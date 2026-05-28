@@ -1,0 +1,16 @@
+row,error,column,value
+1111,invalid_int,quantity,abc
+7777,invalid_int,quantity,abc
+12345,invalid_email,customeremail,invalid-email-12345
+20000,required_missing,orderedat,(empty)
+25001,required_missing,orderedat,(empty)
+33333,invalid_email,customeremail,invalid-email-33333
+42000,invalid_email,customeremail,invalid-email-42000
+50000,required_missing,orderedat,(empty)
+56789,required_missing,orderedat,(empty)
+65000,required_missing,orderedat,(empty)
+70001,required_missing,orderedat,(empty)
+77777,required_missing,orderedat,(empty)
+85000,invalid_int,quantity,abc
+90009,invalid_email,customeremail,invalid-email-90009
+99999,invalid_email,customeremail,invalid-email-99999

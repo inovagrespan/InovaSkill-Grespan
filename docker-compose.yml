@@ -1,0 +1,100 @@
+﻿services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: inovaskill-postgres
+    environment:
+      POSTGRES_DB: inovaskill_importer
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d inovaskill_importer"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: inovaskill-redis
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    container_name: inovaskill-api
+    build:
+      context: ./backend
+      dockerfile: InovaSkill.Importer.Api/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      DisableHttpsRedirection: "true"
+      Storage__UploadsPath: /data/uploads
+      ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
+      ConnectionStrings__HangfireDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
+      ConnectionStrings__Redis: redis:6379
+    ports:
+      - "5279:8080"
+    volumes:
+      - uploads_data:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    container_name: inovaskill-worker
+    build:
+      context: ./backend
+      dockerfile: InovaSkill.Importer.Worker/Dockerfile
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      Storage__UploadsPath: /data/uploads
+      ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
+      ConnectionStrings__HangfireDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
+      ConnectionStrings__Redis: redis:6379
+      ImportProcessing__ParallelWorkers: "4"
+      ImportProcessing__DispatchIntervalSeconds: "15"
+    volumes:
+      - uploads_data:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    container_name: inovaskill-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_URL: http://localhost:5279
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:

@@ -1,0 +1,22 @@
+﻿# Build artifacts
+**/bin/
+**/obj/
+
+# Node
+**/node_modules/
+**/.tanstack/
+
+# Git / IDE
+.git/
+.vscode/
+.idea/
+
+# Logs and temp
+*.log
+*.tmp
+
+# Local runtime data
+uploads/
+InovaSkill.Importer.Api/uploads/
+frontend/dist/
+frontend-backend-antigo/dist/

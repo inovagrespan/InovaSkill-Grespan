@@ -1,0 +1,6 @@
+@InovaSkill.Importer.Api_HostAddress = http://localhost:5279
+
+GET {{InovaSkill.Importer.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

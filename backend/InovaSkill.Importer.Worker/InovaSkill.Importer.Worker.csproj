@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-InovaSkill.Importer.Worker-fbc17d22-3754-4572-a5db-809b3c5c5d77</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hangfire" Version="1.8.*" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.20.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\InovaSkill.Importer.Infrastructure\InovaSkill.Importer.Infrastructure.csproj" />
+    <ProjectReference Include="..\InovaSkill.Importer.Application\InovaSkill.Importer.Application.csproj" />
+    <ProjectReference Include="..\InovaSkill.Importer.Domain\InovaSkill.Importer.Domain.csproj" />
+  </ItemGroup>
+</Project>

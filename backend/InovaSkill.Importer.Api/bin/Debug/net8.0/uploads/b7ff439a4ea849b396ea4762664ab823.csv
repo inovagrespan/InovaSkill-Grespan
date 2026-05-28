@@ -1,0 +1,3 @@
+name,email,createdat
+Alice,alice@corp.com,2026-05-20
+,bad-email,invalid-date

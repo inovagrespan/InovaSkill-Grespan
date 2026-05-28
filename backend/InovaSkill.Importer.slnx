@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="InovaSkill.Importer.Application/InovaSkill.Importer.Application.csproj" />
+  <Project Path="InovaSkill.Importer.Domain/InovaSkill.Importer.Domain.csproj" />
+  <Project Path="InovaSkill.Importer.Infrastructure/InovaSkill.Importer.Infrastructure.csproj" />
+</Solution>

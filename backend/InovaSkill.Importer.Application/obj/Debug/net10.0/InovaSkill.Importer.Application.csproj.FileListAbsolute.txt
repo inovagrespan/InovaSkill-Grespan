@@ -1,0 +1,15 @@
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\bin\Debug\net10.0\InovaSkill.Importer.Application.deps.json
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\bin\Debug\net10.0\InovaSkill.Importer.Application.dll
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\bin\Debug\net10.0\InovaSkill.Importer.Application.pdb
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\bin\Debug\net10.0\InovaSkill.Importer.Domain.dll
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\bin\Debug\net10.0\InovaSkill.Importer.Domain.pdb
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\InovaSkill.Importer.Application.csproj.AssemblyReference.cache
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\InovaSkill.Importer.Application.GeneratedMSBuildEditorConfig.editorconfig
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\InovaSkill.Importer.Application.AssemblyInfoInputs.cache
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\InovaSkill.Importer.Application.AssemblyInfo.cs
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\InovaSkill.Importer.Application.csproj.CoreCompileInputs.cache
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\InovaSki.4EDC3237.Up2Date
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\InovaSkill.Importer.Application.dll
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\refint\InovaSkill.Importer.Application.dll
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\InovaSkill.Importer.Application.pdb
+C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Application\obj\Debug\net10.0\ref\InovaSkill.Importer.Application.dll

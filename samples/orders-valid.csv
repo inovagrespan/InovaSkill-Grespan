@@ -1,0 +1,3 @@
+ordernumber,customeremail,productsku,quantity,orderedat
+ORD-1001,alice@corp.com,SKU-001,2,2026-05-20
+ORD-1002,bob@corp.com,SKU-002,1,2026-05-21
