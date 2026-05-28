@@ -141,3 +141,29 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# .NET / C#
+**/bin/
+**/obj/
+**/TestResults/
+*.user
+*.rsuser
+*.suo
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Monorepo local runtime data
+uploads/
+backend/uploads/
+backend/**/uploads/
+
+# Frontend build outputs
+frontend/dist/
+frontend/.output/

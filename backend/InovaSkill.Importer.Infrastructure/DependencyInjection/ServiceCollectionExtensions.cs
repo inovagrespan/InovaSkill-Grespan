@@ -5,6 +5,7 @@ using InovaSkill.Importer.Infrastructure.Validation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
 
 namespace InovaSkill.Importer.Infrastructure.DependencyInjection;
 
@@ -25,6 +26,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFileImportPipelineProcessor, FileImportPipelineProcessor>();
         services.AddScoped<IFileJobService, FileJobService>();
         services.AddScoped<IFileUploadService, FileUploadService>();
+        var redisConnection = configuration.GetConnectionString("Redis") ?? "localhost:6379";
+        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnection));
+        services.AddSingleton<IFileJobQueue, RedisFileJobQueue>();
         return services;
     }
 }

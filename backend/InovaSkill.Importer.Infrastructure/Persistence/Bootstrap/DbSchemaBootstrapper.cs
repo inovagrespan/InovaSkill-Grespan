@@ -14,7 +14,18 @@ public static class DbSchemaBootstrapper
             return;
         }
 
+        await EnsureFileJobsColumnsAsync(context, cancellationToken);
         await EnsureDefaultTemplatesAsync(context, cancellationToken);
+    }
+
+    private static async Task EnsureFileJobsColumnsAsync(ImportDbContext db, CancellationToken cancellationToken)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "FileJobs"
+            ADD COLUMN IF NOT EXISTS "OriginalFileName" character varying(512) NOT NULL DEFAULT '';
+            """,
+            cancellationToken);
     }
 
     private static async Task EnsureDefaultTemplatesAsync(ImportDbContext db, CancellationToken cancellationToken)

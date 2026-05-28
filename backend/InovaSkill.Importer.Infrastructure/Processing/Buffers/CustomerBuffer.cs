@@ -17,7 +17,7 @@ public sealed class CustomerBuffer : IFileTypeBuffer
         {
             Name = row.Get("name"),
             Email = row.Get("email"),
-            CreatedAt = DateTime.TryParse(row.Get("createdat"), out var createdAt) ? createdAt : DateTime.UtcNow,
+            CreatedAt = UtcDateTimeParser.ParseOrDefaultUtcNow(row.Get("createdat")),
             SourceFileJobId = sourceFileJobId
         });
     }

@@ -3,7 +3,10 @@ using Microsoft.Extensions.Configuration;
 
 namespace InovaSkill.Importer.Infrastructure.Processing;
 
-public sealed class FileUploadService(IFileJobService fileJobService, IConfiguration configuration) : IFileUploadService
+public sealed class FileUploadService(
+    IFileJobService fileJobService,
+    IFileJobQueue fileJobQueue,
+    IConfiguration configuration) : IFileUploadService
 {
     public async Task<long> UploadAndCreateJobAsync(Stream stream, string originalFileName, CancellationToken cancellationToken)
     {
@@ -20,10 +23,36 @@ public sealed class FileUploadService(IFileJobService fileJobService, IConfigura
             : Path.GetFullPath(configuredUploadsPath);
         Directory.CreateDirectory(uploadsDir);
 
-        var filePath = Path.Combine(uploadsDir, $"{Guid.NewGuid():N}{extension}");
+        var fileName = BuildStoredFileName(originalFileName, extension);
+        var filePath = Path.Combine(uploadsDir, fileName);
         await using var fileStream = File.Create(filePath);
         await stream.CopyToAsync(fileStream, cancellationToken);
 
-        return await fileJobService.CreateFileJobAsync(filePath, cancellationToken);
+        var jobId = await fileJobService.CreateFileJobAsync(filePath, originalFileName, cancellationToken);
+        await fileJobQueue.EnqueueAsync(jobId, cancellationToken);
+        return jobId;
+    }
+
+    private static string BuildStoredFileName(string originalFileName, string extension)
+    {
+        var baseName = Path.GetFileNameWithoutExtension(originalFileName);
+        if (string.IsNullOrWhiteSpace(baseName))
+        {
+            baseName = "arquivo";
+        }
+
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = new string(baseName
+            .Select(ch => invalidChars.Contains(ch) ? '_' : ch)
+            .ToArray())
+            .Trim();
+
+        if (string.IsNullOrWhiteSpace(sanitized))
+        {
+            sanitized = "arquivo";
+        }
+
+        var salt = Guid.NewGuid().ToString("N")[..5];
+        return $"{sanitized}_{salt}{extension}";
     }
 }

@@ -8,13 +8,13 @@ using InovaSkill.Importer.Infrastructure.Processing.Buffers;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using System.Data;
 using System.Text.Json;
 
 namespace InovaSkill.Importer.Infrastructure.Processing;
 
 public sealed class FileImportPipelineProcessor(
     ImportDbContext dbContext,
+    IFileJobQueue fileJobQueue,
     IFileParserFactory fileParserFactory,
     IPreProcessorTemplateResolver preProcessorTemplateResolver,
     IPreProcessorRuleEngine preProcessorRuleEngine,
@@ -28,38 +28,34 @@ public sealed class FileImportPipelineProcessor(
     private static readonly TimeSpan StaleProcessingTimeout = TimeSpan.FromMinutes(5);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task ProcessNextPendingJobAsync(CancellationToken cancellationToken)
+    public async Task ProcessJobAsync(long jobId, CancellationToken cancellationToken)
     {
         await RecoverStaleJobsAsync(cancellationToken);
-
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-
-        var waitingProcessing = (int)FileJobStatus.WaitingProcessing;
-        var readyToImport = (int)FileJobStatus.ReadyToImport;
-
-        var job = await dbContext.FileJobs
-            .FromSqlInterpolated($@"
-                SELECT TOP(1) *
-                FROM FileJobs WITH (UPDLOCK, READPAST, ROWLOCK)
-                WHERE Status IN ({waitingProcessing}, {readyToImport})
-                ORDER BY CreatedAt")
-            .FirstOrDefaultAsync(cancellationToken);
-
+        var job = await dbContext.FileJobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (job is null)
         {
-            await tx.CommitAsync(cancellationToken);
+            logger.LogWarning("Job {JobId} was not found.", jobId);
+            return;
+        }
+
+        if (job.Status is not (FileJobStatus.WaitingProcessing or FileJobStatus.ReadyToImport))
+        {
+            logger.LogInformation("Skipping job {JobId} with status {Status}.", job.Id, job.Status);
             return;
         }
 
         var nextStatus = job.StartNextStage();
         await dbContext.SaveChangesAsync(cancellationToken);
-        await tx.CommitAsync(cancellationToken);
 
         try
         {
             if (nextStatus == FileJobStatus.PreProcessing)
             {
                 await PreProcessAndValidateAsync(job, cancellationToken);
+                if (job.Status == FileJobStatus.ReadyToImport)
+                {
+                    await fileJobQueue.EnqueueAsync(job.Id, cancellationToken);
+                }
             }
             else
             {
@@ -68,9 +64,9 @@ public sealed class FileImportPipelineProcessor(
         }
         catch (Exception ex)
         {
-            job.MarkFailed();
+            job.MarkFailed(BuildFailureReason(ex));
             await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogError(ex, "Failed processing job {JobId}", job.Id);
+            logger.LogError(ex, "Failed processing job {JobId}. File: {FilePath}", job.Id, job.FilePath);
         }
     }
 
@@ -238,14 +234,14 @@ public sealed class FileImportPipelineProcessor(
     {
         if (job.FileType == FileType.Unknown)
         {
-            job.MarkFailed();
+            job.MarkFailed("Tipo de arquivo nao identificado para importacao.");
             await dbContext.SaveChangesAsync(cancellationToken);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(job.NormalizedFilePath) || !File.Exists(job.NormalizedFilePath))
         {
-            job.MarkFailed();
+            job.MarkFailed("Arquivo normalizado nao encontrado para importacao.");
             await dbContext.SaveChangesAsync(cancellationToken);
             logger.LogError("Normalized file not found for job {JobId}: {Path}", job.Id, job.NormalizedFilePath);
             return;
@@ -513,5 +509,42 @@ public sealed class FileImportPipelineProcessor(
     {
         var type = rule.RuleType.Trim().ToLowerInvariant();
         return type.StartsWith("validate_", StringComparison.Ordinal);
+    }
+
+    private static string BuildFailureReason(Exception ex)
+    {
+        var message = ex.Message.Trim();
+
+        if (ex is InvalidOperationException)
+        {
+            if (message.Contains("Unsupported extension", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Extensao de arquivo nao suportada. Use CSV ou XLSX.";
+            }
+
+            if (message.Contains("Unsupported file type", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Tipo de arquivo nao suportado para importacao.";
+            }
+
+            if (message.Contains("Unsupported rule type", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Regra de pre-processamento nao suportada.";
+            }
+
+            return $"Erro de configuracao: {message}";
+        }
+
+        if (ex is JsonException)
+        {
+            return "Falha ao ler dados normalizados durante o processamento.";
+        }
+
+        if (ex is IOException)
+        {
+            return "Falha de acesso ao arquivo durante o processamento.";
+        }
+
+        return $"Erro inesperado: {message}";
     }
 }

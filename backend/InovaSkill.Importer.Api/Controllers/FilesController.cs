@@ -18,12 +18,38 @@ public sealed class FilesController(
     {
         if (file is null || file.Length == 0)
         {
-            return BadRequest("File is required.");
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Arquivo inválido",
+                Detail = "Nenhum arquivo foi enviado. Selecione um arquivo CSV ou XLSX.",
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
-        await using var stream = file.OpenReadStream();
-        var fileJobId = await fileUploadService.UploadAndCreateJobAsync(stream, file.FileName, cancellationToken);
-        return Ok(new UploadResponse(fileJobId));
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var fileJobId = await fileUploadService.UploadAndCreateJobAsync(stream, file.FileName, cancellationToken);
+            return Ok(new UploadResponse(fileJobId));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Não foi possível importar o arquivo",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+        catch (Exception)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+            {
+                Title = "Erro interno ao importar arquivo",
+                Detail = $"Falha ao processar o upload de '{file.FileName}'. Tente novamente.",
+                Status = StatusCodes.Status500InternalServerError
+            });
+        }
     }
 
     [HttpPost("jobs/{jobId:long}/retry")]
@@ -32,7 +58,12 @@ public sealed class FilesController(
         var job = await dbContext.FileJobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (job is null)
         {
-            return NotFound();
+            return NotFound(new ProblemDetails
+            {
+                Title = "Arquivo não encontrado",
+                Detail = $"Nenhum arquivo com ID {jobId} foi encontrado.",
+                Status = StatusCodes.Status404NotFound
+            });
         }
 
         if (job.Status == Domain.Enums.FileJobStatus.Importing)
@@ -97,7 +128,7 @@ public sealed class FilesController(
             .Take(pageSize)
             .Select(x => new FileJobDto(
                 x.Id,
-                x.FilePath,
+                Path.GetFileName(x.FilePath),
                 x.FileType,
                 x.Status,
                 x.CreatedAt,
@@ -124,7 +155,12 @@ public sealed class FilesController(
         var exists = await dbContext.FileJobs.AnyAsync(x => x.Id == jobId, cancellationToken);
         if (!exists)
         {
-            return NotFound();
+            return NotFound(new ProblemDetails
+            {
+                Title = "Arquivo não encontrado",
+                Detail = $"Nenhum arquivo com ID {jobId} foi encontrado.",
+                Status = StatusCodes.Status404NotFound
+            });
         }
 
         var baseQuery = dbContext.ImportErrors

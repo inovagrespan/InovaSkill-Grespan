@@ -6,6 +6,7 @@ public sealed class FileJob
 {
     public long Id { get; set; }
     public string FilePath { get; set; } = string.Empty;
+    public string OriginalFileName { get; set; } = string.Empty;
     public string NormalizedFilePath { get; set; } = string.Empty;
     public FileType FileType { get; set; } = FileType.Unknown;
     public FileJobStatus Status { get; set; } = FileJobStatus.WaitingProcessing;
@@ -42,10 +43,12 @@ public sealed class FileJob
         throw new InvalidOperationException($"Cannot start next stage from status {Status}.");
     }
 
-    public void MarkFailed()
+    public void MarkFailed(string? reason = null)
     {
         Status = FileJobStatus.Failed;
-        CurrentStep = "Falha no processamento";
+        CurrentStep = string.IsNullOrWhiteSpace(reason)
+            ? "Falha no processamento"
+            : Truncate($"Falha: {reason}", 128);
         TouchHeartbeat();
     }
 
@@ -122,5 +125,15 @@ public sealed class FileJob
     public void TouchHeartbeat()
     {
         LastHeartbeatAt = DateTime.UtcNow;
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return value[..maxLength];
     }
 }

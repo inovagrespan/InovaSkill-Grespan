@@ -16,6 +16,8 @@
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
 
   redis:
     image: redis:7-alpine
@@ -31,6 +33,8 @@
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
 
   api:
     container_name: inovaskill-api
@@ -43,8 +47,8 @@
       DisableHttpsRedirection: "true"
       Storage__UploadsPath: /data/uploads
       ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
-      ConnectionStrings__HangfireDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
       ConnectionStrings__Redis: redis:6379
+      ImportProcessing__QueueKey: import:file-jobs
     ports:
       - "5279:8080"
     volumes:
@@ -55,6 +59,8 @@
       redis:
         condition: service_healthy
     restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.50
 
   worker:
     container_name: inovaskill-worker
@@ -65,10 +71,8 @@
       DOTNET_ENVIRONMENT: Development
       Storage__UploadsPath: /data/uploads
       ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
-      ConnectionStrings__HangfireDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
       ConnectionStrings__Redis: redis:6379
-      ImportProcessing__ParallelWorkers: "4"
-      ImportProcessing__DispatchIntervalSeconds: "15"
+      ImportProcessing__QueueKey: import:file-jobs
     volumes:
       - uploads_data:/data/uploads
     depends_on:
@@ -79,6 +83,8 @@
       api:
         condition: service_started
     restart: unless-stopped
+    mem_limit: 1024m
+    cpus: 1.50
 
   frontend:
     container_name: inovaskill-frontend
@@ -93,6 +99,8 @@
       api:
         condition: service_started
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
 
 volumes:
   postgres_data:

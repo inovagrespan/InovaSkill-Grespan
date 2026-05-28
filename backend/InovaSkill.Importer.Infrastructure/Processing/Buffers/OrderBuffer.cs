@@ -19,7 +19,7 @@ public sealed class OrderBuffer : IFileTypeBuffer
             CustomerEmail = row.Get("customeremail"),
             ProductSku = row.Get("productsku"),
             Quantity = int.Parse(row.Get("quantity")),
-            OrderedAt = DateTime.Parse(row.Get("orderedat")),
+            OrderedAt = UtcDateTimeParser.ParseRequired(row.Get("orderedat")),
             SourceFileJobId = sourceFileJobId
         });
     }

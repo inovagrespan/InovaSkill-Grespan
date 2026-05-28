@@ -11,6 +11,7 @@
     <PackageReference Include="EFCore.BulkExtensions" Version="8.*" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.*" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.*" />
+    <PackageReference Include="StackExchange.Redis" Version="2.*" />
   </ItemGroup>
 
   <PropertyGroup>

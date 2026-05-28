@@ -19,6 +19,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.FilePath).HasMaxLength(1024).IsRequired();
+            e.Property(x => x.OriginalFileName).HasMaxLength(512).IsRequired();
             e.Property(x => x.NormalizedFilePath).HasMaxLength(1024).IsRequired();
             e.Property(x => x.CreatedAt).IsRequired();
             e.Property(x => x.LastHeartbeatAt).IsRequired();

@@ -18,7 +18,7 @@ public sealed class ProductBuffer : IFileTypeBuffer
             Sku = row.Get("sku"),
             Name = row.Get("name"),
             Price = decimal.Parse(row.Get("price")),
-            CreatedAt = DateTime.TryParse(row.Get("createdat"), out var createdAt) ? createdAt : DateTime.UtcNow,
+            CreatedAt = UtcDateTimeParser.ParseOrDefaultUtcNow(row.Get("createdat")),
             SourceFileJobId = sourceFileJobId
         });
     }

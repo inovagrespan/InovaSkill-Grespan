@@ -41,6 +41,37 @@ export type PagedResult<T> = {
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
 
+async function parseApiError(response: Response, fallbackMessage: string): Promise<string> {
+  try {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const payload = (await response.json()) as {
+        detail?: string;
+        Detail?: string;
+        title?: string;
+        Title?: string;
+        message?: string;
+        Message?: string;
+      };
+
+      return (
+        payload.detail ??
+        payload.Detail ??
+        payload.message ??
+        payload.Message ??
+        payload.title ??
+        payload.Title ??
+        fallbackMessage
+      );
+    }
+
+    const text = (await response.text()).trim();
+    return text || fallbackMessage;
+  } catch {
+    return fallbackMessage;
+  }
+}
+
 type BackendFileJob = {
   id?: number;
   Id?: number;
@@ -101,14 +132,16 @@ export async function uploadFile(file: File): Promise<number> {
     body: form,
   });
 
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    throw new Error(await parseApiError(response, `Falha ao enviar '${file.name}'.`));
+  }
   const data = (await response.json()) as { fileJobId: number };
   return data.fileJobId;
 }
 
 export async function fetchJobs(page = 1, pageSize = 10): Promise<PagedResult<FileJob>> {
   const response = await fetch(`${API_URL}/api/files/jobs?page=${page}&pageSize=${pageSize}`);
-  if (!response.ok) throw new Error("Falha ao carregar jobs");
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar arquivos."));
 
   const raw = (await response.json()) as
     | PagedResult<BackendFileJob>
@@ -148,7 +181,7 @@ export async function fetchJobErrors(
   pageSize = 50,
 ): Promise<PagedResult<ImportError>> {
   const response = await fetch(`${API_URL}/api/files/jobs/${jobId}/errors?page=${page}&pageSize=${pageSize}`);
-  if (!response.ok) throw new Error("Falha ao carregar erros");
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar erros do arquivo."));
 
   const rawJson = await response.json();
   if (Array.isArray(rawJson)) {
