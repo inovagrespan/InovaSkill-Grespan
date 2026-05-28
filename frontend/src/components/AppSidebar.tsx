@@ -1,12 +1,20 @@
 ﻿import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Users, Truck, Activity, TrendingUp, FileUp } from "lucide-react";
+import { LayoutDashboard, Users, Truck, Activity, TrendingUp, FileUp, SlidersHorizontal } from "lucide-react";
 
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/vendas", label: "Vendas", icon: TrendingUp },
   { to: "/logistica", label: "Logística", icon: Truck },
   { to: "/rh", label: "RH Atual", icon: Users },
-  { to: "/importacoes", label: "Importações", icon: FileUp },
+  {
+    to: "/importacoes",
+    label: "Importações",
+    icon: FileUp,
+    children: [
+      { to: "/importacoes/files", label: "Files", icon: FileUp },
+      { to: "/importacoes/templates", label: "Templates", icon: SlidersHorizontal },
+    ],
+  },
   { to: "/simulacao", label: "Simulação", icon: Activity },
 ];
 
@@ -21,29 +29,51 @@ export function AppSidebar() {
             N
           </div>
           <span className="font-display text-xl tracking-tight">
-            NEXUS <span className="text-primary">AI</span>
+            GRESPAN
           </span>
         </Link>
       </div>
 
       <nav className="flex-1 px-4 space-y-2">
         {items.map((item) => {
-          const active = pathname === item.to;
+          const active = item.to === "/importacoes"
+            ? pathname === "/importacoes" || pathname.startsWith("/importacoes/")
+            : pathname === item.to || (item.to !== "/" && pathname.startsWith(`${item.to}/`));
           const Icon = item.icon;
           return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={
-                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors " +
-                (active
-                  ? "text-foreground bg-white/5 border border-white/10"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/[0.02]")
-              }
-            >
-              <Icon className="size-4" />
-              <span className="text-sm font-medium">{item.label}</span>
-            </Link>
+            <div key={item.to} className="space-y-1">
+              <Link
+                to={item.to}
+                className={
+                  "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors " +
+                  (active
+                    ? "text-foreground bg-white/5 border border-white/10"
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/[0.02]")
+                }
+              >
+                <Icon className="size-4" />
+                <span className="text-sm font-medium">{item.label}</span>
+              </Link>
+              {item.children?.map((child) => {
+                const childActive = pathname === child.to;
+                const ChildIcon = child.icon;
+                return (
+                  <Link
+                    key={child.to}
+                    to={child.to}
+                    className={
+                      "ml-6 flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-xs " +
+                      (childActive
+                        ? "text-foreground bg-white/5 border border-white/10"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/[0.02]")
+                    }
+                  >
+                    <ChildIcon className="size-3.5" />
+                    <span className="font-medium">{child.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
           );
         })}
       </nav>

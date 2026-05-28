@@ -93,19 +93,6 @@
           }
         }
       },
-      "Dapper/2.0.123": {
-        "type": "package",
-        "compile": {
-          "lib/net5.0/Dapper.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net5.0/Dapper.dll": {
-            "related": ".xml"
-          }
-        }
-      },
       "DocumentFormat.OpenXml/3.1.1": {
         "type": "package",
         "dependencies": {
@@ -267,147 +254,6 @@
           }
         }
       },
-      "Hangfire/1.8.23": {
-        "type": "package",
-        "dependencies": {
-          "Hangfire.AspNetCore": "[1.8.23]",
-          "Hangfire.Core": "[1.8.23]",
-          "Hangfire.SqlServer": "[1.8.23]"
-        }
-      },
-      "Hangfire.AspNetCore/1.8.23": {
-        "type": "package",
-        "dependencies": {
-          "Hangfire.NetCore": "[1.8.23]"
-        },
-        "compile": {
-          "lib/netcoreapp3.0/Hangfire.AspNetCore.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/netcoreapp3.0/Hangfire.AspNetCore.dll": {
-            "related": ".xml"
-          }
-        },
-        "frameworkReferences": [
-          "Microsoft.AspNetCore.App"
-        ]
-      },
-      "Hangfire.Core/1.8.23": {
-        "type": "package",
-        "dependencies": {
-          "Newtonsoft.Json": "11.0.1"
-        },
-        "compile": {
-          "lib/netstandard2.0/Hangfire.Core.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/netstandard2.0/Hangfire.Core.dll": {
-            "related": ".xml"
-          }
-        },
-        "resource": {
-          "lib/netstandard2.0/ca/Hangfire.Core.resources.dll": {
-            "locale": "ca"
-          },
-          "lib/netstandard2.0/de/Hangfire.Core.resources.dll": {
-            "locale": "de"
-          },
-          "lib/netstandard2.0/es/Hangfire.Core.resources.dll": {
-            "locale": "es"
-          },
-          "lib/netstandard2.0/fa/Hangfire.Core.resources.dll": {
-            "locale": "fa"
-          },
-          "lib/netstandard2.0/fr/Hangfire.Core.resources.dll": {
-            "locale": "fr"
-          },
-          "lib/netstandard2.0/nb/Hangfire.Core.resources.dll": {
-            "locale": "nb"
-          },
-          "lib/netstandard2.0/nl/Hangfire.Core.resources.dll": {
-            "locale": "nl"
-          },
-          "lib/netstandard2.0/pt-BR/Hangfire.Core.resources.dll": {
-            "locale": "pt-BR"
-          },
-          "lib/netstandard2.0/pt-PT/Hangfire.Core.resources.dll": {
-            "locale": "pt-PT"
-          },
-          "lib/netstandard2.0/pt/Hangfire.Core.resources.dll": {
-            "locale": "pt"
-          },
-          "lib/netstandard2.0/sv/Hangfire.Core.resources.dll": {
-            "locale": "sv"
-          },
-          "lib/netstandard2.0/tr-TR/Hangfire.Core.resources.dll": {
-            "locale": "tr-TR"
-          },
-          "lib/netstandard2.0/zh-TW/Hangfire.Core.resources.dll": {
-            "locale": "zh-TW"
-          },
-          "lib/netstandard2.0/zh/Hangfire.Core.resources.dll": {
-            "locale": "zh"
-          }
-        }
-      },
-      "Hangfire.NetCore/1.8.23": {
-        "type": "package",
-        "dependencies": {
-          "Hangfire.Core": "[1.8.23]",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "3.0.0",
-          "Microsoft.Extensions.Hosting.Abstractions": "3.0.0",
-          "Microsoft.Extensions.Logging.Abstractions": "3.0.0"
-        },
-        "compile": {
-          "lib/netstandard2.1/Hangfire.NetCore.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/netstandard2.1/Hangfire.NetCore.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "Hangfire.PostgreSql/1.20.13": {
-        "type": "package",
-        "dependencies": {
-          "Dapper": "2.0.123",
-          "Hangfire.Core": "1.8.0",
-          "Microsoft.CSharp": "4.7.0",
-          "Npgsql": "6.0.11"
-        },
-        "compile": {
-          "lib/netstandard2.0/Hangfire.PostgreSql.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/netstandard2.0/Hangfire.PostgreSql.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "Hangfire.SqlServer/1.8.23": {
-        "type": "package",
-        "dependencies": {
-          "Hangfire.Core": "[1.8.23]"
-        },
-        "compile": {
-          "lib/netstandard2.0/Hangfire.SqlServer.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/netstandard2.0/Hangfire.SqlServer.dll": {
-            "related": ".xml"
-          }
-        }
-      },
       "MedallionTopologicalSort/1.0.0": {
         "type": "package",
         "compile": {
@@ -446,15 +292,6 @@
         },
         "build": {
           "buildTransitive/net6.0/_._": {}
-        }
-      },
-      "Microsoft.CSharp/4.7.0": {
-        "type": "package",
-        "compile": {
-          "ref/netcoreapp2.0/_._": {}
-        },
-        "runtime": {
-          "lib/netcoreapp2.0/_._": {}
         }
       },
       "Microsoft.Data.SqlClient/6.0.1": {
@@ -1592,19 +1429,6 @@
           }
         }
       },
-      "Newtonsoft.Json/11.0.1": {
-        "type": "package",
-        "compile": {
-          "lib/netstandard2.0/Newtonsoft.Json.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/netstandard2.0/Newtonsoft.Json.dll": {
-            "related": ".xml"
-          }
-        }
-      },
       "Npgsql/8.0.6": {
         "type": "package",
         "dependencies": {
@@ -1668,6 +1492,22 @@
           "lib/net8.0/Oracle.ManagedDataAccess.dll": {}
         }
       },
+      "Pipelines.Sockets.Unofficial/2.2.16": {
+        "type": "package",
+        "dependencies": {
+          "System.IO.Pipelines": "8.0.0"
+        },
+        "compile": {
+          "lib/net8.0/Pipelines.Sockets.Unofficial.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/Pipelines.Sockets.Unofficial.dll": {
+            "related": ".xml"
+          }
+        }
+      },
       "Pomelo.EntityFrameworkCore.MySql/8.0.2": {
         "type": "package",
         "dependencies": {
@@ -1721,6 +1561,24 @@
         },
         "runtime": {
           "lib/netstandard2.0/SQLitePCLRaw.core.dll": {}
+        }
+      },
+      "StackExchange.Redis/2.13.17": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.0",
+          "Pipelines.Sockets.Unofficial": "2.2.16",
+          "System.IO.Hashing": "10.0.2"
+        },
+        "compile": {
+          "lib/net8.0/StackExchange.Redis.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/StackExchange.Redis.dll": {
+            "related": ".xml"
+          }
         }
       },
       "System.ClientModel/1.0.0": {
@@ -1893,6 +1751,22 @@
           }
         }
       },
+      "System.IO.Hashing/10.0.2": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/System.IO.Hashing.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/System.IO.Hashing.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net8.0/_._": {}
+        }
+      },
       "System.IO.Packaging/8.0.1": {
         "type": "package",
         "compile": {
@@ -1902,6 +1776,22 @@
         },
         "runtime": {
           "lib/net8.0/System.IO.Packaging.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net6.0/_._": {}
+        }
+      },
+      "System.IO.Pipelines/8.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/System.IO.Pipelines.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/System.IO.Pipelines.dll": {
             "related": ".xml"
           }
         },
@@ -2069,7 +1959,8 @@
           "InovaSkill.Importer.Application": "1.0.0",
           "InovaSkill.Importer.Domain": "1.0.0",
           "Microsoft.EntityFrameworkCore": "8.0.0",
-          "Npgsql.EntityFrameworkCore.PostgreSQL": "8.0.0"
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "8.0.0",
+          "StackExchange.Redis": "2.0.0"
         },
         "compile": {
           "bin/placeholder/InovaSkill.Importer.Infrastructure.dll": {}
@@ -2177,24 +2068,6 @@
         "lib/netstandard2.0/CsvHelper.xml",
         "lib/netstandard2.1/CsvHelper.dll",
         "lib/netstandard2.1/CsvHelper.xml"
-      ]
-    },
-    "Dapper/2.0.123": {
-      "sha512": "RDFF4rBLLmbpi6pwkY7q/M6UXHRJEOerplDGE5jwEkP/JGJnBauAClYavNKJPW1yOTWRPIyfj4is3EaJxQXILQ==",
-      "type": "package",
-      "path": "dapper/2.0.123",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "Dapper.png",
-        "dapper.2.0.123.nupkg.sha512",
-        "dapper.nuspec",
-        "lib/net461/Dapper.dll",
-        "lib/net461/Dapper.xml",
-        "lib/net5.0/Dapper.dll",
-        "lib/net5.0/Dapper.xml",
-        "lib/netstandard2.0/Dapper.dll",
-        "lib/netstandard2.0/Dapper.xml"
       ]
     },
     "DocumentFormat.OpenXml/3.1.1": {
@@ -2379,204 +2252,6 @@
         "lib/netstandard2.0/ExcelNumberFormat.xml"
       ]
     },
-    "Hangfire/1.8.23": {
-      "sha512": "WmVI9+aQDj0cUmCqNkkIz0WQaWcvviNTMtyUTTuIF6ci1eVHsmo+DEWRXqGApYRbmoiCzWNE40JuTjPaXbRePA==",
-      "type": "package",
-      "path": "hangfire/1.8.23",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "COPYING",
-        "COPYING.LESSER",
-        "LICENSE.md",
-        "LICENSE_ROYALTYFREE",
-        "LICENSE_STANDARD",
-        "NOTICES",
-        "README.md",
-        "hangfire.1.8.23.nupkg.sha512",
-        "hangfire.nuspec",
-        "icon.png"
-      ]
-    },
-    "Hangfire.AspNetCore/1.8.23": {
-      "sha512": "TXpOl7kX4xXq5bLEqqWCpt9zh3TaouDwtb3GDtzGHX5uSC2RaAqZzn2swevivx3Uki16slXIigiPtgr4TPKpsg==",
-      "type": "package",
-      "path": "hangfire.aspnetcore/1.8.23",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "COPYING",
-        "COPYING.LESSER",
-        "LICENSE.md",
-        "LICENSE_ROYALTYFREE",
-        "LICENSE_STANDARD",
-        "NOTICES",
-        "hangfire.aspnetcore.1.8.23.nupkg.sha512",
-        "hangfire.aspnetcore.nuspec",
-        "icon.png",
-        "lib/net451/Hangfire.AspNetCore.dll",
-        "lib/net451/Hangfire.AspNetCore.xml",
-        "lib/net461/Hangfire.AspNetCore.dll",
-        "lib/net461/Hangfire.AspNetCore.xml",
-        "lib/netcoreapp3.0/Hangfire.AspNetCore.dll",
-        "lib/netcoreapp3.0/Hangfire.AspNetCore.xml",
-        "lib/netstandard1.3/Hangfire.AspNetCore.dll",
-        "lib/netstandard1.3/Hangfire.AspNetCore.xml",
-        "lib/netstandard2.0/Hangfire.AspNetCore.dll",
-        "lib/netstandard2.0/Hangfire.AspNetCore.xml"
-      ]
-    },
-    "Hangfire.Core/1.8.23": {
-      "sha512": "YCOTtF3NNOQI83PlfjeNDDBkofJDfdET2CwhfQsiVBwmsU6lP19QW9NVTIH9epl+MnOsyFC2G1RnlPSGV8F1FQ==",
-      "type": "package",
-      "path": "hangfire.core/1.8.23",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "COPYING",
-        "COPYING.LESSER",
-        "LICENSE.md",
-        "LICENSE_ROYALTYFREE",
-        "LICENSE_STANDARD",
-        "NOTICES",
-        "README.md",
-        "hangfire.core.1.8.23.nupkg.sha512",
-        "hangfire.core.nuspec",
-        "icon.png",
-        "lib/net451/Hangfire.Core.dll",
-        "lib/net451/Hangfire.Core.xml",
-        "lib/net451/ca/Hangfire.Core.resources.dll",
-        "lib/net451/de/Hangfire.Core.resources.dll",
-        "lib/net451/es/Hangfire.Core.resources.dll",
-        "lib/net451/fa/Hangfire.Core.resources.dll",
-        "lib/net451/fr/Hangfire.Core.resources.dll",
-        "lib/net451/nb/Hangfire.Core.resources.dll",
-        "lib/net451/nl/Hangfire.Core.resources.dll",
-        "lib/net451/pt-BR/Hangfire.Core.resources.dll",
-        "lib/net451/pt-PT/Hangfire.Core.resources.dll",
-        "lib/net451/pt/Hangfire.Core.resources.dll",
-        "lib/net451/sv/Hangfire.Core.resources.dll",
-        "lib/net451/tr-TR/Hangfire.Core.resources.dll",
-        "lib/net451/zh-TW/Hangfire.Core.resources.dll",
-        "lib/net451/zh/Hangfire.Core.resources.dll",
-        "lib/net46/Hangfire.Core.dll",
-        "lib/net46/Hangfire.Core.xml",
-        "lib/net46/ca/Hangfire.Core.resources.dll",
-        "lib/net46/de/Hangfire.Core.resources.dll",
-        "lib/net46/es/Hangfire.Core.resources.dll",
-        "lib/net46/fa/Hangfire.Core.resources.dll",
-        "lib/net46/fr/Hangfire.Core.resources.dll",
-        "lib/net46/nb/Hangfire.Core.resources.dll",
-        "lib/net46/nl/Hangfire.Core.resources.dll",
-        "lib/net46/pt-BR/Hangfire.Core.resources.dll",
-        "lib/net46/pt-PT/Hangfire.Core.resources.dll",
-        "lib/net46/pt/Hangfire.Core.resources.dll",
-        "lib/net46/sv/Hangfire.Core.resources.dll",
-        "lib/net46/tr-TR/Hangfire.Core.resources.dll",
-        "lib/net46/zh-TW/Hangfire.Core.resources.dll",
-        "lib/net46/zh/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/Hangfire.Core.dll",
-        "lib/netstandard1.3/Hangfire.Core.xml",
-        "lib/netstandard1.3/ca/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/de/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/es/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/fa/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/fr/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/nb/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/nl/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/pt-BR/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/pt-PT/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/pt/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/sv/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/tr-TR/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/zh-TW/Hangfire.Core.resources.dll",
-        "lib/netstandard1.3/zh/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/Hangfire.Core.dll",
-        "lib/netstandard2.0/Hangfire.Core.xml",
-        "lib/netstandard2.0/ca/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/de/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/es/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/fa/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/fr/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/nb/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/nl/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/pt-BR/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/pt-PT/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/pt/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/sv/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/tr-TR/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/zh-TW/Hangfire.Core.resources.dll",
-        "lib/netstandard2.0/zh/Hangfire.Core.resources.dll"
-      ]
-    },
-    "Hangfire.NetCore/1.8.23": {
-      "sha512": "SmvUJF/u5MCP666R5Y1V+GntqBc4RCWJqn5ztMMN67d53Cx5cuaWR0YNLMrabjylwLarFYJ7EdR9RnGEZzp/dg==",
-      "type": "package",
-      "path": "hangfire.netcore/1.8.23",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "COPYING",
-        "COPYING.LESSER",
-        "LICENSE.md",
-        "LICENSE_ROYALTYFREE",
-        "LICENSE_STANDARD",
-        "NOTICES",
-        "hangfire.netcore.1.8.23.nupkg.sha512",
-        "hangfire.netcore.nuspec",
-        "icon.png",
-        "lib/net451/Hangfire.NetCore.dll",
-        "lib/net451/Hangfire.NetCore.xml",
-        "lib/net461/Hangfire.NetCore.dll",
-        "lib/net461/Hangfire.NetCore.xml",
-        "lib/netstandard1.3/Hangfire.NetCore.dll",
-        "lib/netstandard1.3/Hangfire.NetCore.xml",
-        "lib/netstandard2.0/Hangfire.NetCore.dll",
-        "lib/netstandard2.0/Hangfire.NetCore.xml",
-        "lib/netstandard2.1/Hangfire.NetCore.dll",
-        "lib/netstandard2.1/Hangfire.NetCore.xml"
-      ]
-    },
-    "Hangfire.PostgreSql/1.20.13": {
-      "sha512": "+JxVOTQINm/gTNstGYgiJQzjP81lGM86COvaSomSyYbbjDExAcqwc5xflsykMVfBKxMP6C/bH0wWgrlhPS0SMQ==",
-      "type": "package",
-      "path": "hangfire.postgresql/1.20.13",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "LICENSE.md",
-        "hangfire.postgresql.1.20.13.nupkg.sha512",
-        "hangfire.postgresql.nuspec",
-        "lib/netstandard2.0/Hangfire.PostgreSql.dll",
-        "lib/netstandard2.0/Hangfire.PostgreSql.xml"
-      ]
-    },
-    "Hangfire.SqlServer/1.8.23": {
-      "sha512": "HiRUbwveK0+wop8iY98Z5DrtfjP+1QCly6IO+21Bnolb5kTO5eCrtKbGErHfhSN0BzKk9ehmTLk9uDHQdAtfcQ==",
-      "type": "package",
-      "path": "hangfire.sqlserver/1.8.23",
-      "hasTools": true,
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "COPYING",
-        "COPYING.LESSER",
-        "LICENSE.md",
-        "LICENSE_ROYALTYFREE",
-        "LICENSE_STANDARD",
-        "NOTICES",
-        "hangfire.sqlserver.1.8.23.nupkg.sha512",
-        "hangfire.sqlserver.nuspec",
-        "icon.png",
-        "lib/net451/Hangfire.SqlServer.dll",
-        "lib/net451/Hangfire.SqlServer.xml",
-        "lib/netstandard1.3/Hangfire.SqlServer.dll",
-        "lib/netstandard1.3/Hangfire.SqlServer.xml",
-        "lib/netstandard2.0/Hangfire.SqlServer.dll",
-        "lib/netstandard2.0/Hangfire.SqlServer.xml",
-        "tools/install.sql"
-      ]
-    },
     "MedallionTopologicalSort/1.0.0": {
       "sha512": "dcAqM8TcyZQ/T466CvqNMUUn/G0FQE+4R7l62ngXH7hLFP9yA7yoP/ySsLgiXx3pGUQC3J+cUvXmJOOR/eC+oQ==",
       "type": "package",
@@ -2641,75 +2316,6 @@
         "microsoft.bcl.cryptography.8.0.0.nupkg.sha512",
         "microsoft.bcl.cryptography.nuspec",
         "useSharedDesignerContext.txt"
-      ]
-    },
-    "Microsoft.CSharp/4.7.0": {
-      "sha512": "pTj+D3uJWyN3My70i2Hqo+OXixq3Os2D1nJ2x92FFo6sk8fYS1m1WLNTs0Dc1uPaViH0YvEEwvzddQ7y4rhXmA==",
-      "type": "package",
-      "path": "microsoft.csharp/4.7.0",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "LICENSE.TXT",
-        "THIRD-PARTY-NOTICES.TXT",
-        "lib/MonoAndroid10/_._",
-        "lib/MonoTouch10/_._",
-        "lib/net45/_._",
-        "lib/netcore50/Microsoft.CSharp.dll",
-        "lib/netcoreapp2.0/_._",
-        "lib/netstandard1.3/Microsoft.CSharp.dll",
-        "lib/netstandard2.0/Microsoft.CSharp.dll",
-        "lib/netstandard2.0/Microsoft.CSharp.xml",
-        "lib/portable-net45+win8+wp8+wpa81/_._",
-        "lib/uap10.0.16299/_._",
-        "lib/win8/_._",
-        "lib/wp80/_._",
-        "lib/wpa81/_._",
-        "lib/xamarinios10/_._",
-        "lib/xamarinmac20/_._",
-        "lib/xamarintvos10/_._",
-        "lib/xamarinwatchos10/_._",
-        "microsoft.csharp.4.7.0.nupkg.sha512",
-        "microsoft.csharp.nuspec",
-        "ref/MonoAndroid10/_._",
-        "ref/MonoTouch10/_._",
-        "ref/net45/_._",
-        "ref/netcore50/Microsoft.CSharp.dll",
-        "ref/netcore50/Microsoft.CSharp.xml",
-        "ref/netcore50/de/Microsoft.CSharp.xml",
-        "ref/netcore50/es/Microsoft.CSharp.xml",
-        "ref/netcore50/fr/Microsoft.CSharp.xml",
-        "ref/netcore50/it/Microsoft.CSharp.xml",
-        "ref/netcore50/ja/Microsoft.CSharp.xml",
-        "ref/netcore50/ko/Microsoft.CSharp.xml",
-        "ref/netcore50/ru/Microsoft.CSharp.xml",
-        "ref/netcore50/zh-hans/Microsoft.CSharp.xml",
-        "ref/netcore50/zh-hant/Microsoft.CSharp.xml",
-        "ref/netcoreapp2.0/_._",
-        "ref/netstandard1.0/Microsoft.CSharp.dll",
-        "ref/netstandard1.0/Microsoft.CSharp.xml",
-        "ref/netstandard1.0/de/Microsoft.CSharp.xml",
-        "ref/netstandard1.0/es/Microsoft.CSharp.xml",
-        "ref/netstandard1.0/fr/Microsoft.CSharp.xml",
-        "ref/netstandard1.0/it/Microsoft.CSharp.xml",
-        "ref/netstandard1.0/ja/Microsoft.CSharp.xml",
-        "ref/netstandard1.0/ko/Microsoft.CSharp.xml",
-        "ref/netstandard1.0/ru/Microsoft.CSharp.xml",
-        "ref/netstandard1.0/zh-hans/Microsoft.CSharp.xml",
-        "ref/netstandard1.0/zh-hant/Microsoft.CSharp.xml",
-        "ref/netstandard2.0/Microsoft.CSharp.dll",
-        "ref/netstandard2.0/Microsoft.CSharp.xml",
-        "ref/portable-net45+win8+wp8+wpa81/_._",
-        "ref/uap10.0.16299/_._",
-        "ref/win8/_._",
-        "ref/wp80/_._",
-        "ref/wpa81/_._",
-        "ref/xamarinios10/_._",
-        "ref/xamarinmac20/_._",
-        "ref/xamarintvos10/_._",
-        "ref/xamarinwatchos10/_._",
-        "useSharedDesignerContext.txt",
-        "version.txt"
       ]
     },
     "Microsoft.Data.SqlClient/6.0.1": {
@@ -4218,36 +3824,6 @@
         "nettopologysuite.io.sqlserverbytes.nuspec"
       ]
     },
-    "Newtonsoft.Json/11.0.1": {
-      "sha512": "pNN4l+J6LlpIvHOeNdXlwxv39NPJ2B5klz+Rd2UQZIx30Squ5oND1Yy3wEAUoKn0GPUj6Yxt9lxlYWQqfZcvKg==",
-      "type": "package",
-      "path": "newtonsoft.json/11.0.1",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "LICENSE.md",
-        "lib/net20/Newtonsoft.Json.dll",
-        "lib/net20/Newtonsoft.Json.xml",
-        "lib/net35/Newtonsoft.Json.dll",
-        "lib/net35/Newtonsoft.Json.xml",
-        "lib/net40/Newtonsoft.Json.dll",
-        "lib/net40/Newtonsoft.Json.xml",
-        "lib/net45/Newtonsoft.Json.dll",
-        "lib/net45/Newtonsoft.Json.xml",
-        "lib/netstandard1.0/Newtonsoft.Json.dll",
-        "lib/netstandard1.0/Newtonsoft.Json.xml",
-        "lib/netstandard1.3/Newtonsoft.Json.dll",
-        "lib/netstandard1.3/Newtonsoft.Json.xml",
-        "lib/netstandard2.0/Newtonsoft.Json.dll",
-        "lib/netstandard2.0/Newtonsoft.Json.xml",
-        "lib/portable-net40+sl5+win8+wp8+wpa81/Newtonsoft.Json.dll",
-        "lib/portable-net40+sl5+win8+wp8+wpa81/Newtonsoft.Json.xml",
-        "lib/portable-net45+win8+wp8+wpa81/Newtonsoft.Json.dll",
-        "lib/portable-net45+win8+wp8+wpa81/Newtonsoft.Json.xml",
-        "newtonsoft.json.11.0.1.nupkg.sha512",
-        "newtonsoft.json.nuspec"
-      ]
-    },
     "Npgsql/8.0.6": {
       "sha512": "KaS6CY5kY2Sd0P00MSeFcOI3t2DiQ4UWG8AuRpVOUeDWITOKfoEEG91DP3cmT6aerixPkjwKgXxnpDxIkDpO6g==",
       "type": "package",
@@ -4320,6 +3896,30 @@
         "oracle.png"
       ]
     },
+    "Pipelines.Sockets.Unofficial/2.2.16": {
+      "sha512": "nonu9l0YrZH6krVYbskBjE7uG0VMAnvOQ9PU+RmzUsy+++vHkqzzCkHRoP877OiA3iRTxJyNDLfpcU8hrJ3/YQ==",
+      "type": "package",
+      "path": "pipelines.sockets.unofficial/2.2.16",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net462/Pipelines.Sockets.Unofficial.dll",
+        "lib/net462/Pipelines.Sockets.Unofficial.xml",
+        "lib/net472/Pipelines.Sockets.Unofficial.dll",
+        "lib/net472/Pipelines.Sockets.Unofficial.xml",
+        "lib/net8.0/Pipelines.Sockets.Unofficial.dll",
+        "lib/net8.0/Pipelines.Sockets.Unofficial.xml",
+        "lib/net9.0/Pipelines.Sockets.Unofficial.dll",
+        "lib/net9.0/Pipelines.Sockets.Unofficial.xml",
+        "lib/netstandard2.0/Pipelines.Sockets.Unofficial.dll",
+        "lib/netstandard2.0/Pipelines.Sockets.Unofficial.xml",
+        "lib/netstandard2.1/Pipelines.Sockets.Unofficial.dll",
+        "lib/netstandard2.1/Pipelines.Sockets.Unofficial.xml",
+        "pipelines.sockets.unofficial.2.2.16.nupkg.sha512",
+        "pipelines.sockets.unofficial.nuspec"
+      ]
+    },
     "Pomelo.EntityFrameworkCore.MySql/8.0.2": {
       "sha512": "XjnlcxVBLnEMbyEc5cZzgZeDyLvAniACZQ04W1slWN0f4rmfNzl98gEMvHnFH0fMDF06z9MmgGi/Sr7hJ+BVnw==",
       "type": "package",
@@ -4381,6 +3981,30 @@
         "lib/netstandard2.0/SQLitePCLRaw.core.dll",
         "sqlitepclraw.core.2.1.6.nupkg.sha512",
         "sqlitepclraw.core.nuspec"
+      ]
+    },
+    "StackExchange.Redis/2.13.17": {
+      "sha512": "P7o7ZDBAmBrOLQEw8Pt44iIA08ioj48smRxn4Jp6yzCu6P3DOSU6lj7f+IOtN3pPvSgC9YufvM92ycukEEBCYQ==",
+      "type": "package",
+      "path": "stackexchange.redis/2.13.17",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net10.0/StackExchange.Redis.dll",
+        "lib/net10.0/StackExchange.Redis.xml",
+        "lib/net461/StackExchange.Redis.dll",
+        "lib/net461/StackExchange.Redis.xml",
+        "lib/net472/StackExchange.Redis.dll",
+        "lib/net472/StackExchange.Redis.xml",
+        "lib/net6.0/StackExchange.Redis.dll",
+        "lib/net6.0/StackExchange.Redis.xml",
+        "lib/net8.0/StackExchange.Redis.dll",
+        "lib/net8.0/StackExchange.Redis.xml",
+        "lib/netstandard2.0/StackExchange.Redis.dll",
+        "lib/netstandard2.0/StackExchange.Redis.xml",
+        "stackexchange.redis.2.13.17.nupkg.sha512",
+        "stackexchange.redis.nuspec"
       ]
     },
     "System.ClientModel/1.0.0": {
@@ -4628,6 +4252,35 @@
         "system.identitymodel.tokens.jwt.nuspec"
       ]
     },
+    "System.IO.Hashing/10.0.2": {
+      "sha512": "AKJknIFi9O3+rGExxTry188JPvUoZAPcCtS2qdqyFhIzsxQ1Ap94BeGDG0VzVEHakhmRxmJtVih6TsHoghIt/g==",
+      "type": "package",
+      "path": "system.io.hashing/10.0.2",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "PACKAGE.md",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/System.IO.Hashing.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net8.0/_._",
+        "buildTransitive/netcoreapp2.0/System.IO.Hashing.targets",
+        "lib/net10.0/System.IO.Hashing.dll",
+        "lib/net10.0/System.IO.Hashing.xml",
+        "lib/net462/System.IO.Hashing.dll",
+        "lib/net462/System.IO.Hashing.xml",
+        "lib/net8.0/System.IO.Hashing.dll",
+        "lib/net8.0/System.IO.Hashing.xml",
+        "lib/net9.0/System.IO.Hashing.dll",
+        "lib/net9.0/System.IO.Hashing.xml",
+        "lib/netstandard2.0/System.IO.Hashing.dll",
+        "lib/netstandard2.0/System.IO.Hashing.xml",
+        "system.io.hashing.10.0.2.nupkg.sha512",
+        "system.io.hashing.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
     "System.IO.Packaging/8.0.1": {
       "sha512": "KYkIOAvPexQOLDxPO2g0BVoWInnQhPpkFzRqvNrNrMhVT6kqhVr0zEb6KCHlptLFukxnZrjuMVAnxK7pOGUYrw==",
       "type": "package",
@@ -4654,6 +4307,35 @@
         "lib/netstandard2.0/System.IO.Packaging.xml",
         "system.io.packaging.8.0.1.nupkg.sha512",
         "system.io.packaging.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "System.IO.Pipelines/8.0.0": {
+      "sha512": "FHNOatmUq0sqJOkTx+UF/9YK1f180cnW5FVqnQMvYUN0elp6wFzbtPSiqbo1/ru8ICp43JM1i7kKkk6GsNGHlA==",
+      "type": "package",
+      "path": "system.io.pipelines/8.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/System.IO.Pipelines.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net6.0/_._",
+        "buildTransitive/netcoreapp2.0/System.IO.Pipelines.targets",
+        "lib/net462/System.IO.Pipelines.dll",
+        "lib/net462/System.IO.Pipelines.xml",
+        "lib/net6.0/System.IO.Pipelines.dll",
+        "lib/net6.0/System.IO.Pipelines.xml",
+        "lib/net7.0/System.IO.Pipelines.dll",
+        "lib/net7.0/System.IO.Pipelines.xml",
+        "lib/net8.0/System.IO.Pipelines.dll",
+        "lib/net8.0/System.IO.Pipelines.xml",
+        "lib/netstandard2.0/System.IO.Pipelines.dll",
+        "lib/netstandard2.0/System.IO.Pipelines.xml",
+        "system.io.pipelines.8.0.0.nupkg.sha512",
+        "system.io.pipelines.nuspec",
         "useSharedDesignerContext.txt"
       ]
     },
@@ -4995,8 +4677,6 @@
   },
   "projectFileDependencyGroups": {
     "net8.0": [
-      "Hangfire >= 1.8.*",
-      "Hangfire.PostgreSql >= 1.20.*",
       "InovaSkill.Importer.Application >= 1.0.0",
       "InovaSkill.Importer.Domain >= 1.0.0",
       "InovaSkill.Importer.Infrastructure >= 1.0.0",
@@ -5010,11 +4690,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\repos\\InovaSkill-Grespan\\InovaSkill.Importer.Worker\\InovaSkill.Importer.Worker.csproj",
+      "projectUniqueName": "C:\\repos\\InovaSkill-Grespan\\backend\\InovaSkill.Importer.Worker\\InovaSkill.Importer.Worker.csproj",
       "projectName": "InovaSkill.Importer.Worker",
-      "projectPath": "C:\\repos\\InovaSkill-Grespan\\InovaSkill.Importer.Worker\\InovaSkill.Importer.Worker.csproj",
+      "projectPath": "C:\\repos\\InovaSkill-Grespan\\backend\\InovaSkill.Importer.Worker\\InovaSkill.Importer.Worker.csproj",
       "packagesPath": "C:\\Users\\UsuarioPc\\.nuget\\packages\\",
-      "outputPath": "C:\\repos\\InovaSkill-Grespan\\InovaSkill.Importer.Worker\\obj\\",
+      "outputPath": "C:\\repos\\InovaSkill-Grespan\\backend\\InovaSkill.Importer.Worker\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -5035,14 +4715,14 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "C:\\repos\\InovaSkill-Grespan\\InovaSkill.Importer.Application\\InovaSkill.Importer.Application.csproj": {
-              "projectPath": "C:\\repos\\InovaSkill-Grespan\\InovaSkill.Importer.Application\\InovaSkill.Importer.Application.csproj"
+            "C:\\repos\\InovaSkill-Grespan\\backend\\InovaSkill.Importer.Application\\InovaSkill.Importer.Application.csproj": {
+              "projectPath": "C:\\repos\\InovaSkill-Grespan\\backend\\InovaSkill.Importer.Application\\InovaSkill.Importer.Application.csproj"
             },
-            "C:\\repos\\InovaSkill-Grespan\\InovaSkill.Importer.Domain\\InovaSkill.Importer.Domain.csproj": {
-              "projectPath": "C:\\repos\\InovaSkill-Grespan\\InovaSkill.Importer.Domain\\InovaSkill.Importer.Domain.csproj"
+            "C:\\repos\\InovaSkill-Grespan\\backend\\InovaSkill.Importer.Domain\\InovaSkill.Importer.Domain.csproj": {
+              "projectPath": "C:\\repos\\InovaSkill-Grespan\\backend\\InovaSkill.Importer.Domain\\InovaSkill.Importer.Domain.csproj"
             },
-            "C:\\repos\\InovaSkill-Grespan\\InovaSkill.Importer.Infrastructure\\InovaSkill.Importer.Infrastructure.csproj": {
-              "projectPath": "C:\\repos\\InovaSkill-Grespan\\InovaSkill.Importer.Infrastructure\\InovaSkill.Importer.Infrastructure.csproj"
+            "C:\\repos\\InovaSkill-Grespan\\backend\\InovaSkill.Importer.Infrastructure\\InovaSkill.Importer.Infrastructure.csproj": {
+              "projectPath": "C:\\repos\\InovaSkill-Grespan\\backend\\InovaSkill.Importer.Infrastructure\\InovaSkill.Importer.Infrastructure.csproj"
             }
           }
         }
@@ -5063,14 +4743,6 @@
       "net8.0": {
         "targetAlias": "net8.0",
         "dependencies": {
-          "Hangfire": {
-            "target": "Package",
-            "version": "[1.8.*, )"
-          },
-          "Hangfire.PostgreSql": {
-            "target": "Package",
-            "version": "[1.20.*, )"
-          },
           "Microsoft.Extensions.Hosting": {
             "target": "Package",
             "version": "[8.*, )"

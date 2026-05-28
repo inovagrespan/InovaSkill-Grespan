@@ -15,6 +15,9 @@ import { Route as RhRouteImport } from './routes/rh'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
+import { Route as ImportacoesTemplatesRouteImport } from './routes/importacoes.templates'
+import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
 
 const VendasRoute = VendasRouteImport.update({
   id: '/vendas',
@@ -46,31 +49,54 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImportacoesIndexRoute = ImportacoesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ImportacoesRoute,
+} as any)
+const ImportacoesTemplatesRoute = ImportacoesTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => ImportacoesRoute,
+} as any)
+const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
+  id: '/files',
+  path: '/files',
+  getParentRoute: () => ImportacoesRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/importacoes': typeof ImportacoesRoute
+  '/importacoes': typeof ImportacoesRouteWithChildren
   '/logistica': typeof LogisticaRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/importacoes/files': typeof ImportacoesFilesRoute
+  '/importacoes/templates': typeof ImportacoesTemplatesRoute
+  '/importacoes/': typeof ImportacoesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/importacoes': typeof ImportacoesRoute
   '/logistica': typeof LogisticaRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/importacoes/files': typeof ImportacoesFilesRoute
+  '/importacoes/templates': typeof ImportacoesTemplatesRoute
+  '/importacoes': typeof ImportacoesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/importacoes': typeof ImportacoesRoute
+  '/importacoes': typeof ImportacoesRouteWithChildren
   '/logistica': typeof LogisticaRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/importacoes/files': typeof ImportacoesFilesRoute
+  '/importacoes/templates': typeof ImportacoesTemplatesRoute
+  '/importacoes/': typeof ImportacoesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -81,8 +107,19 @@ export interface FileRouteTypes {
     | '/rh'
     | '/simulacao'
     | '/vendas'
+    | '/importacoes/files'
+    | '/importacoes/templates'
+    | '/importacoes/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/importacoes' | '/logistica' | '/rh' | '/simulacao' | '/vendas'
+  to:
+    | '/'
+    | '/logistica'
+    | '/rh'
+    | '/simulacao'
+    | '/vendas'
+    | '/importacoes/files'
+    | '/importacoes/templates'
+    | '/importacoes'
   id:
     | '__root__'
     | '/'
@@ -91,11 +128,14 @@ export interface FileRouteTypes {
     | '/rh'
     | '/simulacao'
     | '/vendas'
+    | '/importacoes/files'
+    | '/importacoes/templates'
+    | '/importacoes/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ImportacoesRoute: typeof ImportacoesRoute
+  ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LogisticaRoute: typeof LogisticaRoute
   RhRoute: typeof RhRoute
   SimulacaoRoute: typeof SimulacaoRoute
@@ -146,12 +186,49 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/importacoes/': {
+      id: '/importacoes/'
+      path: '/'
+      fullPath: '/importacoes/'
+      preLoaderRoute: typeof ImportacoesIndexRouteImport
+      parentRoute: typeof ImportacoesRoute
+    }
+    '/importacoes/templates': {
+      id: '/importacoes/templates'
+      path: '/templates'
+      fullPath: '/importacoes/templates'
+      preLoaderRoute: typeof ImportacoesTemplatesRouteImport
+      parentRoute: typeof ImportacoesRoute
+    }
+    '/importacoes/files': {
+      id: '/importacoes/files'
+      path: '/files'
+      fullPath: '/importacoes/files'
+      preLoaderRoute: typeof ImportacoesFilesRouteImport
+      parentRoute: typeof ImportacoesRoute
+    }
   }
 }
 
+interface ImportacoesRouteChildren {
+  ImportacoesFilesRoute: typeof ImportacoesFilesRoute
+  ImportacoesTemplatesRoute: typeof ImportacoesTemplatesRoute
+  ImportacoesIndexRoute: typeof ImportacoesIndexRoute
+}
+
+const ImportacoesRouteChildren: ImportacoesRouteChildren = {
+  ImportacoesFilesRoute: ImportacoesFilesRoute,
+  ImportacoesTemplatesRoute: ImportacoesTemplatesRoute,
+  ImportacoesIndexRoute: ImportacoesIndexRoute,
+}
+
+const ImportacoesRouteWithChildren = ImportacoesRoute._addFileChildren(
+  ImportacoesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ImportacoesRoute: ImportacoesRoute,
+  ImportacoesRoute: ImportacoesRouteWithChildren,
   LogisticaRoute: LogisticaRoute,
   RhRoute: RhRoute,
   SimulacaoRoute: SimulacaoRoute,

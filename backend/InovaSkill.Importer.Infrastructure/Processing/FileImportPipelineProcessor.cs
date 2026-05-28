@@ -98,6 +98,7 @@ public sealed class FileImportPipelineProcessor(
         PreProcessorTemplate? template = null;
         IReadOnlyList<PreProcessorTemplateRule>? transformRules = null;
         IReadOnlyList<PreProcessorTemplateRule>? validationRules = null;
+        IReadOnlyList<ColumnAliasMapping>? aliasMappings = null;
 
         await using (var stream = new FileStream(job.NormalizedFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
         await using (var writer = new StreamWriter(stream))
@@ -118,6 +119,7 @@ public sealed class FileImportPipelineProcessor(
                         var ordered = template.Rules.OrderBy(x => x.SortOrder).ToList();
                         transformRules = ordered.Where(x => !IsValidationRule(x)).ToList();
                         validationRules = ordered.Where(IsValidationRule).ToList();
+                        aliasMappings = ParseAliasMappings(template.ColumnMappingsJson);
                         if (template.FileType != FileType.Unknown && job.FileType == FileType.Unknown)
                         {
                             job.FileType = template.FileType;
@@ -126,7 +128,7 @@ public sealed class FileImportPipelineProcessor(
                 }
 
                 var preprocessResult = PreprocessRow(row, transformRules);
-                var normalizedRow = ApplyBuiltInAliases(preprocessResult.Row);
+                var normalizedRow = ApplyAliases(preprocessResult.Row, aliasMappings);
 
                 foreach (var ruleError in preprocessResult.Errors)
                 {
@@ -490,10 +492,29 @@ public sealed class FileImportPipelineProcessor(
 
     private sealed record NormalizedRow(int RowNumber, Dictionary<string, string> Values);
 
-    private static ImportedRow ApplyBuiltInAliases(ImportedRow row)
+    private static ImportedRow ApplyAliases(ImportedRow row, IReadOnlyList<ColumnAliasMapping>? mappings)
     {
         var values = new Dictionary<string, string>(row.Values, StringComparer.OrdinalIgnoreCase);
         var changed = false;
+
+        if (mappings is { Count: > 0 })
+        {
+            foreach (var mapping in mappings)
+            {
+                if (string.IsNullOrWhiteSpace(mapping.From) || string.IsNullOrWhiteSpace(mapping.To))
+                {
+                    continue;
+                }
+
+                var from = mapping.From.Trim();
+                var to = mapping.To.Trim();
+                if (!values.ContainsKey(to) && values.TryGetValue(from, out var mappedValue))
+                {
+                    values[to] = mappedValue;
+                    changed = true;
+                }
+            }
+        }
 
         // Orders: legacy header alias support.
         if (!values.ContainsKey("orderedat") && values.TryGetValue("orderdate", out var orderDateValue))
@@ -509,6 +530,24 @@ public sealed class FileImportPipelineProcessor(
     {
         var type = rule.RuleType.Trim().ToLowerInvariant();
         return type.StartsWith("validate_", StringComparison.Ordinal);
+    }
+
+    private static IReadOnlyList<ColumnAliasMapping> ParseAliasMappings(string columnMappingsJson)
+    {
+        if (string.IsNullOrWhiteSpace(columnMappingsJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<ColumnAliasMapping>>(columnMappingsJson, JsonOptions);
+            return parsed ?? [];
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     private static string BuildFailureReason(Exception ex)
@@ -547,4 +586,6 @@ public sealed class FileImportPipelineProcessor(
 
         return $"Erro inesperado: {message}";
     }
+
+    private sealed record ColumnAliasMapping(string From, string To);
 }

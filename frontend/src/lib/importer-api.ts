@@ -39,6 +39,16 @@ export type PagedResult<T> = {
   items: T[];
 };
 
+export type TemplateAlias = { from: string; to: string };
+export type TemplateConfig = {
+  id: number;
+  fileType: FileType;
+  name: string;
+  isActive: boolean;
+  requiredHeadersCsv: string;
+  aliases: TemplateAlias[];
+};
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
 
 async function parseApiError(response: Response, fallbackMessage: string): Promise<string> {
@@ -222,4 +232,35 @@ export async function fetchJobErrors(
     total: (raw as PagedResult<ImportError>).total ?? (raw as { Total?: number }).Total ?? 0,
     items,
   };
+}
+
+export async function fetchTemplateConfigs(): Promise<TemplateConfig[]> {
+  const response = await fetch(`${API_URL}/api/template-configs`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar configurações de template."));
+  const data = (await response.json()) as Array<{
+    id?: number;
+    fileType?: number | string;
+    name?: string;
+    isActive?: boolean;
+    requiredHeadersCsv?: string;
+    aliases?: TemplateAlias[];
+  }>;
+  return (data ?? []).map((item) => ({
+    id: item.id ?? 0,
+    fileType: normalizeFileType(item.fileType ?? "Unknown"),
+    name: item.name ?? "",
+    isActive: item.isActive ?? true,
+    requiredHeadersCsv: item.requiredHeadersCsv ?? "",
+    aliases: item.aliases ?? [],
+  }));
+}
+
+export async function saveTemplateConfig(input: Omit<TemplateConfig, "id"> & { id?: number }): Promise<TemplateConfig> {
+  const response = await fetch(`${API_URL}/api/template-configs`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao salvar configuração de template."));
+  return (await response.json()) as TemplateConfig;
 }

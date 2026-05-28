@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
@@ -18,7 +18,7 @@ function NotFoundComponent() {
         <h1 className="text-7xl font-display font-bold text-primary">404</h1>
         <h2 className="mt-4 text-xl font-semibold">Página não encontrada</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          O recurso solicitado não existe no Nexus AI.
+          O recurso solicitado não existe no Grespan.
         </p>
         <div className="mt-6">
           <Link
@@ -60,7 +60,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Nexus AI — Smart Core S&OP" },
+      { title: "Grespan — Smart Core S&OP" },
       {
         name: "description",
         content:
@@ -110,3 +110,5 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
+
+

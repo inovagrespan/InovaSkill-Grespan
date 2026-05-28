@@ -9,3 +9,15 @@ C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Domain\obj\Debug\net8.0\InovaSki
 C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Domain\obj\Debug\net8.0\refint\InovaSkill.Importer.Domain.dll
 C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Domain\obj\Debug\net8.0\InovaSkill.Importer.Domain.pdb
 C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Domain\obj\Debug\net8.0\ref\InovaSkill.Importer.Domain.dll
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\bin\Debug\net8.0\InovaSkill.Importer.Domain.deps.json
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\bin\Debug\net8.0\InovaSkill.Importer.Domain.dll
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\bin\Debug\net8.0\InovaSkill.Importer.Domain.pdb
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\obj\Debug\net8.0\InovaSkill.Importer.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\obj\Debug\net8.0\InovaSkill.Importer.Domain.AssemblyInfoInputs.cache
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\obj\Debug\net8.0\InovaSkill.Importer.Domain.AssemblyInfo.cs
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\obj\Debug\net8.0\InovaSkill.Importer.Domain.csproj.CoreCompileInputs.cache
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\obj\Debug\net8.0\InovaSkill.Importer.Domain.sourcelink.json
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\obj\Debug\net8.0\InovaSkill.Importer.Domain.dll
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\obj\Debug\net8.0\refint\InovaSkill.Importer.Domain.dll
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\obj\Debug\net8.0\InovaSkill.Importer.Domain.pdb
+C:\repos\InovaSkill-Grespan\backend\InovaSkill.Importer.Domain\obj\Debug\net8.0\ref\InovaSkill.Importer.Domain.dll

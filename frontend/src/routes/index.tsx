@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Users, Truck, Activity, TrendingUp } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -17,7 +17,7 @@ function Dashboard() {
             Dashboard Operacional
           </h1>
           <p className="text-muted-foreground max-w-[60ch] text-pretty">
-            Bem-vindo ao Nexus AI. Comece revisando o cenário atual do RH e em seguida
+            Bem-vindo ao Grespan. Comece revisando o cenário atual do RH e em seguida
             simule picos de demanda para visualizar o efeito cascata.
           </p>
         </div>
@@ -127,3 +127,5 @@ function Dashboard() {
     </div>
   );
 }
+
+
