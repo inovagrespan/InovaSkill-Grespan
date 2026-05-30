@@ -1,37 +1,54 @@
-using InovaSkill.Importer.Application.Abstractions;
-using InovaSkill.Importer.Domain.Enums;
+﻿using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.ValueObjects;
 
 namespace InovaSkill.Importer.Infrastructure.Validation;
 
 public sealed class FileSchemaProvider : IFileSchemaProvider
 {
-    public FileSchema GetSchema(FileType fileType)
+    public FileSchema GetSchema(string importFileTypeCode)
     {
-        return fileType switch
+        var code = importFileTypeCode?.Trim()?.ToUpperInvariant() ?? string.Empty;
+        return code switch
         {
-            FileType.Customers => new FileSchema(FileType.Customers,
+            var x when x == ImportFileTypeCodes.CustomerList => new FileSchema(ImportFileTypeCodes.CustomerList,
             [
                 new ColumnSchema("name", true, ColumnDataType.String),
                 new ColumnSchema("email", true, ColumnDataType.Email),
                 new ColumnSchema("createdat", false, ColumnDataType.DateTime)
             ]),
-            FileType.Products => new FileSchema(FileType.Products,
+            var x when x == ImportFileTypeCodes.ProductList => new FileSchema(ImportFileTypeCodes.ProductList,
             [
                 new ColumnSchema("sku", true, ColumnDataType.String),
                 new ColumnSchema("name", true, ColumnDataType.String),
                 new ColumnSchema("price", true, ColumnDataType.Decimal),
                 new ColumnSchema("createdat", false, ColumnDataType.DateTime)
             ]),
-            FileType.Orders => new FileSchema(FileType.Orders,
+            var x when x == ImportFileTypeCodes.FinancialEntry => new FileSchema(ImportFileTypeCodes.FinancialEntry,
             [
                 new ColumnSchema("ordernumber", true, ColumnDataType.String),
                 new ColumnSchema("customeremail", true, ColumnDataType.Email),
                 new ColumnSchema("productsku", true, ColumnDataType.String),
-                new ColumnSchema("quantity", true, ColumnDataType.Int),
+                new ColumnSchema("quantity", true, ColumnDataType.Decimal),
                 new ColumnSchema("orderedat", true, ColumnDataType.DateTime)
             ]),
-            _ => new FileSchema(FileType.Unknown, [])
+            var x when x == ImportFileTypeCodes.SalesInvoice => new FileSchema(ImportFileTypeCodes.SalesInvoice,
+            [
+                new ColumnSchema("documentnumber", true, ColumnDataType.String),
+                new ColumnSchema("transactiondate", true, ColumnDataType.DateTime),
+                new ColumnSchema("customercode", true, ColumnDataType.String),
+                new ColumnSchema("customername", true, ColumnDataType.String),
+                new ColumnSchema("productcode", true, ColumnDataType.String),
+                new ColumnSchema("productdescription", true, ColumnDataType.String),
+                new ColumnSchema("quantity", true, ColumnDataType.Decimal),
+                new ColumnSchema("unitprice", true, ColumnDataType.Decimal),
+                new ColumnSchema("totalamount", true, ColumnDataType.Decimal),
+                new ColumnSchema("transactiontype", false, ColumnDataType.String),
+                new ColumnSchema("city", true, ColumnDataType.String),
+                new ColumnSchema("productgroup", true, ColumnDataType.String),
+                new ColumnSchema("grossweightkg", true, ColumnDataType.Decimal)
+            ]),
+            _ => new FileSchema(string.Empty, [])
         };
     }
 }

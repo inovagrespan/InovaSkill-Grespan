@@ -7,11 +7,14 @@ namespace InovaSkill.Importer.Infrastructure.Processing;
 
 public sealed class PreProcessorTemplateResolver(ImportDbContext dbContext) : IPreProcessorTemplateResolver
 {
-    public async Task<PreProcessorTemplate?> ResolveAsync(string fileName, IReadOnlyCollection<string> headers, CancellationToken cancellationToken)
+    public async Task<ImportTemplate?> ResolveAsync(string fileName, IReadOnlyCollection<string> headers, CancellationToken cancellationToken)
     {
-        var activeTemplates = await dbContext.PreProcessorTemplates
+        var activeTemplates = await dbContext.ImportTemplates
             .AsNoTracking()
-            .Include(x => x.Rules)
+            .Include(x => x.ImportFileType)
+            .Include(x => x.ColumnMappings)
+                .ThenInclude(x => x.TransformRules)
+                    .ThenInclude(x => x.TransformRule)
             .Where(x => x.IsActive)
             .OrderBy(x => x.Id)
             .ToListAsync(cancellationToken);
@@ -28,18 +31,16 @@ public sealed class PreProcessorTemplateResolver(ImportDbContext dbContext) : IP
 
         foreach (var template in activeTemplates)
         {
-            if (!MatchesHeaders(template, normalizedHeaders))
+            if (MatchesHeaders(template, normalizedHeaders))
             {
-                continue;
+                return template;
             }
-
-            return template;
         }
 
         return null;
     }
 
-    private static bool MatchesHeaders(PreProcessorTemplate template, HashSet<string> normalizedHeaders)
+    private static bool MatchesHeaders(ImportTemplate template, HashSet<string> normalizedHeaders)
     {
         var requiredHeaders = template.RequiredHeadersCsv
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
@@ -59,4 +60,3 @@ public sealed class PreProcessorTemplateResolver(ImportDbContext dbContext) : IP
         return value.Trim().ToLowerInvariant();
     }
 }
-

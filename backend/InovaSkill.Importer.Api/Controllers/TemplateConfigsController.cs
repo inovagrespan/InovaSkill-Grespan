@@ -12,6 +12,11 @@ namespace InovaSkill.Importer.Api.Controllers;
 [Route("api/template-configs")]
 public sealed class TemplateConfigsController(ImportDbContext dbContext) : ControllerBase
 {
+    private static readonly JsonSerializerOptions AliasJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<TemplateConfigDto>>> GetAll(CancellationToken cancellationToken)
     {
@@ -36,7 +41,7 @@ public sealed class TemplateConfigsController(ImportDbContext dbContext) : Contr
     {
         if (request.FileType == FileType.Unknown)
         {
-            return BadRequest("FileType deve ser Customers, Products ou Orders.");
+            return BadRequest("FileType deve ser Customers, Products ou CommercialTransaction.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -96,7 +101,7 @@ public sealed class TemplateConfigsController(ImportDbContext dbContext) : Contr
 
         try
         {
-            var parsed = JsonSerializer.Deserialize<List<TemplateAliasDto>>(json);
+            var parsed = JsonSerializer.Deserialize<List<TemplateAliasDto>>(json, AliasJsonOptions);
             return parsed ?? [];
         }
         catch

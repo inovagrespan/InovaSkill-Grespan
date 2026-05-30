@@ -99,8 +99,8 @@
       api:
         condition: service_started
     restart: unless-stopped
-    mem_limit: 256m
-    cpus: 0.50
+    mem_limit: 768m
+    cpus: 1.00
 
 volumes:
   postgres_data:

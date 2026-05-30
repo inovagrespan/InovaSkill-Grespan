@@ -1,9 +1,9 @@
-# AGENTS.md
+﻿# AGENTS.md
 
 Guia local para qualquer IA que edite este repositório.
 
 ## Objetivo
-- Evitar regressões de texto/encoding (ex.: `Configura��o`).
+- Evitar regressões de texto/encoding (ex.: `Configuração`).
 - Manter padrão de arquitetura já existente no projeto.
 - Reduzir mudanças fora do escopo.
 
@@ -12,10 +12,14 @@ Guia local para qualquer IA que edite este repositório.
 - Não renomear pastas de arquitetura existente sem pedido explícito.
 - Não quebrar separação entre `frontend` e `backend`.
 - Não mudar contratos de API sem atualizar frontend e backend no mesmo PR.
+- Para qualquer alteração de código, criar/atualizar testes cobrindo o comportamento alterado.
+- No frontend, criar casos de teste para funcionalidades importantes com cenários diferentes (fluxo feliz, bordas e entradas inválidas).
+- Antes de finalizar, executar a suíte de testes aplicável (frontend e backend quando houver alterações em ambos) e só encerrar a tarefa com testes passando.
 
 ## Encoding e Idioma
 - Textos de UI devem usar PT-BR com acentuação correta.
 - Nunca commitar arquivos em UTF-16/ANSI.
+- É proibido introduzir ou manter caracteres corrompidos/mojibake (ex.: `Ã`, `��`, `�`) em qualquer arquivo.
 - Antes de finalizar, buscar por caracteres corrompidos:
   - `Ã`
   - `��`
@@ -68,4 +72,12 @@ docker compose ps
 - Verificar textos quebrados:
 ```powershell
 rg "Ã|��|�" -n frontend backend -S
+```
+- Executar testes frontend:
+```powershell
+cd frontend; npm run test
+```
+- Executar testes backend:
+```powershell
+cd backend; dotnet test
 ```

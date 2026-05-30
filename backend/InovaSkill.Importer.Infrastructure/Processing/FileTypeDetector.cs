@@ -1,29 +1,45 @@
-using InovaSkill.Importer.Application.Abstractions;
-using InovaSkill.Importer.Domain.Enums;
+﻿using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Domain.Entities;
 
 namespace InovaSkill.Importer.Infrastructure.Processing;
 
 public sealed class FileTypeDetector : IFileTypeDetector
 {
-    public FileType Detect(IReadOnlyDictionary<string, string> row)
+    public string? DetectCode(IReadOnlyDictionary<string, string> row)
     {
-        // Most specific first, to avoid false positives (e.g. Products has "name").
+        if (HasAny(
+            row,
+            "documentnumber",
+            "transactiondate",
+            "customercode",
+            "productcode",
+            "totalamount",
+            "documento",
+            "data",
+            "cliente",
+            "produto",
+            "quantidade",
+            "total"))
+        {
+            return ImportFileTypeCodes.SalesInvoice;
+        }
+
         if (HasAny(row, "ordernumber", "quantity", "productsku", "customeremail", "orderedat", "orderdate"))
         {
-            return FileType.Orders;
+            return ImportFileTypeCodes.FinancialEntry;
         }
 
         if (HasAny(row, "sku", "price"))
         {
-            return FileType.Products;
+            return ImportFileTypeCodes.ProductList;
         }
 
         if (HasAny(row, "email", "name", "createdat"))
         {
-            return FileType.Customers;
+            return ImportFileTypeCodes.CustomerList;
         }
 
-        return FileType.Unknown;
+        return null;
     }
 
     private static bool HasAny(IReadOnlyDictionary<string, string> row, params string[] keys)

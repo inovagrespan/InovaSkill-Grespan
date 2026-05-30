@@ -1,4 +1,4 @@
-using InovaSkill.Importer.Domain.Enums;
+﻿using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.Validation;
 
 namespace InovaSkill.Importer.Tests.Validation;
@@ -8,14 +8,15 @@ public class FileSchemaProviderTests
     private readonly FileSchemaProvider _sut = new();
 
     [Theory]
-    [InlineData(FileType.Customers)]
-    [InlineData(FileType.Orders)]
-    [InlineData(FileType.Products)]
-    public void GetSchema_ReturnsExpectedSchema(FileType type)
+    [InlineData(ImportFileTypeCodes.CustomerList)]
+    [InlineData(ImportFileTypeCodes.FinancialEntry)]
+    [InlineData(ImportFileTypeCodes.ProductList)]
+    [InlineData(ImportFileTypeCodes.SalesInvoice)]
+    public void GetSchema_ReturnsExpectedSchema(string code)
     {
-        var schema = _sut.GetSchema(type);
+        var schema = _sut.GetSchema(code);
 
-        Assert.Equal(type, schema.FileType);
+        Assert.Equal(code, schema.ImportFileTypeCode);
         Assert.NotEmpty(schema.Columns);
     }
 }

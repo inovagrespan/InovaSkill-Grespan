@@ -8,7 +8,7 @@ public sealed class FileJob
     public string FilePath { get; set; } = string.Empty;
     public string OriginalFileName { get; set; } = string.Empty;
     public string NormalizedFilePath { get; set; } = string.Empty;
-    public FileType FileType { get; set; } = FileType.Unknown;
+    public string? ImportFileTypeCode { get; set; }
     public FileJobStatus Status { get; set; } = FileJobStatus.WaitingProcessing;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string CurrentStep { get; set; } = "Aguardando validacao";
@@ -88,7 +88,7 @@ public sealed class FileJob
 
     public void RequeueManually()
     {
-        Status = FileType == FileType.Unknown ? FileJobStatus.WaitingProcessing : FileJobStatus.ReadyToImport;
+        Status = string.IsNullOrWhiteSpace(ImportFileTypeCode) ? FileJobStatus.WaitingProcessing : FileJobStatus.ReadyToImport;
         CurrentStep = "Reenfileirado manualmente";
         ProgressPercent = Status == FileJobStatus.WaitingProcessing ? 0 : 60;
         ProcessedRows = 0;
@@ -137,3 +137,5 @@ public sealed class FileJob
         return value[..maxLength];
     }
 }
+
+

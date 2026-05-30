@@ -1,4 +1,4 @@
-using InovaSkill.Importer.Application.Abstractions;
+﻿using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Application.Validation;
 using InovaSkill.Importer.Domain.ValueObjects;
 
@@ -10,9 +10,9 @@ public sealed class RowValidator : IRowValidator
     {
         var result = new ValidationResult();
 
-        if (schema.FileType == InovaSkill.Importer.Domain.Enums.FileType.Unknown)
+        if (string.IsNullOrWhiteSpace(schema.ImportFileTypeCode))
         {
-            result.Errors.Add(new ValidationError("FileType", "Unknown schema."));
+            result.Errors.Add(new ValidationError("ImportFileType", "Unknown schema."));
             return result;
         }
 
@@ -48,3 +48,4 @@ public sealed class RowValidator : IRowValidator
         return result;
     }
 }
+

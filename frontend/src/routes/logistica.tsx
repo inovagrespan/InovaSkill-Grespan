@@ -31,7 +31,7 @@ const utilization = [
   { d: "Qua", uso: 88, meta: 85 },
   { d: "Qui", uso: 91, meta: 85 },
   { d: "Sex", uso: 94, meta: 85 },
-  { d: "Sáb", uso: 73, meta: 85 },
+  { d: "SÃ¡b", uso: 73, meta: 85 },
   { d: "Dom", uso: 41, meta: 85 },
 ];
 
@@ -45,12 +45,12 @@ const routeCost = [
 ];
 
 const fleet = [
-  { id: "TRK-014", tipo: "Truck 14t", rota: "R-03 · SP→Campinas", status: "rota", carga: 92, eta: "14:20" },
-  { id: "TRK-022", tipo: "Truck 14t", rota: "CD Central", status: "carregando", carga: 35, eta: "—" },
-  { id: "VAN-007", tipo: "VUC 3.5t", rota: "R-01 · Zona Sul", status: "rota", carga: 78, eta: "13:05" },
-  { id: "TRK-031", tipo: "Truck 14t", rota: "R-05 · Litoral", status: "atraso", carga: 88, eta: "16:40" },
-  { id: "VAN-012", tipo: "VUC 3.5t", rota: "—", status: "manutenção", carga: 0, eta: "—" },
-  { id: "TRK-008", tipo: "Truck 14t", rota: "R-02 · ABC", status: "rota", carga: 81, eta: "13:48" },
+  { id: "TRK-014", tipo: "Truck 14t", rota: "R-03 Â· SPâ†’Campinas", status: "rota", carga: 92, eta: "14:20" },
+  { id: "TRK-022", tipo: "Truck 14t", rota: "CD Central", status: "carregando", carga: 35, eta: "â€”" },
+  { id: "VAN-007", tipo: "VUC 3.5t", rota: "R-01 Â· Zona Sul", status: "rota", carga: 78, eta: "13:05" },
+  { id: "TRK-031", tipo: "Truck 14t", rota: "R-05 Â· Litoral", status: "atraso", carga: 88, eta: "16:40" },
+  { id: "VAN-012", tipo: "VUC 3.5t", rota: "â€”", status: "manutenÃ§Ã£o", carga: 0, eta: "â€”" },
+  { id: "TRK-008", tipo: "Truck 14t", rota: "R-02 Â· ABC", status: "rota", carga: 81, eta: "13:48" },
 ];
 
 function Logistica() {
@@ -59,25 +59,25 @@ function Logistica() {
       <header className="flex justify-between items-end mb-12 animate-fade-in">
         <div>
           <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-muted-foreground">
-            Smart Core / Logística
+            Smart Core / LogÃ­stica
           </span>
           <h1 className="text-4xl font-display tracking-tight text-balance mt-2 mb-2">
-            Cenário Atual da Operação
+            CenÃ¡rio Atual da OperaÃ§Ã£o
           </h1>
           <p className="text-muted-foreground max-w-[60ch] text-pretty">
-            Linha de base da frota, rotas e CDs. A IA cruza estes números com a
-            previsão de vendas para projetar gargalos e custos.
+            Linha de base da frota, rotas e CDs. A IA cruza estes nÃºmeros com a
+            previsÃ£o de vendas para projetar gargalos e custos.
           </p>
         </div>
         <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em]">
-          Sync · há 4 min
+          Sync Â· hÃ¡ 4 min
         </span>
       </header>
 
       <section className="grid grid-cols-4 gap-4 mb-10 animate-fade-in [animation-delay:100ms]">
         {[
-          { l: "Frota Ativa", v: "86", sub: "de 92 veículos", icon: Truck, accent: false },
-          { l: "Ocupação Média", v: "87%", sub: "meta 85%", icon: Activity, accent: true },
+          { l: "Frota Ativa", v: "86", sub: "de 92 veÃ­culos", icon: Truck, accent: false },
+          { l: "OcupaÃ§Ã£o MÃ©dia", v: "87%", sub: "meta 85%", icon: Activity, accent: true },
           { l: "Custo / Km", v: "R$ 5,42", sub: "+6.1% vs trimestre", icon: Fuel, accent: false },
           { l: "SLA Entregas", v: "93.1%", sub: "alerta em 2 rotas", icon: Clock, accent: false, warn: true },
         ].map((s) => (
@@ -107,7 +107,7 @@ function Logistica() {
         <div className="col-span-2 bg-surface border border-border rounded-xl p-6 animate-fade-in [animation-delay:200ms]">
           <div className="flex justify-between items-baseline mb-4">
             <div>
-              <h3 className="font-display text-lg">Ocupação da Frota · 7d</h3>
+              <h3 className="font-display text-lg">OcupaÃ§Ã£o da Frota Â· 7d</h3>
               <p className="text-xs text-muted-foreground">% de capacidade utilizada vs meta</p>
             </div>
             <span className="text-[10px] font-mono text-primary uppercase tracking-widest">
@@ -140,14 +140,14 @@ function Logistica() {
         </div>
 
         <div className="bg-surface border border-border rounded-xl p-6 animate-fade-in [animation-delay:300ms]">
-          <h3 className="font-display text-lg mb-1">Centros de Distribuição</h3>
-          <p className="text-xs text-muted-foreground mb-5">Ocupação atual dos CDs</p>
+          <h3 className="font-display text-lg mb-1">Centros de DistribuiÃ§Ã£o</h3>
+          <p className="text-xs text-muted-foreground mb-5">OcupaÃ§Ã£o atual dos CDs</p>
           <div className="space-y-5">
             {[
-              { cd: "CD Central · SP", pct: 94, status: "crítico" },
-              { cd: "CD Norte · Guarulhos", pct: 78, status: "ok" },
-              { cd: "CD Sul · ABC", pct: 86, status: "atenção" },
-              { cd: "CD Litoral · Santos", pct: 62, status: "ok" },
+              { cd: "CD Central Â· SP", pct: 94, status: "crÃ­tico" },
+              { cd: "CD Norte Â· Guarulhos", pct: 78, status: "ok" },
+              { cd: "CD Sul Â· ABC", pct: 86, status: "atenÃ§Ã£o" },
+              { cd: "CD Litoral Â· Santos", pct: 62, status: "ok" },
             ].map((c) => (
               <div key={c.cd}>
                 <div className="flex justify-between text-xs mb-1.5">
@@ -158,9 +158,9 @@ function Logistica() {
                   <div
                     className={
                       "h-full " +
-                      (c.status === "crítico"
+                      (c.status === "crÃ­tico"
                         ? "bg-danger"
-                        : c.status === "atenção"
+                        : c.status === "atenÃ§Ã£o"
                           ? "bg-yellow-400"
                           : "bg-primary")
                     }
@@ -178,7 +178,7 @@ function Logistica() {
           <div className="flex justify-between items-baseline mb-4">
             <div>
               <h3 className="font-display text-lg">Custo por Rota</h3>
-              <p className="text-xs text-muted-foreground">R$/km transportado · semana atual</p>
+              <p className="text-xs text-muted-foreground">R$/km transportado Â· semana atual</p>
             </div>
             <span className="text-[10px] font-mono text-yellow-400 uppercase tracking-widest">
               2 rotas em alerta
@@ -209,8 +209,8 @@ function Logistica() {
             {[
               { icon: Package, l: "Pedidos despachados", v: "1.284" },
               { icon: MapPin, l: "Rotas ativas", v: "23" },
-              { icon: Truck, l: "Veículos em rota", v: "71" },
-              { icon: AlertTriangle, l: "Ocorrências", v: "4", warn: true },
+              { icon: Truck, l: "VeÃ­culos em rota", v: "71" },
+              { icon: AlertTriangle, l: "OcorrÃªncias", v: "4", warn: true },
             ].map((i) => (
               <div key={i.l} className="flex justify-between items-center pb-3 border-b border-border last:border-0">
                 <div className="flex items-center gap-3">
@@ -228,13 +228,13 @@ function Logistica() {
 
       <section className="mb-10">
         <h2 className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground mb-6">
-          Frota em Operação · Tempo Real
+          Frota em OperaÃ§Ã£o Â· Tempo Real
         </h2>
         <div className="bg-surface border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-white/[0.02] border-b border-border">
               <tr className="text-left text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                <th className="px-6 py-3">Veículo</th>
+                <th className="px-6 py-3">VeÃ­culo</th>
                 <th className="px-6 py-3">Tipo</th>
                 <th className="px-6 py-3">Rota</th>
                 <th className="px-6 py-3">Carga</th>
@@ -271,7 +271,7 @@ function Logistica() {
                         "text-[10px] font-mono uppercase px-2 py-0.5 rounded " +
                         (f.status === "atraso"
                           ? "bg-danger/10 text-danger"
-                          : f.status === "manutenção"
+                          : f.status === "manutenÃ§Ã£o"
                             ? "bg-white/5 text-muted-foreground"
                             : f.status === "carregando"
                               ? "bg-yellow-500/10 text-yellow-400"
@@ -299,7 +299,7 @@ function Logistica() {
             </h3>
             <p className="text-sm text-muted-foreground text-pretty max-w-[60ch]">
               Com 2 rotas em alerta de SLA e o CD Central a 94%, qualquer aumento de
-              demanda força terceirização. Rode a simulação para dimensionar.
+              demanda forÃ§a terceirizaÃ§Ã£o. Rode a simulaÃ§Ã£o para dimensionar.
             </p>
           </div>
         </div>

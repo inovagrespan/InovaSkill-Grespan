@@ -78,7 +78,7 @@ function FlowProgress({ step }: { step: Step }) {
   const steps: { id: Step; label: string }[] = [
     { id: "slider", label: "Demanda" },
     { id: "impacto", label: "Impacto" },
-    { id: "cenarios", label: "Cenários" },
+    { id: "cenarios", label: "CenÃƒÂ¡rios" },
     { id: "detalhe", label: "Plano" },
   ];
   const currentIdx = steps.findIndex((s) => s.id === step);
@@ -138,8 +138,8 @@ function SliderStep({
   return (
     <section className="animate-fade-in">
       <p className="text-muted-foreground max-w-[60ch] text-pretty mb-10">
-        Arraste o controle para projetar diferentes níveis de crescimento de vendas
-        mensais. A IA recalcula em tempo real o impacto na operação.
+        Arraste o controle para projetar diferentes nÃƒÂ­veis de crescimento de vendas
+        mensais. A IA recalcula em tempo real o impacto na operaÃƒÂ§ÃƒÂ£o.
       </p>
 
       <div className="bg-surface border border-border p-12 rounded-2xl relative overflow-hidden mb-8">
@@ -193,8 +193,8 @@ function SliderStep({
             delta: `+R$ ${(3.5 * (demand / 100) * 1000).toFixed(0)}K`,
           },
           {
-            label: "Tendência S&OP",
-            value: demand > 25 ? "Agressiva" : demand > 10 ? "Moderada" : "Estável",
+            label: "TendÃƒÂªncia S&OP",
+            value: demand > 25 ? "Agressiva" : demand > 10 ? "Moderada" : "EstÃƒÂ¡vel",
             delta: null,
           },
         ].map((c) => (
@@ -240,11 +240,11 @@ function ImpactoStep({
   return (
     <section className="animate-fade-in">
       <h2 className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground mb-2">
-        Diagnóstico de Impacto Geral · Demanda +{demand}%
+        DiagnÃƒÂ³stico de Impacto Geral Ã‚Â· Demanda +{demand}%
       </h2>
       <p className="text-muted-foreground max-w-[60ch] text-pretty mb-10">
-        A IA cruzou o histórico de vendas com a capacidade atual e identificou os
-        gargalos críticos abaixo.
+        A IA cruzou o histÃƒÂ³rico de vendas com a capacidade atual e identificou os
+        gargalos crÃƒÂ­ticos abaixo.
       </p>
 
       <div className="grid grid-cols-3 gap-6 mb-10">
@@ -260,13 +260,13 @@ function ImpactoStep({
             R$ {extraRevenue}K
           </p>
           <p className="text-[10px] text-muted-foreground font-mono mt-3">
-            POR MÊS · PROJEÇÃO LINEAR
+            POR MÃƒÅ S Ã‚Â· PROJEÃƒâ€¡ÃƒÆ’O LINEAR
           </p>
         </div>
 
         <div className="bg-surface border border-danger/30 p-6 rounded-xl relative animate-fade-in [animation-delay:200ms]">
           <div className="absolute -left-3 top-1/2 -translate-y-1/2 text-danger text-xl">
-            →
+            Ã¢â€ â€™
           </div>
           <div className="flex items-center justify-between mb-4">
             <Truck className="size-5 text-danger" />
@@ -278,14 +278,14 @@ function ImpactoStep({
           <p className="text-3xl font-display text-danger tabular-nums">+{costPct}%</p>
           <div className="mt-4 p-2 bg-danger/10 border border-danger/20 rounded">
             <p className="text-[10px] font-bold text-danger font-mono">
-              FALTA 1 CAMINHÃO PRÓPRIO
+              FALTA 1 CAMINHÃƒÆ’O PRÃƒâ€œPRIO
             </p>
           </div>
         </div>
 
         <div className="bg-surface border border-danger/30 p-6 rounded-xl relative animate-fade-in [animation-delay:300ms]">
           <div className="absolute -left-3 top-1/2 -translate-y-1/2 text-danger text-xl">
-            →
+            Ã¢â€ â€™
           </div>
           <div className="flex items-center justify-between mb-4">
             <Users className="size-5 text-danger" />
@@ -297,7 +297,7 @@ function ImpactoStep({
           <p className="text-3xl font-display text-danger tabular-nums">2 Vagas</p>
           <div className="mt-4 p-2 bg-danger/10 border border-danger/20 rounded">
             <p className="text-[10px] font-bold text-danger font-mono">
-              1 MOTORISTA · 1 AJUDANTE
+              1 MOTORISTA Ã‚Â· 1 AJUDANTE
             </p>
           </div>
         </div>
@@ -311,9 +311,9 @@ function ImpactoStep({
           <div>
             <h3 className="text-lg font-display mb-2">Efeito Cascata Identificado</h3>
             <p className="text-sm text-muted-foreground text-pretty max-w-[72ch]">
-              Sem ação, o crescimento de {demand}% nas vendas se traduz em atrasos de
-              entrega, sobrecarga de equipes e perda estimada de R$ 312K em SLA. A IA já
-              calculou dois caminhos viáveis para resolver a crise.
+              Sem aÃƒÂ§ÃƒÂ£o, o crescimento de {demand}% nas vendas se traduz em atrasos de
+              entrega, sobrecarga de equipes e perda estimada de R$ 312K em SLA. A IA jÃƒÂ¡
+              calculou dois caminhos viÃƒÂ¡veis para resolver a crise.
             </p>
           </div>
         </div>
@@ -330,14 +330,14 @@ function ImpactoStep({
           onClick={onNext}
           className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg font-bold uppercase text-xs tracking-widest hover:brightness-110 transition-all"
         >
-          <Sparkles className="size-4" /> Gerar Soluções da IA
+          <Sparkles className="size-4" /> Gerar SoluÃƒÂ§ÃƒÂµes da IA
         </button>
       </div>
     </section>
   );
 }
 
-/* ------------------------- STEP 3: CENÁRIOS ------------------------- */
+/* ------------------------- STEP 3: CENÃƒÂRIOS ------------------------- */
 function CenariosStep({
   selected,
   setSelected,
@@ -352,11 +352,11 @@ function CenariosStep({
   return (
     <section className="animate-fade-in">
       <h2 className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground mb-2">
-        Soluções Recomendadas pela IA
+        SoluÃƒÂ§ÃƒÂµes Recomendadas pela IA
       </h2>
       <p className="text-muted-foreground max-w-[60ch] text-pretty mb-10">
-        A IA vasculhou o histórico do negócio e identificou dois caminhos cobrindo todo
-        o leque de soluções: saídas externas e expansão interna.
+        A IA vasculhou o histÃƒÂ³rico do negÃƒÂ³cio e identificou dois caminhos cobrindo todo
+        o leque de soluÃƒÂ§ÃƒÂµes: saÃƒÂ­das externas e expansÃƒÂ£o interna.
       </p>
 
       <div className="grid grid-cols-2 gap-8 mb-10">
@@ -364,13 +364,13 @@ function CenariosStep({
           id="A"
           selected={selected === "A"}
           onSelect={() => setSelected("A")}
-          tag="Cenário A · Terceirização"
-          title="Contratação Spot & Frete Externo"
+          tag="CenÃƒÂ¡rio A Ã‚Â· TerceirizaÃƒÂ§ÃƒÂ£o"
+          title="ContrataÃƒÂ§ÃƒÂ£o Spot & Frete Externo"
           badge="Baixo Capex"
           items={[
-            "Aluguel de 1 caminhão plataforma (diário)",
-            "Contratação via agência (2 temporários)",
-            { label: "Prazo de implementação:", value: "48 horas" },
+            "Aluguel de 1 caminhÃƒÂ£o plataforma (diÃƒÂ¡rio)",
+            "ContrataÃƒÂ§ÃƒÂ£o via agÃƒÂªncia (2 temporÃƒÂ¡rios)",
+            { label: "Prazo de implementaÃƒÂ§ÃƒÂ£o:", value: "48 horas" },
           ]}
           roi="92%"
           payback="1.2 meses"
@@ -379,14 +379,14 @@ function CenariosStep({
           id="B"
           selected={selected === "B"}
           onSelect={() => setSelected("B")}
-          tag="Cenário B · Expansão de Ativos"
-          title="Otimização e Ativos Próprios"
+          tag="CenÃƒÂ¡rio B Ã‚Â· ExpansÃƒÂ£o de Ativos"
+          title="OtimizaÃƒÂ§ÃƒÂ£o e Ativos PrÃƒÂ³prios"
           badge="Recomendado"
           recommended
           items={[
-            "Aquisição de 1 caminhão Cargo 2024",
-            "Contratação CLT: 1 Motorista + 1 Ajudante",
-            { label: "Prazo de execução:", value: "30 dias", accent: true },
+            "AquisiÃƒÂ§ÃƒÂ£o de 1 caminhÃƒÂ£o Cargo 2024",
+            "ContrataÃƒÂ§ÃƒÂ£o CLT: 1 Motorista + 1 Ajudante",
+            { label: "Prazo de execuÃƒÂ§ÃƒÂ£o:", value: "30 dias", accent: true },
           ]}
           roi="156%"
           payback="3.5 meses"
@@ -404,7 +404,7 @@ function CenariosStep({
           onClick={onNext}
           className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg font-bold uppercase text-xs tracking-widest hover:brightness-110 transition-all"
         >
-          Detalhar Cenário {selected} <ArrowRight className="size-4" />
+          Detalhar CenÃƒÂ¡rio {selected} <ArrowRight className="size-4" />
         </button>
       </div>
     </section>
@@ -516,7 +516,7 @@ function ScenarioCard({
       </div>
       {selected && (
         <div className="mt-6 inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-primary">
-          <CheckCircle2 className="size-3" /> Selecionado · Cenário {id}
+          <CheckCircle2 className="size-3" /> Selecionado Ã‚Â· CenÃƒÂ¡rio {id}
         </div>
       )}
     </button>
@@ -541,34 +541,34 @@ function DetalheStep({
   const actions = isB
     ? [
         {
-          title: "Aquisição de 1 Unidade de Frota",
+          title: "AquisiÃƒÂ§ÃƒÂ£o de 1 Unidade de Frota",
           desc: "Disparar ordem de compra para fornecedor preferencial (Cargo 2024).",
           tag: "Prazo 20 dias",
           icon: Truck,
         },
         {
-          title: "Contratação CLT — 2 vagas",
-          desc: "Abertura de requisições no ATS: 1 Motorista + 1 Ajudante de Carga.",
+          title: "ContrataÃƒÂ§ÃƒÂ£o CLT Ã¢â‚¬â€ 2 vagas",
+          desc: "Abertura de requisiÃƒÂ§ÃƒÂµes no ATS: 1 Motorista + 1 Ajudante de Carga.",
           tag: "Prazo 30 dias",
           icon: Users,
         },
         {
-          title: "Reotimização de rotas",
-          desc: "Recalcular malha logística incluindo o novo ativo na capacidade total.",
-          tag: "Automático",
+          title: "ReotimizaÃƒÂ§ÃƒÂ£o de rotas",
+          desc: "Recalcular malha logÃƒÂ­stica incluindo o novo ativo na capacidade total.",
+          tag: "AutomÃƒÂ¡tico",
           icon: Sparkles,
         },
       ]
     : [
         {
-          title: "Aluguel emergencial de 1 caminhão",
-          desc: "Locação spot via marketplace de frete (contrato diário).",
+          title: "Aluguel emergencial de 1 caminhÃƒÂ£o",
+          desc: "LocaÃƒÂ§ÃƒÂ£o spot via marketplace de frete (contrato diÃƒÂ¡rio).",
           tag: "Prazo 48h",
           icon: Truck,
         },
         {
-          title: "Contratação via agência",
-          desc: "2 ajudantes temporários por 90 dias renováveis.",
+          title: "ContrataÃƒÂ§ÃƒÂ£o via agÃƒÂªncia",
+          desc: "2 ajudantes temporÃƒÂ¡rios por 90 dias renovÃƒÂ¡veis.",
           tag: "Prazo 48h",
           icon: Users,
         },
@@ -577,18 +577,18 @@ function DetalheStep({
   return (
     <section className="animate-fade-in">
       <h2 className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground mb-2">
-        Plano Detalhado · Cenário {scenario}
+        Plano Detalhado Ã‚Â· CenÃƒÂ¡rio {scenario}
       </h2>
       <p className="text-muted-foreground max-w-[60ch] text-pretty mb-10">
         {isB
-          ? "Expansão de ativos próprios. Maior ROI no longo prazo e construção de capacidade permanente."
-          : "Solução rápida via terceirização. Implementação imediata com menor capex."}
+          ? "ExpansÃƒÂ£o de ativos prÃƒÂ³prios. Maior ROI no longo prazo e construÃƒÂ§ÃƒÂ£o de capacidade permanente."
+          : "SoluÃƒÂ§ÃƒÂ£o rÃƒÂ¡pida via terceirizaÃƒÂ§ÃƒÂ£o. ImplementaÃƒÂ§ÃƒÂ£o imediata com menor capex."}
       </p>
 
       <div className="grid grid-cols-3 gap-6 mb-10">
-        <MetricCard label="ROI do Cenário" value={roi} accent />
+        <MetricCard label="ROI do CenÃƒÂ¡rio" value={roi} accent />
         <MetricCard label="Payback Estimado" value={payback} accent />
-        <MetricCard label="Prazo de Execução" value={prazo} icon={Clock} />
+        <MetricCard label="Prazo de ExecuÃƒÂ§ÃƒÂ£o" value={prazo} icon={Clock} />
       </div>
 
       <div className="bg-surface border border-border rounded-2xl p-8 mb-10">
@@ -629,7 +629,7 @@ function DetalheStep({
           onClick={onBack}
           className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground px-4 py-3 text-xs font-mono uppercase tracking-widest"
         >
-          <ArrowLeft className="size-4" /> Comparar cenários
+          <ArrowLeft className="size-4" /> Comparar cenÃƒÂ¡rios
         </button>
         <button
           onClick={onNext}
@@ -697,15 +697,15 @@ function SuccessModal({ onClose }: { onClose: () => void }) {
           Ordens disparadas com sucesso
         </h2>
         <p className="text-sm text-muted-foreground text-pretty mb-8">
-          A ordem de compra de frota foi enviada ao fornecedor e a requisição de 2 vagas
+          A ordem de compra de frota foi enviada ao fornecedor e a requisiÃƒÂ§ÃƒÂ£o de 2 vagas
           (1 Motorista + 1 Ajudante) foi disparada ao RH com prazo de 30 dias.
         </p>
 
         <div className="space-y-3 mb-8">
           {[
             { label: "Ordem de Compra #OC-2026-0489", status: "ENVIADA" },
-            { label: "Requisição RH #RQ-2026-1142", status: "ABERTA" },
-            { label: "Reotimização de rotas", status: "PROCESSANDO" },
+            { label: "RequisiÃƒÂ§ÃƒÂ£o RH #RQ-2026-1142", status: "ABERTA" },
+            { label: "ReotimizaÃƒÂ§ÃƒÂ£o de rotas", status: "PROCESSANDO" },
           ].map((r) => (
             <div
               key={r.label}
@@ -724,7 +724,7 @@ function SuccessModal({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             className="flex-1 border border-border text-foreground py-3 rounded-lg font-medium text-sm hover:bg-white/5"
           >
-            Nova simulação
+            Nova simulaÃƒÂ§ÃƒÂ£o
           </button>
           <Link
             to="/"
@@ -740,7 +740,7 @@ function SuccessModal({ onClose }: { onClose: () => void }) {
 
 /* ------------------------- AI FORECAST PANEL ------------------------- */
 function AiForecastPanel({ demand }: { demand: number }) {
-  // Histórico real (12M) — mesmos dados base da página Vendas (R$ milhões)
+  // HistÃƒÂ³rico real (12M) Ã¢â‚¬â€ mesmos dados base da pÃƒÂ¡gina Vendas (R$ milhÃƒÂµes)
   const historical = [
     { m: "Jun/24", real: 2.8 },
     { m: "Jul/24", real: 2.95 },
@@ -756,9 +756,9 @@ function AiForecastPanel({ demand }: { demand: number }) {
     { m: "Mai/25", real: 3.5 },
   ];
 
-  // Tendência baseline da IA (regressão histórica): +4.2% a.m. composto suavizado
-  const baselineGrowth = 0.018; // ~1.8% a.m. tendência orgânica
-  const simGrowth = demand / 100 / 6; // crescimento simulado distribuído nos próximos 6 meses
+  // TendÃƒÂªncia baseline da IA (regressÃƒÂ£o histÃƒÂ³rica): +4.2% a.m. composto suavizado
+  const baselineGrowth = 0.018; // ~1.8% a.m. tendÃƒÂªncia orgÃƒÂ¢nica
+  const simGrowth = demand / 100 / 6; // crescimento simulado distribuÃƒÂ­do nos prÃƒÂ³ximos 6 meses
   const lastReal = historical[historical.length - 1].real;
 
   const forecast = Array.from({ length: 6 }).map((_, i) => {
@@ -774,7 +774,7 @@ function AiForecastPanel({ demand }: { demand: number }) {
     ...forecast,
   ];
 
-  // Decisão da IA: comparar crescimento simulado com tendência histórica
+  // DecisÃƒÂ£o da IA: comparar crescimento simulado com tendÃƒÂªncia histÃƒÂ³rica
   const trendPct = baselineGrowth * 6 * 100; // ~10.8% em 6 meses
   const simPct = demand;
   const delta = simPct - trendPct;
@@ -787,15 +787,15 @@ function AiForecastPanel({ demand }: { demand: number }) {
   if (delta >= 8) {
     veredito = "alta";
     titulo = "Alta probabilidade de aumento de vendas";
-    descricao = `O cenário simulado de +${simPct}% supera a tendência histórica orgânica (+${trendPct.toFixed(1)}% em 6M). Cruzando sazonalidade de Q4, recompra de clientes ativos e funil de novos clientes, a IA classifica como expansão sustentável.`;
+    descricao = `O cenÃƒÂ¡rio simulado de +${simPct}% supera a tendÃƒÂªncia histÃƒÂ³rica orgÃƒÂ¢nica (+${trendPct.toFixed(1)}% em 6M). Cruzando sazonalidade de Q4, recompra de clientes ativos e funil de novos clientes, a IA classifica como expansÃƒÂ£o sustentÃƒÂ¡vel.`;
   } else if (delta >= -3) {
     veredito = "estavel";
-    titulo = "Crescimento alinhado à tendência histórica";
-    descricao = `A simulação de +${simPct}% está em linha com o padrão orgânico (+${trendPct.toFixed(1)}% em 6M). A IA confirma viabilidade sem ruptura, mas sem ganho competitivo significativo.`;
+    titulo = "Crescimento alinhado ÃƒÂ  tendÃƒÂªncia histÃƒÂ³rica";
+    descricao = `A simulaÃƒÂ§ÃƒÂ£o de +${simPct}% estÃƒÂ¡ em linha com o padrÃƒÂ£o orgÃƒÂ¢nico (+${trendPct.toFixed(1)}% em 6M). A IA confirma viabilidade sem ruptura, mas sem ganho competitivo significativo.`;
   } else {
     veredito = "risco";
-    titulo = "Projeção abaixo do potencial histórico";
-    descricao = `O cenário simulado (+${simPct}%) fica abaixo da tendência natural detectada (+${trendPct.toFixed(1)}% em 6M). A IA sinaliza risco de subaproveitamento da demanda ativa do mercado.`;
+    titulo = "ProjeÃƒÂ§ÃƒÂ£o abaixo do potencial histÃƒÂ³rico";
+    descricao = `O cenÃƒÂ¡rio simulado (+${simPct}%) fica abaixo da tendÃƒÂªncia natural detectada (+${trendPct.toFixed(1)}% em 6M). A IA sinaliza risco de subaproveitamento da demanda ativa do mercado.`;
   }
 
   const isAlta = veredito === "alta";
@@ -820,7 +820,7 @@ function AiForecastPanel({ demand }: { demand: number }) {
           </div>
           <div>
             <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-muted-foreground flex items-center gap-2">
-              <Activity className="size-3" /> Previsão IA · Histórico × Tendência
+              <Activity className="size-3" /> PrevisÃƒÂ£o IA Ã‚Â· HistÃƒÂ³rico Ãƒâ€” TendÃƒÂªncia
             </span>
             <h3 className="text-xl font-display mt-1.5">{titulo}</h3>
           </div>
@@ -828,7 +828,7 @@ function AiForecastPanel({ demand }: { demand: number }) {
 
         <div className="text-right shrink-0">
           <p className="text-[10px] font-mono uppercase text-muted-foreground">
-            Confiança do modelo
+            ConfianÃƒÂ§a do modelo
           </p>
           <p
             className={
@@ -888,7 +888,7 @@ function AiForecastPanel({ demand }: { demand: number }) {
                 stroke="hsl(var(--muted-foreground))"
                 strokeWidth={2}
                 fill="url(#gReal)"
-                name="Histórico"
+                name="HistÃƒÂ³rico"
               />
               <Area
                 type="monotone"
@@ -897,7 +897,7 @@ function AiForecastPanel({ demand }: { demand: number }) {
                 strokeWidth={1}
                 strokeDasharray="4 4"
                 fill="none"
-                name="Tendência IA"
+                name="TendÃƒÂªncia IA"
               />
               <Area
                 type="monotone"
@@ -913,13 +913,13 @@ function AiForecastPanel({ demand }: { demand: number }) {
 
         <div className="space-y-3">
           <ForecastSignal
-            label="Tendência histórica 6M"
+            label="TendÃƒÂªncia histÃƒÂ³rica 6M"
             value={`+${trendPct.toFixed(1)}%`}
             icon={<TrendingUp className="size-3.5" />}
             tone="muted"
           />
           <ForecastSignal
-            label="Cenário simulado"
+            label="CenÃƒÂ¡rio simulado"
             value={`+${simPct}%`}
             icon={
               isRisco ? <TrendingDown className="size-3.5" /> : <TrendingUp className="size-3.5" />
@@ -927,7 +927,7 @@ function AiForecastPanel({ demand }: { demand: number }) {
             tone={isAlta ? "primary" : isRisco ? "danger" : "muted"}
           />
           <ForecastSignal
-            label="Delta vs. tendência"
+            label="Delta vs. tendÃƒÂªncia"
             value={`${delta >= 0 ? "+" : ""}${delta.toFixed(1)} p.p.`}
             icon={<Activity className="size-3.5" />}
             tone={isAlta ? "primary" : isRisco ? "danger" : "muted"}
@@ -937,10 +937,10 @@ function AiForecastPanel({ demand }: { demand: number }) {
               Sinais cruzados
             </p>
             <ul className="space-y-1 text-[11px] text-muted-foreground">
-              <li>· 12M de vendas reais</li>
-              <li>· Recompra de clientes ativos</li>
-              <li>· Sazonalidade Q4 (+18%)</li>
-              <li>· Funil de novos clientes</li>
+              <li>Ã‚Â· 12M de vendas reais</li>
+              <li>Ã‚Â· Recompra de clientes ativos</li>
+              <li>Ã‚Â· Sazonalidade Q4 (+18%)</li>
+              <li>Ã‚Â· Funil de novos clientes</li>
             </ul>
           </div>
         </div>

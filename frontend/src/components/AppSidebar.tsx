@@ -1,5 +1,14 @@
-﻿import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Users, Truck, Activity, TrendingUp, FileUp, SlidersHorizontal } from "lucide-react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { Activity, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, Menu, SlidersHorizontal, TrendingUp, Truck, Users } from "lucide-react";
+import { useState } from "react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
+type AppSidebarProps = {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+};
 
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -18,57 +27,77 @@ const items = [
   { to: "/simulacao", label: "Simulação", icon: Activity },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ collapsed, onToggleCollapsed }: AppSidebarProps) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  return (
-    <aside className="w-64 border-r border-border bg-surface flex flex-col fixed inset-y-0 left-0 z-20">
-      <div className="p-6 mb-8">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="size-8 bg-primary rounded-sm flex items-center justify-center text-primary-foreground font-bold font-display">
-            N
-          </div>
-          <span className="font-display text-xl tracking-tight">
-            GRESPAN
-          </span>
-        </Link>
-      </div>
+  function isItemActive(to: string): boolean {
+    if (to === "/importacoes") return pathname === "/importacoes" || pathname.startsWith("/importacoes/");
+    return pathname === to || (to !== "/" && pathname.startsWith(`${to}/`));
+  }
 
-      <nav className="flex-1 px-4 space-y-2">
+  function renderNav(showCollapsed: boolean, onNavigate?: () => void) {
+    return (
+      <nav className="flex-1 space-y-2 px-3">
         {items.map((item) => {
-          const active = item.to === "/importacoes"
-            ? pathname === "/importacoes" || pathname.startsWith("/importacoes/")
-            : pathname === item.to || (item.to !== "/" && pathname.startsWith(`${item.to}/`));
+          const active = isItemActive(item.to);
           const Icon = item.icon;
+          const topLevelLink = (
+            <Link
+              to={item.to}
+              aria-label={item.label}
+              onClick={onNavigate}
+              className={cn(
+                "group flex items-center rounded-lg border px-3 py-2.5 text-sm transition-all duration-200 motion-reduce:transition-none",
+                "outline-none ring-primary/40 focus-visible:ring-2",
+                showCollapsed ? "justify-center" : "gap-3",
+                active
+                  ? "border-white/15 bg-white/8 text-foreground shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]"
+                  : "border-transparent text-muted-foreground hover:border-white/10 hover:bg-white/[0.03] hover:text-foreground",
+              )}
+            >
+              <Icon className="size-4 shrink-0" />
+              <span
+                className={cn(
+                  "whitespace-nowrap text-sm font-medium transition-all duration-200 motion-reduce:transition-none",
+                  showCollapsed ? "pointer-events-none w-0 -translate-x-1 opacity-0" : "w-auto translate-x-0 opacity-100",
+                )}
+                aria-hidden={showCollapsed}
+              >
+                {item.label}
+              </span>
+            </Link>
+          );
+
           return (
             <div key={item.to} className="space-y-1">
-              <Link
-                to={item.to}
-                className={
-                  "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors " +
-                  (active
-                    ? "text-foreground bg-white/5 border border-white/10"
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/[0.02]")
-                }
-              >
-                <Icon className="size-4" />
-                <span className="text-sm font-medium">{item.label}</span>
-              </Link>
-              {item.children?.map((child) => {
+              {showCollapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>{topLevelLink}</TooltipTrigger>
+                  <TooltipContent side="right">{item.label}</TooltipContent>
+                </Tooltip>
+              ) : (
+                topLevelLink
+              )}
+
+              {!showCollapsed && item.children?.map((child) => {
                 const childActive = pathname === child.to;
                 const ChildIcon = child.icon;
                 return (
                   <Link
                     key={child.to}
                     to={child.to}
-                    className={
-                      "ml-6 flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-xs " +
-                      (childActive
-                        ? "text-foreground bg-white/5 border border-white/10"
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/[0.02]")
-                    }
+                    aria-label={child.label}
+                    onClick={onNavigate}
+                    className={cn(
+                      "ml-6 flex items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors",
+                      "outline-none ring-primary/40 focus-visible:ring-2",
+                      childActive
+                        ? "border border-white/10 bg-white/6 text-foreground"
+                        : "text-muted-foreground hover:bg-white/[0.02] hover:text-foreground",
+                    )}
                   >
-                    <ChildIcon className="size-3.5" />
+                    <ChildIcon className="size-3.5 shrink-0" />
                     <span className="font-medium">{child.label}</span>
                   </Link>
                 );
@@ -77,18 +106,74 @@ export function AppSidebar() {
           );
         })}
       </nav>
+    );
+  }
 
-      <div className="p-6 border-t border-border">
-        <div className="bg-white/5 rounded p-3">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
-            Status do Sistema
-          </p>
-          <p className="text-xs font-mono text-foreground">
-            <span className="inline-block size-1.5 rounded-full bg-primary mr-2 animate-pulse" />
-            PROD_CORE: ACTIVE
-          </p>
-        </div>
+  return (
+    <TooltipProvider delayDuration={120}>
+      <div className="fixed left-3 top-3 z-30 md:hidden">
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              aria-label="Abrir menu lateral"
+              className="inline-flex size-10 items-center justify-center rounded-md border border-border bg-surface text-foreground shadow-sm outline-none ring-primary/40 focus-visible:ring-2"
+            >
+              <Menu className="size-5" />
+            </button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-[280px] border-border bg-surface p-0">
+            <SheetHeader className="border-b border-border px-4 py-4 text-left">
+              <SheetTitle>Menu</SheetTitle>
+            </SheetHeader>
+            <div className="flex h-full flex-col py-3">
+              {renderNav(false, () => setMobileOpen(false))}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
-    </aside>
+
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-20 hidden border-r border-border bg-surface md:flex md:flex-col",
+          "transition-[width] duration-200 ease-out motion-reduce:transition-none",
+          collapsed ? "md:w-[72px]" : "md:w-[264px]",
+        )}
+        aria-label="Navegação principal"
+      >
+        <div className={cn("mb-5 flex items-center border-b border-border px-3 py-4", collapsed ? "justify-center" : "justify-between")}>
+          <Link to="/" className={cn("flex items-center gap-2 rounded-md outline-none ring-primary/40 focus-visible:ring-2", collapsed && "justify-center")}>
+            <div className="flex size-8 items-center justify-center rounded-sm bg-primary font-display font-bold text-primary-foreground">
+              N
+            </div>
+            <span
+              className={cn(
+                "font-display text-xl tracking-tight transition-all duration-200 motion-reduce:transition-none",
+                collapsed ? "pointer-events-none w-0 -translate-x-1 opacity-0" : "w-auto translate-x-0 opacity-100",
+              )}
+              aria-hidden={collapsed}
+            >
+              GRESPAN
+            </span>
+          </Link>
+
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
+            className={cn(
+              "inline-flex size-8 items-center justify-center rounded-md border border-white/10 bg-white/[0.03] text-muted-foreground transition-colors hover:text-foreground hover:bg-white/[0.07]",
+              "outline-none ring-primary/40 focus-visible:ring-2",
+              collapsed && "absolute -right-3 top-5 bg-background",
+            )}
+          >
+            {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+          </button>
+        </div>
+
+        {renderNav(collapsed)}
+
+      </aside>
+    </TooltipProvider>
   );
 }

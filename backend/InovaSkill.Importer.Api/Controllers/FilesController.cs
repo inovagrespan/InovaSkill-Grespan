@@ -1,5 +1,6 @@
 ﻿using InovaSkill.Importer.Api.Contracts;
 using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +14,7 @@ public sealed class FilesController(
     ImportDbContext dbContext) : ControllerBase
 {
     [HttpPost("upload")]
-    [RequestSizeLimit(50_000_000)]
+    [RequestSizeLimit(524_288_000)]
     public async Task<ActionResult<UploadResponse>> Upload([FromForm] IFormFile file, CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
@@ -68,40 +69,27 @@ public sealed class FilesController(
 
         if (job.Status == Domain.Enums.FileJobStatus.Importing)
         {
-            if (job.FileType == Domain.Enums.FileType.Customers)
+            if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.CustomerList, StringComparison.OrdinalIgnoreCase))
             {
                 await dbContext.Customers.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             }
-            else if (job.FileType == Domain.Enums.FileType.Products)
+            else if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.ProductList, StringComparison.OrdinalIgnoreCase))
             {
                 await dbContext.Products.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             }
-            else if (job.FileType == Domain.Enums.FileType.Orders)
+            else if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.FinancialEntry, StringComparison.OrdinalIgnoreCase))
             {
                 await dbContext.Orders.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             }
+            else if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.SalesInvoice, StringComparison.OrdinalIgnoreCase))
+            {
+                await dbContext.CommercialTransactions.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
+            }
         }
-
-        // if (!string.IsNullOrWhiteSpace(job.NormalizedFilePath) &&
-        //     job.Status != Domain.Enums.FileJobStatus.ReadyToImport)
-        // {
-        //     try
-        //     {
-        //         if (System.IO.File.Exists(job.NormalizedFilePath))
-        //         {
-        //             System.IO.File.Delete(job.NormalizedFilePath);
-        //         }
-        //     }
-        //     catch
-        //     {
-        //         // best effort
-        //     }
-        //     job.NormalizedFilePath = string.Empty;
-        // }
 
         if (job.Status == Domain.Enums.FileJobStatus.ValidationFailed)
         {
-            job.FileType = Domain.Enums.FileType.Unknown;
+            job.ImportFileTypeCode = null;
         }
 
         job.RequeueManually();
@@ -129,7 +117,7 @@ public sealed class FilesController(
             .Select(x => new FileJobDto(
                 x.Id,
                 Path.GetFileName(x.FilePath),
-                x.FileType,
+                x.ImportFileTypeCode,
                 x.Status,
                 x.CreatedAt,
                 dbContext.ImportErrors.Count(e => e.FileJobId == x.Id),
@@ -182,4 +170,3 @@ public sealed class FilesController(
         return Ok(new PagedResult<ImportErrorDto>(page, pageSize, total, errors));
     }
 }
-

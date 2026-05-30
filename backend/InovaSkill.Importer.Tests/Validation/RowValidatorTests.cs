@@ -1,4 +1,4 @@
-using InovaSkill.Importer.Domain.Enums;
+﻿using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.ValueObjects;
 using InovaSkill.Importer.Infrastructure.Validation;
 
@@ -12,7 +12,7 @@ public class RowValidatorTests
     [Fact]
     public void Validate_ReturnsValid_ForValidCustomerRow()
     {
-        var schema = _schemaProvider.GetSchema(FileType.Customers);
+        var schema = _schemaProvider.GetSchema(ImportFileTypeCodes.CustomerList);
         var row = new ImportedRow(2, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["name"] = "Alice",
@@ -29,7 +29,7 @@ public class RowValidatorTests
     [Fact]
     public void Validate_ReturnsErrors_ForInvalidCustomerRow()
     {
-        var schema = _schemaProvider.GetSchema(FileType.Customers);
+        var schema = _schemaProvider.GetSchema(ImportFileTypeCodes.CustomerList);
         var row = new ImportedRow(2, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["name"] = "",

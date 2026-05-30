@@ -8,6 +8,8 @@ namespace InovaSkill.Importer.Infrastructure.Parsing;
 
 public sealed class CsvFileParser : IFileParser
 {
+    private const int HeaderSearchLimit = 5;
+
     public async IAsyncEnumerable<ImportedRow> ParseAsync(string filePath, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var stream = File.OpenRead(filePath);
@@ -17,26 +19,52 @@ public sealed class CsvFileParser : IFileParser
             BadDataFound = null,
             MissingFieldFound = null,
             TrimOptions = TrimOptions.Trim,
-            HeaderValidated = null
+            HeaderValidated = null,
+            IgnoreBlankLines = false
         };
 
         using var csv = new CsvReader(reader, config);
-        await csv.ReadAsync();
-        csv.ReadHeader();
-        var headers = csv.HeaderRecord ?? [];
+        string[] headers = [];
+        var headerFound = false;
+        for (var attempt = 1; attempt <= HeaderSearchLimit; attempt++)
+        {
+            if (!await csv.ReadAsync())
+            {
+                break;
+            }
 
-        var rowNumber = 1;
+            var candidate = csv.Parser.Record ?? [];
+            if (IsLikelyHeader(candidate))
+            {
+                headers = candidate.Select(x => x?.Trim() ?? string.Empty).ToArray();
+                headerFound = true;
+                break;
+            }
+        }
+
+        if (!headerFound)
+        {
+            throw new InvalidOperationException($"Cabeçalho não encontrado nas {HeaderSearchLimit} primeiras linhas.");
+        }
+
         while (await csv.ReadAsync())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            rowNumber++;
+            var rowNumber = csv.Parser.Row;
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var header in headers)
+            for (var i = 0; i < headers.Length; i++)
             {
-                dict[header] = csv.GetField(header) ?? string.Empty;
+                var header = headers[i];
+                dict[header] = csv.GetField(i) ?? string.Empty;
             }
 
             yield return new ImportedRow(rowNumber, HeaderNormalizer.Normalize(dict));
         }
+    }
+
+    private static bool IsLikelyHeader(IReadOnlyList<string> candidate)
+    {
+        var nonEmpty = candidate.Count(field => !string.IsNullOrWhiteSpace(field));
+        return nonEmpty >= 2;
     }
 }

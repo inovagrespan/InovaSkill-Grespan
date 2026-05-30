@@ -13,7 +13,6 @@ public sealed class FileJobService(ImportDbContext dbContext) : IFileJobService
         {
             FilePath = filePath,
             OriginalFileName = originalFileName,
-            FileType = FileType.Unknown,
             Status = FileJobStatus.WaitingProcessing,
             CreatedAt = DateTime.UtcNow,
             LastHeartbeatAt = DateTime.UtcNow

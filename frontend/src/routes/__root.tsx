@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
@@ -7,9 +7,11 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
 import appCss from "../styles.css?url";
 import { AppSidebar } from "../components/AppSidebar";
+import { cn } from "../lib/utils";
 
 function NotFoundComponent() {
   return (
@@ -99,11 +101,31 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("app.sidebar.collapsed");
+    if (saved === "1") setSidebarCollapsed(true);
+    if (saved === "0") setSidebarCollapsed(false);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("app.sidebar.collapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <div className="min-h-screen bg-background text-foreground font-body">
-        <AppSidebar />
-        <main className="ml-64 min-h-screen">
+        <AppSidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
+        />
+        <main
+          className={cn(
+            "min-h-screen transition-[margin] duration-200 ease-out motion-reduce:transition-none",
+            sidebarCollapsed ? "md:ml-[72px]" : "md:ml-[264px]",
+          )}
+        >
           <Outlet />
         </main>
       </div>

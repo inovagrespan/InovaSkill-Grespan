@@ -15,9 +15,10 @@ namespace InovaSkill.Importer.Infrastructure.Processing;
 public sealed class FileImportPipelineProcessor(
     ImportDbContext dbContext,
     IFileJobQueue fileJobQueue,
+    IPostImportJobQueue postImportJobQueue,
     IFileParserFactory fileParserFactory,
     IPreProcessorTemplateResolver preProcessorTemplateResolver,
-    IPreProcessorRuleEngine preProcessorRuleEngine,
+    IImportMappingEngine importMappingEngine,
     IFileTypeDetector fileTypeDetector,
     IFileSchemaProvider fileSchemaProvider,
     IRowValidator rowValidator,
@@ -92,13 +93,10 @@ public sealed class FileImportPipelineProcessor(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var errors = new List<ImportError>();
-        var detectedFileType = job.FileType;
-        var detectionAttempted = detectedFileType != FileType.Unknown;
+        var detectedFileTypeCode = job.ImportFileTypeCode;
+        var detectionAttempted = !string.IsNullOrWhiteSpace(detectedFileTypeCode);
         var processedRows = 0;
-        PreProcessorTemplate? template = null;
-        IReadOnlyList<PreProcessorTemplateRule>? transformRules = null;
-        IReadOnlyList<PreProcessorTemplateRule>? validationRules = null;
-        IReadOnlyList<ColumnAliasMapping>? aliasMappings = null;
+        ImportTemplate? template = null;
 
         await using (var stream = new FileStream(job.NormalizedFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
         await using (var writer = new StreamWriter(stream))
@@ -114,40 +112,39 @@ public sealed class FileImportPipelineProcessor(
                         row.Values.Keys.ToArray(),
                         cancellationToken);
 
-                    if (template is not null)
+                    if (template?.ImportFileType is not null && string.IsNullOrWhiteSpace(job.ImportFileTypeCode))
                     {
-                        var ordered = template.Rules.OrderBy(x => x.SortOrder).ToList();
-                        transformRules = ordered.Where(x => !IsValidationRule(x)).ToList();
-                        validationRules = ordered.Where(IsValidationRule).ToList();
-                        aliasMappings = ParseAliasMappings(template.ColumnMappingsJson);
-                        if (template.FileType != FileType.Unknown && job.FileType == FileType.Unknown)
-                        {
-                            job.FileType = template.FileType;
-                        }
+                        job.ImportFileTypeCode = template.ImportFileType.Code;
                     }
                 }
 
-                var preprocessResult = PreprocessRow(row, transformRules);
-                var normalizedRow = ApplyAliases(preprocessResult.Row, aliasMappings);
-
-                foreach (var ruleError in preprocessResult.Errors)
+                var normalizedRow = row;
+                if (template is not null)
                 {
-                    errors.Add(BuildImportError(job.Id, normalizedRow.RowNumber, ruleError.Column, ruleError.Message, normalizedRow.Values, detectedFileType));
+                    var rawValues = row.Values.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
+                    var mapped = importMappingEngine.MapRow(row.RowNumber, rawValues, template);
+                    foreach (var mapError in mapped.Errors)
+                    {
+                        errors.Add(BuildImportError(job.Id, mapError.RowNumber, mapError.Column, mapError.Message, row.Values, detectedFileTypeCode));
+                    }
+
+                    var mappedValues = mapped.StandardValues.ToDictionary(k => k.Key, v => v.Value?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+                    normalizedRow = new ImportedRow(row.RowNumber, mappedValues);
                 }
 
                 if (!detectionAttempted)
                 {
-                    detectedFileType = fileTypeDetector.Detect(normalizedRow.Values);
+                    detectedFileTypeCode = fileTypeDetector.DetectCode(normalizedRow.Values);
                     detectionAttempted = true;
-                    job.FileType = detectedFileType;
+                    job.ImportFileTypeCode = detectedFileTypeCode;
 
-                    if (detectedFileType == FileType.Unknown)
+                    if (string.IsNullOrWhiteSpace(detectedFileTypeCode))
                     {
                         errors.Add(new ImportError
                         {
                             FileJobId = job.Id,
                             RowNumber = normalizedRow.RowNumber,
-                            Column = "FileType",
+                            Column = "ImportFileType",
                             Message = "Unable to detect file type from header.",
                             RecordIdentifier = string.Empty
                         });
@@ -173,10 +170,10 @@ public sealed class FileImportPipelineProcessor(
         job.MarkValidating();
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await ValidateNormalizedFileAsync(job, validationRules, errors, cancellationToken);
+        await ValidateNormalizedFileAsync(job, errors, cancellationToken);
     }
 
-    private async Task ValidateNormalizedFileAsync(FileJob job, IReadOnlyList<PreProcessorTemplateRule>? validationRules, List<ImportError> errors, CancellationToken cancellationToken)
+    private async Task ValidateNormalizedFileAsync(FileJob job, List<ImportError> errors, CancellationToken cancellationToken)
     {
         var processedRows = 0;
 
@@ -184,20 +181,12 @@ public sealed class FileImportPipelineProcessor(
         {
             processedRows++;
 
-            var validationErrors = ValidateRow(normalizedRow, job.FileType);
+            var validationErrors = ValidateRow(normalizedRow, job.ImportFileTypeCode ?? string.Empty);
             foreach (var verr in validationErrors)
             {
-                errors.Add(BuildImportError(job.Id, normalizedRow.RowNumber, verr.Column, verr.Message, normalizedRow.Values, job.FileType));
+                errors.Add(BuildImportError(job.Id, normalizedRow.RowNumber, verr.Column, verr.Message, normalizedRow.Values, job.ImportFileTypeCode));
             }
 
-            if (validationRules is { Count: > 0 })
-            {
-                var ruleValidation = preProcessorRuleEngine.Execute(normalizedRow, validationRules);
-                foreach (var err in ruleValidation.Errors)
-                {
-                    errors.Add(BuildImportError(job.Id, normalizedRow.RowNumber, err.Column, err.Message, normalizedRow.Values, job.FileType));
-                }
-            }
 
             var shouldUpdateProgress = processedRows % ProgressUpdateIntervalRows == 0;
             if (shouldUpdateProgress)
@@ -234,7 +223,7 @@ public sealed class FileImportPipelineProcessor(
 
     private async Task ImportValidatedFileAsync(FileJob job, CancellationToken cancellationToken)
     {
-        if (job.FileType == FileType.Unknown)
+        if (string.IsNullOrWhiteSpace(job.ImportFileTypeCode))
         {
             job.MarkFailed("Tipo de arquivo nao identificado para importacao.");
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -249,7 +238,7 @@ public sealed class FileImportPipelineProcessor(
             return;
         }
 
-        var buffer = CreateBuffer(job.FileType);
+        var buffer = CreateBuffer(job.ImportFileTypeCode ?? string.Empty);
         var processedRows = 0;
 
         await foreach (var row in ReadNormalizedRowsAsync(job.NormalizedFilePath, cancellationToken))
@@ -276,6 +265,20 @@ public sealed class FileImportPipelineProcessor(
 
         job.MarkCompleted(job.TotalRows > 0 ? job.TotalRows : processedRows);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.SalesInvoice, StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                await postImportJobQueue.EnqueueAsync(
+                    new PostImportJobItem(job.Id, PostImportJobType.SalesSummary),
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to enqueue post-import sales summary for job {JobId}.", job.Id);
+            }
+        }
 
         // TryDeleteNormalizedFile(job.NormalizedFilePath);
     }
@@ -349,31 +352,38 @@ public sealed class FileImportPipelineProcessor(
 
     private async Task CleanupImportedDataByJobAsync(FileJob job, CancellationToken cancellationToken)
     {
-        if (job.FileType == FileType.Customers)
+        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.CustomerList, StringComparison.OrdinalIgnoreCase))
         {
             await dbContext.Customers.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             return;
         }
 
-        if (job.FileType == FileType.Products)
+        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.ProductList, StringComparison.OrdinalIgnoreCase))
         {
             await dbContext.Products.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             return;
         }
 
-        if (job.FileType == FileType.Orders)
+        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.FinancialEntry, StringComparison.OrdinalIgnoreCase))
         {
             await dbContext.Orders.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
+            return;
+        }
+
+        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.SalesInvoice, StringComparison.OrdinalIgnoreCase))
+        {
+            await dbContext.CommercialTransactions.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
         }
     }
 
-    private static string ExtractIdentifier(IReadOnlyDictionary<string, string> values, FileType fileType)
+    private static string ExtractIdentifier(IReadOnlyDictionary<string, string> values, string? importFileTypeCode)
     {
-        return fileType switch
+        return importFileTypeCode?.ToUpperInvariant() switch
         {
-            FileType.Customers => TryValue(values, "email"),
-            FileType.Products => TryValue(values, "sku"),
-            FileType.Orders => TryValue(values, "ordernumber"),
+            ImportFileTypeCodes.CustomerList => TryValue(values, "email"),
+            ImportFileTypeCodes.ProductList => TryValue(values, "sku"),
+            ImportFileTypeCodes.FinancialEntry => TryValue(values, "ordernumber"),
+            ImportFileTypeCodes.SalesInvoice => TryValue(values, "documentnumber"),
             _ => string.Empty
         };
     }
@@ -383,30 +393,22 @@ public sealed class FileImportPipelineProcessor(
         return values.TryGetValue(key, out var value) ? value : string.Empty;
     }
 
-    private static IFileTypeBuffer CreateBuffer(FileType fileType)
+    private static IFileTypeBuffer CreateBuffer(string importFileTypeCode)
     {
-        return fileType switch
+        return importFileTypeCode?.ToUpperInvariant() switch
         {
-            FileType.Customers => new CustomerBuffer(),
-            FileType.Products => new ProductBuffer(),
-            FileType.Orders => new OrderBuffer(),
-            _ => throw new InvalidOperationException($"Unsupported file type: {fileType}")
+            ImportFileTypeCodes.CustomerList => new CustomerBuffer(),
+            ImportFileTypeCodes.ProductList => new ProductBuffer(),
+            ImportFileTypeCodes.FinancialEntry => new OrderBuffer(),
+            ImportFileTypeCodes.SalesInvoice => new CommercialTransactionBuffer(),
+            _ => throw new InvalidOperationException($"Unsupported file type code: {importFileTypeCode}")
         };
     }
 
-    private PreProcessorExecutionResult PreprocessRow(ImportedRow row, IReadOnlyList<PreProcessorTemplateRule>? orderedRules)
-    {
-        if (orderedRules is null || orderedRules.Count == 0)
-        {
-            return new PreProcessorExecutionResult(row, []);
-        }
 
-        return preProcessorRuleEngine.Execute(row, orderedRules);
-    }
-
-    private IReadOnlyList<ValidationError> ValidateRow(ImportedRow row, FileType detectedFileType)
+    private IReadOnlyList<ValidationError> ValidateRow(ImportedRow row, string detectedFileTypeCode)
     {
-        var schema = fileSchemaProvider.GetSchema(detectedFileType);
+        var schema = fileSchemaProvider.GetSchema(detectedFileTypeCode);
         var validation = rowValidator.Validate(row, schema);
         return validation.Errors;
     }
@@ -417,7 +419,7 @@ public sealed class FileImportPipelineProcessor(
         string column,
         string message,
         IReadOnlyDictionary<string, string> values,
-        FileType detectedFileType)
+        string? detectedFileTypeCode)
     {
         return new ImportError
         {
@@ -425,7 +427,7 @@ public sealed class FileImportPipelineProcessor(
             RowNumber = rowNumber,
             Column = column,
             Message = message,
-            RecordIdentifier = ExtractIdentifier(values, detectedFileType)
+            RecordIdentifier = ExtractIdentifier(values, detectedFileTypeCode)
         };
     }
 
@@ -492,63 +494,8 @@ public sealed class FileImportPipelineProcessor(
 
     private sealed record NormalizedRow(int RowNumber, Dictionary<string, string> Values);
 
-    private static ImportedRow ApplyAliases(ImportedRow row, IReadOnlyList<ColumnAliasMapping>? mappings)
-    {
-        var values = new Dictionary<string, string>(row.Values, StringComparer.OrdinalIgnoreCase);
-        var changed = false;
 
-        if (mappings is { Count: > 0 })
-        {
-            foreach (var mapping in mappings)
-            {
-                if (string.IsNullOrWhiteSpace(mapping.From) || string.IsNullOrWhiteSpace(mapping.To))
-                {
-                    continue;
-                }
 
-                var from = mapping.From.Trim();
-                var to = mapping.To.Trim();
-                if (!values.ContainsKey(to) && values.TryGetValue(from, out var mappedValue))
-                {
-                    values[to] = mappedValue;
-                    changed = true;
-                }
-            }
-        }
-
-        // Orders: legacy header alias support.
-        if (!values.ContainsKey("orderedat") && values.TryGetValue("orderdate", out var orderDateValue))
-        {
-            values["orderedat"] = orderDateValue;
-            changed = true;
-        }
-
-        return changed ? new ImportedRow(row.RowNumber, values) : row;
-    }
-
-    private static bool IsValidationRule(PreProcessorTemplateRule rule)
-    {
-        var type = rule.RuleType.Trim().ToLowerInvariant();
-        return type.StartsWith("validate_", StringComparison.Ordinal);
-    }
-
-    private static IReadOnlyList<ColumnAliasMapping> ParseAliasMappings(string columnMappingsJson)
-    {
-        if (string.IsNullOrWhiteSpace(columnMappingsJson))
-        {
-            return [];
-        }
-
-        try
-        {
-            var parsed = JsonSerializer.Deserialize<List<ColumnAliasMapping>>(columnMappingsJson, JsonOptions);
-            return parsed ?? [];
-        }
-        catch
-        {
-            return [];
-        }
-    }
 
     private static string BuildFailureReason(Exception ex)
     {
@@ -587,5 +534,9 @@ public sealed class FileImportPipelineProcessor(
         return $"Erro inesperado: {message}";
     }
 
-    private sealed record ColumnAliasMapping(string From, string To);
 }
+
+
+
+
+

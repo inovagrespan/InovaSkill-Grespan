@@ -1,255 +1,446 @@
+﻿import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { TrendingUp, Users, UserPlus, DollarSign, ArrowUpRight, Activity } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KpiCard } from "@/components/ui/kpi-card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Boxes, DollarSign, Scale, TrendingUp, Weight } from "lucide-react";
 import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
+  fetchCommercialTransactionsSummary,
+  fetchCommercialTransactions,
+  type CommercialTransactionSummaryResponse,
+  type SummaryGranularity,
+  type SummarySortBy,
+  type CommercialTransaction,
+} from "@/lib/importer-api";
 
 export const Route = createFileRoute("/vendas")({
   component: VendasPage,
 });
 
-// Histórico real (últimos 12 meses) + Previsão IA (próximos 6 meses)
-const salesHistory = [
-  { mes: "Jun/25", real: 1820, previsao: null, novos: 42, ativos: 318 },
-  { mes: "Jul/25", real: 1910, previsao: null, novos: 38, ativos: 332 },
-  { mes: "Ago/25", real: 2040, previsao: null, novos: 45, ativos: 348 },
-  { mes: "Set/25", real: 2110, previsao: null, novos: 51, ativos: 361 },
-  { mes: "Out/25", real: 2280, previsao: null, novos: 47, ativos: 378 },
-  { mes: "Nov/25", real: 2510, previsao: null, novos: 62, ativos: 401 },
-  { mes: "Dez/25", real: 2890, previsao: null, novos: 78, ativos: 432 },
-  { mes: "Jan/26", real: 2640, previsao: null, novos: 54, ativos: 451 },
-  { mes: "Fev/26", real: 2720, previsao: null, novos: 49, ativos: 463 },
-  { mes: "Mar/26", real: 2880, previsao: null, novos: 58, ativos: 478 },
-  { mes: "Abr/26", real: 3020, previsao: null, novos: 64, ativos: 492 },
-  { mes: "Mai/26", real: 3180, previsao: 3180, novos: 71, ativos: 508 },
-  { mes: "Jun/26", real: null, previsao: 3360, novos: 76, ativos: 524 },
-  { mes: "Jul/26", real: null, previsao: 3540, novos: 82, ativos: 541 },
-  { mes: "Ago/26", real: null, previsao: 3720, novos: 88, ativos: 559 },
-  { mes: "Set/26", real: null, previsao: 3890, novos: 91, ativos: 576 },
-  { mes: "Out/26", real: null, previsao: 4080, novos: 96, ativos: 594 },
-  { mes: "Nov/26", real: null, previsao: 4380, novos: 108, ativos: 615 },
-];
+function formatDate(value: string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("pt-BR");
+}
 
-const topClientes = [
-  { nome: "Distribuidora Vega S.A.", consumoAtual: 142, projetado: 178, var: 25.4 },
-  { nome: "Mercantil Norte LTDA", consumoAtual: 118, projetado: 146, var: 23.7 },
-  { nome: "Rede Atacado Sul", consumoAtual: 96, projetado: 121, var: 26.0 },
-  { nome: "Comercial Aurora", consumoAtual: 84, projetado: 102, var: 21.4 },
-  { nome: "Grupo Pampa Foods", consumoAtual: 71, projetado: 89, var: 25.3 },
-];
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value ?? 0);
+}
 
-const tooltipStyle = {
-  backgroundColor: "#12151c",
-  border: "1px solid #1e293b",
-  borderRadius: "8px",
-  fontSize: "12px",
-  fontFamily: "JetBrains Mono, monospace",
-};
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    notation: "compact",
+    compactDisplay: "short",
+    maximumFractionDigits: 1,
+  }).format(value ?? 0);
+}
+
+function formatCompactCurrency(value: number): string {
+  const compact = formatCompactNumber(value);
+  return `R$ ${compact}`;
+}
+
+function toInputDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function VendasPage() {
+  const [viewMode, setViewMode] = useState<"summary" | "items">("summary");
+  const [companySortBy, setCompanySortBy] = useState<SummarySortBy>("growth");
+  const [summaryGranularity, setSummaryGranularity] = useState<SummaryGranularity>("weekly");
+  const [summaryReferenceDate, setSummaryReferenceDate] = useState(() => toInputDate(new Date()));
+  const [summaryPage, setSummaryPage] = useState(1);
+  const summaryPageSize = 20;
+  const [items, setItems] = useState<CommercialTransaction[]>([]);
+  const [summary, setSummary] = useState<CommercialTransactionSummaryResponse>({
+    granularity: "weekly",
+    currentPeriodStart: "",
+    previousPeriodStart: "",
+    currentPeriodTotalAmount: 0,
+    previousPeriodTotalAmount: 0,
+    totalGrowthPercent: null,
+    totalRecords: 0,
+    totalAmount: 0,
+    totalQuantity: 0,
+    totalWeightKg: 0,
+    totalCompanies: 0,
+    items: [],
+  });
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 20;
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const [documentNumber, setDocumentNumber] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [productCode, setProductCode] = useState("");
+  const [city, setCity] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total]);
+  const summaryTotalPages = useMemo(
+    () => Math.max(1, Math.ceil((summary.totalItems || 0) / summaryPageSize)),
+    [summary.totalItems],
+  );
+
+  function formatDelta(value: number | null): string {
+    if (value == null) return "N/A";
+    return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+  }
+
+  function formatDecimal3(value: number): string {
+    return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 }).format(value ?? 0);
+  }
+
+  const revenueComparisonText = useMemo(() => {
+    if (summary.totalGrowthPercent == null) return "Sem base comparativa para o período anterior.";
+    if (summary.totalGrowthPercent < 0) return "O faturamento do período selecionado foi pior que o anterior.";
+    if (summary.totalGrowthPercent > 0) return "O faturamento do período selecionado foi melhor que o anterior.";
+    return "O faturamento do período selecionado ficou igual ao anterior.";
+  }, [summary.totalGrowthPercent]);
+
+  async function load(targetPage: number) {
+    setLoading(true);
+    setMessage("");
+    try {
+      const data = await fetchCommercialTransactions({
+        page: targetPage,
+        pageSize,
+        documentNumber,
+        customerName,
+        productCode,
+        city,
+        dateFrom,
+        dateTo,
+      });
+      setItems(data.items);
+      setPage(data.page);
+      setTotal(data.total);
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadSummaryData() {
+    const data = await fetchCommercialTransactionsSummary({
+        granularity: summaryGranularity,
+        sortBy: companySortBy,
+        page: summaryPage,
+        pageSize: summaryPageSize,
+        documentNumber,
+        customerName,
+        productCode,
+        city,
+        dateFrom,
+        dateTo,
+        referenceDate: summaryReferenceDate,
+      });
+    setSummary(data);
+  }
+
+  useEffect(() => {
+    void Promise.all([load(1), loadSummaryData()]);
+  }, []);
+
+  useEffect(() => {
+    setSummaryPage(1);
+  }, [summaryGranularity, companySortBy, summaryReferenceDate, documentNumber, customerName, productCode, city, dateFrom, dateTo]);
+
+  useEffect(() => {
+    void loadSummaryData();
+  }, [summaryGranularity, companySortBy, summaryReferenceDate, summaryPage]);
+
+  function handleFilterSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSummaryPage(1);
+    void Promise.all([load(1), loadSummaryData()]);
+  }
+
   return (
-    <div className="p-12">
-      <header className="flex justify-between items-end mb-12 animate-fade-in">
-        <div>
-          <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-muted-foreground">
-            Smart Core / Inteligência de Vendas
-          </span>
-          <h1 className="text-4xl font-display tracking-tight mt-2 mb-2">
-            Vendas & Previsão de Demanda
-          </h1>
-          <p className="text-muted-foreground max-w-[64ch] text-pretty">
-            Histórico consolidado dos últimos 12 meses e projeção da IA para os próximos
-            6 meses, segmentando consumo de clientes ativos e captação de novos clientes.
-          </p>
-        </div>
-        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em]">
-          Modelo v3.1 · Confiança 94%
-        </span>
+    <div className="page-shell">
+      <header className="animate-soft-enter">
+        <span className="page-header-kicker">Smart Core / Vendas</span>
+        <h1 className="text-4xl font-display tracking-tight mt-2">Vendas Importadas</h1>
+        <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
+          Consulte as vendas processadas com filtros rápidos e navegação por páginas.
+        </p>
       </header>
 
-      {/* KPIs */}
-      <section className="grid grid-cols-4 gap-4 mb-10 animate-fade-in [animation-delay:80ms]">
-        {[
-          { label: "Receita 12M", value: "R$ 30.0M", delta: "+18.4%", icon: DollarSign },
-          { label: "Previsão 6M", value: "R$ 23.9M", delta: "+22.7%", icon: TrendingUp, accent: true },
-          { label: "Clientes Ativos", value: "508", delta: "+59 vs Q4", icon: Users },
-          { label: "Novos Clientes / Mês", value: "71", delta: "+34% YoY", icon: UserPlus },
-        ].map((s) => (
-          <div key={s.label} className="border border-border bg-surface p-5 rounded-xl">
-            <div className="flex justify-between items-start mb-3">
-              <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
-                {s.label}
-              </p>
-              <s.icon className="size-3.5 text-muted-foreground" />
+      {message && (
+        <Alert variant="destructive" className="animate-soft-enter">
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      )}
+
+      <Card className="animate-soft-enter">
+        <CardHeader>
+          <CardTitle>Filtros</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleFilterSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label>Documento</Label>
+              <Input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} placeholder="Ex.: 000123" />
             </div>
-            <p className={"text-2xl font-display tabular-nums " + (s.accent ? "text-primary" : "text-foreground")}>
-              {s.value}
-            </p>
-            <p className="text-[11px] font-mono text-primary mt-1 flex items-center gap-1">
-              <ArrowUpRight className="size-3" /> {s.delta}
-            </p>
-          </div>
-        ))}
-      </section>
+            <div className="space-y-1">
+              <Label>Cliente</Label>
+              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Nome do cliente" />
+            </div>
+            <div className="space-y-1">
+              <Label>Produto</Label>
+              <Input value={productCode} onChange={(e) => setProductCode(e.target.value)} placeholder="Código do produto" />
+            </div>
+            <div className="space-y-1">
+              <Label>Cidade</Label>
+              <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Cidade" />
+            </div>
+            <div className="space-y-1">
+              <Label>Data inicial</Label>
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>Data final</Label>
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            </div>
+            <div className="md:col-span-3 flex justify-end gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDocumentNumber("");
+                  setCustomerName("");
+                  setProductCode("");
+                  setCity("");
+                  setDateFrom("");
+                  setDateTo("");
+                  setSummaryPage(1);
+                  void Promise.all([load(1), loadSummaryData()]);
+                }}
+              >
+                Limpar
+              </Button>
+              <Button type="submit" disabled={loading}>{loading ? "Filtrando..." : "Filtrar"}</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
-      {/* Histórico + Previsão (chart) */}
-      <section className="bg-surface border border-border rounded-2xl p-6 mb-10 animate-fade-in [animation-delay:160ms]">
-        <div className="flex justify-between items-end mb-6">
-          <div>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-              Série Temporal · Receita (R$ mil)
-            </span>
-            <h2 className="text-xl font-display mt-1">Histórico Real vs Previsão IA</h2>
+      <Card className="animate-soft-enter">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <CardTitle>Resultados</CardTitle>
+            <div className="inline-flex rounded-md border border-border p-1">
+              <Button
+                type="button"
+                size="sm"
+                variant={viewMode === "summary" ? "default" : "ghost"}
+                onClick={() => setViewMode("summary")}
+              >
+                Resumo
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={viewMode === "items" ? "default" : "ghost"}
+                onClick={() => setViewMode("items")}
+              >
+                Itens
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-4 text-[11px] font-mono">
-            <span className="flex items-center gap-2 text-muted-foreground">
-              <span className="size-2 rounded-full bg-foreground/60" /> Realizado
-            </span>
-            <span className="flex items-center gap-2 text-primary">
-              <span className="size-2 rounded-full bg-primary" /> Previsto
-            </span>
-          </div>
-        </div>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={salesHistory}>
-              <defs>
-                <linearGradient id="gReal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="#94a3b8" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gPrev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#22ee5b" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="#22ee5b" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="#1e293b" vertical={false} />
-              <XAxis dataKey="mes" tick={{ fill: "#94a3b8", fontSize: 11, fontFamily: "JetBrains Mono" }} />
-              <YAxis tick={{ fill: "#94a3b8", fontSize: 11, fontFamily: "JetBrains Mono" }} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Area type="monotone" dataKey="real" stroke="#f8fafc" strokeWidth={2} fill="url(#gReal)" name="Realizado" />
-              <Area type="monotone" dataKey="previsao" stroke="#22ee5b" strokeWidth={2} strokeDasharray="5 5" fill="url(#gPrev)" name="Previsto" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+          <p className="text-xs text-muted-foreground">Total encontrado: {total}</p>
+        </CardHeader>
 
-      {/* Dois gráficos lado a lado */}
-      <section className="grid grid-cols-2 gap-6 mb-10 animate-fade-in [animation-delay:240ms]">
-        <div className="bg-surface border border-border rounded-2xl p-6">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-            Consumo · Clientes Ativos
-          </span>
-          <h3 className="text-lg font-display mt-1 mb-1">Base ativa em expansão</h3>
-          <p className="text-xs text-muted-foreground mb-4">
-            IA prevê +21% no consumo médio dos clientes existentes nos próximos 6 meses.
-          </p>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={salesHistory}>
-                <CartesianGrid stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: "#94a3b8", fontSize: 10, fontFamily: "JetBrains Mono" }} />
-                <YAxis tick={{ fill: "#94a3b8", fontSize: 10, fontFamily: "JetBrains Mono" }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Line type="monotone" dataKey="ativos" stroke="#22ee5b" strokeWidth={2} dot={{ r: 3, fill: "#22ee5b" }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        <CardContent className="space-y-3">
+          {viewMode === "summary" ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <KpiCard
+                  title="Registros no filtro"
+                  value={new Intl.NumberFormat("pt-BR").format(summary.totalRecords)}
+                  percentageChange={null}
+                  trendDirection="stable"
+                  trendData={[Math.max(1, summary.totalRecords * 0.92), summary.totalRecords]}
+                  periodLabel="Conjunto retornado pelos filtros aplicados"
+                  icon={Boxes}
+                />
+                <KpiCard
+                  title="Faturamento no filtro"
+                  value={formatCompactCurrency(summary.totalAmount)}
+                  percentageChange={summary.totalGrowthPercent}
+                  trendData={[summary.previousPeriodTotalAmount, summary.currentPeriodTotalAmount]}
+                  periodLabel={`${summary.currentPeriodStart ? formatDate(summary.currentPeriodStart) : "-"} vs ${summary.previousPeriodStart ? formatDate(summary.previousPeriodStart) : "-"}`}
+                  icon={DollarSign}
+                  description={`${revenueComparisonText} Atual: ${formatCurrency(summary.currentPeriodTotalAmount)} | Anterior: ${formatCurrency(summary.previousPeriodTotalAmount)}.`}
+                />
+                <KpiCard
+                  title="Quantidade no filtro"
+                  value={formatDecimal3(summary.totalQuantity)}
+                  percentageChange={null}
+                  trendDirection="stable"
+                  trendData={[Math.max(1, summary.totalQuantity * 0.96), summary.totalQuantity]}
+                  periodLabel="Somatório de itens vendidos no período filtrado"
+                  icon={Scale}
+                />
+                <KpiCard
+                  title="Peso bruto no filtro (kg)"
+                  value={formatDecimal3(summary.totalWeightKg)}
+                  percentageChange={null}
+                  trendDirection="stable"
+                  trendData={[Math.max(1, summary.totalWeightKg * 0.95), summary.totalWeightKg]}
+                  periodLabel="Somatório de peso bruto no período filtrado"
+                  icon={Weight}
+                />
+                <KpiCard
+                  title="Comparativo selecionado"
+                  value={formatDelta(summary.totalGrowthPercent)}
+                  percentageChange={summary.totalGrowthPercent}
+                  trendData={[summary.previousPeriodTotalAmount, summary.currentPeriodTotalAmount]}
+                  periodLabel={revenueComparisonText}
+                  icon={TrendingUp}
+                />
+              </div>
 
-        <div className="bg-surface border border-border rounded-2xl p-6">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-            Aquisição · Novos Clientes / Mês
-          </span>
-          <h3 className="text-lg font-display mt-1 mb-1">Captação acelerando</h3>
-          <p className="text-xs text-muted-foreground mb-4">
-            Tendência de crescimento de 34% YoY, puxada por campanhas no Sudeste.
-          </p>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesHistory}>
-                <CartesianGrid stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: "#94a3b8", fontSize: 10, fontFamily: "JetBrains Mono" }} />
-                <YAxis tick={{ fill: "#94a3b8", fontSize: 10, fontFamily: "JetBrains Mono" }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="novos" fill="#22ee5b" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </section>
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <p className="text-sm font-medium">
+                  Resumo por empresa ({summaryGranularity === "weekly" ? "semana selecionada vs anterior" : "dia selecionado vs anterior"})
+                </p>
+                <div className="flex gap-2">
+                  <select
+                    className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+                    value={summaryGranularity}
+                    onChange={(e) => setSummaryGranularity(e.target.value as SummaryGranularity)}
+                  >
+                    <option value="daily">Diário</option>
+                    <option value="weekly">Semanal</option>
+                  </select>
+                  <Input
+                    type="date"
+                    value={summaryReferenceDate}
+                    onChange={(e) => setSummaryReferenceDate(e.target.value)}
+                    className="w-[170px]"
+                  />
+                  <select
+                    className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+                    value={companySortBy}
+                    onChange={(e) => setCompanySortBy(e.target.value as SummarySortBy)}
+                  >
+                    <option value="growth">Maior crescimento</option>
+                    <option value="amount">Maior faturamento</option>
+                    <option value="weight">Maior peso</option>
+                    <option value="quantity">Maior quantidade</option>
+                  </select>
+                </div>
+              </div>
 
-      {/* Tabela top clientes */}
-      <section className="bg-surface border border-border rounded-2xl p-6 mb-10 animate-fade-in [animation-delay:320ms]">
-        <div className="flex justify-between items-end mb-6">
-          <div>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-              Top Clientes Ativos · Projeção 6M
-            </span>
-            <h3 className="text-lg font-display mt-1">Previsão de aumento de consumo</h3>
-          </div>
-          <span className="text-[10px] font-mono text-muted-foreground">
-            Baseado em 24 meses de histórico transacional
-          </span>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground border-b border-border">
-              <th className="text-left py-3">Cliente</th>
-              <th className="text-right py-3">Consumo Atual (un/mês)</th>
-              <th className="text-right py-3">Projetado IA</th>
-              <th className="text-right py-3">Variação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {topClientes.map((c) => (
-              <tr key={c.nome} className="border-b border-border/50 last:border-0">
-                <td className="py-4 font-medium">{c.nome}</td>
-                <td className="py-4 text-right font-mono tabular-nums text-muted-foreground">{c.consumoAtual}</td>
-                <td className="py-4 text-right font-mono tabular-nums text-foreground">{c.projetado}</td>
-                <td className="py-4 text-right">
-                  <span className="inline-flex items-center gap-1 font-mono text-primary text-xs">
-                    <ArrowUpRight className="size-3" /> +{c.var}%
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Empresa</TableHead>
+                    <TableHead>Faturamento</TableHead>
+                    <TableHead>Quantidade</TableHead>
+                    <TableHead>Peso (kg)</TableHead>
+                    <TableHead>Variação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {summary.items.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        {loading ? "Carregando resumo..." : "Sem dados para montar resumo por empresa."}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {summary.items.map((row) => (
+                    <TableRow key={row.companyName}>
+                      <TableCell>{row.companyName}</TableCell>
+                      <TableCell>{formatCurrency(row.totalAmount)}</TableCell>
+                      <TableCell>{formatDecimal3(row.totalQuantity)}</TableCell>
+                      <TableCell>{formatDecimal3(row.totalWeightKg)}</TableCell>
+                      <TableCell className={row.growthPercent == null ? "text-muted-foreground" : row.growthPercent >= 0 ? "text-green-600" : "text-red-600"}>
+                        {formatDelta(row.growthPercent)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="outline" size="sm" disabled={summaryPage <= 1 || loading} onClick={() => setSummaryPage((x) => x - 1)}>
+                  Anterior
+                </Button>
+                <span className="text-xs text-muted-foreground">Página {summaryPage} de {summaryTotalPages}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={summaryPage >= summaryTotalPages || loading}
+                  onClick={() => setSummaryPage((x) => x + 1)}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Documento</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Qtd</TableHead>
+                    <TableHead>Unitário</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Cidade</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        {loading ? "Carregando vendas..." : "Nenhuma venda encontrada."}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {items.map((item) => (
+                    <TableRow key={item.id} className="animate-soft-enter">
+                      <TableCell>{item.documentNumber}</TableCell>
+                      <TableCell>{formatDate(item.transactionDate)}</TableCell>
+                      <TableCell>{item.customerName}</TableCell>
+                      <TableCell>{item.productCode}</TableCell>
+                      <TableCell>{formatDecimal3(item.quantity)}</TableCell>
+                      <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
+                      <TableCell>{formatCurrency(item.totalAmount)}</TableCell>
+                      <TableCell>{item.city}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
-      {/* Insight */}
-      <section className="bg-primary/5 border border-primary/30 rounded-2xl p-6 animate-fade-in [animation-delay:400ms]">
-        <div className="flex items-start gap-4">
-          <div className="size-10 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-            <Activity className="size-5 text-primary" />
-          </div>
-          <div>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-primary">
-              Insight Nexus AI
-            </span>
-            <h3 className="text-lg font-display mt-1 mb-2">
-              Demanda projetada exigirá +20% de capacidade operacional até Set/26
-            </h3>
-            <p className="text-sm text-muted-foreground max-w-[80ch] text-pretty">
-              A combinação do crescimento orgânico dos 508 clientes ativos (+21% de consumo médio) com
-              a captação de novos clientes (76/mês) deve elevar a receita mensal para R$ 4.38M até
-              Nov/26. Recomendamos abrir o Simulador para projetar o impacto em Logística e RH.
-            </p>
-          </div>
-        </div>
-      </section>
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => void load(page - 1)}>
+                  Anterior
+                </Button>
+                <span className="text-xs text-muted-foreground">Página {page} de {totalPages}</span>
+                <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => void load(page + 1)}>
+                  Próxima
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

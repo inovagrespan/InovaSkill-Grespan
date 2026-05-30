@@ -1,4 +1,6 @@
-export type FileType = "Unknown" | "Customers" | "Orders" | "Products";
+import { extractHeadersInWorker } from "@/features/import-template-builder/utils/extract-headers-in-worker";
+
+export type FileType = "Unknown" | "Customers" | "Orders" | "Products" | "CommercialTransaction";
 
 export type JobStatus =
   | "WaitingProcessing"
@@ -49,7 +51,55 @@ export type TemplateConfig = {
   aliases: TemplateAlias[];
 };
 
+export type CommercialTransaction = {
+  id: number;
+  documentNumber: string;
+  transactionDate: string;
+  customerCode: string;
+  customerName: string;
+  productCode: string;
+  productDescription: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  transactionType: string;
+  city: string;
+  productGroup: string;
+  grossWeightKg: number;
+  sourceFileJobId: number;
+};
+
+export type SummaryGranularity = "daily" | "weekly";
+export type SummarySortBy = "growth" | "amount" | "weight" | "quantity";
+export type CommercialTransactionCompanySummary = {
+  companyName: string;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  currentPeriodAmount: number;
+  previousPeriodAmount: number;
+  growthPercent: number | null;
+};
+export type CommercialTransactionSummaryResponse = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  granularity: SummaryGranularity;
+  currentPeriodStart: string;
+  previousPeriodStart: string;
+  currentPeriodTotalAmount: number;
+  previousPeriodTotalAmount: number;
+  totalGrowthPercent: number | null;
+  totalRecords: number;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  totalCompanies: number;
+  items: CommercialTransactionCompanySummary[];
+};
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
+export const MAX_UPLOAD_SIZE_BYTES = 524_288_000;
 
 async function parseApiError(response: Response, fallbackMessage: string): Promise<string> {
   try {
@@ -110,6 +160,7 @@ const fileTypeMap: Record<number, FileType> = {
   1: "Customers",
   2: "Orders",
   3: "Products",
+  4: "CommercialTransaction",
 };
 
 const statusMap: Record<number, JobStatus> = {
@@ -137,16 +188,28 @@ export async function uploadFile(file: File): Promise<number> {
   const form = new FormData();
   form.append("file", file);
 
-  const response = await fetch(`${API_URL}/api/files/upload`, {
-    method: "POST",
-    body: form,
-  });
+  try {
+    const response = await fetch(`${API_URL}/api/files/upload`, {
+      method: "POST",
+      body: form,
+    });
 
-  if (!response.ok) {
-    throw new Error(await parseApiError(response, `Falha ao enviar '${file.name}'.`));
+    if (!response.ok) {
+      if (response.status === 413) {
+        throw new Error("Arquivo muito grande. O limite atual Ã© 500 MB.");
+      }
+      throw new Error(await parseApiError(response, `Falha ao enviar '${file.name}'.`));
+    }
+
+    const data = (await response.json()) as { fileJobId: number };
+    return data.fileJobId;
+  } catch (error) {
+    if (error instanceof Error && /Failed to fetch|NetworkError|Load failed/i.test(error.message)) {
+      throw new Error("NÃ£o foi possÃ­vel conectar com a API. Verifique se os containers estÃ£o ativos e tente novamente.");
+    }
+
+    throw error;
   }
-  const data = (await response.json()) as { fileJobId: number };
-  return data.fileJobId;
 }
 
 export async function fetchJobs(page = 1, pageSize = 10): Promise<PagedResult<FileJob>> {
@@ -236,7 +299,7 @@ export async function fetchJobErrors(
 
 export async function fetchTemplateConfigs(): Promise<TemplateConfig[]> {
   const response = await fetch(`${API_URL}/api/template-configs`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar configurações de template."));
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar configuraÃ§Ãµes de template."));
   const data = (await response.json()) as Array<{
     id?: number;
     fileType?: number | string;
@@ -261,6 +324,274 @@ export async function saveTemplateConfig(input: Omit<TemplateConfig, "id"> & { i
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao salvar configuração de template."));
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao salvar configuraÃ§Ã£o de template."));
   return (await response.json()) as TemplateConfig;
+}
+
+export async function fetchCommercialTransactions(input: {
+  page?: number;
+  pageSize?: number;
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<PagedResult<CommercialTransaction>> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+
+  if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
+  if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
+  if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  const response = await fetch(`${API_URL}/api/commercial-transactions?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar vendas."));
+
+  const raw = (await response.json()) as
+    | PagedResult<CommercialTransaction>
+    | { Page?: number; PageSize?: number; Total?: number; Items?: CommercialTransaction[] };
+
+  const items = (raw as PagedResult<CommercialTransaction>).items ?? (raw as { Items?: CommercialTransaction[] }).Items ?? [];
+
+  return {
+    page: (raw as PagedResult<CommercialTransaction>).page ?? (raw as { Page?: number }).Page ?? 1,
+    pageSize: (raw as PagedResult<CommercialTransaction>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? 20,
+    total: (raw as PagedResult<CommercialTransaction>).total ?? (raw as { Total?: number }).Total ?? 0,
+    items,
+  };
+}
+
+export type ApiImportFileType = { id: string; name: string; code?: string };
+export type ApiTargetField = { name: string; displayName: string; required: boolean; description?: string };
+export type ApiTransformRule = {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  requiresParameters?: boolean;
+};
+export type ApiImportTemplateRule = {
+  transformRuleId: string;
+  order: number;
+  parametersJson: unknown;
+};
+export type ApiImportTemplateMapping = {
+  sourceColumnName: string;
+  targetFieldName: string;
+  isRequired: boolean;
+  defaultValue: string | null;
+  transformRules: ApiImportTemplateRule[];
+};
+export type ApiImportTemplate = {
+  id?: string;
+  name: string;
+  description: string;
+  importFileTypeId: string;
+  columnMappings: ApiImportTemplateMapping[];
+};
+
+export async function fetchImportTemplateFileTypes(): Promise<ApiImportFileType[]> {
+  try {
+    const response = await fetch(`${API_URL}/api/import-templates/file-types`);
+    if (response.ok) {
+      const data = (await response.json()) as Array<Record<string, unknown>>;
+      return (data ?? []).map((item) => ({
+        id: String(item.id ?? item.Id ?? item.value ?? item.Value ?? ""),
+        name: String(item.name ?? item.Name ?? item.label ?? item.Label ?? ""),
+        code: String(item.code ?? item.Code ?? ""),
+      }));
+    }
+  } catch {
+    // fallback
+  }
+
+  return [
+    { id: "Customers", name: "Clientes", code: "CUSTOMERS" },
+    { id: "Products", name: "Produtos", code: "PRODUCTS" },
+    { id: "CommercialTransaction", name: "Vendas", code: "COMMERCIAL_TRANSACTION" },
+    { id: "Orders", name: "Pedidos", code: "ORDERS" },
+  ];
+}
+
+export async function fetchCommercialTransactionsSummary(input: {
+  page?: number;
+  pageSize?: number;
+  granularity?: SummaryGranularity;
+  sortBy?: SummarySortBy;
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  referenceDate?: string;
+}): Promise<CommercialTransactionSummaryResponse> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+  query.set("granularity", input.granularity ?? "weekly");
+  query.set("sortBy", input.sortBy ?? "growth");
+
+  if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
+  if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
+  if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+  if (input.referenceDate?.trim()) query.set("referenceDate", input.referenceDate.trim());
+
+  const response = await fetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de vendas."));
+
+  return (await response.json()) as CommercialTransactionSummaryResponse;
+}
+
+export async function fetchImportTemplateTargetFields(importFileTypeId: string): Promise<ApiTargetField[]> {
+  try {
+    const response = await fetch(`${API_URL}/api/import-templates/file-types/${importFileTypeId}/fields`);
+    if (response.ok) {
+      const data = (await response.json()) as Array<Record<string, unknown>>;
+      return (data ?? []).map((item) => ({
+        name: String(item.name ?? item.Name ?? ""),
+        displayName: String(item.displayName ?? item.DisplayName ?? item.name ?? item.Name ?? ""),
+        required: Boolean(item.required ?? item.Required ?? false),
+        description: String(item.description ?? item.Description ?? ""),
+      }));
+    }
+  } catch {
+    // fallback
+  }
+
+  const fallbackFields: Record<string, ApiTargetField[]> = {
+    Customers: [
+      { name: "name", displayName: "Nome", required: true },
+      { name: "email", displayName: "E-mail", required: true },
+    ],
+    Products: [
+      { name: "sku", displayName: "SKU", required: true },
+      { name: "name", displayName: "Nome", required: true },
+      { name: "price", displayName: "PreÃ§o", required: false },
+    ],
+    Orders: [
+      { name: "ordernumber", displayName: "NÃºmero do Pedido", required: true },
+      { name: "customeremail", displayName: "E-mail do Cliente", required: true },
+      { name: "productsku", displayName: "SKU do Produto", required: true },
+      { name: "quantity", displayName: "Quantidade", required: true },
+      { name: "orderdate", displayName: "Data do Pedido", required: false },
+    ],
+    CommercialTransaction: [
+      { name: "documentnumber", displayName: "Documento", required: true },
+      { name: "transactiondate", displayName: "Data", required: true },
+      { name: "customercode", displayName: "CÃ³digo Cliente", required: true },
+      { name: "customername", displayName: "Nome Cliente", required: true },
+      { name: "productcode", displayName: "CÃ³digo Produto", required: true },
+      { name: "productdescription", displayName: "DescriÃ§Ã£o Produto", required: false },
+      { name: "quantity", displayName: "Quantidade", required: true },
+      { name: "unitprice", displayName: "Valor UnitÃ¡rio", required: false },
+      { name: "totalamount", displayName: "Valor Total", required: false },
+      { name: "transactiontype", displayName: "Tipo", required: false },
+      { name: "city", displayName: "Cidade", required: false },
+      { name: "productgroup", displayName: "Grupo Produto", required: false },
+      { name: "grossweightkg", displayName: "Peso Bruto (Kg)", required: false },
+    ],
+  };
+
+  return fallbackFields[importFileTypeId] ?? [];
+}
+
+export async function extractSpreadsheetHeaders(file: File, importFileTypeId?: string): Promise<string[]> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (importFileTypeId) formData.append("importFileTypeId", importFileTypeId);
+
+  try {
+    const response = await fetch(`${API_URL}/api/import-templates/extract-headers`, { method: "POST", body: formData });
+    if (response.ok) {
+      const payload = (await response.json()) as { headers?: string[]; Headers?: string[] } | string[];
+      const apiHeaders = Array.isArray(payload) ? payload : payload.headers ?? payload.Headers ?? [];
+      if (apiHeaders.length > 0) return apiHeaders;
+    }
+  } catch {
+    // fallback
+  }
+
+  return extractHeadersInWorker(file);
+}
+
+export async function fetchTransformRules(): Promise<ApiTransformRule[]> {
+  try {
+    const response = await fetch(`${API_URL}/api/import-templates/transform-rules`);
+    if (response.ok) {
+      const data = (await response.json()) as Array<Record<string, unknown>>;
+      return (data ?? []).map((item) => ({
+        id: String(item.id ?? item.Id ?? ""),
+        name: String(item.name ?? item.Name ?? item.code ?? item.Code ?? ""),
+        code: String(item.code ?? item.Code ?? ""),
+        description: String(item.description ?? item.Description ?? ""),
+        requiresParameters: Boolean(item.requiresParameters ?? item.RequiresParameters ?? false),
+      }));
+    }
+  } catch {
+    // fallback
+  }
+
+  return [
+    { id: "trim", name: "Trim", code: "Trim", requiresParameters: false },
+    { id: "onlydigits", name: "OnlyDigits", code: "OnlyDigits", requiresParameters: false },
+    { id: "brcurrency", name: "BrazilianCurrency", code: "BrazilianCurrency", requiresParameters: true },
+    { id: "brdate", name: "BrazilianDate", code: "BrazilianDate", requiresParameters: true },
+    { id: "uppercase", name: "UpperCase", code: "UpperCase", requiresParameters: false },
+    { id: "lowercase", name: "LowerCase", code: "LowerCase", requiresParameters: false },
+  ];
+}
+export async function fetchImportTemplateById(templateId: string): Promise<ApiImportTemplate> {
+  const response = await fetch(`${API_URL}/api/import-templates/${templateId}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar template."));
+  const item = (await response.json()) as Record<string, any>;
+  return {
+    id: String(item.id ?? item.Id ?? ""),
+    name: String(item.name ?? item.Name ?? ""),
+    description: String(item.description ?? item.Description ?? ""),
+    importFileTypeId: String(item.importFileTypeId ?? item.ImportFileTypeId ?? ""),
+    columnMappings: (item.columnMappings ?? item.ColumnMappings ?? []).map((mapping: any) => ({
+      sourceColumnName: String(mapping.sourceColumnName ?? mapping.SourceColumnName ?? ""),
+      targetFieldName: String(mapping.targetFieldName ?? mapping.TargetFieldName ?? ""),
+      isRequired: Boolean(mapping.isRequired ?? mapping.IsRequired ?? false),
+      defaultValue: mapping.defaultValue ?? mapping.DefaultValue ?? null,
+      transformRules: (mapping.transformRules ?? mapping.TransformRules ?? []).map((rule: any) => ({
+        transformRuleId: String(rule.transformRuleId ?? rule.TransformRuleId ?? ""),
+        order: Number(rule.order ?? rule.Order ?? 0),
+        parametersJson: rule.parametersJson ?? rule.ParametersJson ?? null,
+      })),
+    })),
+  };
+}
+
+export async function createImportTemplate(input: ApiImportTemplate): Promise<ApiImportTemplate> {
+  const response = await fetch(`${API_URL}/api/import-templates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao criar template."));
+  return (await response.json()) as ApiImportTemplate;
+}
+
+export async function updateImportTemplate(templateId: string, input: ApiImportTemplate): Promise<ApiImportTemplate> {
+  const response = await fetch(`${API_URL}/api/import-templates/${templateId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao atualizar template."));
+  return (await response.json()) as ApiImportTemplate;
 }

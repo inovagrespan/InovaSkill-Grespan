@@ -4,6 +4,6 @@ namespace InovaSkill.Importer.Application.Abstractions;
 
 public interface IPreProcessorTemplateResolver
 {
-    Task<PreProcessorTemplate?> ResolveAsync(string fileName, IReadOnlyCollection<string> headers, CancellationToken cancellationToken);
+    Task<ImportTemplate?> ResolveAsync(string fileName, IReadOnlyCollection<string> headers, CancellationToken cancellationToken);
 }
 

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("InovaSkill.Importer.Application")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d762822cde12c24e291f5304e8a18910d5d5efe8")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+64582574f858da83a22ea241583dd4191e032176")]
 [assembly: System.Reflection.AssemblyProductAttribute("InovaSkill.Importer.Application")]
 [assembly: System.Reflection.AssemblyTitleAttribute("InovaSkill.Importer.Application")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

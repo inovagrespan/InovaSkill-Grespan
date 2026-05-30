@@ -1,11 +1,11 @@
-using InovaSkill.Importer.Domain.Enums;
+﻿using InovaSkill.Importer.Domain.Enums;
 
 namespace InovaSkill.Importer.Api.Contracts;
 
 public sealed record FileJobDto(
     long Id,
     string FilePath,
-    FileType FileType,
+    string? ImportFileTypeCode,
     FileJobStatus Status,
     DateTime CreatedAt,
     int ErrorCount,

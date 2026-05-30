@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { FileUp, AlertTriangle, FolderUp, FileText, ChevronRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import {
+  MAX_UPLOAD_SIZE_BYTES,
   fetchJobErrors,
   fetchJobs,
   type FileJob,
@@ -117,6 +118,9 @@ function ImportacoesPage() {
     try {
       const results: string[] = [];
       for (const file of selectedFiles) {
+        if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+          throw new Error(`Arquivo '${file.name}' excede o limite de 500 MB.`);
+        }
         const jobId = await uploadFile(file);
         results.push(`${file.name} -> Job #${jobId}`);
       }
@@ -133,12 +137,15 @@ function ImportacoesPage() {
   const selectedJob = useMemo(() => jobs.find((job) => job.id === selectedJobId) ?? null, [jobs, selectedJobId]);
 
   return (
-    <div className="p-12 space-y-6">
-      <header className="animate-fade-in">
-        <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-muted-foreground">Smart Core / Importações</span>
+    <div className="page-shell">
+      <header className="animate-soft-enter">
+        <span className="page-header-kicker">Smart Core / Importações</span>
         <h1 className="text-4xl font-display tracking-tight mt-2">Importação de Arquivos</h1>
+        <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
+          Envie arquivos, acompanhe o processamento em tempo real e revise erros com contexto.
+        </p>
         <div className="mt-4">
-          <Link to="/importacoes/templates" className="text-sm text-primary hover:underline">
+          <Link to="/importacoes/templates" className="text-sm text-primary hover:underline underline-offset-4">
             Abrir configuração de templates
           </Link>
         </div>
@@ -150,7 +157,7 @@ function ImportacoesPage() {
         </Alert>
       )}
 
-      <Card className="bg-surface border-primary/40 ring-2 ring-primary/10">
+      <Card className="bg-surface border-primary/40 ring-2 ring-primary/10 animate-soft-enter">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FolderUp className="size-5 text-primary" />
@@ -159,13 +166,13 @@ function ImportacoesPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleUpload} className="space-y-4">
-            <label className="block cursor-pointer rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors p-6">
+            <label className="block cursor-pointer rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-all duration-200 p-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Clique para selecionar um ou mais arquivos</p>
                   <p className="text-xs text-muted-foreground">Formatos aceitos: .csv e .xlsx</p>
                 </div>
-                <div className="inline-flex items-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold">
+                <div className="inline-flex items-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold shadow-sm shadow-primary/20">
                   <FileUp className="size-4 mr-2" />
                   Escolher arquivos
                 </div>
@@ -204,7 +211,7 @@ function ImportacoesPage() {
         </CardContent>
       </Card>
 
-      <Card className="bg-surface border-border">
+      <Card className="bg-surface border-border animate-soft-enter">
         <CardHeader>
           <CardTitle>Arquivos</CardTitle>
         </CardHeader>
@@ -220,7 +227,7 @@ function ImportacoesPage() {
                 setDetailsOpen(true);
                 void loadErrors(job.id, 1);
               }}
-              className="w-full text-left rounded-lg border border-border p-3 transition-colors hover:bg-white/[0.03]"
+              className="w-full text-left rounded-lg border border-border/80 p-3 transition-all duration-200 hover:bg-white/[0.03] hover:border-border"
             >
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-medium truncate">{job.filePath.split(/[/\\]/).pop() ?? `Job #${job.id}`}</p>
@@ -309,7 +316,7 @@ function ImportacoesPage() {
                 <AlertDescription>
                   {selectedJob.errorCount > 0
                     ? `Arquivo com inconsistências. Total de erros: ${errorTotal}.`
-                    : "Arquivo validado sem inconsistï¿½ncias."}
+                    : "Arquivo validado sem inconsistências."}
                 </AlertDescription>
               </Alert>
 
