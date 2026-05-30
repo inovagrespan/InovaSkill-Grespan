@@ -1,5 +1,0 @@
-C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Worker\obj\Debug\net10.0\InovaSkill.Importer.Worker.csproj.AssemblyReference.cache
-C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Worker\obj\Debug\net10.0\InovaSkill.Importer.Worker.GeneratedMSBuildEditorConfig.editorconfig
-C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Worker\obj\Debug\net10.0\InovaSkill.Importer.Worker.AssemblyInfoInputs.cache
-C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Worker\obj\Debug\net10.0\InovaSkill.Importer.Worker.AssemblyInfo.cs
-C:\repos\InovaSkill-Grespan\InovaSkill.Importer.Worker\obj\Debug\net10.0\InovaSkill.Importer.Worker.csproj.CoreCompileInputs.cache
