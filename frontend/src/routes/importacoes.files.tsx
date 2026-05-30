@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
 import {
   MAX_UPLOAD_SIZE_BYTES,
   fetchJobErrors,
@@ -14,8 +15,11 @@ import {
   type FileJob,
   type ImportError,
   type PagedResult,
+  type UploadDestinationCode,
+  type UploadDestinationMode,
   uploadFile,
 } from "@/lib/importer-api";
+import { destinationLabel, detectUploadDestination } from "@/lib/upload-destination-detector";
 
 export const Route = createFileRoute("/importacoes/files")({
   component: ImportacoesPage,
@@ -48,6 +52,8 @@ function formatDate(value: string): string {
 
 function ImportacoesPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [destinationMode, setDestinationMode] = useState<UploadDestinationMode>("auto");
+  const [manualDestination, setManualDestination] = useState<UploadDestinationCode>("SALES_INVOICE");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -106,6 +112,15 @@ function ImportacoesPage() {
     }
   }, [selectedJobId, detailsOpen]);
 
+  const destinationSuggestions = useMemo(
+    () =>
+      selectedFiles.map((file) => ({
+        file,
+        suggestion: detectUploadDestination(file.name),
+      })),
+    [selectedFiles],
+  );
+
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
     if (selectedFiles.length === 0) {
@@ -117,11 +132,18 @@ function ImportacoesPage() {
     setMessage("");
     try {
       const results: string[] = [];
-      for (const file of selectedFiles) {
+      for (const item of destinationSuggestions) {
+        const file = item.file;
         if (file.size > MAX_UPLOAD_SIZE_BYTES) {
           throw new Error(`Arquivo '${file.name}' excede o limite de 500 MB.`);
         }
-        const jobId = await uploadFile(file);
+        const selectedDestination =
+          destinationMode === "manual"
+            ? manualDestination
+            : item.suggestion.confidence === "low"
+              ? manualDestination
+              : item.suggestion.code;
+        const jobId = await uploadFile(file, selectedDestination);
         results.push(`${file.name} -> Job #${jobId}`);
       }
       setMessage(`Upload concluído: ${results.join(" | ")}`);
@@ -187,15 +209,46 @@ function ImportacoesPage() {
             </label>
 
             <div className="rounded-lg border border-border bg-background/50 p-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div className="space-y-1">
+                  <Label>Modo de destino</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                    value={destinationMode}
+                    onChange={(e) => setDestinationMode(e.target.value as UploadDestinationMode)}
+                  >
+                    <option value="auto">Automático (detectar)</option>
+                    <option value="manual">Manual (escolher destino)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Destino manual</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                    value={manualDestination}
+                    onChange={(e) => setManualDestination(e.target.value as UploadDestinationCode)}
+                    disabled={destinationMode === "auto"}
+                  >
+                    <option value="SALES_INVOICE">{destinationLabel("SALES_INVOICE")}</option>
+                    <option value="CUSTOMER_LIST">{destinationLabel("CUSTOMER_LIST")}</option>
+                    <option value="PRODUCT_LIST">{destinationLabel("PRODUCT_LIST")}</option>
+                    <option value="FINANCIAL_ENTRY">{destinationLabel("FINANCIAL_ENTRY")}</option>
+                  </select>
+                </div>
+              </div>
               <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Arquivos selecionados</p>
               {selectedFiles.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nenhum arquivo selecionado.</p>
               ) : (
                 <div className="space-y-1">
-                  {selectedFiles.map((file) => (
+                  {destinationSuggestions.map(({ file, suggestion }) => (
                     <p key={`${file.name}-${file.lastModified}`} className="text-sm flex items-center gap-2">
                       <FileText className="size-4 text-muted-foreground" />
                       {file.name}
+                      <span className="text-xs text-muted-foreground">
+                        - sugerido: {suggestion.label}
+                        {destinationMode === "auto" && suggestion.confidence === "low" ? ` (baixa confiança; usando manual: ${destinationLabel(manualDestination)})` : ""}
+                      </span>
                     </p>
                   ))}
                 </div>

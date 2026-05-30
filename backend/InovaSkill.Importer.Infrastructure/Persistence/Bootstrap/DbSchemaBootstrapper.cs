@@ -15,9 +15,13 @@ public static class DbSchemaBootstrapper
         }
 
         await EnsureFileJobsColumnsAsync(context, cancellationToken);
+        await EnsureCustomersColumnsAsync(context, cancellationToken);
         await EnsureCommercialTransactionsTableAsync(context, cancellationToken);
         await EnsureSalesSummariesDailyTableAsync(context, cancellationToken);
         await EnsureSalesSummariesWeeklyTableAsync(context, cancellationToken);
+        await EnsureCustomerSummariesDailyTableAsync(context, cancellationToken);
+        await EnsureCustomerSummariesWeeklyTableAsync(context, cancellationToken);
+        await EnsureCustomerSummariesMonthlyTableAsync(context, cancellationToken);
         await EnsureImportFileTypesAsync(context, cancellationToken);
         await EnsureImportTemplateV2TablesAsync(context, cancellationToken);
         await EnsureDefaultTemplatesAsync(context, cancellationToken);
@@ -112,6 +116,32 @@ public static class DbSchemaBootstrapper
             """
             CREATE INDEX IF NOT EXISTS "IX_CommercialTransactions_SourceFileJobId_TransactionDate"
             ON "CommercialTransactions" ("SourceFileJobId", "TransactionDate");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            DELETE FROM "CommercialTransactions" c
+            USING "CommercialTransactions" d
+            WHERE c."Id" > d."Id"
+              AND c."DocumentNumber" = d."DocumentNumber"
+              AND c."TransactionDate" = d."TransactionDate"
+              AND c."CustomerCode" = d."CustomerCode"
+              AND c."ProductCode" = d."ProductCode"
+              AND c."TransactionType" = d."TransactionType"
+              AND c."City" = d."City"
+              AND c."ProductGroup" = d."ProductGroup"
+              AND c."Quantity" = d."Quantity"
+              AND c."UnitPrice" = d."UnitPrice"
+              AND c."GrossWeightKg" = d."GrossWeightKg";
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS "UQ_CommercialTransactions_BusinessKey"
+            ON "CommercialTransactions"
+            ("DocumentNumber", "TransactionDate", "CustomerCode", "ProductCode", "TransactionType", "City", "ProductGroup", "Quantity", "UnitPrice", "GrossWeightKg");
             """,
             cancellationToken);
 
@@ -265,6 +295,161 @@ public static class DbSchemaBootstrapper
             cancellationToken);
     }
 
+    private static async Task EnsureCustomersColumnsAsync(ImportDbContext db, CancellationToken cancellationToken)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "Customers"
+            ADD COLUMN IF NOT EXISTS "CustomerCode" character varying(64) NOT NULL DEFAULT '';
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_Customers_CustomerCode"
+            ON "Customers" ("CustomerCode");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            DELETE FROM "Customers" c
+            USING "Customers" d
+            WHERE c."Id" > d."Id"
+              AND c."CustomerCode" = d."CustomerCode";
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS "UQ_Customers_CustomerCode"
+            ON "Customers" ("CustomerCode");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            DELETE FROM "Products" p
+            USING "Products" d
+            WHERE p."Id" > d."Id"
+              AND p."Sku" = d."Sku";
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS "UQ_Products_Sku"
+            ON "Products" ("Sku");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            DELETE FROM "Orders" o
+            USING "Orders" d
+            WHERE o."Id" > d."Id"
+              AND o."OrderNumber" = d."OrderNumber"
+              AND o."CustomerEmail" = d."CustomerEmail"
+              AND o."ProductSku" = d."ProductSku"
+              AND o."OrderedAt" = d."OrderedAt";
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS "UQ_Orders_BusinessKey"
+            ON "Orders" ("OrderNumber", "CustomerEmail", "ProductSku", "OrderedAt");
+            """,
+            cancellationToken);
+    }
+
+    private static async Task EnsureCustomerSummariesDailyTableAsync(ImportDbContext db, CancellationToken cancellationToken)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "CustomerSummariesDaily" (
+                "Id" bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                "SourceFileJobId" bigint NOT NULL,
+                "ReferenceDate" timestamp with time zone NOT NULL,
+                "CustomerCode" character varying(64) NOT NULL,
+                "CustomerName" character varying(256) NOT NULL,
+                "City" character varying(256) NOT NULL,
+                "ProductGroup" character varying(128) NOT NULL,
+                "TransactionType" character varying(128) NOT NULL,
+                "Orders" integer NOT NULL,
+                "Revenue" numeric(18,2) NOT NULL,
+                "Quantity" numeric(18,3) NOT NULL,
+                "Weight" numeric(18,3) NOT NULL,
+                "ProcessedAt" timestamp with time zone NOT NULL
+            );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesDaily_SourceFileJobId" ON "CustomerSummariesDaily" ("SourceFileJobId");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesDaily_ReferenceDate" ON "CustomerSummariesDaily" ("ReferenceDate");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesDaily_CustomerName" ON "CustomerSummariesDaily" ("CustomerName");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesDaily_ReferenceDate_CustomerName" ON "CustomerSummariesDaily" ("ReferenceDate", "CustomerName");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE UNIQUE INDEX IF NOT EXISTS "IX_CustomerSummariesDaily_UQ_BySourceAndDimensions" ON "CustomerSummariesDaily" ("SourceFileJobId", "ReferenceDate", "CustomerCode", "City", "ProductGroup", "TransactionType");""", cancellationToken);
+    }
+
+    private static async Task EnsureCustomerSummariesWeeklyTableAsync(ImportDbContext db, CancellationToken cancellationToken)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "CustomerSummariesWeekly" (
+                "Id" bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                "SourceFileJobId" bigint NOT NULL,
+                "WeekStartDate" timestamp with time zone NOT NULL,
+                "CustomerCode" character varying(64) NOT NULL,
+                "CustomerName" character varying(256) NOT NULL,
+                "City" character varying(256) NOT NULL,
+                "ProductGroup" character varying(128) NOT NULL,
+                "TransactionType" character varying(128) NOT NULL,
+                "Orders" integer NOT NULL,
+                "Revenue" numeric(18,2) NOT NULL,
+                "Quantity" numeric(18,3) NOT NULL,
+                "Weight" numeric(18,3) NOT NULL,
+                "ProcessedAt" timestamp with time zone NOT NULL
+            );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesWeekly_SourceFileJobId" ON "CustomerSummariesWeekly" ("SourceFileJobId");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesWeekly_WeekStartDate" ON "CustomerSummariesWeekly" ("WeekStartDate");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesWeekly_CustomerName" ON "CustomerSummariesWeekly" ("CustomerName");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesWeekly_WeekStartDate_CustomerName" ON "CustomerSummariesWeekly" ("WeekStartDate", "CustomerName");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE UNIQUE INDEX IF NOT EXISTS "IX_CustomerSummariesWeekly_UQ_BySourceAndDimensions" ON "CustomerSummariesWeekly" ("SourceFileJobId", "WeekStartDate", "CustomerCode", "City", "ProductGroup", "TransactionType");""", cancellationToken);
+    }
+
+    private static async Task EnsureCustomerSummariesMonthlyTableAsync(ImportDbContext db, CancellationToken cancellationToken)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "CustomerSummariesMonthly" (
+                "Id" bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                "SourceFileJobId" bigint NOT NULL,
+                "MonthStartDate" timestamp with time zone NOT NULL,
+                "CustomerCode" character varying(64) NOT NULL,
+                "CustomerName" character varying(256) NOT NULL,
+                "City" character varying(256) NOT NULL,
+                "ProductGroup" character varying(128) NOT NULL,
+                "TransactionType" character varying(128) NOT NULL,
+                "Orders" integer NOT NULL,
+                "Revenue" numeric(18,2) NOT NULL,
+                "Quantity" numeric(18,3) NOT NULL,
+                "Weight" numeric(18,3) NOT NULL,
+                "ProcessedAt" timestamp with time zone NOT NULL
+            );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesMonthly_SourceFileJobId" ON "CustomerSummariesMonthly" ("SourceFileJobId");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesMonthly_MonthStartDate" ON "CustomerSummariesMonthly" ("MonthStartDate");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesMonthly_CustomerName" ON "CustomerSummariesMonthly" ("CustomerName");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_CustomerSummariesMonthly_MonthStartDate_CustomerName" ON "CustomerSummariesMonthly" ("MonthStartDate", "CustomerName");""", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("""CREATE UNIQUE INDEX IF NOT EXISTS "IX_CustomerSummariesMonthly_UQ_BySourceAndDimensions" ON "CustomerSummariesMonthly" ("SourceFileJobId", "MonthStartDate", "CustomerCode", "City", "ProductGroup", "TransactionType");""", cancellationToken);
+    }
+
     private static async Task EnsureDefaultTemplatesAsync(ImportDbContext db, CancellationToken cancellationToken)
     {
         var templates = await db.PreProcessorTemplates
@@ -296,7 +481,7 @@ public static class DbSchemaBootstrapper
             "Template Padrão Customers",
             FileType.Customers,
             "customers",
-            "name,email");
+            "cliente,nome");
 
         var commercialTransactions = UpsertTemplate(
             db,
@@ -345,10 +530,13 @@ public static class DbSchemaBootstrapper
         UpsertRule(orders, "orders_validate_int_quantity", "validate_int", true, "{\"column\":\"quantity\",\"message\":\"quantity inválido\"}", 120);
         UpsertRule(orders, "orders_validate_datetime_orderedat", "validate_datetime", true, "{\"column\":\"orderedat\",\"message\":\"orderedat inválido\"}", 130);
 
-        UpsertRule(customers, "customers_split_single_column", "split_single_column", true, "{\"column\":\"raw\",\"delimiter\":\";\",\"headers\":[\"name\",\"email\",\"createdat\"],\"overwrite\":false}", 10);
-        UpsertRule(customers, "customers_map_email_alias", "map_column", true, "{\"from\":\"e-mail\",\"to\":\"email\",\"overwrite\":false}", 20);
+        UpsertRule(customers, "customers_split_single_column", "split_single_column", true, "{\"column\":\"raw\",\"delimiter\":\";\",\"headers\":[\"customercode\",\"name\",\"email\",\"createdat\"],\"overwrite\":false}", 10);
+        UpsertRule(customers, "customers_map_code_alias", "map_column", true, "{\"from\":\"cliente\",\"to\":\"customercode\",\"overwrite\":false}", 20);
+        UpsertRule(customers, "customers_map_name_alias", "map_column", true, "{\"from\":\"nome\",\"to\":\"name\",\"overwrite\":false}", 30);
+        UpsertRule(customers, "customers_map_email_alias", "map_column", true, "{\"from\":\"e-mail\",\"to\":\"email\",\"overwrite\":false}", 40);
         UpsertRule(customers, "customers_validate_required_name", "validate_required", true, "{\"column\":\"name\",\"message\":\"name obrigatório\"}", 100);
-        UpsertRule(customers, "customers_validate_email", "validate_email", true, "{\"column\":\"email\",\"message\":\"email inválido\"}", 110);
+        UpsertRule(customers, "customers_validate_required_customercode", "validate_required", true, "{\"column\":\"customercode\",\"message\":\"customercode obrigatório\"}", 110);
+        UpsertRule(customers, "customers_validate_email", "validate_email", false, "{\"column\":\"email\",\"message\":\"email inválido\"}", 120);
 
         UpsertRule(commercialTransactions, "sales_validate_required_documentnumber", "validate_required", true, "{\"column\":\"documentnumber\",\"message\":\"documentnumber obrigatório\"}", 100);
         UpsertRule(commercialTransactions, "sales_normalize_transactiondate", "normalize_date", true, "{\"column\":\"data\",\"target\":\"transactiondate\",\"formats\":[\"yyyyMMdd\",\"dd/MM/yyyy\",\"yyyy-MM-dd\",\"MM/dd/yyyy\"],\"outputFormat\":\"yyyy-MM-dd\"}", 10);

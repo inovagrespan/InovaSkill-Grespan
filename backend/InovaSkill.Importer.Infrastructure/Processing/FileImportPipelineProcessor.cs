@@ -7,6 +7,7 @@ using InovaSkill.Importer.Domain.ValueObjects;
 using InovaSkill.Importer.Infrastructure.Processing.Buffers;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -22,6 +23,7 @@ public sealed class FileImportPipelineProcessor(
     IFileTypeDetector fileTypeDetector,
     IFileSchemaProvider fileSchemaProvider,
     IRowValidator rowValidator,
+    IConfiguration configuration,
     ILogger<FileImportPipelineProcessor> logger) : IFileImportPipelineProcessor
 {
     private const int BatchSize = 5000;
@@ -73,6 +75,13 @@ public sealed class FileImportPipelineProcessor(
 
     private async Task PreProcessAndValidateAsync(FileJob job, CancellationToken cancellationToken)
     {
+        var resolvedSourcePath = ResolveExistingSourcePath(job.FilePath, configuration);
+        if (!string.Equals(resolvedSourcePath, job.FilePath, StringComparison.Ordinal))
+        {
+            job.FilePath = resolvedSourcePath;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
         var existingErrors = await dbContext.ImportErrors
             .Where(x => x.FileJobId == job.Id)
             .ToListAsync(cancellationToken);
@@ -87,9 +96,8 @@ public sealed class FileImportPipelineProcessor(
         EnsureParentDirectory(job.NormalizedFilePath);
 
         var parser = fileParserFactory.Create(job.FilePath);
-        var parserForCounting = fileParserFactory.Create(job.FilePath);
-        var totalRows = await CountRowsAsync(parserForCounting, job.FilePath, cancellationToken);
-        job.TotalRows = totalRows;
+        var totalRows = 0;
+        job.TotalRows = 0;
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var errors = new List<ImportError>();
@@ -131,6 +139,10 @@ public sealed class FileImportPipelineProcessor(
                     var mappedValues = mapped.StandardValues.ToDictionary(k => k.Key, v => v.Value?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
                     normalizedRow = new ImportedRow(row.RowNumber, mappedValues);
                 }
+                else if (!string.IsNullOrWhiteSpace(job.ImportFileTypeCode))
+                {
+                    normalizedRow = ApplyDefaultAliases(normalizedRow, job.ImportFileTypeCode);
+                }
 
                 if (!detectionAttempted)
                 {
@@ -157,12 +169,13 @@ public sealed class FileImportPipelineProcessor(
                 var shouldUpdateProgress = processedRows % ProgressUpdateIntervalRows == 0;
                 if (shouldUpdateProgress)
                 {
-                    await UpdateProgressAsync(job, "Pre-processando arquivo", 0, 30, processedRows, totalRows, cancellationToken);
+                    await UpdateProgressAsync(job, "Pre-processando arquivo", 0, 100, processedRows, totalRows, cancellationToken);
                 }
             }
         }
 
-        job.TotalRows = totalRows;
+        totalRows = processedRows;
+        job.TotalRows = processedRows;
         job.ProcessedRows = processedRows;
         job.UpdateProgress("Pre-processamento concluido", 30, processedRows);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -191,7 +204,7 @@ public sealed class FileImportPipelineProcessor(
             var shouldUpdateProgress = processedRows % ProgressUpdateIntervalRows == 0;
             if (shouldUpdateProgress)
             {
-                await UpdateProgressAsync(job, "Validando arquivo normalizado", 30, 60, processedRows, job.TotalRows, cancellationToken);
+                await UpdateProgressAsync(job, "Validando arquivo normalizado", 0, 100, processedRows, job.TotalRows, cancellationToken);
             }
         }
 
@@ -254,7 +267,7 @@ public sealed class FileImportPipelineProcessor(
             var shouldUpdateProgress = processedRows % ProgressUpdateIntervalRows == 0;
             if (shouldUpdateProgress)
             {
-                await UpdateProgressAsync(job, "Importando dados", 60, 100, processedRows, job.TotalRows, cancellationToken);
+                await UpdateProgressAsync(job, "Importando dados", 0, 100, processedRows, job.TotalRows, cancellationToken);
             }
         }
 
@@ -273,10 +286,13 @@ public sealed class FileImportPipelineProcessor(
                 await postImportJobQueue.EnqueueAsync(
                     new PostImportJobItem(job.Id, PostImportJobType.SalesSummary),
                     cancellationToken);
+                await postImportJobQueue.EnqueueAsync(
+                    new PostImportJobItem(job.Id, PostImportJobType.CustomerSummary),
+                    cancellationToken);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to enqueue post-import sales summary for job {JobId}.", job.Id);
+                logger.LogError(ex, "Failed to enqueue post-import summary jobs for file job {JobId}.", job.Id);
             }
         }
 
@@ -403,6 +419,42 @@ public sealed class FileImportPipelineProcessor(
             ImportFileTypeCodes.SalesInvoice => new CommercialTransactionBuffer(),
             _ => throw new InvalidOperationException($"Unsupported file type code: {importFileTypeCode}")
         };
+    }
+
+    private static ImportedRow ApplyDefaultAliases(ImportedRow row, string importFileTypeCode)
+    {
+        if (!string.Equals(importFileTypeCode, ImportFileTypeCodes.CustomerList, StringComparison.OrdinalIgnoreCase))
+        {
+            return row;
+        }
+
+        var values = new Dictionary<string, string>(row.Values, StringComparer.OrdinalIgnoreCase);
+
+        if (!values.ContainsKey("customercode") || string.IsNullOrWhiteSpace(values["customercode"]))
+        {
+            if (values.TryGetValue("cliente", out var customerCodeAlias) && !string.IsNullOrWhiteSpace(customerCodeAlias))
+            {
+                values["customercode"] = customerCodeAlias;
+            }
+        }
+
+        if (!values.ContainsKey("name") || string.IsNullOrWhiteSpace(values["name"]))
+        {
+            if (values.TryGetValue("nome", out var nameAlias) && !string.IsNullOrWhiteSpace(nameAlias))
+            {
+                values["name"] = nameAlias;
+            }
+        }
+
+        if (!values.ContainsKey("email") || string.IsNullOrWhiteSpace(values["email"]))
+        {
+            if (values.TryGetValue("e-mail", out var emailAlias) && !string.IsNullOrWhiteSpace(emailAlias))
+            {
+                values["email"] = emailAlias;
+            }
+        }
+
+        return new ImportedRow(row.RowNumber, values);
     }
 
 
@@ -532,6 +584,46 @@ public sealed class FileImportPipelineProcessor(
         }
 
         return $"Erro inesperado: {message}";
+    }
+
+    private static string ResolveExistingSourcePath(string currentPath, IConfiguration configuration)
+    {
+        if (!string.IsNullOrWhiteSpace(currentPath) && File.Exists(currentPath))
+        {
+            return currentPath;
+        }
+
+        var fileName = ExtractFileNameCrossPlatform(currentPath);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return currentPath;
+        }
+
+        var configuredUploadsPath = configuration["Storage:UploadsPath"];
+        if (!string.IsNullOrWhiteSpace(configuredUploadsPath))
+        {
+            var candidate = Path.Combine(configuredUploadsPath, fileName);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        var uploadsDir = Path.Combine(AppContext.BaseDirectory, "uploads");
+        var fallback = Path.Combine(uploadsDir, fileName);
+        return File.Exists(fallback) ? fallback : currentPath;
+    }
+
+    private static string ExtractFileNameCrossPlatform(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        var normalized = path.Replace('\\', '/');
+        var idx = normalized.LastIndexOf('/');
+        return idx >= 0 ? normalized[(idx + 1)..] : normalized;
     }
 
 }

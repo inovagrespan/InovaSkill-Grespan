@@ -41,4 +41,36 @@ public sealed class CommercialTransactionBufferTests
         Assert.Equal(10.5m, stored.UnitPrice);
         Assert.Equal(21m, stored.TotalAmount);
     }
+
+    [Fact]
+    public void Add_IgnoresDuplicateCommercialTransactionInSameBuffer()
+    {
+        var row = new ImportedRow(10, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["documentnumber"] = "0001",
+            ["transactiondate"] = "2025-07-31",
+            ["customercode"] = "C1",
+            ["customername"] = "Empresa X",
+            ["productcode"] = "P1",
+            ["productdescription"] = "Produto X",
+            ["quantity"] = "2",
+            ["unitprice"] = "10.5",
+            ["totalamount"] = "21",
+            ["transactiontype"] = "N",
+            ["city"] = "SP",
+            ["productgroup"] = "G1",
+            ["grossweightkg"] = "1.2"
+        });
+
+        var buffer = new CommercialTransactionBuffer();
+        buffer.Add(row, 77);
+        buffer.Add(row, 77);
+
+        var itemsField = typeof(CommercialTransactionBuffer)
+            .GetField("_items", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(itemsField);
+
+        var items = Assert.IsType<List<CommercialTransaction>>(itemsField!.GetValue(buffer));
+        Assert.Single(items);
+    }
 }

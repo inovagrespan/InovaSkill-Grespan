@@ -1,13 +1,15 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Boxes, DollarSign, Scale, TrendingUp, Weight } from "lucide-react";
+import { Boxes, DollarSign, Scale, Weight } from "lucide-react";
+import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import {
   fetchCommercialTransactionsSummary,
   fetchCommercialTransactions,
@@ -29,19 +31,6 @@ function formatDate(value: string): string {
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value ?? 0);
-}
-
-function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    notation: "compact",
-    compactDisplay: "short",
-    maximumFractionDigits: 1,
-  }).format(value ?? 0);
-}
-
-function formatCompactCurrency(value: number): string {
-  const compact = formatCompactNumber(value);
-  return `R$ ${compact}`;
 }
 
 function toInputDate(value: Date): string {
@@ -265,10 +254,12 @@ function VendasPage() {
         <CardContent className="space-y-3">
           {viewMode === "summary" ? (
             <div className="space-y-3">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <KpiCard
                   title="Registros no filtro"
-                  value={new Intl.NumberFormat("pt-BR").format(summary.totalRecords)}
+                  value={formatKpiCompactNumber(summary.totalRecords)}
+                  valueTooltip={new Intl.NumberFormat("pt-BR").format(summary.totalRecords)}
+                  showPercentageChange={false}
                   percentageChange={null}
                   trendDirection="stable"
                   trendData={[Math.max(1, summary.totalRecords * 0.92), summary.totalRecords]}
@@ -277,7 +268,8 @@ function VendasPage() {
                 />
                 <KpiCard
                   title="Faturamento no filtro"
-                  value={formatCompactCurrency(summary.totalAmount)}
+                  value={formatKpiCompactCurrency(summary.totalAmount)}
+                  valueTooltip={formatCurrency(summary.totalAmount)}
                   percentageChange={summary.totalGrowthPercent}
                   trendData={[summary.previousPeriodTotalAmount, summary.currentPeriodTotalAmount]}
                   periodLabel={`${summary.currentPeriodStart ? formatDate(summary.currentPeriodStart) : "-"} vs ${summary.previousPeriodStart ? formatDate(summary.previousPeriodStart) : "-"}`}
@@ -286,7 +278,9 @@ function VendasPage() {
                 />
                 <KpiCard
                   title="Quantidade no filtro"
-                  value={formatDecimal3(summary.totalQuantity)}
+                  value={formatKpiCompactNumber(summary.totalQuantity)}
+                  valueTooltip={formatDecimal3(summary.totalQuantity)}
+                  showPercentageChange={false}
                   percentageChange={null}
                   trendDirection="stable"
                   trendData={[Math.max(1, summary.totalQuantity * 0.96), summary.totalQuantity]}
@@ -295,26 +289,20 @@ function VendasPage() {
                 />
                 <KpiCard
                   title="Peso bruto no filtro (kg)"
-                  value={formatDecimal3(summary.totalWeightKg)}
+                  value={formatKpiCompactNumber(summary.totalWeightKg)}
+                  valueTooltip={formatDecimal3(summary.totalWeightKg)}
+                  showPercentageChange={false}
                   percentageChange={null}
                   trendDirection="stable"
                   trendData={[Math.max(1, summary.totalWeightKg * 0.95), summary.totalWeightKg]}
                   periodLabel="Somatório de peso bruto no período filtrado"
                   icon={Weight}
                 />
-                <KpiCard
-                  title="Comparativo selecionado"
-                  value={formatDelta(summary.totalGrowthPercent)}
-                  percentageChange={summary.totalGrowthPercent}
-                  trendData={[summary.previousPeriodTotalAmount, summary.currentPeriodTotalAmount]}
-                  periodLabel={revenueComparisonText}
-                  icon={TrendingUp}
-                />
               </div>
 
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <p className="text-sm font-medium">
-                  Resumo por empresa ({summaryGranularity === "weekly" ? "semana selecionada vs anterior" : "dia selecionado vs anterior"})
+                  Resumo por empresa ({summaryGranularity === "weekly" ? "semana selecionada vs anterior" : summaryGranularity === "monthly" ? "mês selecionado vs anterior" : "dia selecionado vs anterior"})
                 </p>
                 <div className="flex gap-2">
                   <select
@@ -324,6 +312,7 @@ function VendasPage() {
                   >
                     <option value="daily">Diário</option>
                     <option value="weekly">Semanal</option>
+                    <option value="monthly">Mensal</option>
                   </select>
                   <Input
                     type="date"
@@ -368,8 +357,19 @@ function VendasPage() {
                       <TableCell>{formatCurrency(row.totalAmount)}</TableCell>
                       <TableCell>{formatDecimal3(row.totalQuantity)}</TableCell>
                       <TableCell>{formatDecimal3(row.totalWeightKg)}</TableCell>
-                      <TableCell className={row.growthPercent == null ? "text-muted-foreground" : row.growthPercent >= 0 ? "text-green-600" : "text-red-600"}>
-                        {formatDelta(row.growthPercent)}
+                      <TableCell>
+                        <Badge
+                          variant={row.growthPercent == null ? "outline" : row.growthPercent >= 0 ? "secondary" : "destructive"}
+                          className={
+                            row.growthPercent == null
+                              ? "text-muted-foreground"
+                              : row.growthPercent >= 0
+                                ? "border-[color:var(--success)]/20 bg-[color:var(--success)]/10 text-[color:var(--success)]"
+                                : "border-[color:var(--danger)]/20 bg-[color:var(--danger)]/10 text-[color:var(--danger)]"
+                          }
+                        >
+                          {formatDelta(row.growthPercent)}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -5,7 +5,8 @@ namespace InovaSkill.Importer.Infrastructure.Processing;
 public enum SalesSummaryGranularity
 {
     Daily = 1,
-    Weekly = 2
+    Weekly = 2,
+    Monthly = 3
 }
 
 public enum SalesSummarySortBy
@@ -50,9 +51,12 @@ public static class SalesCompanySummaryCalculator
         DateTime? referenceDate = null)
     {
         var current = GetPeriodKey((referenceDate ?? DateTime.UtcNow), granularity);
-        var previous = granularity == SalesSummaryGranularity.Daily
-            ? current.AddDays(-1)
-            : current.AddDays(-7);
+        var previous = granularity switch
+        {
+            SalesSummaryGranularity.Daily => current.AddDays(-1),
+            SalesSummaryGranularity.Weekly => current.AddDays(-7),
+            _ => current.AddMonths(-1)
+        };
         var totalAmount = Round3(rows.Sum(ResolveAmount));
         var totalQuantity = Round3(rows.Sum(x => x.Quantity));
         var totalWeight = Round3(rows.Sum(x => x.GrossWeightKg));
@@ -131,6 +135,11 @@ public static class SalesCompanySummaryCalculator
         if (granularity == SalesSummaryGranularity.Daily)
         {
             return date;
+        }
+
+        if (granularity == SalesSummaryGranularity.Monthly)
+        {
+            return new DateTime(date.Year, date.Month, 1);
         }
 
         var diff = date.DayOfWeek == DayOfWeek.Sunday ? -6 : DayOfWeek.Monday - date.DayOfWeek;

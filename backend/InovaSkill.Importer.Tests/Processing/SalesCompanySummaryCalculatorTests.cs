@@ -82,6 +82,30 @@ public sealed class SalesCompanySummaryCalculatorTests
     }
 
     [Fact]
+    public void Build_UsesMonthlyGranularityWhenRequested()
+    {
+        var rows = new List<CommercialTransaction>
+        {
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 15), TotalAmount = 200m, Quantity = 2m, GrossWeightKg = 10m },
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 4, 10), TotalAmount = 100m, Quantity = 1m, GrossWeightKg = 5m }
+        };
+
+        var result = SalesCompanySummaryCalculator.Build(
+            rows,
+            SalesSummaryGranularity.Monthly,
+            SalesSummarySortBy.Growth,
+            new DateTime(2026, 5, 20));
+
+        Assert.Single(result.Items);
+        Assert.Equal(new DateTime(2026, 5, 1), result.CurrentPeriodStart);
+        Assert.Equal(new DateTime(2026, 4, 1), result.PreviousPeriodStart);
+        Assert.Equal(200m, result.CurrentPeriodTotalAmount);
+        Assert.Equal(100m, result.PreviousPeriodTotalAmount);
+        Assert.Equal(100m, result.TotalGrowthPercent);
+        Assert.Equal(100m, result.Items[0].GrowthPercent);
+    }
+
+    [Fact]
     public void Build_PreservesAmountSign_InsteadOfForcingAbsolute()
     {
         var rows = new List<CommercialTransaction>

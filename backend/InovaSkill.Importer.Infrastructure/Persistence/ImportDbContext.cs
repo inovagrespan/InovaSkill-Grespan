@@ -13,6 +13,9 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<CommercialTransaction> CommercialTransactions => Set<CommercialTransaction>();
     public DbSet<SalesSummaryDaily> SalesSummariesDaily => Set<SalesSummaryDaily>();
     public DbSet<SalesSummaryWeekly> SalesSummariesWeekly => Set<SalesSummaryWeekly>();
+    public DbSet<CustomerSummaryDaily> CustomerSummariesDaily => Set<CustomerSummaryDaily>();
+    public DbSet<CustomerSummaryWeekly> CustomerSummariesWeekly => Set<CustomerSummaryWeekly>();
+    public DbSet<CustomerSummaryMonthly> CustomerSummariesMonthly => Set<CustomerSummaryMonthly>();
     public DbSet<ImportFileType> ImportFileTypes => Set<ImportFileType>();
     public DbSet<ImportTemplate> ImportTemplates => Set<ImportTemplate>();
     public DbSet<ImportColumnMapping> ImportColumnMappings => Set<ImportColumnMapping>();
@@ -49,8 +52,10 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
         modelBuilder.Entity<Customer>(e =>
         {
             e.HasKey(x => x.Id);
+            e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
             e.Property(x => x.Name).HasMaxLength(256).IsRequired();
             e.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            e.HasIndex(x => x.CustomerCode).IsUnique();
             e.HasIndex(x => x.Email);
             e.HasIndex(x => x.SourceFileJobId);
         });
@@ -61,7 +66,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.Sku).HasMaxLength(64).IsRequired();
             e.Property(x => x.Name).HasMaxLength(256).IsRequired();
             e.Property(x => x.Price).HasColumnType("decimal(18,2)");
-            e.HasIndex(x => x.Sku);
+            e.HasIndex(x => x.Sku).IsUnique();
             e.HasIndex(x => x.SourceFileJobId);
         });
 
@@ -71,7 +76,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.OrderNumber).HasMaxLength(64).IsRequired();
             e.Property(x => x.CustomerEmail).HasMaxLength(256).IsRequired();
             e.Property(x => x.ProductSku).HasMaxLength(64).IsRequired();
-            e.HasIndex(x => x.OrderNumber);
+            e.HasIndex(x => new { x.OrderNumber, x.CustomerEmail, x.ProductSku, x.OrderedAt }).IsUnique();
             e.HasIndex(x => x.SourceFileJobId);
         });
 
@@ -97,6 +102,19 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.HasIndex(x => x.ProductCode);
             e.HasIndex(x => x.City);
             e.HasIndex(x => new { x.SourceFileJobId, x.TransactionDate });
+            e.HasIndex(x => new
+            {
+                x.DocumentNumber,
+                x.TransactionDate,
+                x.CustomerCode,
+                x.ProductCode,
+                x.TransactionType,
+                x.City,
+                x.ProductGroup,
+                x.Quantity,
+                x.UnitPrice,
+                x.GrossWeightKg
+            }).IsUnique();
         });
 
         modelBuilder.Entity<SalesSummaryDaily>(e =>
@@ -134,6 +152,72 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.HasIndex(x => x.WeekStartDate);
             e.HasIndex(x => new { x.WeekStartDate, x.City, x.ProductGroup, x.TransactionType });
             e.HasIndex(x => new { x.SourceFileJobId, x.WeekStartDate, x.City, x.ProductGroup, x.TransactionType })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<CustomerSummaryDaily>(e =>
+        {
+            e.ToTable("CustomerSummariesDaily");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ReferenceDate).IsRequired();
+            e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CustomerName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.City).HasMaxLength(256).IsRequired();
+            e.Property(x => x.ProductGroup).HasMaxLength(128).IsRequired();
+            e.Property(x => x.TransactionType).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
+            e.Property(x => x.Weight).HasColumnType("decimal(18,3)");
+            e.Property(x => x.ProcessedAt).IsRequired();
+            e.HasIndex(x => x.SourceFileJobId);
+            e.HasIndex(x => x.ReferenceDate);
+            e.HasIndex(x => x.CustomerName);
+            e.HasIndex(x => new { x.ReferenceDate, x.CustomerName });
+            e.HasIndex(x => new { x.SourceFileJobId, x.ReferenceDate, x.CustomerCode, x.City, x.ProductGroup, x.TransactionType })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<CustomerSummaryWeekly>(e =>
+        {
+            e.ToTable("CustomerSummariesWeekly");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.WeekStartDate).IsRequired();
+            e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CustomerName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.City).HasMaxLength(256).IsRequired();
+            e.Property(x => x.ProductGroup).HasMaxLength(128).IsRequired();
+            e.Property(x => x.TransactionType).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
+            e.Property(x => x.Weight).HasColumnType("decimal(18,3)");
+            e.Property(x => x.ProcessedAt).IsRequired();
+            e.HasIndex(x => x.SourceFileJobId);
+            e.HasIndex(x => x.WeekStartDate);
+            e.HasIndex(x => x.CustomerName);
+            e.HasIndex(x => new { x.WeekStartDate, x.CustomerName });
+            e.HasIndex(x => new { x.SourceFileJobId, x.WeekStartDate, x.CustomerCode, x.City, x.ProductGroup, x.TransactionType })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<CustomerSummaryMonthly>(e =>
+        {
+            e.ToTable("CustomerSummariesMonthly");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.MonthStartDate).IsRequired();
+            e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CustomerName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.City).HasMaxLength(256).IsRequired();
+            e.Property(x => x.ProductGroup).HasMaxLength(128).IsRequired();
+            e.Property(x => x.TransactionType).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
+            e.Property(x => x.Weight).HasColumnType("decimal(18,3)");
+            e.Property(x => x.ProcessedAt).IsRequired();
+            e.HasIndex(x => x.SourceFileJobId);
+            e.HasIndex(x => x.MonthStartDate);
+            e.HasIndex(x => x.CustomerName);
+            e.HasIndex(x => new { x.MonthStartDate, x.CustomerName });
+            e.HasIndex(x => new { x.SourceFileJobId, x.MonthStartDate, x.CustomerCode, x.City, x.ProductGroup, x.TransactionType })
                 .IsUnique();
         });
 

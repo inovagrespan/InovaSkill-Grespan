@@ -1,6 +1,7 @@
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.Persistence.Bootstrap;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Features;
 
@@ -41,5 +42,15 @@ if (!disableHttpsRedirection)
 }
 app.UseCors("frontend");
 app.MapControllers();
+app.MapGet("/api/_debug/routes", (IEnumerable<EndpointDataSource> endpointSources) =>
+{
+    var routes = endpointSources
+        .SelectMany(s => s.Endpoints)
+        .OfType<RouteEndpoint>()
+        .Select(e => e.RoutePattern.RawText)
+        .OrderBy(x => x)
+        .ToArray();
+    return Results.Ok(routes);
+});
 
 app.Run();

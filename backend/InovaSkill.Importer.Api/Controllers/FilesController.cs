@@ -11,11 +11,23 @@ namespace InovaSkill.Importer.Api.Controllers;
 [Route("api/files")]
 public sealed class FilesController(
     IFileUploadService fileUploadService,
+    IFileJobQueue fileJobQueue,
     ImportDbContext dbContext) : ControllerBase
 {
+    private static readonly HashSet<string> AllowedImportFileTypeCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ImportFileTypeCodes.SalesInvoice,
+        ImportFileTypeCodes.CustomerList,
+        ImportFileTypeCodes.ProductList,
+        ImportFileTypeCodes.FinancialEntry
+    };
+
     [HttpPost("upload")]
     [RequestSizeLimit(524_288_000)]
-    public async Task<ActionResult<UploadResponse>> Upload([FromForm] IFormFile file, CancellationToken cancellationToken)
+    public async Task<ActionResult<UploadResponse>> Upload(
+        [FromForm] IFormFile file,
+        [FromForm] string? importFileTypeCode = null,
+        CancellationToken cancellationToken = default)
     {
         if (file is null || file.Length == 0)
         {
@@ -27,10 +39,28 @@ public sealed class FilesController(
             });
         }
 
+        var normalizedImportFileTypeCode = string.IsNullOrWhiteSpace(importFileTypeCode)
+            ? null
+            : importFileTypeCode.Trim().ToUpperInvariant();
+
+        if (normalizedImportFileTypeCode is not null && !AllowedImportFileTypeCodes.Contains(normalizedImportFileTypeCode))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Destino de importação inválido",
+                Detail = "Selecione um destino válido para importação.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
         try
         {
             await using var stream = file.OpenReadStream();
-            var fileJobId = await fileUploadService.UploadAndCreateJobAsync(stream, file.FileName, cancellationToken);
+            var fileJobId = await fileUploadService.UploadAndCreateJobAsync(
+                stream,
+                file.FileName,
+                normalizedImportFileTypeCode,
+                cancellationToken);
             return Ok(new UploadResponse(fileJobId));
         }
         catch (InvalidOperationException ex)
@@ -95,6 +125,7 @@ public sealed class FilesController(
         job.RequeueManually();
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await fileJobQueue.EnqueueAsync(job.Id, cancellationToken);
         return Ok();
     }
 

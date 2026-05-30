@@ -174,9 +174,12 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
             .ToListAsync(cancellationToken);
 
         var normalizedGranularity = granularity.Trim().ToLowerInvariant();
-        var resolvedGranularity = normalizedGranularity == "daily"
-            ? SalesSummaryGranularity.Daily
-            : SalesSummaryGranularity.Weekly;
+        var resolvedGranularity = normalizedGranularity switch
+        {
+            "daily" => SalesSummaryGranularity.Daily,
+            "monthly" => SalesSummaryGranularity.Monthly,
+            _ => SalesSummaryGranularity.Weekly
+        };
 
         var normalizedSortBy = sortBy.Trim().ToLowerInvariant();
         var resolvedSortBy = normalizedSortBy switch
@@ -197,7 +200,12 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
             page,
             pageSize,
             summary.TotalCompanies,
-            resolvedGranularity == SalesSummaryGranularity.Daily ? "daily" : "weekly",
+            resolvedGranularity switch
+            {
+                SalesSummaryGranularity.Daily => "daily",
+                SalesSummaryGranularity.Monthly => "monthly",
+                _ => "weekly"
+            },
             summary.CurrentPeriodStart,
             summary.PreviousPeriodStart,
             summary.CurrentPeriodTotalAmount,

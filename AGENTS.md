@@ -51,6 +51,19 @@ rg "Ã|��|�" -n frontend backend -S
   - Banco, fila e arquivos em `Infrastructure`.
   - Worker deve consumir fila (Redis) e não depender de chamadas internas da API.
 
+## Padrão Para Cálculos e Agregações
+- Para cálculos pesados, consolidações, enriquecimento de dados e geração de resumos (diário/semanal/mensal), preferir processamento assíncrono via `InovaSkill.Importer.Worker`.
+- A `Api` deve expor consulta e acionamento, mas não executar processamento pesado em request síncrono.
+- O `Worker` consome eventos/fila (Redis), executa o pipeline de processamento e persiste resultados nas tabelas de resumo.
+- Regras de cálculo, validação e comparação devem ficar em `Application/Domain` (ou serviços de processamento em `Infrastructure` quando envolver integração/persistência), mantendo lógica reutilizável e testável.
+- Leitura para dashboards deve consultar dados já consolidados (materializados) sempre que possível, evitando recalcular tudo em cada requisição.
+- Sempre que criar novo cálculo:
+  - Definir contrato de entrada/saída e granularidade (ex.: diário, semanal, mensal).
+  - Implementar processamento no `Worker` + persistência em `Infrastructure`.
+  - Expor endpoint de leitura na `Api`.
+  - Atualizar frontend para consumir o contrato.
+  - Criar testes de unidade para cálculo e testes de integração para filtros/agregações.
+
 ## Docker e Infra
 - Serviços padrão: `frontend`, `api`, `worker`, `postgres`, `redis`.
 - Persistência obrigatória via volumes para Postgres/Redis/uploads.

@@ -1,11 +1,13 @@
 import { Loader2, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
-import { buildSparklinePoints, resolveTrendDirection, type TrendDirection } from "./kpi-card.utils";
+import { resolveTrendDirection, type TrendDirection } from "./kpi-card.utils";
 
 type KpiCardProps = {
   title: string;
   value: string;
+  valueTooltip?: string;
+  showPercentageChange?: boolean;
   percentageChange?: number | null;
   trendDirection?: TrendDirection;
   trendData?: number[];
@@ -25,6 +27,8 @@ function formatPct(value?: number | null): string {
 export function KpiCard({
   title,
   value,
+  valueTooltip,
+  showPercentageChange = true,
   percentageChange = null,
   trendDirection,
   trendData = [],
@@ -37,55 +41,48 @@ export function KpiCard({
   const direction = resolveTrendDirection(percentageChange, trendDirection);
   const toneClass =
     direction === "up"
-      ? "text-emerald-400"
+      ? "text-[var(--success)]"
       : direction === "down"
-        ? "text-red-400"
-        : "text-slate-400";
-  const SparklinePoints = buildSparklinePoints(trendData);
-
+        ? "text-[var(--error)]"
+        : "text-muted-foreground";
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-surface p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-red-500/40",
+        "h-full rounded-xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(250,251,253,0.96))] p-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-sm dark:bg-[linear-gradient(180deg,rgba(23,28,37,0.98),rgba(20,25,34,0.98))]",
         "animate-soft-enter",
         className,
       )}
-      title={description ?? title}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex min-h-12 items-start justify-between gap-3">
         <p className="text-xs text-muted-foreground">{title}</p>
-        <div className={cn("inline-flex items-center gap-1 text-xs font-semibold", toneClass)}>
-          {direction === "up" && <TrendingUp className="size-3.5" />}
-          {direction === "down" && <TrendingDown className="size-3.5" />}
-          {direction === "stable" && <Minus className="size-3.5" />}
-          {formatPct(percentageChange)}
-        </div>
+        {showPercentageChange ? (
+          <div className={cn("inline-flex items-center gap-1 text-xs font-semibold", toneClass)}>
+            {direction === "up" && <TrendingUp className="size-3.5" />}
+            {direction === "down" && <TrendingDown className="size-3.5" />}
+            {direction === "stable" && <Minus className="size-3.5" />}
+            {formatPct(percentageChange)}
+          </div>
+        ) : null}
       </div>
 
-      <div className="mt-2 flex items-center justify-between gap-3">
+      <div className="flex min-h-20 flex-1 items-center justify-between gap-3">
         {loading ? (
           <Loader2 className="size-5 animate-spin text-muted-foreground" />
         ) : (
-          <p className="text-4xl font-display leading-none tracking-tight">{value}</p>
+          <p title={valueTooltip ?? value} className="text-3xl font-display leading-none tracking-tight text-[var(--text-primary)] md:text-4xl">
+            {value}
+          </p>
         )}
-        {Icon ? <Icon className="size-4 text-muted-foreground" /> : null}
+        <div className="flex flex-col items-end gap-2">
+          {Icon ? (
+            <div className="inline-flex size-8 items-center justify-center rounded-full border border-primary/15 bg-[var(--soft-red-background)] text-primary">
+              <Icon className="size-4" />
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {trendData.length > 1 ? (
-        <svg viewBox="0 0 100 26" preserveAspectRatio="none" className="mt-3 h-7 w-full opacity-80">
-          <polyline
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className={toneClass}
-            points={SparklinePoints}
-          />
-        </svg>
-      ) : (
-        <div className="mt-3 h-7 w-full rounded-md border border-border/70 bg-black/10" />
-      )}
-
-      {periodLabel ? <p className="mt-2 text-[11px] text-muted-foreground">{periodLabel}</p> : null}
+      {periodLabel ? <p className="min-h-8 text-[11px] text-muted-foreground">{periodLabel}</p> : null}
     </div>
   );
 }

@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as VendasRouteImport } from './routes/vendas'
 import { Route as SimulacaoRouteImport } from './routes/simulacao'
 import { Route as RhRouteImport } from './routes/rh'
+import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
+import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
 import { Route as ImportacoesTemplatesRouteImport } from './routes/importacoes.templates'
@@ -34,6 +36,11 @@ const RhRoute = RhRouteImport.update({
   path: '/rh',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RelatoriosRoute = RelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LogisticaRoute = LogisticaRouteImport.update({
   id: '/logistica',
   path: '/logistica',
@@ -42,6 +49,11 @@ const LogisticaRoute = LogisticaRouteImport.update({
 const ImportacoesRoute = ImportacoesRouteImport.update({
   id: '/importacoes',
   path: '/importacoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClientesRoute = ClientesRouteImport.update({
+  id: '/clientes',
+  path: '/clientes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -67,8 +79,10 @@ const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/clientes': typeof ClientesRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/logistica': typeof LogisticaRoute
+  '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
@@ -78,7 +92,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/clientes': typeof ClientesRoute
   '/logistica': typeof LogisticaRoute
+  '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
@@ -89,8 +105,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/clientes': typeof ClientesRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/logistica': typeof LogisticaRoute
+  '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
@@ -102,8 +120,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/clientes'
     | '/importacoes'
     | '/logistica'
+    | '/relatorios'
     | '/rh'
     | '/simulacao'
     | '/vendas'
@@ -113,7 +133,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/clientes'
     | '/logistica'
+    | '/relatorios'
     | '/rh'
     | '/simulacao'
     | '/vendas'
@@ -123,8 +145,10 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/clientes'
     | '/importacoes'
     | '/logistica'
+    | '/relatorios'
     | '/rh'
     | '/simulacao'
     | '/vendas'
@@ -135,8 +159,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ClientesRoute: typeof ClientesRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LogisticaRoute: typeof LogisticaRoute
+  RelatoriosRoute: typeof RelatoriosRoute
   RhRoute: typeof RhRoute
   SimulacaoRoute: typeof SimulacaoRoute
   VendasRoute: typeof VendasRoute
@@ -165,6 +191,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RhRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/relatorios': {
+      id: '/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof RelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/logistica': {
       id: '/logistica'
       path: '/logistica'
@@ -177,6 +210,13 @@ declare module '@tanstack/react-router' {
       path: '/importacoes'
       fullPath: '/importacoes'
       preLoaderRoute: typeof ImportacoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clientes': {
+      id: '/clientes'
+      path: '/clientes'
+      fullPath: '/clientes'
+      preLoaderRoute: typeof ClientesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -228,8 +268,10 @@ const ImportacoesRouteWithChildren = ImportacoesRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ClientesRoute: ClientesRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LogisticaRoute: LogisticaRoute,
+  RelatoriosRoute: RelatoriosRoute,
   RhRoute: RhRoute,
   SimulacaoRoute: SimulacaoRoute,
   VendasRoute: VendasRoute,

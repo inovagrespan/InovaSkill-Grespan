@@ -1,5 +1,5 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, Menu, SlidersHorizontal, TrendingUp, Truck, Users } from "lucide-react";
+﻿import { Link, useRouterState } from "@tanstack/react-router";
+import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, Menu, Moon, SlidersHorizontal, Sun, TrendingUp, Truck, Users } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -8,11 +8,15 @@ import { cn } from "@/lib/utils";
 type AppSidebarProps = {
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 };
 
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/vendas", label: "Vendas", icon: TrendingUp },
+  { to: "/clientes", label: "Clientes", icon: Users },
+  { to: "/relatorios", label: "Relatorios", icon: BarChart3 },
   { to: "/logistica", label: "Logística", icon: Truck },
   { to: "/rh", label: "RH Atual", icon: Users },
   {
@@ -27,7 +31,7 @@ const items = [
   { to: "/simulacao", label: "Simulação", icon: Activity },
 ];
 
-export function AppSidebar({ collapsed, onToggleCollapsed }: AppSidebarProps) {
+export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme }: AppSidebarProps) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -52,11 +56,13 @@ export function AppSidebar({ collapsed, onToggleCollapsed }: AppSidebarProps) {
                 "outline-none ring-primary/40 focus-visible:ring-2",
                 showCollapsed ? "justify-center" : "gap-3",
                 active
-                  ? "border-white/15 bg-white/8 text-foreground shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]"
-                  : "border-transparent text-muted-foreground hover:border-white/10 hover:bg-white/[0.03] hover:text-foreground",
+                  ? "border-primary/25 bg-[linear-gradient(90deg,rgba(180,35,47,0.14),rgba(180,35,47,0.05))] text-foreground shadow-[inset_0_0_0_1px_rgba(180,35,47,0.2)]"
+                  : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
               )}
             >
-              <Icon className="size-4 shrink-0" />
+              <span className={cn("inline-flex size-7 items-center justify-center rounded-md transition-colors", active ? "bg-[var(--soft-red-background)] text-primary" : "bg-muted/50 text-muted-foreground group-hover:text-foreground")}>
+                <Icon className="size-4 shrink-0" />
+              </span>
               <span
                 className={cn(
                   "whitespace-nowrap text-sm font-medium transition-all duration-200 motion-reduce:transition-none",
@@ -93,8 +99,8 @@ export function AppSidebar({ collapsed, onToggleCollapsed }: AppSidebarProps) {
                       "ml-6 flex items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors",
                       "outline-none ring-primary/40 focus-visible:ring-2",
                       childActive
-                        ? "border border-white/10 bg-white/6 text-foreground"
-                        : "text-muted-foreground hover:bg-white/[0.02] hover:text-foreground",
+                        ? "border border-primary/20 bg-primary/10 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                     )}
                   >
                     <ChildIcon className="size-3.5 shrink-0" />
@@ -128,6 +134,16 @@ export function AppSidebar({ collapsed, onToggleCollapsed }: AppSidebarProps) {
             </SheetHeader>
             <div className="flex h-full flex-col py-3">
               {renderNav(false, () => setMobileOpen(false))}
+              <div className="mt-auto px-3 pb-3">
+                <button
+                  type="button"
+                  onClick={onToggleTheme}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                >
+                  {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+                  <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
+                </button>
+              </div>
             </div>
           </SheetContent>
         </Sheet>
@@ -135,7 +151,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed }: AppSidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-20 hidden border-r border-border bg-surface md:flex md:flex-col",
+          "fixed inset-y-0 left-0 z-20 hidden border-r border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(249,250,252,0.98))] shadow-sm dark:bg-[linear-gradient(180deg,rgba(21,27,36,0.98),rgba(16,21,30,0.98))] md:flex md:flex-col",
           "transition-[width] duration-200 ease-out motion-reduce:transition-none",
           collapsed ? "md:w-[72px]" : "md:w-[264px]",
         )}
@@ -162,7 +178,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed }: AppSidebarProps) {
             onClick={onToggleCollapsed}
             aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
             className={cn(
-              "inline-flex size-8 items-center justify-center rounded-md border border-white/10 bg-white/[0.03] text-muted-foreground transition-colors hover:text-foreground hover:bg-white/[0.07]",
+              "inline-flex size-8 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
               "outline-none ring-primary/40 focus-visible:ring-2",
               collapsed && "absolute -right-3 top-5 bg-background",
             )}
@@ -172,7 +188,20 @@ export function AppSidebar({ collapsed, onToggleCollapsed }: AppSidebarProps) {
         </div>
 
         {renderNav(collapsed)}
-
+        <div className="mt-auto p-3">
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
+            className={cn(
+              "inline-flex w-full items-center rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+              collapsed ? "justify-center" : "justify-start gap-2",
+            )}
+          >
+            {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            {!collapsed ? <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span> : null}
+          </button>
+        </div>
       </aside>
     </TooltipProvider>
   );

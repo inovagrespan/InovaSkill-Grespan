@@ -34,7 +34,7 @@ public sealed class FileJob
         {
             Status = FileJobStatus.Importing;
             CurrentStep = "Importando dados";
-            ProgressPercent = Math.Max(60, ProgressPercent);
+            ProgressPercent = 0;
             ProcessedRows = 0;
             TouchHeartbeat();
             return Status;
@@ -56,7 +56,7 @@ public sealed class FileJob
     {
         Status = FileJobStatus.Validating;
         CurrentStep = "Validando arquivo normalizado";
-        ProgressPercent = Math.Max(30, ProgressPercent);
+        ProgressPercent = 0;
         ProcessedRows = 0;
         TouchHeartbeat();
     }
@@ -73,7 +73,7 @@ public sealed class FileJob
     {
         Status = FileJobStatus.ReadyToImport;
         CurrentStep = "Pronto para importar";
-        ProgressPercent = 60;
+        ProgressPercent = 100;
         TouchHeartbeat();
     }
 
@@ -90,7 +90,7 @@ public sealed class FileJob
     {
         Status = string.IsNullOrWhiteSpace(ImportFileTypeCode) ? FileJobStatus.WaitingProcessing : FileJobStatus.ReadyToImport;
         CurrentStep = "Reenfileirado manualmente";
-        ProgressPercent = Status == FileJobStatus.WaitingProcessing ? 0 : 60;
+        ProgressPercent = 0;
         ProcessedRows = 0;
         TouchHeartbeat();
     }
@@ -99,7 +99,7 @@ public sealed class FileJob
     {
         Status = FileJobStatus.ReadyToImport;
         CurrentStep = "Retomado apos falha. Pronto para importar novamente";
-        ProgressPercent = 60;
+        ProgressPercent = 0;
         ProcessedRows = 0;
         TouchHeartbeat();
     }

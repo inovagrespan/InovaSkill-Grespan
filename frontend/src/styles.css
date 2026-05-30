@@ -38,30 +38,113 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: #090b0f;
-  --surface: #12151c;
-  --foreground: #f8fafc;
-  --card: #12151c;
-  --card-foreground: #f8fafc;
-  --popover: #12151c;
-  --popover-foreground: #f8fafc;
-  --primary: #22ee5b;
-  --primary-foreground: #03130a;
-  --secondary: #1e293b;
-  --secondary-foreground: #f8fafc;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --accent: #1e293b;
-  --accent-foreground: #f8fafc;
-  --destructive: #ff3e3e;
-  --destructive-foreground: #f8fafc;
-  --danger: #ff3e3e;
-  --border: #1e293b;
-  --input: #1e293b;
-  --ring: #22ee5b;
-  --surface-elevated: #171b24;
-  --surface-soft: #0f131a;
+  --radius: 0.75rem;
+
+  /* Brand and semantic tokens */
+  --primary-red: #b4232f;
+  --primary-red-hover: #9f1f29;
+  --primary-red-active: #861a22;
+  --soft-red-background: #fdf2f3;
+  --border-subtle: #e7e9ef;
+  --background-app: #f4f5f8;
+  --background-card: #ffffff;
+  --success: #18794e;
+  --danger: #c7363b;
+  --warning: #a15c00;
+  --error: var(--danger);
+  --info: #1f5ea8;
+
+  /* Neutral and text tokens */
+  --background: var(--background-app);
+  --surface: var(--background-card);
+  --border: var(--border-subtle);
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+
+  /* System mappings */
+  --foreground: var(--text-primary);
+  --card: var(--surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--primary-red);
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f3;
+  --secondary-foreground: #1f2937;
+  --muted: #f3f4f6;
+  --muted-foreground: var(--text-muted);
+  --accent: #f3f4f6;
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--error);
+  --destructive-foreground: #ffffff;
+  --input: #d6dae1;
+  --ring: #d33d48;
+  --surface-elevated: #ffffff;
+  --surface-soft: #f8f9fc;
+
+  /* Design system scales */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+
+  --radius-sm-token: 0.375rem;
+  --radius-md-token: 0.5rem;
+  --radius-lg-token: 0.75rem;
+  --radius-xl-token: 1rem;
+
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 8px 16px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 20px 24px rgba(16, 24, 40, 0.08), 0 8px 8px rgba(16, 24, 40, 0.05);
+
+  --elevation-1: var(--shadow-xs);
+  --elevation-2: var(--shadow-sm);
+  --elevation-3: var(--shadow-md);
+  --elevation-4: var(--shadow-lg);
+
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 280ms;
+}
+
+:root.dark {
+  --background-app: #0e1116;
+  --background-card: #161b23;
+  --soft-red-background: #2a1518;
+  --border-subtle: #2b3340;
+  --text-primary: #e6e9ef;
+  --text-secondary: #c5cbd7;
+  --text-muted: #93a0b4;
+
+  --background: var(--background-app);
+  --surface: var(--background-card);
+  --border: var(--border-subtle);
+  --foreground: var(--text-primary);
+  --card: var(--surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface);
+  --popover-foreground: var(--text-primary);
+  --secondary: #1f2630;
+  --secondary-foreground: #d6dbe5;
+  --muted: #1b222c;
+  --muted-foreground: var(--text-muted);
+  --accent: #1d2530;
+  --accent-foreground: var(--text-primary);
+  --input: #313c4b;
+  --ring: #d54b56;
+  --surface-soft: #1a2029;
 }
 
 @keyframes slideUp {
@@ -87,8 +170,8 @@
 }
 
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 40px rgba(34, 238, 91, 0.4); }
-  50% { box-shadow: 0 0 60px rgba(34, 238, 91, 0.7); }
+  0%, 100% { box-shadow: 0 0 28px rgba(180, 35, 47, 0.2); }
+  50% { box-shadow: 0 0 36px rgba(180, 35, 47, 0.3); }
 }
 
 .animate-fade-in {
@@ -112,7 +195,25 @@
 }
 
 .glass-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.005));
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.97));
+}
+
+.dark .glass-card {
+  background: linear-gradient(165deg, rgba(22, 28, 37, 0.98), rgba(18, 23, 32, 0.97));
+}
+
+.app-background {
+  background:
+    radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47, 0.05), transparent 38%),
+    radial-gradient(800px circle at 100% 100%, rgba(17, 24, 39, 0.04), transparent 36%),
+    var(--background-app);
+}
+
+.dark .app-background {
+  background:
+    radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47, 0.16), transparent 36%),
+    radial-gradient(800px circle at 100% 100%, rgba(7, 10, 16, 0.45), transparent 35%),
+    var(--background-app);
 }
 
 @layer base {
@@ -123,5 +224,6 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-body);
+    line-height: 1.45;
   }
 }

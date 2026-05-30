@@ -35,6 +35,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRowValidator, RowValidator>();
         services.AddScoped<IFileImportPipelineProcessor, FileImportPipelineProcessor>();
         services.AddScoped<IPostImportProcessor, SalesSummaryProcessor>();
+        services.AddScoped<IPostImportProcessor, CustomerSummaryProcessor>();
         services.AddScoped<IFileJobService, FileJobService>();
         services.AddScoped<IFileUploadService, FileUploadService>();
         var redisConnection = configuration.GetConnectionString("Redis") ?? "localhost:6379";

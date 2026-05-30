@@ -1,4 +1,4 @@
-﻿export function parseManualHeaders(input: string): string[] {
+export function parseManualHeaders(input: string): string[] {
   return Array.from(
     new Set(
       input

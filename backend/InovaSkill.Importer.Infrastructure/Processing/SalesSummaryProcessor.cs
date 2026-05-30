@@ -38,7 +38,7 @@ public sealed class SalesSummaryProcessor(
         var dailySummaries = sourceRows
             .GroupBy(x => new
             {
-                Date = x.TransactionDate.Date,
+                Date = DateTime.SpecifyKind(x.TransactionDate.Date, DateTimeKind.Utc),
                 x.City,
                 x.ProductGroup,
                 x.TransactionType
@@ -116,6 +116,6 @@ public sealed class SalesSummaryProcessor(
     {
         var date = referenceDate.Date;
         var diff = date.DayOfWeek == DayOfWeek.Sunday ? -6 : DayOfWeek.Monday - date.DayOfWeek;
-        return date.AddDays(diff);
+        return DateTime.SpecifyKind(date.AddDays(diff), DateTimeKind.Utc);
     }
 }

@@ -8,7 +8,11 @@ public sealed class FileUploadService(
     IFileJobQueue fileJobQueue,
     IConfiguration configuration) : IFileUploadService
 {
-    public async Task<long> UploadAndCreateJobAsync(Stream stream, string originalFileName, CancellationToken cancellationToken)
+    public async Task<long> UploadAndCreateJobAsync(
+        Stream stream,
+        string originalFileName,
+        string? importFileTypeCode,
+        CancellationToken cancellationToken)
     {
         var extension = Path.GetExtension(originalFileName).ToLowerInvariant();
         if (extension is not ".csv" and not ".xlsx")
@@ -28,7 +32,7 @@ public sealed class FileUploadService(
         await using var fileStream = File.Create(filePath);
         await stream.CopyToAsync(fileStream, cancellationToken);
 
-        var jobId = await fileJobService.CreateFileJobAsync(filePath, originalFileName, cancellationToken);
+        var jobId = await fileJobService.CreateFileJobAsync(filePath, originalFileName, importFileTypeCode, cancellationToken);
         await fileJobQueue.EnqueueAsync(jobId, cancellationToken);
         return jobId;
     }

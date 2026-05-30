@@ -27,6 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\InovaSkill.Importer.Api\InovaSkill.Importer.Api.csproj" />
     <ProjectReference Include="..\InovaSkill.Importer.Domain\InovaSkill.Importer.Domain.csproj" />
     <ProjectReference Include="..\InovaSkill.Importer.Application\InovaSkill.Importer.Application.csproj" />
     <ProjectReference Include="..\InovaSkill.Importer.Infrastructure\InovaSkill.Importer.Infrastructure.csproj" />

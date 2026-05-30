@@ -1,6 +1,8 @@
 import { extractHeadersInWorker } from "@/features/import-template-builder/utils/extract-headers-in-worker";
 
 export type FileType = "Unknown" | "Customers" | "Orders" | "Products" | "CommercialTransaction";
+export type UploadDestinationMode = "auto" | "manual";
+export type UploadDestinationCode = "SALES_INVOICE" | "CUSTOMER_LIST" | "PRODUCT_LIST" | "FINANCIAL_ENTRY";
 
 export type JobStatus =
   | "WaitingProcessing"
@@ -69,7 +71,7 @@ export type CommercialTransaction = {
   sourceFileJobId: number;
 };
 
-export type SummaryGranularity = "daily" | "weekly";
+export type SummaryGranularity = "daily" | "weekly" | "monthly";
 export type SummarySortBy = "growth" | "amount" | "weight" | "quantity";
 export type CommercialTransactionCompanySummary = {
   companyName: string;
@@ -96,6 +98,120 @@ export type CommercialTransactionSummaryResponse = {
   totalWeightKg: number;
   totalCompanies: number;
   items: CommercialTransactionCompanySummary[];
+};
+
+export type CustomerAnalyticsSummary = {
+  activeCustomers: number;
+  totalRevenue: number;
+  totalOrders: number;
+  averageTicket: number;
+  averageRevenuePerCustomer: number;
+  newCustomers: number;
+  inactiveCustomers: number;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  previousPeriodStart: string;
+  previousPeriodEnd: string;
+};
+
+export type CustomerRankingItem = {
+  customerCode: string;
+  customerName: string;
+  revenue: number;
+  quantity: number;
+  weight: number;
+  orders: number;
+  averageTicket: number;
+  variationPercent: number | null;
+};
+
+export type CustomerRankingResponse = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  items: CustomerRankingItem[];
+};
+
+export type CustomerNewCustomersMonthlyPoint = {
+  monthStart: string;
+  newCustomers: number;
+};
+
+export type CustomerNewCustomersMonthlyResponse = {
+  periodStart: string;
+  periodEnd: string;
+  totalNewCustomers: number;
+  activeMonths: number;
+  points: CustomerNewCustomersMonthlyPoint[];
+};
+
+export type CustomerDetailSummary = {
+  customerCode: string;
+  customerName: string;
+  city: string;
+  linkedCompany: string;
+  lastPurchaseDate: string | null;
+  status: "Ativo" | "Inativo" | "Em queda" | "Em crescimento";
+  totalRevenue: number;
+  averageTicket: number | null;
+  averageRevenueMonthly: number | null;
+  averageRevenueWeekly: number | null;
+  totalQuantity: number;
+  totalWeight: number;
+  totalOrders: number;
+  averageDaysBetweenPurchases: number | null;
+};
+
+export type CustomerTimelinePoint = {
+  periodStart: string;
+  value: number;
+  revenue: number;
+  quantity: number;
+  weight: number;
+  orders: number;
+};
+
+export type CustomerTimelineResponse = {
+  granularity: "daily" | "weekly" | "monthly";
+  metric: "revenue" | "quantity" | "weight" | "orders";
+  points: CustomerTimelinePoint[];
+};
+
+export type CustomerComparisonItem = {
+  label: string;
+  currentValue: number;
+  previousValue: number;
+  variationPercent: number | null;
+};
+
+export type CustomerComparisonResponse = {
+  items: CustomerComparisonItem[];
+};
+
+export type CustomerTopProductItem = {
+  productCode: string;
+  productDescription: string;
+  quantity: number;
+  revenue: number;
+  sharePercent: number;
+};
+
+export type CustomerPurchaseHistoryItem = {
+  date: string;
+  document: string;
+  product: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  weight: number;
+  operationType: string;
+};
+
+export type CustomerPurchaseHistoryResponse = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  items: CustomerPurchaseHistoryItem[];
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
@@ -184,9 +300,12 @@ function normalizeStatus(value: number | string): JobStatus {
   return (value as JobStatus) ?? "Failed";
 }
 
-export async function uploadFile(file: File): Promise<number> {
+export async function uploadFile(file: File, importFileTypeCode?: UploadDestinationCode): Promise<number> {
   const form = new FormData();
   form.append("file", file);
+  if (importFileTypeCode) {
+    form.append("importFileTypeCode", importFileTypeCode);
+  }
 
   try {
     const response = await fetch(`${API_URL}/api/files/upload`, {
@@ -196,7 +315,7 @@ export async function uploadFile(file: File): Promise<number> {
 
     if (!response.ok) {
       if (response.status === 413) {
-        throw new Error("Arquivo muito grande. O limite atual Ã© 500 MB.");
+        throw new Error("Arquivo muito grande. O limite atual é 500 MB.");
       }
       throw new Error(await parseApiError(response, `Falha ao enviar '${file.name}'.`));
     }
@@ -205,7 +324,7 @@ export async function uploadFile(file: File): Promise<number> {
     return data.fileJobId;
   } catch (error) {
     if (error instanceof Error && /Failed to fetch|NetworkError|Load failed/i.test(error.message)) {
-      throw new Error("NÃ£o foi possÃ­vel conectar com a API. Verifique se os containers estÃ£o ativos e tente novamente.");
+      throw new Error("Não foi possível conectar com a API. Verifique se os containers estão ativos e tente novamente.");
     }
 
     throw error;
@@ -299,7 +418,7 @@ export async function fetchJobErrors(
 
 export async function fetchTemplateConfigs(): Promise<TemplateConfig[]> {
   const response = await fetch(`${API_URL}/api/template-configs`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar configuraÃ§Ãµes de template."));
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar configurações de template."));
   const data = (await response.json()) as Array<{
     id?: number;
     fileType?: number | string;
@@ -324,7 +443,7 @@ export async function saveTemplateConfig(input: Omit<TemplateConfig, "id"> & { i
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao salvar configuraÃ§Ã£o de template."));
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao salvar configuração de template."));
   return (await response.json()) as TemplateConfig;
 }
 
@@ -455,6 +574,158 @@ export async function fetchCommercialTransactionsSummary(input: {
   return (await response.json()) as CommercialTransactionSummaryResponse;
 }
 
+export async function fetchCustomerAnalyticsSummary(input: {
+  dateFrom?: string;
+  dateTo?: string;
+  customer?: string;
+  city?: string;
+  productGroup?: string;
+  productCode?: string;
+  transactionType?: string;
+}): Promise<CustomerAnalyticsSummary> {
+  const query = new URLSearchParams();
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+  if (input.customer?.trim()) query.set("customer", input.customer.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
+
+  const response = await fetch(`${API_URL}/api/customer-analytics-v2/summary?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de clientes."));
+  return (await response.json()) as CustomerAnalyticsSummary;
+}
+
+export async function fetchCustomerRanking(input: {
+  page?: number;
+  pageSize?: number;
+  sortBy?: "revenue" | "growth" | "drop" | "quantity" | "weight" | "ticket";
+  dateFrom?: string;
+  dateTo?: string;
+  customer?: string;
+  city?: string;
+  productGroup?: string;
+  productCode?: string;
+  transactionType?: string;
+}): Promise<CustomerRankingResponse> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+  query.set("sortBy", input.sortBy ?? "revenue");
+
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+  if (input.customer?.trim()) query.set("customer", input.customer.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
+
+  const response = await fetch(`${API_URL}/api/customer-analytics-v2/ranking?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar ranking de clientes."));
+  return (await response.json()) as CustomerRankingResponse;
+}
+
+export async function fetchCustomerNewCustomersMonthly(input: {
+  dateFrom?: string;
+  dateTo?: string;
+  customer?: string;
+  city?: string;
+  productGroup?: string;
+  productCode?: string;
+  transactionType?: string;
+}): Promise<CustomerNewCustomersMonthlyResponse> {
+  const query = new URLSearchParams();
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+  if (input.customer?.trim()) query.set("customer", input.customer.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
+
+  const response = await fetch(`${API_URL}/api/customer-analytics-v2/new-customers-monthly?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução mensal de novos clientes."));
+  return (await response.json()) as CustomerNewCustomersMonthlyResponse;
+}
+
+export async function fetchCustomerDetailsSummary(input: {
+  customerId: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<CustomerDetailSummary> {
+  const query = new URLSearchParams();
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/summary?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo do cliente."));
+  return (await response.json()) as CustomerDetailSummary;
+}
+
+export async function fetchCustomerTimeline(input: {
+  customerId: string;
+  granularity?: "daily" | "weekly" | "monthly";
+  metric?: "revenue" | "quantity" | "weight" | "orders";
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<CustomerTimelineResponse> {
+  const query = new URLSearchParams();
+  query.set("granularity", input.granularity ?? "monthly");
+  query.set("metric", input.metric ?? "revenue");
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/timeline?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução temporal do cliente."));
+  return (await response.json()) as CustomerTimelineResponse;
+}
+
+export async function fetchCustomerTopProducts(input: {
+  customerId: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<CustomerTopProductItem[]> {
+  const query = new URLSearchParams();
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/top-products?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos mais comprados."));
+  return (await response.json()) as CustomerTopProductItem[];
+}
+
+export async function fetchCustomerPurchaseHistory(input: {
+  customerId: string;
+  page?: number;
+  pageSize?: number;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<CustomerPurchaseHistoryResponse> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 10));
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/purchase-history?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar histórico de compras."));
+  return (await response.json()) as CustomerPurchaseHistoryResponse;
+}
+
+export async function fetchCustomerComparison(input: {
+  customerId: string;
+  referenceDate?: string;
+}): Promise<CustomerComparisonResponse> {
+  const query = new URLSearchParams();
+  if (input.referenceDate?.trim()) query.set("referenceDate", input.referenceDate.trim());
+
+  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/comparison?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar comparativo do cliente."));
+  return (await response.json()) as CustomerComparisonResponse;
+}
+
 export async function fetchImportTemplateTargetFields(importFileTypeId: string): Promise<ApiTargetField[]> {
   try {
     const response = await fetch(`${API_URL}/api/import-templates/file-types/${importFileTypeId}/fields`);
@@ -473,16 +744,17 @@ export async function fetchImportTemplateTargetFields(importFileTypeId: string):
 
   const fallbackFields: Record<string, ApiTargetField[]> = {
     Customers: [
+      { name: "customercode", displayName: "Codigo do Cliente", required: true },
       { name: "name", displayName: "Nome", required: true },
-      { name: "email", displayName: "E-mail", required: true },
+      { name: "email", displayName: "E-mail", required: false },
     ],
     Products: [
       { name: "sku", displayName: "SKU", required: true },
       { name: "name", displayName: "Nome", required: true },
-      { name: "price", displayName: "PreÃ§o", required: false },
+      { name: "price", displayName: "Preço", required: false },
     ],
     Orders: [
-      { name: "ordernumber", displayName: "NÃºmero do Pedido", required: true },
+      { name: "ordernumber", displayName: "Número do Pedido", required: true },
       { name: "customeremail", displayName: "E-mail do Cliente", required: true },
       { name: "productsku", displayName: "SKU do Produto", required: true },
       { name: "quantity", displayName: "Quantidade", required: true },
@@ -491,12 +763,12 @@ export async function fetchImportTemplateTargetFields(importFileTypeId: string):
     CommercialTransaction: [
       { name: "documentnumber", displayName: "Documento", required: true },
       { name: "transactiondate", displayName: "Data", required: true },
-      { name: "customercode", displayName: "CÃ³digo Cliente", required: true },
+      { name: "customercode", displayName: "Código Cliente", required: true },
       { name: "customername", displayName: "Nome Cliente", required: true },
-      { name: "productcode", displayName: "CÃ³digo Produto", required: true },
-      { name: "productdescription", displayName: "DescriÃ§Ã£o Produto", required: false },
+      { name: "productcode", displayName: "Código Produto", required: true },
+      { name: "productdescription", displayName: "Descrição Produto", required: false },
       { name: "quantity", displayName: "Quantidade", required: true },
-      { name: "unitprice", displayName: "Valor UnitÃ¡rio", required: false },
+      { name: "unitprice", displayName: "Valor Unitário", required: false },
       { name: "totalamount", displayName: "Valor Total", required: false },
       { name: "transactiontype", displayName: "Tipo", required: false },
       { name: "city", displayName: "Cidade", required: false },

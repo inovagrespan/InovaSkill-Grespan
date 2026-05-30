@@ -7,12 +7,17 @@ namespace InovaSkill.Importer.Infrastructure.Processing;
 
 public sealed class FileJobService(ImportDbContext dbContext) : IFileJobService
 {
-    public async Task<long> CreateFileJobAsync(string filePath, string originalFileName, CancellationToken cancellationToken)
+    public async Task<long> CreateFileJobAsync(
+        string filePath,
+        string originalFileName,
+        string? importFileTypeCode,
+        CancellationToken cancellationToken)
     {
         var job = new FileJob
         {
             FilePath = filePath,
             OriginalFileName = originalFileName,
+            ImportFileTypeCode = string.IsNullOrWhiteSpace(importFileTypeCode) ? null : importFileTypeCode.Trim().ToUpperInvariant(),
             Status = FileJobStatus.WaitingProcessing,
             CreatedAt = DateTime.UtcNow,
             LastHeartbeatAt = DateTime.UtcNow

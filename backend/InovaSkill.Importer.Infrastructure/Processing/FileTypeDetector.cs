@@ -7,19 +7,14 @@ public sealed class FileTypeDetector : IFileTypeDetector
 {
     public string? DetectCode(IReadOnlyDictionary<string, string> row)
     {
-        if (HasAny(
-            row,
-            "documentnumber",
-            "transactiondate",
-            "customercode",
-            "productcode",
-            "totalamount",
-            "documento",
-            "data",
-            "cliente",
-            "produto",
-            "quantidade",
-            "total"))
+        var salesKeys = new[]
+        {
+            "documentnumber", "transactiondate", "customercode", "productcode", "totalamount",
+            "documento", "data", "produto", "quantidade", "total"
+        };
+
+        var salesScore = salesKeys.Count(row.ContainsKey);
+        if (salesScore >= 3 || (row.ContainsKey("documentnumber") && row.ContainsKey("productcode")))
         {
             return ImportFileTypeCodes.SalesInvoice;
         }
@@ -34,7 +29,7 @@ public sealed class FileTypeDetector : IFileTypeDetector
             return ImportFileTypeCodes.ProductList;
         }
 
-        if (HasAny(row, "email", "name", "createdat"))
+        if (HasAny(row, "email", "name", "createdat", "nome", "cliente"))
         {
             return ImportFileTypeCodes.CustomerList;
         }

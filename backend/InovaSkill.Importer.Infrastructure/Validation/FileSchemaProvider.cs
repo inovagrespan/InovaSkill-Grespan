@@ -13,8 +13,9 @@ public sealed class FileSchemaProvider : IFileSchemaProvider
         {
             var x when x == ImportFileTypeCodes.CustomerList => new FileSchema(ImportFileTypeCodes.CustomerList,
             [
+                new ColumnSchema("customercode", true, ColumnDataType.String),
                 new ColumnSchema("name", true, ColumnDataType.String),
-                new ColumnSchema("email", true, ColumnDataType.Email),
+                new ColumnSchema("email", false, ColumnDataType.Email),
                 new ColumnSchema("createdat", false, ColumnDataType.DateTime)
             ]),
             var x when x == ImportFileTypeCodes.ProductList => new FileSchema(ImportFileTypeCodes.ProductList,

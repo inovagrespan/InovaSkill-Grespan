@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   createImportTemplate,
   extractSpreadsheetHeaders,
@@ -46,18 +46,18 @@ export function useImportTemplateBuilder(templateId?: string) {
 
   function normalizeDisplayText(value: string): string {
     return value
-      .replaceAll("Ã§", "ç")
-      .replaceAll("Ã£", "ã")
-      .replaceAll("Ã¡", "á")
-      .replaceAll("Ã©", "é")
-      .replaceAll("Ãª", "ê")
-      .replaceAll("Ã­", "í")
-      .replaceAll("Ã³", "ó")
-      .replaceAll("Ã´", "ô")
-      .replaceAll("Ãº", "ú")
-      .replaceAll("Ã ", "à")
-      .replaceAll("Ã‰", "É")
-      .replaceAll("Ã‡", "Ç")
+      .replaceAll("\u00C3\u00A7", "ç")
+      .replaceAll("\u00C3\u00A3", "ã")
+      .replaceAll("\u00C3\u00A1", "á")
+      .replaceAll("\u00C3\u00A9", "é")
+      .replaceAll("\u00C3\u00AA", "ê")
+      .replaceAll("\u00C3\u00AD", "í")
+      .replaceAll("\u00C3\u00B3", "ó")
+      .replaceAll("\u00C3\u00B4", "ô")
+      .replaceAll("\u00C3\u00BA", "ú")
+      .replaceAll("\u00C3\u00A0", "à")
+      .replaceAll("\u00C3\u0089", "É")
+      .replaceAll("\u00C3\u0087", "Ç")
       .replaceAll("Â·", "·")
       .replaceAll("â†’", "→")
       .replaceAll("â€“", "–")
@@ -321,3 +321,4 @@ export function useImportTemplateBuilder(templateId?: string) {
     save,
   };
 }
+

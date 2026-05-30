@@ -20,7 +20,7 @@ function NotFoundComponent() {
         <h1 className="text-7xl font-display font-bold text-primary">404</h1>
         <h2 className="mt-4 text-xl font-semibold">Página não encontrada</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          O recurso solicitado não existe no Grespan.
+          O recurso solicitado não existe no AAI Seguri.
         </p>
         <div className="mt-6">
           <Link
@@ -62,11 +62,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Grespan — Smart Core S&OP" },
+      { title: "AAI Seguri - ERP Corporativo" },
       {
         name: "description",
         content:
-          "Plataforma de IA corporativa para simulação integrada de cenários de Vendas, Logística e RH.",
+          "Plataforma corporativa para gestão integrada de Vendas, Logística, RH e Importações.",
       },
     ],
     links: [
@@ -102,23 +102,40 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
     const saved = window.localStorage.getItem("app.sidebar.collapsed");
     if (saved === "1") setSidebarCollapsed(true);
     if (saved === "0") setSidebarCollapsed(false);
+
+    const savedTheme = window.localStorage.getItem("app.theme");
+    if (savedTheme === "dark" || savedTheme === "light") {
+      setTheme(savedTheme);
+      return;
+    }
+
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setTheme(prefersDark ? "dark" : "light");
   }, []);
 
   useEffect(() => {
     window.localStorage.setItem("app.sidebar.collapsed", sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    window.localStorage.setItem("app.theme", theme);
+  }, [theme]);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-background text-foreground font-body">
+      <div className="app-background min-h-screen text-foreground font-body">
         <AppSidebar
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
+          theme={theme}
+          onToggleTheme={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
         />
         <main
           className={cn(
@@ -132,5 +149,3 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
-
-

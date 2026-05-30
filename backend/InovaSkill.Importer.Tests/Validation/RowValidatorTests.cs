@@ -15,6 +15,7 @@ public class RowValidatorTests
         var schema = _schemaProvider.GetSchema(ImportFileTypeCodes.CustomerList);
         var row = new ImportedRow(2, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            ["customercode"] = "C-001",
             ["name"] = "Alice",
             ["email"] = "alice@corp.com",
             ["createdat"] = "2026-05-20"
