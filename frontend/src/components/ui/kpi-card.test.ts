@@ -29,4 +29,14 @@ describe("kpi-card component markup", () => {
     expect(component).not.toContain('viewBox="0 0 100 26"');
     expect(component).not.toContain("h-7 w-full");
   });
+
+  it("mantem valor sem quebra de linha e com tooltip", () => {
+    const component = fs.readFileSync(path.resolve(process.cwd(), "src/components/ui/kpi-card.tsx"), "utf8");
+
+    expect(component).toContain("text-ellipsis");
+    expect(component).toContain("whitespace-nowrap");
+    expect(component).toContain("allowWrapValue");
+    expect(component).toContain("whitespace-normal break-words");
+    expect(component).toContain("title={valueTooltip ?? value}");
+  });
 });

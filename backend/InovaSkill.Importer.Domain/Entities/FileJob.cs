@@ -88,10 +88,11 @@ public sealed class FileJob
 
     public void RequeueManually()
     {
-        Status = string.IsNullOrWhiteSpace(ImportFileTypeCode) ? FileJobStatus.WaitingProcessing : FileJobStatus.ReadyToImport;
+        Status = FileJobStatus.WaitingProcessing;
         CurrentStep = "Reenfileirado manualmente";
         ProgressPercent = 0;
         ProcessedRows = 0;
+        TotalRows = 0;
         TouchHeartbeat();
     }
 

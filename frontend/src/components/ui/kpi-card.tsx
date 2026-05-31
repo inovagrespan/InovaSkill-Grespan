@@ -16,6 +16,7 @@ type KpiCardProps = {
   loading?: boolean;
   description?: string;
   className?: string;
+  allowWrapValue?: boolean;
 };
 
 function formatPct(value?: number | null): string {
@@ -37,6 +38,7 @@ export function KpiCard({
   loading = false,
   description,
   className,
+  allowWrapValue = false,
 }: KpiCardProps) {
   const direction = resolveTrendDirection(percentageChange, trendDirection);
   const toneClass =
@@ -69,7 +71,15 @@ export function KpiCard({
         {loading ? (
           <Loader2 className="size-5 animate-spin text-muted-foreground" />
         ) : (
-          <p title={valueTooltip ?? value} className="text-3xl font-display leading-none tracking-tight text-[var(--text-primary)] md:text-4xl">
+          <p
+            title={valueTooltip ?? value}
+            className={cn(
+              "min-w-0 flex-1 pr-1 text-2xl font-display leading-tight tracking-tight text-[var(--text-primary)] sm:text-3xl",
+              allowWrapValue
+                ? "whitespace-normal break-words"
+                : "overflow-hidden text-ellipsis whitespace-nowrap",
+            )}
+          >
             {value}
           </p>
         )}

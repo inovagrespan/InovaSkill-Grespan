@@ -12,4 +12,14 @@ public sealed record FileJobDto(
     string CurrentStep,
     int ProgressPercent,
     int ProcessedRows,
-    int TotalRows);
+    int TotalRows,
+    string? CurrentStageCode,
+    string? CurrentStageName,
+    IReadOnlyList<FileJobStageProgressDto> Stages);
+
+public sealed record FileJobStageProgressDto(
+    string Code,
+    string Name,
+    string Status,
+    int ProgressPercent,
+    int ErrorCount);

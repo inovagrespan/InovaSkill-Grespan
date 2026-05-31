@@ -19,6 +19,7 @@ import {
   type UploadDestinationMode,
   uploadFile,
 } from "@/lib/importer-api";
+import { clampProgressPercent, stageStatusLabel, type JobStageStatus } from "@/lib/importer-progress";
 import { destinationLabel, detectUploadDestination } from "@/lib/upload-destination-detector";
 
 export const Route = createFileRoute("/importacoes/files")({
@@ -40,6 +41,13 @@ function statusBadgeVariant(status: string): "default" | "secondary" | "destruct
   if (status === "Completed") return "default";
   if (status === "ValidationFailed" || status === "Failed") return "destructive";
   if (status === "ReadyToImport") return "secondary";
+  return "outline";
+}
+
+function stageBadgeVariant(status: JobStageStatus): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "completed") return "default";
+  if (status === "failed") return "destructive";
+  if (status === "running") return "secondary";
   return "outline";
 }
 
@@ -290,6 +298,15 @@ function ImportacoesPage() {
                 <Badge variant={statusBadgeVariant(job.status)}>{statusLabel[job.status] ?? job.status}</Badge>
                 <span className="text-xs text-muted-foreground font-mono">#{job.id}</span>
               </div>
+              <div className="mt-2 flex items-center gap-2">
+                <Progress value={clampProgressPercent(job.progressPercent)} className="h-1.5" />
+                <span className="text-xs font-mono text-muted-foreground w-9 text-right">
+                  {clampProgressPercent(job.progressPercent)}%
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {job.currentStageName ? `Etapa atual: ${job.currentStageName}` : job.currentStep || "Aguardando etapa"}
+              </p>
             </button>
           ))}
 
@@ -356,11 +373,35 @@ function ImportacoesPage() {
               <div className="rounded-lg border border-border p-3">
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <Badge variant={statusBadgeVariant(selectedJob.status)}>{statusLabel[selectedJob.status] ?? selectedJob.status}</Badge>
-                  <span className="text-xs text-muted-foreground">Etapa: {selectedJob.currentStep || "-"}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Etapa atual: {(selectedJob.currentStageName ?? selectedJob.currentStep) || "-"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Progress value={Math.max(0, Math.min(100, Number(selectedJob.progressPercent ?? 0)))} className="h-2" />
-                  <span className="text-xs font-mono w-9 text-right">{Math.max(0, Math.min(100, Number(selectedJob.progressPercent ?? 0)))}%</span>
+                  <Progress value={clampProgressPercent(selectedJob.progressPercent)} className="h-2" />
+                  <span className="text-xs font-mono w-9 text-right">{clampProgressPercent(selectedJob.progressPercent)}%</span>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{selectedJob.currentStep || "Aguardando processamento."}</p>
+              </div>
+
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">Etapas do processamento</p>
+                <div className="space-y-3">
+                  {selectedJob.stages.map((stage) => (
+                    <div key={stage.code} className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{stage.name}</span>
+                          <Badge variant={stageBadgeVariant(stage.status)}>{stageStatusLabel(stage.status)}</Badge>
+                        </div>
+                        <span className="text-xs font-mono text-muted-foreground">{clampProgressPercent(stage.progressPercent)}%</span>
+                      </div>
+                      <Progress value={clampProgressPercent(stage.progressPercent)} className="h-1.5" />
+                      {stage.errorCount > 0 && (
+                        <p className="text-xs text-destructive">{stage.errorCount} erro(s) nessa etapa.</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -385,6 +426,7 @@ function ImportacoesPage() {
                       <p className="text-sm font-medium">
                         Linha {err.rowNumber} - Campo: {err.column} - Registro: {err.recordIdentifier || "N/A"}
                       </p>
+                      {err.stage && <p className="text-xs text-muted-foreground">Etapa: {err.stage}</p>}
                       <p className="text-sm text-muted-foreground">{err.message}</p>
                     </div>
                   ))}

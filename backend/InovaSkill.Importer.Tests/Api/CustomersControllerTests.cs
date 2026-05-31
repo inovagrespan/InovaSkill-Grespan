@@ -65,6 +65,32 @@ public sealed class CustomersControllerTests
     }
 
     [Fact]
+    public async Task GetTimeline_UsesTransactionsFallback_WhenSummaryTablesHaveNoRows()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        db.CustomerSummariesDaily.RemoveRange(db.CustomerSummariesDaily);
+        db.CustomerSummariesWeekly.RemoveRange(db.CustomerSummariesWeekly);
+        db.CustomerSummariesMonthly.RemoveRange(db.CustomerSummariesMonthly);
+        await db.SaveChangesAsync();
+
+        var controller = new CustomersController(db);
+        var result = await controller.GetTimeline(
+            "C1",
+            "monthly",
+            "revenue",
+            new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 5, 31, 0, 0, 0, DateTimeKind.Utc));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerTimelineResponseDto>(ok.Value);
+
+        Assert.Equal("monthly", payload.Granularity);
+        Assert.NotEmpty(payload.Points);
+        Assert.Contains(payload.Points, x => x.Revenue == 300m);
+    }
+
+    [Fact]
     public async Task GetComparison_ReturnsThreePeriods()
     {
         await using var db = await CreateDbAsync();
@@ -82,6 +108,62 @@ public sealed class CustomersControllerTests
     }
 
     [Fact]
+    public async Task GetComparison_CalculatesVariationAgainstPreviousPeriod()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetComparison("C1", new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc));
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerComparisonResponseDto>(ok.Value);
+
+        var monthly = Assert.Single(payload.Items, x => x.Label.Contains("mês", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(300m, monthly.CurrentValue);
+        Assert.Equal(50m, monthly.PreviousValue);
+        Assert.Equal(500m, monthly.VariationPercent);
+    }
+
+    [Fact]
+    public async Task GetComparison_UsesTransactionsFallback_WhenSummaryTablesHaveNoRows()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        db.CustomerSummariesDaily.RemoveRange(db.CustomerSummariesDaily);
+        db.CustomerSummariesWeekly.RemoveRange(db.CustomerSummariesWeekly);
+        db.CustomerSummariesMonthly.RemoveRange(db.CustomerSummariesMonthly);
+
+        db.CommercialTransactions.Add(new Domain.Entities.CommercialTransaction
+        {
+            DocumentNumber = "NF-099",
+            TransactionDate = new DateTime(2026, 4, 10, 0, 0, 0, DateTimeKind.Utc),
+            CustomerCode = "C1",
+            CustomerName = "Cliente A",
+            ProductCode = "P0",
+            ProductDescription = "Produto 0",
+            Quantity = 5m,
+            UnitPrice = 10m,
+            TotalAmount = 50m,
+            TransactionType = "Venda",
+            City = "Campinas",
+            ProductGroup = "Grupo A",
+            GrossWeightKg = 2m,
+            SourceFileJobId = 1
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new CustomersController(db);
+        var result = await controller.GetComparison("C1", new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc));
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerComparisonResponseDto>(ok.Value);
+
+        var monthly = Assert.Single(payload.Items, x => x.Label.Contains("mês", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(300m, monthly.CurrentValue);
+        Assert.Equal(50m, monthly.PreviousValue);
+        Assert.Equal(500m, monthly.VariationPercent);
+    }
+
+    [Fact]
     public async Task GetPurchaseHistory_AppliesPagination()
     {
         await using var db = await CreateDbAsync();
@@ -96,6 +178,77 @@ public sealed class CustomersControllerTests
         Assert.Equal(10, payload.PageSize);
         Assert.Equal(2, payload.TotalItems);
         Assert.Equal(2, payload.Items.Count);
+    }
+
+    [Fact]
+    public async Task GetInsights_ReturnsPredictionsRiskAndTrend()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetInsights("C1", movingAverageWindowMonths: 3);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerInsightsResponseDto>(ok.Value);
+
+        Assert.Equal(7m, payload.AveragePurchaseFrequencyDays);
+        Assert.Equal(new DateTime(2026, 5, 26, 0, 0, 0, DateTimeKind.Utc), payload.EstimatedNextPurchaseDate);
+        Assert.Equal(175m, payload.PredictedRevenue);
+        Assert.Equal(17.5m, payload.PredictedQuantity);
+        Assert.Equal("Estabilidade", payload.ConsumptionTrend);
+        Assert.NotEqual("Sem histórico suficiente", payload.RiskLevel);
+        Assert.True(payload.DaysWithoutPurchase >= 0);
+        Assert.NotNull(payload.RiskScore);
+        Assert.True(payload.RiskScore > 0);
+        Assert.Null(payload.FrequencyReason);
+        Assert.Null(payload.NextPurchaseReason);
+        Assert.Null(payload.RevenuePredictionReason);
+        Assert.Null(payload.QuantityPredictionReason);
+        Assert.Null(payload.RiskReason);
+        Assert.True(payload.MonthlyHistoryPeriods >= 3);
+    }
+
+    [Fact]
+    public async Task GetInsights_ReturnsInsufficientHistory_WhenOnlyOnePurchaseDay()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        db.CommercialTransactions.RemoveRange(db.CommercialTransactions.Where(x => x.DocumentNumber == "NF-101"));
+        await db.SaveChangesAsync();
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetInsights("C1", movingAverageWindowMonths: 3);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerInsightsResponseDto>(ok.Value);
+
+        Assert.Null(payload.AveragePurchaseFrequencyDays);
+        Assert.Null(payload.EstimatedNextPurchaseDate);
+        Assert.Equal("Sem histórico suficiente", payload.RiskLevel);
+        Assert.Null(payload.RiskScore);
+        Assert.Equal("Necessário pelo menos 2 compras em datas diferentes para calcular frequência.", payload.FrequencyReason);
+        Assert.Equal("Necessário calcular a frequência média antes de estimar a próxima compra.", payload.NextPurchaseReason);
+        Assert.Equal("Necessário frequência média e data da última compra para calcular risco.", payload.RiskReason);
+    }
+
+    [Fact]
+    public async Task GetInsights_ReturnsPredictionReason_WhenMonthlyHistoryHasLessThanThreePeriods()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        db.CustomerSummariesMonthly.RemoveRange(
+            db.CustomerSummariesMonthly.Where(x => x.MonthStartDate == new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        await db.SaveChangesAsync();
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetInsights("C1", movingAverageWindowMonths: 3);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerInsightsResponseDto>(ok.Value);
+
+        Assert.Null(payload.PredictedRevenue);
+        Assert.Null(payload.PredictedQuantity);
+        Assert.Equal("Necessário histórico de pelo menos 3 meses para previsão mensal por média móvel.", payload.RevenuePredictionReason);
+        Assert.Equal("Necessário histórico de pelo menos 3 meses para previsão mensal por média móvel.", payload.QuantityPredictionReason);
+        Assert.Equal(2, payload.MonthlyHistoryPeriods);
     }
 
     [Fact]
@@ -208,6 +361,21 @@ public sealed class CustomersControllerTests
             });
 
         db.CustomerSummariesMonthly.AddRange(
+            new Domain.Entities.CustomerSummaryMonthly
+            {
+                SourceFileJobId = 1,
+                MonthStartDate = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                CustomerCode = "C1",
+                CustomerName = "Cliente A",
+                City = "Campinas",
+                ProductGroup = "Grupo A",
+                TransactionType = "Venda",
+                Orders = 1,
+                Revenue = 175m,
+                Quantity = 17.5m,
+                Weight = 7m,
+                ProcessedAt = DateTime.UtcNow
+            },
             new Domain.Entities.CustomerSummaryMonthly
             {
                 SourceFileJobId = 1,

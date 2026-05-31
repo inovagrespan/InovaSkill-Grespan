@@ -1,4 +1,4 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -21,6 +21,14 @@ describe("design system tokens", () => {
     expect(css).toContain("--text-secondary:");
     expect(css).toContain("--text-muted:");
   });
+
+  it("define estilo de scrollbar customizado", () => {
+    const css = read("src/styles.css");
+
+    expect(css).toContain(".custom-scrollbar");
+    expect(css).toContain("scrollbar-width: thin;");
+    expect(css).toContain("::-webkit-scrollbar-thumb");
+  });
 });
 
 describe("component states", () => {
@@ -36,5 +44,12 @@ describe("component states", () => {
     const badge = read("src/components/ui/badge.tsx");
 
     expect(badge).toContain('outline: "border-border bg-surface text-foreground"');
+  });
+
+  it("mantém container de gráfico com largura total e altura mínima", () => {
+    const chart = read("src/components/ui/chart.tsx");
+
+    expect(chart).toContain("min-h-[220px]");
+    expect(chart).toContain("w-full");
   });
 });

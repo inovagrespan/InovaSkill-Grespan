@@ -43,10 +43,12 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
         modelBuilder.Entity<ImportError>(e =>
         {
             e.HasKey(x => x.Id);
+            e.Property(x => x.Stage).HasMaxLength(64).IsRequired();
             e.Property(x => x.Column).HasMaxLength(128).IsRequired();
             e.Property(x => x.Message).HasMaxLength(1024).IsRequired();
             e.Property(x => x.RecordIdentifier).HasMaxLength(256).IsRequired();
             e.HasIndex(x => x.FileJobId);
+            e.HasIndex(x => new { x.FileJobId, x.Stage });
         });
 
         modelBuilder.Entity<Customer>(e =>

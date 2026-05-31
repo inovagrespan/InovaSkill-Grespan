@@ -4,13 +4,22 @@ using InovaSkill.Importer.Domain.ValueObjects;
 
 namespace InovaSkill.Importer.Infrastructure.Parsing;
 
-public sealed class ExcelFileParser : IFileParser
+public sealed class ExcelFileParser : IFileParser, ITableReader
 {
     private const int HeaderSearchLimit = 5;
 
     public async IAsyncEnumerable<ImportedRow> ParseAsync(string filePath, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        using var workbook = new XLWorkbook(filePath);
+        using var stream = File.OpenRead(filePath);
+        await foreach (var row in ReadRowsAsync(stream, cancellationToken))
+        {
+            yield return new ImportedRow(row.RowNumber, row.Values);
+        }
+    }
+
+    public async IAsyncEnumerable<TableRow> ReadRowsAsync(Stream stream, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        using var workbook = new XLWorkbook(stream);
         var worksheet = workbook.Worksheets.First();
         var lastRow = worksheet.LastRowUsed()?.RowNumber() ?? 0;
         if (lastRow == 0)
@@ -45,7 +54,7 @@ public sealed class ExcelFileParser : IFileParser
 
         if (headers is null)
         {
-            throw new InvalidOperationException($"CabeÁalho n„o encontrado nas {HeaderSearchLimit} primeiras linhas.");
+            throw new InvalidOperationException($"Cabe√ßalho n√£o encontrado nas {HeaderSearchLimit} primeiras linhas.");
         }
 
         for (var rowNumber = headerRowNumber + 1; rowNumber <= lastRow; rowNumber++)
@@ -59,7 +68,7 @@ public sealed class ExcelFileParser : IFileParser
                 dict[headers[i]] = row.Cell(i + 1).GetString().Trim();
             }
 
-            yield return new ImportedRow(rowNumber, HeaderNormalizer.Normalize(dict));
+            yield return new TableRow(rowNumber, HeaderNormalizer.Normalize(dict));
             await Task.Yield();
         }
     }

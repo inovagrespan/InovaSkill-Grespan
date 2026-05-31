@@ -5,6 +5,7 @@ public sealed class ImportError
     public long Id { get; set; }
     public long FileJobId { get; set; }
     public int RowNumber { get; set; }
+    public string Stage { get; set; } = string.Empty;
     public string Column { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string RecordIdentifier { get; set; } = string.Empty;

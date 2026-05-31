@@ -15,6 +15,7 @@ public static class DbSchemaBootstrapper
         }
 
         await EnsureFileJobsColumnsAsync(context, cancellationToken);
+        await EnsureImportErrorsColumnsAsync(context, cancellationToken);
         await EnsureCustomersColumnsAsync(context, cancellationToken);
         await EnsureCommercialTransactionsTableAsync(context, cancellationToken);
         await EnsureSalesSummariesDailyTableAsync(context, cancellationToken);
@@ -291,6 +292,23 @@ public static class DbSchemaBootstrapper
             """
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_SalesSummariesWeekly_SourceFileJobId_Week_City_Group_Type"
             ON "SalesSummariesWeekly" ("SourceFileJobId", "WeekStartDate", "City", "ProductGroup", "TransactionType");
+            """,
+            cancellationToken);
+    }
+
+    private static async Task EnsureImportErrorsColumnsAsync(ImportDbContext db, CancellationToken cancellationToken)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "ImportErrors"
+            ADD COLUMN IF NOT EXISTS "Stage" character varying(64) NOT NULL DEFAULT '';
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_ImportErrors_FileJobId_Stage"
+            ON "ImportErrors" ("FileJobId", "Stage");
             """,
             cancellationToken);
     }

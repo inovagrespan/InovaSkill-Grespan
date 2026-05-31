@@ -6,13 +6,21 @@ using System.Globalization;
 
 namespace InovaSkill.Importer.Infrastructure.Parsing;
 
-public sealed class CsvFileParser : IFileParser
+public sealed class CsvFileParser : IFileParser, ITableReader
 {
     private const int HeaderSearchLimit = 5;
 
     public async IAsyncEnumerable<ImportedRow> ParseAsync(string filePath, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var stream = File.OpenRead(filePath);
+        await foreach (var row in ReadRowsAsync(stream, cancellationToken))
+        {
+            yield return new ImportedRow(row.RowNumber, row.Values);
+        }
+    }
+
+    public async IAsyncEnumerable<TableRow> ReadRowsAsync(Stream stream, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         using var reader = new StreamReader(stream);
         var config = new CsvConfiguration(CultureInfo.InvariantCulture)
         {
@@ -44,7 +52,7 @@ public sealed class CsvFileParser : IFileParser
 
         if (!headerFound)
         {
-            throw new InvalidOperationException($"CabeÁalho n„o encontrado nas {HeaderSearchLimit} primeiras linhas.");
+            throw new InvalidOperationException($"Cabe√ßalho n√£o encontrado nas {HeaderSearchLimit} primeiras linhas.");
         }
 
         while (await csv.ReadAsync())
@@ -58,7 +66,7 @@ public sealed class CsvFileParser : IFileParser
                 dict[header] = csv.GetField(i) ?? string.Empty;
             }
 
-            yield return new ImportedRow(rowNumber, HeaderNormalizer.Normalize(dict));
+            yield return new TableRow(rowNumber, HeaderNormalizer.Normalize(dict));
         }
     }
 

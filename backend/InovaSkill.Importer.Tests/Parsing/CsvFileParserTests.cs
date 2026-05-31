@@ -5,6 +5,23 @@ namespace InovaSkill.Importer.Tests.Parsing;
 public class CsvFileParserTests
 {
     [Fact]
+    public async Task ReadRowsAsync_ReadsRowsFromMemoryStream()
+    {
+        var content = "RELATORIO DE VENDAS\nname,email,createdat\nAlice,alice@corp.com,2026-05-20\n";
+        await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content));
+        var parser = new CsvFileParser();
+
+        var rows = new List<InovaSkill.Importer.Domain.ValueObjects.TableRow>();
+        await foreach (var row in parser.ReadRowsAsync(stream, CancellationToken.None))
+        {
+            rows.Add(row);
+        }
+
+        Assert.Single(rows);
+        Assert.Equal("Alice", rows[0].Get("name"));
+    }
+
+    [Fact]
     public async Task ParseAsync_ReadsRows()
     {
         var filePath = Path.Combine(AppContext.BaseDirectory, "TestData", "customers-valid.csv");
@@ -71,6 +88,6 @@ public class CsvFileParserTests
             }
         });
 
-        Assert.Contains("CabeÁalho n„o encontrado", ex.Message);
+        Assert.Contains("Cabe√ßalho n√£o encontrado", ex.Message);
     }
 }

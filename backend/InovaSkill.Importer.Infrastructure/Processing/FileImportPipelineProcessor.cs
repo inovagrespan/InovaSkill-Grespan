@@ -9,6 +9,7 @@ using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using System.Text.Json;
 
 namespace InovaSkill.Importer.Infrastructure.Processing;
@@ -18,16 +19,13 @@ public sealed class FileImportPipelineProcessor(
     IFileJobQueue fileJobQueue,
     IPostImportJobQueue postImportJobQueue,
     IFileParserFactory fileParserFactory,
-    IPreProcessorTemplateResolver preProcessorTemplateResolver,
-    IImportMappingEngine importMappingEngine,
-    IFileTypeDetector fileTypeDetector,
+    IImportPreProcessingPipeline importPreProcessingPipeline,
     IFileSchemaProvider fileSchemaProvider,
     IRowValidator rowValidator,
     IConfiguration configuration,
     ILogger<FileImportPipelineProcessor> logger) : IFileImportPipelineProcessor
 {
     private const int BatchSize = 5000;
-    private const int ProgressUpdateIntervalRows = 200;
     private static readonly TimeSpan StaleProcessingTimeout = TimeSpan.FromMinutes(5);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -96,80 +94,50 @@ public sealed class FileImportPipelineProcessor(
         EnsureParentDirectory(job.NormalizedFilePath);
 
         var parser = fileParserFactory.Create(job.FilePath);
-        var totalRows = 0;
-        job.TotalRows = 0;
+        var totalRows = await CountRowsAsync(parser, job.FilePath, cancellationToken);
+        job.TotalRows = totalRows;
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var errors = new List<ImportError>();
-        var detectedFileTypeCode = job.ImportFileTypeCode;
-        var detectionAttempted = !string.IsNullOrWhiteSpace(detectedFileTypeCode);
         var processedRows = 0;
-        ImportTemplate? template = null;
 
         await using (var stream = new FileStream(job.NormalizedFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
         await using (var writer = new StreamWriter(stream))
         {
-            await foreach (var row in parser.ParseAsync(job.FilePath, cancellationToken))
+            var tableRows = ReadTableRowsAsync(parser, job.FilePath, cancellationToken);
+            var request = new ImportPreProcessingRequest(Path.GetFileName(job.FilePath), job.ImportFileTypeCode, tableRows);
+
+            await foreach (var result in importPreProcessingPipeline.ProcessRowsAsync(request, cancellationToken))
             {
                 processedRows++;
 
-                if (processedRows == 1)
+                if (!string.IsNullOrWhiteSpace(result.DetectedFileTypeCode))
                 {
-                    template = await preProcessorTemplateResolver.ResolveAsync(
-                        Path.GetFileName(job.FilePath),
-                        row.Values.Keys.ToArray(),
-                        cancellationToken);
-
-                    if (template?.ImportFileType is not null && string.IsNullOrWhiteSpace(job.ImportFileTypeCode))
-                    {
-                        job.ImportFileTypeCode = template.ImportFileType.Code;
-                    }
+                    job.ImportFileTypeCode = result.DetectedFileTypeCode;
                 }
 
-                var normalizedRow = row;
-                if (template is not null)
+                foreach (var rowError in result.Errors)
                 {
-                    var rawValues = row.Values.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.OrdinalIgnoreCase);
-                    var mapped = importMappingEngine.MapRow(row.RowNumber, rawValues, template);
-                    foreach (var mapError in mapped.Errors)
-                    {
-                        errors.Add(BuildImportError(job.Id, mapError.RowNumber, mapError.Column, mapError.Message, row.Values, detectedFileTypeCode));
-                    }
-
-                    var mappedValues = mapped.StandardValues.ToDictionary(k => k.Key, v => v.Value?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase);
-                    normalizedRow = new ImportedRow(row.RowNumber, mappedValues);
-                }
-                else if (!string.IsNullOrWhiteSpace(job.ImportFileTypeCode))
-                {
-                    normalizedRow = ApplyDefaultAliases(normalizedRow, job.ImportFileTypeCode);
+                    errors.Add(BuildImportError(
+                        job.Id,
+                        rowError.RowNumber,
+                        ImportProcessingStages.PreProcessing,
+                        rowError.Column,
+                        rowError.Message,
+                        result.Row.Values,
+                        result.DetectedFileTypeCode));
                 }
 
-                if (!detectionAttempted)
+                if (result.ShouldStopProcessing)
                 {
-                    detectedFileTypeCode = fileTypeDetector.DetectCode(normalizedRow.Values);
-                    detectionAttempted = true;
-                    job.ImportFileTypeCode = detectedFileTypeCode;
-
-                    if (string.IsNullOrWhiteSpace(detectedFileTypeCode))
-                    {
-                        errors.Add(new ImportError
-                        {
-                            FileJobId = job.Id,
-                            RowNumber = normalizedRow.RowNumber,
-                            Column = "ImportFileType",
-                            Message = "Unable to detect file type from header.",
-                            RecordIdentifier = string.Empty
-                        });
-                        break;
-                    }
+                    break;
                 }
 
-                await WriteNormalizedRowAsync(writer, normalizedRow, cancellationToken);
+                await WriteNormalizedRowAsync(writer, result.Row, cancellationToken);
 
-                var shouldUpdateProgress = processedRows % ProgressUpdateIntervalRows == 0;
-                if (shouldUpdateProgress)
+                if (ShouldUpdateProgress(job, processedRows, totalRows))
                 {
-                    await UpdateProgressAsync(job, "Pre-processando arquivo", 0, 100, processedRows, totalRows, cancellationToken);
+                    await UpdateProgressAsync(job, "Pre-processando arquivo", processedRows, totalRows, cancellationToken);
                 }
             }
         }
@@ -177,7 +145,7 @@ public sealed class FileImportPipelineProcessor(
         totalRows = processedRows;
         job.TotalRows = processedRows;
         job.ProcessedRows = processedRows;
-        job.UpdateProgress("Pre-processamento concluido", 30, processedRows);
+        job.UpdateProgress("Pre-processamento concluido", ImportStageProgress.CompletePercent, processedRows);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         job.MarkValidating();
@@ -197,14 +165,20 @@ public sealed class FileImportPipelineProcessor(
             var validationErrors = ValidateRow(normalizedRow, job.ImportFileTypeCode ?? string.Empty);
             foreach (var verr in validationErrors)
             {
-                errors.Add(BuildImportError(job.Id, normalizedRow.RowNumber, verr.Column, verr.Message, normalizedRow.Values, job.ImportFileTypeCode));
+                errors.Add(BuildImportError(
+                    job.Id,
+                    normalizedRow.RowNumber,
+                    ImportProcessingStages.Validation,
+                    verr.Column,
+                    verr.Message,
+                    normalizedRow.Values,
+                    job.ImportFileTypeCode));
             }
 
 
-            var shouldUpdateProgress = processedRows % ProgressUpdateIntervalRows == 0;
-            if (shouldUpdateProgress)
+            if (ShouldUpdateProgress(job, processedRows, job.TotalRows))
             {
-                await UpdateProgressAsync(job, "Validando arquivo normalizado", 0, 100, processedRows, job.TotalRows, cancellationToken);
+                await UpdateProgressAsync(job, "Validando arquivo normalizado", processedRows, job.TotalRows, cancellationToken);
             }
         }
 
@@ -214,6 +188,7 @@ public sealed class FileImportPipelineProcessor(
             {
                 FileJobId = job.Id,
                 RowNumber = 0,
+                Stage = ImportProcessingStages.Validation,
                 Column = "File",
                 Message = "File has no data rows.",
                 RecordIdentifier = string.Empty
@@ -251,6 +226,15 @@ public sealed class FileImportPipelineProcessor(
             return;
         }
 
+        var importValidationErrors = await ValidateRowsBeforeImportAsync(job, cancellationToken);
+        if (importValidationErrors.Count > 0)
+        {
+            await dbContext.BulkInsertAsync(importValidationErrors, cancellationToken: cancellationToken);
+            job.MarkValidationFailed();
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
         var buffer = CreateBuffer(job.ImportFileTypeCode ?? string.Empty);
         var processedRows = 0;
 
@@ -264,10 +248,9 @@ public sealed class FileImportPipelineProcessor(
                 await buffer.FlushAsync(dbContext, cancellationToken);
             }
 
-            var shouldUpdateProgress = processedRows % ProgressUpdateIntervalRows == 0;
-            if (shouldUpdateProgress)
+            if (ShouldUpdateProgress(job, processedRows, job.TotalRows))
             {
-                await UpdateProgressAsync(job, "Importando dados", 0, 100, processedRows, job.TotalRows, cancellationToken);
+                await UpdateProgressAsync(job, "Importando dados", processedRows, job.TotalRows, cancellationToken);
             }
         }
 
@@ -302,22 +285,54 @@ public sealed class FileImportPipelineProcessor(
     private async Task UpdateProgressAsync(
         FileJob job,
         string step,
-        int startPercent,
-        int endPercent,
         int processedRows,
         int totalRows,
         CancellationToken cancellationToken)
     {
-        var progressPercent = startPercent;
-        if (totalRows > 0)
-        {
-            var local = (double)processedRows / totalRows;
-            var mapped = startPercent + ((endPercent - startPercent) * local);
-            progressPercent = Math.Clamp((int)Math.Round(mapped), startPercent, endPercent);
-        }
+        var progressPercent = ImportStageProgress.CalculatePercent(processedRows, totalRows);
 
         job.UpdateProgress(step, progressPercent, processedRows);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    internal async Task<List<ImportError>> ValidateRowsBeforeImportAsync(FileJob job, CancellationToken cancellationToken)
+    {
+        var errors = new List<ImportError>();
+
+        await foreach (var row in ReadNormalizedRowsAsync(job.NormalizedFilePath, cancellationToken))
+        {
+            var validationErrors = ValidateRow(row, job.ImportFileTypeCode ?? string.Empty);
+            foreach (var validationError in validationErrors)
+            {
+                errors.Add(BuildImportError(
+                    job.Id,
+                    row.RowNumber,
+                    ImportProcessingStages.Import,
+                    validationError.Column,
+                    validationError.Message,
+                    row.Values,
+                    job.ImportFileTypeCode));
+            }
+        }
+
+        return errors;
+    }
+
+    private static bool ShouldUpdateProgress(FileJob job, int processedRows, int totalRows)
+    {
+        var currentPercent = ImportStageProgress.CalculatePercent(processedRows, totalRows);
+        return ImportStageProgress.ShouldUpdate(processedRows, totalRows, currentPercent, job.ProgressPercent);
+    }
+
+    private static async IAsyncEnumerable<TableRow> ReadTableRowsAsync(
+        IFileParser parser,
+        string filePath,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (var row in parser.ParseAsync(filePath, cancellationToken))
+        {
+            yield return new TableRow(row.RowNumber, row.Values);
+        }
     }
 
     private static async Task<int> CountRowsAsync(IFileParser parser, string filePath, CancellationToken cancellationToken)
@@ -421,43 +436,6 @@ public sealed class FileImportPipelineProcessor(
         };
     }
 
-    private static ImportedRow ApplyDefaultAliases(ImportedRow row, string importFileTypeCode)
-    {
-        if (!string.Equals(importFileTypeCode, ImportFileTypeCodes.CustomerList, StringComparison.OrdinalIgnoreCase))
-        {
-            return row;
-        }
-
-        var values = new Dictionary<string, string>(row.Values, StringComparer.OrdinalIgnoreCase);
-
-        if (!values.ContainsKey("customercode") || string.IsNullOrWhiteSpace(values["customercode"]))
-        {
-            if (values.TryGetValue("cliente", out var customerCodeAlias) && !string.IsNullOrWhiteSpace(customerCodeAlias))
-            {
-                values["customercode"] = customerCodeAlias;
-            }
-        }
-
-        if (!values.ContainsKey("name") || string.IsNullOrWhiteSpace(values["name"]))
-        {
-            if (values.TryGetValue("nome", out var nameAlias) && !string.IsNullOrWhiteSpace(nameAlias))
-            {
-                values["name"] = nameAlias;
-            }
-        }
-
-        if (!values.ContainsKey("email") || string.IsNullOrWhiteSpace(values["email"]))
-        {
-            if (values.TryGetValue("e-mail", out var emailAlias) && !string.IsNullOrWhiteSpace(emailAlias))
-            {
-                values["email"] = emailAlias;
-            }
-        }
-
-        return new ImportedRow(row.RowNumber, values);
-    }
-
-
     private IReadOnlyList<ValidationError> ValidateRow(ImportedRow row, string detectedFileTypeCode)
     {
         var schema = fileSchemaProvider.GetSchema(detectedFileTypeCode);
@@ -468,6 +446,7 @@ public sealed class FileImportPipelineProcessor(
     private static ImportError BuildImportError(
         long fileJobId,
         int rowNumber,
+        string stage,
         string column,
         string message,
         IReadOnlyDictionary<string, string> values,
@@ -477,6 +456,7 @@ public sealed class FileImportPipelineProcessor(
         {
             FileJobId = fileJobId,
             RowNumber = rowNumber,
+            Stage = stage,
             Column = column,
             Message = message,
             RecordIdentifier = ExtractIdentifier(values, detectedFileTypeCode)
@@ -583,7 +563,38 @@ public sealed class FileImportPipelineProcessor(
             return "Falha de acesso ao arquivo durante o processamento.";
         }
 
+        var postgresException = FindException<PostgresException>(ex);
+        if (postgresException?.SqlState == PostgresErrorCodes.NumericValueOutOfRange ||
+            ContainsNumericOverflowSignal(ex))
+        {
+            return "Valor numerico excede o limite permitido pelo banco de dados.";
+        }
+
         return $"Erro inesperado: {message}";
+    }
+
+    private static TException? FindException<TException>(Exception exception)
+        where TException : Exception
+    {
+        var current = exception;
+        while (current is not null)
+        {
+            if (current is TException matched)
+            {
+                return matched;
+            }
+
+            current = current.InnerException;
+        }
+
+        return null;
+    }
+
+    private static bool ContainsNumericOverflowSignal(Exception exception)
+    {
+        var details = exception.ToString();
+        return details.Contains(PostgresErrorCodes.NumericValueOutOfRange, StringComparison.OrdinalIgnoreCase) ||
+            details.Contains("numeric field overflow", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveExistingSourcePath(string currentPath, IConfiguration configuration)

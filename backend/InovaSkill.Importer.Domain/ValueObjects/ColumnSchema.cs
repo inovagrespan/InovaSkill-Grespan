@@ -1,3 +1,8 @@
 namespace InovaSkill.Importer.Domain.ValueObjects;
 
-public sealed record ColumnSchema(string Name, bool Required, ColumnDataType DataType);
+public sealed record ColumnSchema(
+    string Name,
+    bool Required,
+    ColumnDataType DataType,
+    int? Precision = null,
+    int? Scale = null);

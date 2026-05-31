@@ -22,7 +22,7 @@ public sealed class FileSchemaProvider : IFileSchemaProvider
             [
                 new ColumnSchema("sku", true, ColumnDataType.String),
                 new ColumnSchema("name", true, ColumnDataType.String),
-                new ColumnSchema("price", true, ColumnDataType.Decimal),
+                new ColumnSchema("price", true, ColumnDataType.Decimal, Precision: 18, Scale: 2),
                 new ColumnSchema("createdat", false, ColumnDataType.DateTime)
             ]),
             var x when x == ImportFileTypeCodes.FinancialEntry => new FileSchema(ImportFileTypeCodes.FinancialEntry,
@@ -30,7 +30,7 @@ public sealed class FileSchemaProvider : IFileSchemaProvider
                 new ColumnSchema("ordernumber", true, ColumnDataType.String),
                 new ColumnSchema("customeremail", true, ColumnDataType.Email),
                 new ColumnSchema("productsku", true, ColumnDataType.String),
-                new ColumnSchema("quantity", true, ColumnDataType.Decimal),
+                new ColumnSchema("quantity", true, ColumnDataType.Int),
                 new ColumnSchema("orderedat", true, ColumnDataType.DateTime)
             ]),
             var x when x == ImportFileTypeCodes.SalesInvoice => new FileSchema(ImportFileTypeCodes.SalesInvoice,
@@ -41,13 +41,13 @@ public sealed class FileSchemaProvider : IFileSchemaProvider
                 new ColumnSchema("customername", true, ColumnDataType.String),
                 new ColumnSchema("productcode", true, ColumnDataType.String),
                 new ColumnSchema("productdescription", true, ColumnDataType.String),
-                new ColumnSchema("quantity", true, ColumnDataType.Decimal),
-                new ColumnSchema("unitprice", true, ColumnDataType.Decimal),
-                new ColumnSchema("totalamount", true, ColumnDataType.Decimal),
+                new ColumnSchema("quantity", true, ColumnDataType.Decimal, Precision: 18, Scale: 3),
+                new ColumnSchema("unitprice", true, ColumnDataType.Decimal, Precision: 18, Scale: 2),
+                new ColumnSchema("totalamount", true, ColumnDataType.Decimal, Precision: 18, Scale: 2),
                 new ColumnSchema("transactiontype", false, ColumnDataType.String),
                 new ColumnSchema("city", true, ColumnDataType.String),
                 new ColumnSchema("productgroup", true, ColumnDataType.String),
-                new ColumnSchema("grossweightkg", true, ColumnDataType.Decimal)
+                new ColumnSchema("grossweightkg", true, ColumnDataType.Decimal, Precision: 18, Scale: 3)
             ]),
             _ => new FileSchema(string.Empty, [])
         };

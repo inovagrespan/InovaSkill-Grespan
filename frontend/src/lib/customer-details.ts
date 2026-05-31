@@ -1,4 +1,4 @@
-export function formatVariationPercent(value: number | null): string {
+﻿export function formatVariationPercent(value: number | null): string {
   if (value == null || Number.isNaN(value)) return "N/A";
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
@@ -29,13 +29,20 @@ export function formatNullableCurrencyTooltip(value: number | null, formatter: (
 export function formatPurchaseFrequency(value: number | null): { value: string; tooltip: string } {
   if (value == null) {
     return {
-      value: "Compra única no período",
-      tooltip: "Não há intervalo entre compras para calcular a frequência média.",
+      value: "Histórico insuficiente",
+      tooltip: "Histórico insuficiente para calcular frequência.",
     };
   }
 
   return {
-    value: `${Math.round(value)} dias`,
-    tooltip: `Compra em média a cada ${Math.round(value)} dias`,
+    value: `${value.toFixed(1)} dias`,
+    tooltip: `Compra em média a cada ${value.toFixed(1)} dias`,
   };
+}
+
+export function resolveRiskBadgeVariant(riskLevel: string): "default" | "destructive" | "secondary" | "outline" {
+  if (riskLevel === "Crítico") return "destructive";
+  if (riskLevel === "Em risco") return "default";
+  if (riskLevel === "Atenção") return "outline";
+  return "secondary";
 }

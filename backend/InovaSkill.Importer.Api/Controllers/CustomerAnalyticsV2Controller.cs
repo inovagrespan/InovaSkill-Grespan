@@ -1,4 +1,5 @@
 using InovaSkill.Importer.Api.Contracts;
+using InovaSkill.Importer.Application.Analytics;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,50 +21,41 @@ public sealed class CustomerAnalyticsV2Controller(ImportDbContext dbContext) : C
         [FromQuery] string? transactionType = null,
         CancellationToken cancellationToken = default)
     {
-        ResolvePeriods(dateFrom, dateTo, out var currentFrom, out var currentTo, out var previousFrom, out var previousTo);
+        var period = CustomerCalculators.ResolvePeriods(dateFrom, dateTo, defaultDays: 30);
 
-        var currentQuery = BuildTransactionsQuery(customer, city, productGroup, productCode, transactionType)
-            .Where(x => x.TransactionDate >= currentFrom && x.TransactionDate < currentTo);
-
-        var previousQuery = BuildTransactionsQuery(customer, city, productGroup, productCode, transactionType)
-            .Where(x => x.TransactionDate >= previousFrom && x.TransactionDate < previousTo);
-
-        var currentRows = await currentQuery
-            .Select(x => new { x.CustomerCode, x.CustomerName, x.DocumentNumber, x.TotalAmount })
+        var currentRows = await BuildTransactionsQuery(customer, city, productGroup, productCode, transactionType)
+            .Where(x => x.TransactionDate >= period.CurrentFrom && x.TransactionDate < period.CurrentTo)
+            .Select(x => new CustomerMetricTransaction(
+                x.CustomerCode,
+                x.CustomerName,
+                x.City,
+                x.DocumentNumber,
+                x.TotalAmount,
+                x.Quantity,
+                x.GrossWeightKg,
+                x.TransactionDate))
             .ToListAsync(cancellationToken);
 
-        var previousCustomers = await previousQuery
-            .Select(x => new { x.CustomerCode, x.CustomerName })
+        var previousCustomerKeys = await BuildTransactionsQuery(customer, city, productGroup, productCode, transactionType)
+            .Where(x => x.TransactionDate >= period.PreviousFrom && x.TransactionDate < period.PreviousTo)
+            .Select(x => $"{x.CustomerCode}|{x.CustomerName}")
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        var activeCustomers = currentRows
-            .Select(x => $"{x.CustomerCode}|{x.CustomerName}")
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var previousCustomerSet = previousCustomers
-            .Select(x => $"{x.CustomerCode}|{x.CustomerName}")
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var totalRevenue = currentRows.Sum(x => x.TotalAmount);
-        var totalOrders = currentRows.Select(x => x.DocumentNumber).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-        var newCustomers = activeCustomers.Count(x => !previousCustomerSet.Contains(x));
-        var inactiveCustomers = previousCustomerSet.Count(x => !activeCustomers.Contains(x));
-        var activeCount = activeCustomers.Count;
+        var metrics = CustomerCalculators.BuildAnalyticsSummary(currentRows, previousCustomerKeys);
 
         return Ok(new CustomerAnalyticsSummaryDto(
-            activeCount,
-            totalRevenue,
-            totalOrders,
-            totalOrders == 0 ? 0 : totalRevenue / totalOrders,
-            activeCount == 0 ? 0 : totalRevenue / activeCount,
-            newCustomers,
-            inactiveCustomers,
-            currentFrom,
-            currentTo.AddTicks(-1),
-            previousFrom,
-            previousTo.AddTicks(-1)));
+            metrics.ActiveCustomers,
+            metrics.TotalRevenue,
+            metrics.TotalOrders,
+            metrics.AverageTicket,
+            metrics.AverageRevenuePerCustomer,
+            metrics.NewCustomers,
+            metrics.InactiveCustomers,
+            period.CurrentFrom,
+            period.CurrentTo.AddTicks(-1),
+            period.PreviousFrom,
+            period.PreviousTo.AddTicks(-1)));
     }
 
     [HttpGet("ranking")]
@@ -83,62 +75,41 @@ public sealed class CustomerAnalyticsV2Controller(ImportDbContext dbContext) : C
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 10, 100);
 
-        ResolvePeriods(dateFrom, dateTo, out var currentFrom, out var currentTo, out var previousFrom, out var previousTo);
-
-        var current = await BuildTransactionsQuery(customer, city, productGroup, productCode, transactionType)
-            .Where(x => x.TransactionDate >= currentFrom && x.TransactionDate < currentTo)
-            .GroupBy(x => new { x.CustomerCode, x.CustomerName })
-            .Select(g => new
-            {
-                g.Key.CustomerCode,
-                g.Key.CustomerName,
-                Revenue = g.Sum(x => x.TotalAmount),
-                Quantity = g.Sum(x => x.Quantity),
-                Weight = g.Sum(x => x.GrossWeightKg),
-                Orders = g.Select(x => x.DocumentNumber).Distinct().Count()
-            })
+        var period = CustomerCalculators.ResolvePeriods(dateFrom, dateTo, defaultDays: 30);
+        var currentRows = await BuildTransactionsQuery(customer, city, productGroup, productCode, transactionType)
+            .Where(x => x.TransactionDate >= period.CurrentFrom && x.TransactionDate < period.CurrentTo)
+            .Select(x => new CustomerMetricTransaction(
+                x.CustomerCode,
+                x.CustomerName,
+                x.City,
+                x.DocumentNumber,
+                x.TotalAmount,
+                x.Quantity,
+                x.GrossWeightKg,
+                x.TransactionDate))
             .ToListAsync(cancellationToken);
 
         var previousRevenue = await BuildTransactionsQuery(customer, city, productGroup, productCode, transactionType)
-            .Where(x => x.TransactionDate >= previousFrom && x.TransactionDate < previousTo)
+            .Where(x => x.TransactionDate >= period.PreviousFrom && x.TransactionDate < period.PreviousTo)
             .GroupBy(x => new { x.CustomerCode, x.CustomerName })
             .Select(g => new
             {
-                g.Key.CustomerCode,
-                g.Key.CustomerName,
+                Key = $"{g.Key.CustomerCode}|{g.Key.CustomerName}",
                 Revenue = g.Sum(x => x.TotalAmount)
             })
-            .ToDictionaryAsync(
-                x => $"{x.CustomerCode}|{x.CustomerName}",
-                x => x.Revenue,
-                StringComparer.OrdinalIgnoreCase,
-                cancellationToken);
+            .ToDictionaryAsync(x => x.Key, x => x.Revenue, StringComparer.OrdinalIgnoreCase, cancellationToken);
 
-        var items = current.Select(x =>
-        {
-            var key = $"{x.CustomerCode}|{x.CustomerName}";
-            previousRevenue.TryGetValue(key, out var prev);
-            decimal? variation = prev == 0 ? null : ((x.Revenue - prev) / prev) * 100m;
-            return new CustomerRankingItemDto(
+        var items = CustomerCalculators.BuildRanking(currentRows, previousRevenue, sortBy)
+            .Select(x => new CustomerRankingItemDto(
                 x.CustomerCode,
                 x.CustomerName,
                 x.Revenue,
                 x.Quantity,
                 x.Weight,
                 x.Orders,
-                x.Orders == 0 ? 0 : x.Revenue / x.Orders,
-                variation);
-        }).ToList();
-
-        items = sortBy.Trim().ToLowerInvariant() switch
-        {
-            "growth" => items.OrderByDescending(x => x.VariationPercent ?? decimal.MinValue).ToList(),
-            "drop" => items.OrderBy(x => x.VariationPercent ?? decimal.MaxValue).ToList(),
-            "quantity" => items.OrderByDescending(x => x.Quantity).ToList(),
-            "weight" => items.OrderByDescending(x => x.Weight).ToList(),
-            "ticket" => items.OrderByDescending(x => x.AverageTicket).ToList(),
-            _ => items.OrderByDescending(x => x.Revenue).ToList()
-        };
+                x.AverageTicket,
+                x.VariationPercent))
+            .ToList();
 
         var total = items.Count;
         var paged = items.Skip((page - 1) * pageSize).Take(pageSize).ToList();
@@ -156,40 +127,23 @@ public sealed class CustomerAnalyticsV2Controller(ImportDbContext dbContext) : C
         [FromQuery] string? transactionType = null,
         CancellationToken cancellationToken = default)
     {
-        ResolvePeriods(dateFrom, dateTo, out var currentFrom, out var currentTo, out _, out _);
+        var period = CustomerCalculators.ResolvePeriods(dateFrom, dateTo, defaultDays: 30);
 
-        var firstPurchasePerCustomer = await BuildTransactionsQuery(customer, city, productGroup, productCode, transactionType)
+        var firstPurchaseDates = await BuildTransactionsQuery(customer, city, productGroup, productCode, transactionType)
             .GroupBy(x => new { x.CustomerCode, x.CustomerName })
-            .Select(g => new
-            {
-                FirstPurchaseDate = g.Min(x => x.TransactionDate)
-            })
-            .Where(x => x.FirstPurchaseDate >= currentFrom && x.FirstPurchaseDate < currentTo)
+            .Select(g => g.Min(x => x.TransactionDate))
+            .Where(x => x >= period.CurrentFrom && x < period.CurrentTo)
             .ToListAsync(cancellationToken);
 
-        var monthStart = StartOfMonthUtc(currentFrom);
-        var monthEndExclusive = StartOfMonthUtc(currentTo);
-        if (monthEndExclusive < currentTo)
-        {
-            monthEndExclusive = monthEndExclusive.AddMonths(1);
-        }
-
-        var points = new List<CustomerNewCustomersMonthlyPointDto>();
-        for (var cursor = monthStart; cursor < monthEndExclusive; cursor = cursor.AddMonths(1))
-        {
-            var nextMonth = cursor.AddMonths(1);
-            var monthCount = firstPurchasePerCustomer.Count(x => x.FirstPurchaseDate >= cursor && x.FirstPurchaseDate < nextMonth);
-            points.Add(new CustomerNewCustomersMonthlyPointDto(cursor, monthCount));
-        }
-
-        var totalNewCustomers = points.Sum(x => x.NewCustomers);
-        var activeMonths = points.Count(x => x.NewCustomers > 0);
+        var points = CustomerCalculators.BuildNewCustomersMonthly(firstPurchaseDates, period.CurrentFrom, period.CurrentTo)
+            .Select(x => new CustomerNewCustomersMonthlyPointDto(x.MonthStart, x.NewCustomers))
+            .ToList();
 
         return Ok(new CustomerNewCustomersMonthlyResponseDto(
-            currentFrom,
-            currentTo.AddTicks(-1),
-            totalNewCustomers,
-            activeMonths,
+            period.CurrentFrom,
+            period.CurrentTo.AddTicks(-1),
+            points.Sum(x => x.NewCustomers),
+            points.Count(x => x.NewCustomers > 0),
             points));
     }
 
@@ -233,38 +187,5 @@ public sealed class CustomerAnalyticsV2Controller(ImportDbContext dbContext) : C
         }
 
         return query;
-    }
-
-    private static void ResolvePeriods(DateTime? dateFrom, DateTime? dateTo, out DateTime currentFrom, out DateTime currentTo, out DateTime previousFrom, out DateTime previousTo)
-    {
-        var normalizedTo = NormalizeToUtc(dateTo ?? DateTime.UtcNow);
-        var to = normalizedTo.Date.AddDays(1);
-        var from = NormalizeToUtc(dateFrom ?? to.AddDays(-30)).Date;
-        if (from >= to)
-        {
-            from = to.AddDays(-30);
-        }
-
-        var length = to - from;
-        currentFrom = from;
-        currentTo = to;
-        previousTo = from;
-        previousFrom = from - length;
-    }
-
-    private static DateTime NormalizeToUtc(DateTime value)
-    {
-        return value.Kind switch
-        {
-            DateTimeKind.Utc => value,
-            DateTimeKind.Local => value.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
-        };
-    }
-
-    private static DateTime StartOfMonthUtc(DateTime date)
-    {
-        var normalized = NormalizeToUtc(date);
-        return new DateTime(normalized.Year, normalized.Month, 1, 0, 0, 0, DateTimeKind.Utc);
     }
 }

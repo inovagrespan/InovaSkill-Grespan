@@ -118,3 +118,19 @@ public sealed record CustomerPurchaseHistoryResponseDto(
     int PageSize,
     int TotalItems,
     IReadOnlyList<CustomerPurchaseHistoryItemDto> Items);
+
+public sealed record CustomerInsightsResponseDto(
+    decimal? AveragePurchaseFrequencyDays,
+    DateTime? EstimatedNextPurchaseDate,
+    decimal? PredictedRevenue,
+    decimal? PredictedQuantity,
+    string ConsumptionTrend,
+    string RiskLevel,
+    int DaysWithoutPurchase,
+    decimal? RiskScore,
+    string? FrequencyReason,
+    string? NextPurchaseReason,
+    string? RevenuePredictionReason,
+    string? QuantityPredictionReason,
+    string? RiskReason,
+    int MonthlyHistoryPeriods);

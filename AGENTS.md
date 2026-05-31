@@ -14,6 +14,7 @@ Guia local para qualquer IA que edite este repositório.
 - Não mudar contratos de API sem atualizar frontend e backend no mesmo PR.
 - Para qualquer alteração de código, criar/atualizar testes cobrindo o comportamento alterado.
 - No frontend, criar casos de teste para funcionalidades importantes com cenários diferentes (fluxo feliz, bordas e entradas inválidas).
+- Não introduzir números mágicos em código de regra de negócio, cálculos, limites, paginação, datas ou timeouts; extrair para constantes nomeadas, configuração ou objetos de política conforme o contexto.
 - Antes de finalizar, executar a suíte de testes aplicável (frontend e backend quando houver alterações em ambos) e só encerrar a tarefa com testes passando.
 
 ## Encoding e Idioma
@@ -68,6 +69,7 @@ rg "Ã|��|�" -n frontend backend -S
 - Serviços padrão: `frontend`, `api`, `worker`, `postgres`, `redis`.
 - Persistência obrigatória via volumes para Postgres/Redis/uploads.
 - Evitar alterações que removam `restart: unless-stopped`.
+- Durante desenvolvimento local, subir no Docker somente a infraestrutura (`postgres` e `redis`); rodar `frontend`, `api` e `worker` localmente pelos comandos próprios de cada projeto.
 
 ## Checklist Antes de Entregar
 - Build frontend:
@@ -77,6 +79,10 @@ cd frontend; npm run build
 - Subir stack:
 ```powershell
 cd ..; docker compose up -d --build
+```
+- Em desenvolvimento local, subir apenas a infraestrutura:
+```powershell
+docker compose up -d postgres redis
 ```
 - Verificar containers:
 ```powershell

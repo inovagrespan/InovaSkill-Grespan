@@ -4,6 +4,7 @@ public sealed record ImportErrorDto(
     long Id,
     long FileJobId,
     int RowNumber,
+    string Stage,
     string Column,
     string Message,
     string RecordIdentifier);

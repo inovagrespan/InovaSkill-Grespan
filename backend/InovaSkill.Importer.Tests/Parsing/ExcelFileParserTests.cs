@@ -6,6 +6,34 @@ namespace InovaSkill.Importer.Tests.Parsing;
 public class ExcelFileParserTests
 {
     [Fact]
+    public async Task ReadRowsAsync_ReadsRowsFromMemoryStream()
+    {
+        await using var stream = new MemoryStream();
+        using (var workbook = new XLWorkbook())
+        {
+            var sheet = workbook.AddWorksheet("Data");
+            sheet.Cell(1, 1).Value = "RELATORIO DE VENDAS";
+            sheet.Cell(2, 1).Value = "name";
+            sheet.Cell(2, 2).Value = "email";
+            sheet.Cell(3, 1).Value = "Alice";
+            sheet.Cell(3, 2).Value = "alice@corp.com";
+            workbook.SaveAs(stream);
+        }
+
+        stream.Position = 0;
+        var parser = new ExcelFileParser();
+        var rows = new List<InovaSkill.Importer.Domain.ValueObjects.TableRow>();
+
+        await foreach (var row in parser.ReadRowsAsync(stream, CancellationToken.None))
+        {
+            rows.Add(row);
+        }
+
+        Assert.Single(rows);
+        Assert.Equal("Alice", rows[0].Get("name"));
+    }
+
+    [Fact]
     public async Task ParseAsync_ReadsRows()
     {
         var filePath = Path.Combine(Path.GetTempPath(), $"customers-{Guid.NewGuid():N}.xlsx");
@@ -91,7 +119,7 @@ public class ExcelFileParserTests
             }
         });
 
-        Assert.Contains("CabeÁalho n„o encontrado", ex.Message);
+        Assert.Contains("Cabe√ßalho n√£o encontrado", ex.Message);
 
         File.Delete(filePath);
     }

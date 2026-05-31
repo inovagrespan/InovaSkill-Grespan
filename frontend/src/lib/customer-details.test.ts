@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   formatNullableCurrency,
   formatNullableCurrencyTooltip,
   formatPurchaseFrequency,
   formatVariationPercent,
   resolveComparisonColor,
+  resolveRiskBadgeVariant,
   resolveCustomerStatusVariant,
 } from "./customer-details";
 
@@ -31,14 +32,21 @@ describe("customer detail helpers", () => {
     expect(resolveCustomerStatusVariant("Ativo")).toBe("secondary");
   });
 
-  it("mostra estados explicitos para valores ausentes", () => {
+  it("mostra estados explícitos para valores ausentes", () => {
     const passthrough = (value: number) => `R$ ${value.toFixed(2)}`;
     expect(formatNullableCurrency(null, passthrough)).toBe("Sem dados");
     expect(formatNullableCurrencyTooltip(null, passthrough)).toBe("Dados insuficientes no período filtrado");
   });
 
-  it("formata frequência com compra única e média em dias", () => {
-    expect(formatPurchaseFrequency(null).value).toBe("Compra única no período");
-    expect(formatPurchaseFrequency(9.5).value).toBe("10 dias");
+  it("formata frequência com histórico insuficiente e média em dias", () => {
+    expect(formatPurchaseFrequency(null).value).toBe("Histórico insuficiente");
+    expect(formatPurchaseFrequency(9.5).value).toBe("9.5 dias");
+  });
+
+  it("resolve estilo do badge de risco", () => {
+    expect(resolveRiskBadgeVariant("Sem risco")).toBe("secondary");
+    expect(resolveRiskBadgeVariant("Atenção")).toBe("outline");
+    expect(resolveRiskBadgeVariant("Em risco")).toBe("default");
+    expect(resolveRiskBadgeVariant("Crítico")).toBe("destructive");
   });
 });

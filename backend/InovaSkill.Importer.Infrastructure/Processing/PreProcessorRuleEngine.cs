@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.ValueObjects;
+using InovaSkill.Importer.Infrastructure.Processing.Buffers;
 
 namespace InovaSkill.Importer.Infrastructure.Processing;
 
@@ -203,15 +204,21 @@ public sealed class PreProcessorRuleEngine : IPreProcessorRuleEngine
         }
 
         var trimmed = raw.Trim();
-        DateTime parsed;
         if (formats.Count > 0)
         {
-            if (!DateTime.TryParseExact(trimmed, formats.ToArray(), CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed))
+            if (!DateTime.TryParseExact(trimmed, formats.ToArray(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var configuredFormatParsed))
             {
-                return;
+                if (!UtcDateTimeParser.TryParse(trimmed, out configuredFormatParsed))
+                {
+                    return;
+                }
             }
+
+            values[target] = configuredFormatParsed.ToString(outputFormat, CultureInfo.InvariantCulture);
+            return;
         }
-        else if (!DateTime.TryParse(trimmed, out parsed))
+
+        if (!UtcDateTimeParser.TryParse(trimmed, out var parsed))
         {
             return;
         }
@@ -290,7 +297,7 @@ public sealed class PreProcessorRuleEngine : IPreProcessorRuleEngine
     {
         var column = GetRequiredString(config, "column");
         var message = GetString(config, "message") ?? "Invalid datetime value.";
-        if (values.TryGetValue(column, out var value) && !string.IsNullOrWhiteSpace(value) && !DateTime.TryParse(value, out _))
+        if (values.TryGetValue(column, out var value) && !string.IsNullOrWhiteSpace(value) && !UtcDateTimeParser.TryParse(value, out _))
         {
             errors.Add(new PreProcessorExecutionError(column, message));
         }

@@ -1,4 +1,5 @@
 import { extractHeadersInWorker } from "@/features/import-template-builder/utils/extract-headers-in-worker";
+import { buildFallbackStages, type FileJobStageProgress } from "@/lib/importer-progress";
 
 export type FileType = "Unknown" | "Customers" | "Orders" | "Products" | "CommercialTransaction";
 export type UploadDestinationMode = "auto" | "manual";
@@ -25,12 +26,16 @@ export type FileJob = {
   progressPercent: number;
   processedRows: number;
   totalRows: number;
+  currentStageCode: string | null;
+  currentStageName: string | null;
+  stages: FileJobStageProgress[];
 };
 
 export type ImportError = {
   id: number;
   fileJobId: number;
   rowNumber: number;
+  stage: string;
   column: string;
   message: string;
   recordIdentifier: string;
@@ -214,6 +219,23 @@ export type CustomerPurchaseHistoryResponse = {
   items: CustomerPurchaseHistoryItem[];
 };
 
+export type CustomerInsightsResponse = {
+  averagePurchaseFrequencyDays: number | null;
+  estimatedNextPurchaseDate: string | null;
+  predictedRevenue: number | null;
+  predictedQuantity: number | null;
+  consumptionTrend: "Crescimento" | "Estabilidade" | "Queda" | string;
+  riskLevel: "Sem risco" | "Atenção" | "Em risco" | "Crítico" | "Sem histórico suficiente" | string;
+  daysWithoutPurchase: number;
+  riskScore: number | null;
+  frequencyReason: string | null;
+  nextPurchaseReason: string | null;
+  revenuePredictionReason: string | null;
+  quantityPredictionReason: string | null;
+  riskReason: string | null;
+  monthlyHistoryPeriods: number;
+};
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
 export const MAX_UPLOAD_SIZE_BYTES = 524_288_000;
 
@@ -269,6 +291,25 @@ type BackendFileJob = {
   ProcessedRows?: number;
   totalRows?: number;
   TotalRows?: number;
+  currentStageCode?: string | null;
+  CurrentStageCode?: string | null;
+  currentStageName?: string | null;
+  CurrentStageName?: string | null;
+  stages?: BackendFileJobStage[];
+  Stages?: BackendFileJobStage[];
+};
+
+type BackendFileJobStage = {
+  code?: string;
+  Code?: string;
+  name?: string;
+  Name?: string;
+  status?: string;
+  Status?: string;
+  progressPercent?: number;
+  ProgressPercent?: number;
+  errorCount?: number;
+  ErrorCount?: number;
 };
 
 const fileTypeMap: Record<number, FileType> = {
@@ -343,18 +384,29 @@ export async function fetchJobs(page = 1, pageSize = 10): Promise<PagedResult<Fi
     (raw as PagedResult<BackendFileJob>).items ??
     (raw as { Items?: BackendFileJob[] }).Items ??
     []
-  ).map((job) => ({
-    id: job.id ?? job.Id ?? 0,
-    filePath: job.filePath ?? job.FilePath ?? "",
-    fileType: normalizeFileType(job.fileType ?? job.FileType ?? "Unknown"),
-    status: normalizeStatus(job.status ?? job.Status ?? "Failed"),
-    createdAt: job.createdAt ?? job.CreatedAt ?? "",
-    errorCount: job.errorCount ?? job.ErrorCount ?? 0,
-    currentStep: job.currentStep ?? job.CurrentStep ?? "",
-    progressPercent: job.progressPercent ?? job.ProgressPercent ?? 0,
-    processedRows: job.processedRows ?? job.ProcessedRows ?? 0,
-    totalRows: job.totalRows ?? job.TotalRows ?? 0,
-  }));
+  ).map((job) => {
+    const status = normalizeStatus(job.status ?? job.Status ?? "Failed");
+    const progressPercent = job.progressPercent ?? job.ProgressPercent ?? 0;
+    const errorCount = job.errorCount ?? job.ErrorCount ?? 0;
+    const stages = normalizeStages(job.stages ?? job.Stages, status, progressPercent, errorCount);
+    const runningStage = stages.find((stage) => stage.status === "running");
+
+    return {
+      id: job.id ?? job.Id ?? 0,
+      filePath: job.filePath ?? job.FilePath ?? "",
+      fileType: normalizeFileType(job.fileType ?? job.FileType ?? "Unknown"),
+      status,
+      createdAt: job.createdAt ?? job.CreatedAt ?? "",
+      errorCount,
+      currentStep: job.currentStep ?? job.CurrentStep ?? "",
+      progressPercent,
+      processedRows: job.processedRows ?? job.ProcessedRows ?? 0,
+      totalRows: job.totalRows ?? job.TotalRows ?? 0,
+      currentStageCode: job.currentStageCode ?? job.CurrentStageCode ?? runningStage?.code ?? null,
+      currentStageName: job.currentStageName ?? job.CurrentStageName ?? runningStage?.name ?? null,
+      stages,
+    };
+  });
 
   return {
     page: (raw as PagedResult<BackendFileJob>).page ?? (raw as { Page?: number }).Page ?? page,
@@ -365,6 +417,33 @@ export async function fetchJobs(page = 1, pageSize = 10): Promise<PagedResult<Fi
     total: (raw as PagedResult<BackendFileJob>).total ?? (raw as { Total?: number }).Total ?? 0,
     items,
   };
+}
+
+function normalizeStages(
+  stages: BackendFileJobStage[] | undefined,
+  status: JobStatus,
+  progressPercent: number,
+  errorCount: number,
+): FileJobStageProgress[] {
+  if (!stages || stages.length === 0) {
+    return buildFallbackStages({ status, progressPercent, errorCount });
+  }
+
+  return stages.map((stage) => ({
+    code: stage.code ?? stage.Code ?? "",
+    name: stage.name ?? stage.Name ?? "",
+    status: normalizeStageStatus(stage.status ?? stage.Status ?? "pending"),
+    progressPercent: stage.progressPercent ?? stage.ProgressPercent ?? 0,
+    errorCount: stage.errorCount ?? stage.ErrorCount ?? 0,
+  }));
+}
+
+function normalizeStageStatus(value: string): FileJobStageProgress["status"] {
+  if (value === "running" || value === "completed" || value === "failed") {
+    return value;
+  }
+
+  return "pending";
 }
 
 export async function fetchJobErrors(
@@ -381,6 +460,7 @@ export async function fetchJobErrors(
       id: e.id ?? e.Id ?? 0,
       fileJobId: e.fileJobId ?? e.FileJobId ?? jobId,
       rowNumber: e.rowNumber ?? e.RowNumber ?? 0,
+      stage: e.stage ?? e.Stage ?? "",
       column: e.column ?? e.Column ?? "",
       message: e.message ?? e.Message ?? "",
       recordIdentifier: e.recordIdentifier ?? e.RecordIdentifier ?? "",
@@ -399,6 +479,7 @@ export async function fetchJobErrors(
       id: e.id ?? e.Id ?? 0,
       fileJobId: e.fileJobId ?? e.FileJobId ?? jobId,
       rowNumber: e.rowNumber ?? e.RowNumber ?? 0,
+      stage: e.stage ?? e.Stage ?? "",
       column: e.column ?? e.Column ?? "",
       message: e.message ?? e.Message ?? "",
       recordIdentifier: e.recordIdentifier ?? e.RecordIdentifier ?? "",
@@ -726,6 +807,18 @@ export async function fetchCustomerComparison(input: {
   return (await response.json()) as CustomerComparisonResponse;
 }
 
+export async function fetchCustomerInsights(input: {
+  customerId: string;
+  movingAverageWindowMonths?: 3 | 6 | 12;
+}): Promise<CustomerInsightsResponse> {
+  const query = new URLSearchParams();
+  query.set("movingAverageWindowMonths", String(input.movingAverageWindowMonths ?? 3));
+
+  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar insights do cliente."));
+  return (await response.json()) as CustomerInsightsResponse;
+}
+
 export async function fetchImportTemplateTargetFields(importFileTypeId: string): Promise<ApiTargetField[]> {
   try {
     const response = await fetch(`${API_URL}/api/import-templates/file-types/${importFileTypeId}/fields`);
@@ -867,3 +960,5 @@ export async function updateImportTemplate(templateId: string, input: ApiImportT
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao atualizar template."));
   return (await response.json()) as ApiImportTemplate;
 }
+
+

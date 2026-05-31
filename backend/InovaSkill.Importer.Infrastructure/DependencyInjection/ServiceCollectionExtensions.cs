@@ -23,6 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFileTypeDetector, FileTypeDetector>();
         services.AddScoped<IFileSchemaProvider, FileSchemaProvider>();
         services.AddScoped<IPreProcessorTemplateResolver, PreProcessorTemplateResolver>();
+        services.AddScoped<IImportPreProcessingPipeline, ImportPreProcessingPipeline>();
         services.AddScoped<IPreProcessorRuleEngine, PreProcessorRuleEngine>();
         services.AddScoped<IImportMappingEngine, ImportMappingEngine>();
         services.AddScoped<ITransformRuleRegistry, TransformRuleRegistry>();

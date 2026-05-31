@@ -73,4 +73,37 @@ public sealed class CommercialTransactionBufferTests
         var items = Assert.IsType<List<CommercialTransaction>>(itemsField!.GetValue(buffer));
         Assert.Single(items);
     }
+
+    [Fact]
+    public void Add_AcceptsBrazilianDateTimeWithTime()
+    {
+        var row = new ImportedRow(10, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["documentnumber"] = "0001",
+            ["transactiondate"] = "31/07/2025 00:00:00",
+            ["customercode"] = "C1",
+            ["customername"] = "Empresa X",
+            ["productcode"] = "P1",
+            ["productdescription"] = "Produto X",
+            ["quantity"] = "2",
+            ["unitprice"] = "10.5",
+            ["totalamount"] = "21",
+            ["transactiontype"] = "N",
+            ["city"] = "SP",
+            ["productgroup"] = "G1",
+            ["grossweightkg"] = "1.2"
+        });
+
+        var buffer = new CommercialTransactionBuffer();
+        buffer.Add(row, 77);
+
+        var itemsField = typeof(CommercialTransactionBuffer)
+            .GetField("_items", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(itemsField);
+
+        var items = Assert.IsType<List<CommercialTransaction>>(itemsField!.GetValue(buffer));
+        var stored = Assert.Single(items);
+
+        Assert.Equal(new DateTime(2025, 7, 31, 0, 0, 0, DateTimeKind.Utc), stored.TransactionDate);
+    }
 }

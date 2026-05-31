@@ -1,6 +1,8 @@
 ﻿using InovaSkill.Importer.Api.Contracts;
 using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Domain.Enums;
+using InovaSkill.Importer.Domain.ValueObjects;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -145,20 +147,47 @@ public sealed class FilesController(
             .OrderByDescending(x => x.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => new FileJobDto(
+            .ToListAsync(cancellationToken);
+
+        var jobIds = jobs.Select(x => x.Id).ToArray();
+        var errorCounts = await dbContext.ImportErrors
+            .AsNoTracking()
+            .Where(x => jobIds.Contains(x.FileJobId))
+            .GroupBy(x => new { x.FileJobId, x.Stage })
+            .Select(x => new
+            {
+                x.Key.FileJobId,
+                x.Key.Stage,
+                Count = x.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        var errorCountLookup = errorCounts
+            .GroupBy(x => (x.FileJobId, NormalizeStageCode(x.Stage)))
+            .ToDictionary(x => x.Key, x => x.Sum(item => item.Count));
+
+        var items = jobs.Select(x =>
+        {
+            var stages = BuildStageProgress(x, errorCountLookup);
+            var currentStage = stages.FirstOrDefault(stage => stage.Status == StageProgressStatus.Running);
+
+            return new FileJobDto(
                 x.Id,
                 Path.GetFileName(x.FilePath),
                 x.ImportFileTypeCode,
                 x.Status,
                 x.CreatedAt,
-                dbContext.ImportErrors.Count(e => e.FileJobId == x.Id),
+                stages.Sum(stage => stage.ErrorCount),
                 x.CurrentStep,
                 x.ProgressPercent,
                 x.ProcessedRows,
-                x.TotalRows))
-            .ToListAsync(cancellationToken);
+                x.TotalRows,
+                currentStage?.Code,
+                currentStage?.Name,
+                stages);
+        }).ToList();
 
-        return Ok(new PagedResult<FileJobDto>(page, pageSize, total, jobs));
+        return Ok(new PagedResult<FileJobDto>(page, pageSize, total, items));
     }
 
     [HttpGet("jobs/{jobId:long}/errors")]
@@ -188,16 +217,181 @@ public sealed class FilesController(
 
         var total = await baseQuery.CountAsync(cancellationToken);
 
-        var errors = await dbContext.ImportErrors
+        var errorRows = await dbContext.ImportErrors
             .AsNoTracking()
             .Where(x => x.FileJobId == jobId)
             .OrderBy(x => x.RowNumber)
             .ThenBy(x => x.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => new ImportErrorDto(x.Id, x.FileJobId, x.RowNumber, x.Column, x.Message, x.RecordIdentifier))
             .ToListAsync(cancellationToken);
 
+        var errors = errorRows
+            .Select(x => new ImportErrorDto(
+                x.Id,
+                x.FileJobId,
+                x.RowNumber,
+                NormalizeStageCode(x.Stage),
+                x.Column,
+                x.Message,
+                x.RecordIdentifier))
+            .ToList();
+
         return Ok(new PagedResult<ImportErrorDto>(page, pageSize, total, errors));
+    }
+
+    private static IReadOnlyList<FileJobStageProgressDto> BuildStageProgress(
+        FileJob job,
+        IReadOnlyDictionary<(long FileJobId, string Stage), int> errorCountLookup)
+    {
+        return ImportProcessingStages.All
+            .Select(stage => new FileJobStageProgressDto(
+                stage.Code,
+                stage.Name,
+                ResolveStageStatus(job, stage.Code, GetStageErrorCount(job.Id, stage.Code, errorCountLookup)),
+                ResolveStageProgress(job, stage.Code),
+                GetStageErrorCount(job.Id, stage.Code, errorCountLookup)))
+            .ToList();
+    }
+
+    private static int GetStageErrorCount(
+        long fileJobId,
+        string stage,
+        IReadOnlyDictionary<(long FileJobId, string Stage), int> errorCountLookup)
+    {
+        return errorCountLookup.TryGetValue((fileJobId, stage), out var count) ? count : 0;
+    }
+
+    private static string ResolveStageStatus(FileJob job, string stage, int errorCount)
+    {
+        if (job.Status == FileJobStatus.Failed && IsCurrentFailureStage(job, stage))
+        {
+            return StageProgressStatus.Failed;
+        }
+
+        return stage switch
+        {
+            ImportProcessingStages.PreProcessing => ResolvePreProcessingStatus(job, errorCount),
+            ImportProcessingStages.Validation => ResolveValidationStatus(job, errorCount),
+            ImportProcessingStages.Import => ResolveImportStatus(job),
+            _ => StageProgressStatus.Pending
+        };
+    }
+
+    private static string ResolvePreProcessingStatus(FileJob job, int errorCount)
+    {
+        if (job.Status == FileJobStatus.PreProcessing)
+        {
+            return StageProgressStatus.Running;
+        }
+
+        if (job.Status == FileJobStatus.ValidationFailed && errorCount > 0)
+        {
+            return StageProgressStatus.Failed;
+        }
+
+        return job.Status is FileJobStatus.Validating
+            or FileJobStatus.ValidationFailed
+            or FileJobStatus.ReadyToImport
+            or FileJobStatus.Importing
+            or FileJobStatus.Completed
+            ? StageProgressStatus.Completed
+            : StageProgressStatus.Pending;
+    }
+
+    private static string ResolveValidationStatus(FileJob job, int errorCount)
+    {
+        if (job.Status == FileJobStatus.Validating)
+        {
+            return StageProgressStatus.Running;
+        }
+
+        if (job.Status == FileJobStatus.ValidationFailed && errorCount > 0)
+        {
+            return StageProgressStatus.Failed;
+        }
+
+        return job.Status is FileJobStatus.ReadyToImport
+            or FileJobStatus.Importing
+            or FileJobStatus.Completed
+            ? StageProgressStatus.Completed
+            : StageProgressStatus.Pending;
+    }
+
+    private static string ResolveImportStatus(FileJob job)
+    {
+        return job.Status switch
+        {
+            FileJobStatus.Importing => StageProgressStatus.Running,
+            FileJobStatus.Completed => StageProgressStatus.Completed,
+            _ => StageProgressStatus.Pending
+        };
+    }
+
+    private static int ResolveStageProgress(FileJob job, string stage)
+    {
+        return stage switch
+        {
+            ImportProcessingStages.PreProcessing when job.Status == FileJobStatus.PreProcessing => ClampProgress(job.ProgressPercent),
+            ImportProcessingStages.Validation when job.Status == FileJobStatus.Validating => ClampProgress(job.ProgressPercent),
+            ImportProcessingStages.Import when job.Status == FileJobStatus.Importing => ClampProgress(job.ProgressPercent),
+            ImportProcessingStages.PreProcessing when IsPreProcessingComplete(job.Status) => StageProgressPercent.Complete,
+            ImportProcessingStages.Validation when IsValidationComplete(job.Status) => StageProgressPercent.Complete,
+            ImportProcessingStages.Import when job.Status == FileJobStatus.Completed => StageProgressPercent.Complete,
+            _ => StageProgressPercent.Pending
+        };
+    }
+
+    private static bool IsPreProcessingComplete(FileJobStatus status)
+    {
+        return status is FileJobStatus.Validating
+            or FileJobStatus.ValidationFailed
+            or FileJobStatus.ReadyToImport
+            or FileJobStatus.Importing
+            or FileJobStatus.Completed;
+    }
+
+    private static bool IsValidationComplete(FileJobStatus status)
+    {
+        return status is FileJobStatus.ReadyToImport
+            or FileJobStatus.Importing
+            or FileJobStatus.Completed;
+    }
+
+    private static bool IsCurrentFailureStage(FileJob job, string stage)
+    {
+        var step = job.CurrentStep;
+
+        return stage switch
+        {
+            ImportProcessingStages.Import => step.Contains("import", StringComparison.OrdinalIgnoreCase),
+            ImportProcessingStages.Validation => step.Contains("valid", StringComparison.OrdinalIgnoreCase),
+            ImportProcessingStages.PreProcessing => step.Contains("pre", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
+    private static int ClampProgress(int value)
+    {
+        return Math.Clamp(value, StageProgressPercent.Pending, StageProgressPercent.Complete);
+    }
+
+    private static string NormalizeStageCode(string? stage)
+    {
+        return string.IsNullOrWhiteSpace(stage) ? ImportProcessingStages.Validation : stage.Trim().ToUpperInvariant();
+    }
+
+    private static class StageProgressStatus
+    {
+        public const string Pending = "pending";
+        public const string Running = "running";
+        public const string Completed = "completed";
+        public const string Failed = "failed";
+    }
+
+    private static class StageProgressPercent
+    {
+        public const int Pending = 0;
+        public const int Complete = 100;
     }
 }
