@@ -43,7 +43,8 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
             .Select(x => new { x.Name })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var latestWeekStart = CustomerCalculators.StartOfWeekUtc(DateTime.UtcNow);
+        var referenceDate = period.CurrentTo.AddTicks(-1);
+        var latestWeekStart = CustomerCalculators.StartOfWeekUtc(referenceDate);
         var currentWeekRevenue = (decimal)await dbContext.CustomerSummariesWeekly
             .AsNoTracking()
             .Where(x => x.CustomerCode == resolvedCustomerCode && x.WeekStartDate == latestWeekStart)
@@ -59,7 +60,7 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
             period.CurrentTo,
             currentWeekRevenue,
             previousWeekRevenue,
-            DateTime.UtcNow);
+            referenceDate);
 
         return Ok(new CustomerSummaryResponseDto(
             resolvedCustomerCode,

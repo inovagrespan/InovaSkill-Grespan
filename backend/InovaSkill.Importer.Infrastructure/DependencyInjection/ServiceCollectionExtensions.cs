@@ -2,6 +2,7 @@
 using InovaSkill.Importer.Infrastructure.Mappings;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.Processing;
+using InovaSkill.Importer.Infrastructure.Processing.EventHandlers;
 using InovaSkill.Importer.Infrastructure.Processing.TransformRules;
 using InovaSkill.Importer.Infrastructure.Validation;
 using Microsoft.EntityFrameworkCore;
@@ -33,8 +34,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITransformRule, BrazilianDateRule>();
         services.AddScoped<ITransformRule, UpperCaseRule>();
         services.AddScoped<ITransformRule, LowerCaseRule>();
+        services.AddScoped<ITransformRule, RemoveSpecialCharactersRule>();
         services.AddScoped<IRowValidator, RowValidator>();
         services.AddScoped<IFileImportPipelineProcessor, FileImportPipelineProcessor>();
+        services.AddScoped<IProcessingEventHandler, FileUploadedEventHandler>();
+        services.AddScoped<IProcessingEventHandler, ImportRequestedEventHandler>();
+        services.AddScoped<IProcessingEventHandler, SummaryGenerationRequestedEventHandler>();
+        services.AddScoped<IProcessingEventHandler, AnalyticsRefreshRequestedEventHandler>();
+        services.AddScoped<ProcessingEventDispatcher>();
         services.AddScoped<IPostImportProcessor, SalesSummaryProcessor>();
         services.AddScoped<IPostImportProcessor, CustomerSummaryProcessor>();
         services.AddScoped<IFileJobService, FileJobService>();
@@ -43,6 +50,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnection));
         services.AddSingleton<IFileJobQueue, RedisFileJobQueue>();
         services.AddSingleton<IPostImportJobQueue, RedisPostImportJobQueue>();
+        services.AddSingleton<IProcessingEventQueue, RedisProcessingEventQueue>();
+        services.AddSingleton<IProcessingEventPublisher>(sp => sp.GetRequiredService<IProcessingEventQueue>());
+        services.AddSingleton<IProcessingEventConsumer>(sp => sp.GetRequiredService<IProcessingEventQueue>());
+        services.AddSingleton<IProcessingDeadLetterQueue>(sp => sp.GetRequiredService<IProcessingEventQueue>());
+        services.AddSingleton<IProcessingQueueMonitor, RedisProcessingQueueMonitor>();
         return services;
     }
 }

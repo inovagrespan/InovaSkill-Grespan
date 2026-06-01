@@ -40,3 +40,54 @@ public sealed record UpsertPreProcessorTemplateRequest(
     string ValidationRulesJson,
     IReadOnlyList<UpsertPreProcessorTemplateRuleRequest> Rules);
 
+public sealed record ImportTemplateFileTypeDto(
+    string Id,
+    string Code,
+    string Name,
+    string Description,
+    string AllowedExtensions);
+
+public sealed record ImportTemplateTargetFieldDto(
+    string Name,
+    string DisplayName,
+    bool Required,
+    string DataType,
+    string Description);
+
+public sealed record TransformRuleDto(
+    string Id,
+    string Code,
+    string Name,
+    string Description,
+    bool RequiresParameters);
+
+public sealed record ImportTemplateRuleDto(
+    string TransformRuleId,
+    int Order,
+    object? ParametersJson);
+
+public sealed record ImportTemplateColumnMappingDto(
+    string SourceColumnName,
+    string TargetFieldName,
+    bool IsRequired,
+    string? DefaultValue,
+    IReadOnlyList<ImportTemplateRuleDto> TransformRules);
+
+public sealed record ImportTemplateDto(
+    string Id,
+    string Name,
+    string Description,
+    string ImportFileTypeId,
+    bool IsActive,
+    IReadOnlyList<ImportTemplateColumnMappingDto> ColumnMappings);
+
+public sealed record UpsertImportTemplateRequest(
+    string Name,
+    string Description,
+    string ImportFileTypeId,
+    IReadOnlyList<ImportTemplateColumnMappingDto> ColumnMappings);
+
+public sealed record SpreadsheetHeaderPreviewDto(
+    IReadOnlyList<string> Headers,
+    IReadOnlyList<IReadOnlyDictionary<string, string>> PreviewRows);
+

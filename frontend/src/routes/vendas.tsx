@@ -8,6 +8,7 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SkeletonMetricCard, SkeletonTable } from "@/components/ui/skeleton";
 import { Boxes, DollarSign, Scale, Weight } from "lucide-react";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import {
@@ -65,7 +66,7 @@ function VendasPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 20;
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
   const [documentNumber, setDocumentNumber] = useState("");
@@ -248,13 +249,22 @@ function VendasPage() {
               </Button>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Total encontrado: {total}</p>
+          <p className="text-xs text-muted-foreground">Total encontrado: {loading ? "..." : total}</p>
         </CardHeader>
 
         <CardContent className="space-y-3">
           {viewMode === "summary" ? (
             <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {loading ? (
+                  <>
+                    <SkeletonMetricCard />
+                    <SkeletonMetricCard />
+                    <SkeletonMetricCard />
+                    <SkeletonMetricCard />
+                  </>
+                ) : (
+                <>
                 <KpiCard
                   title="Registros no filtro"
                   value={formatKpiCompactNumber(summary.totalRecords)}
@@ -298,6 +308,8 @@ function VendasPage() {
                   periodLabel="Somatório de peso bruto no período filtrado"
                   icon={Weight}
                 />
+                </>
+                )}
               </div>
 
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -333,6 +345,9 @@ function VendasPage() {
                 </div>
               </div>
 
+              {loading ? (
+                <SkeletonTable rows={6} columns={5} />
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -344,10 +359,10 @@ function VendasPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {summary.items.length === 0 && (
+                  {!loading && summary.items.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                        {loading ? "Carregando resumo..." : "Sem dados para montar resumo por empresa."}
+                        Sem dados para montar resumo por empresa.
                       </TableCell>
                     </TableRow>
                   )}
@@ -375,6 +390,7 @@ function VendasPage() {
                   ))}
                 </TableBody>
               </Table>
+              )}
               <div className="flex items-center justify-end gap-2">
                 <Button variant="outline" size="sm" disabled={summaryPage <= 1 || loading} onClick={() => setSummaryPage((x) => x - 1)}>
                   Anterior
@@ -392,6 +408,9 @@ function VendasPage() {
             </div>
           ) : (
             <>
+              {loading ? (
+                <SkeletonTable rows={8} columns={8} />
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -406,10 +425,10 @@ function VendasPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.length === 0 && (
+                  {!loading && items.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                        {loading ? "Carregando vendas..." : "Nenhuma venda encontrada."}
+                        Nenhuma venda encontrada.
                       </TableCell>
                     </TableRow>
                   )}
@@ -427,6 +446,7 @@ function VendasPage() {
                   ))}
                 </TableBody>
               </Table>
+              )}
 
               <div className="flex items-center justify-end gap-2">
                 <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => void load(page - 1)}>

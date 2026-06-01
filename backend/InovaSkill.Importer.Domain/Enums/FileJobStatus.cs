@@ -9,5 +9,6 @@ public enum FileJobStatus
     ReadyToImport = 4,
     Importing = 5,
     Completed = 6,
-    Failed = 7
+    Failed = 7,
+    Cancelled = 8
 }

@@ -16,6 +16,10 @@ public sealed class FileJob
     public int ProcessedRows { get; set; }
     public int TotalRows { get; set; }
     public DateTime LastHeartbeatAt { get; set; } = DateTime.UtcNow;
+    public DateTime? StartedAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
+    public string LockedBy { get; set; } = string.Empty;
+    public DateTime? LockedAt { get; set; }
 
     public FileJobStatus StartNextStage()
     {
@@ -26,6 +30,8 @@ public sealed class FileJob
             ProgressPercent = 0;
             ProcessedRows = 0;
             TotalRows = 0;
+            StartedAt ??= DateTime.UtcNow;
+            FinishedAt = null;
             TouchHeartbeat();
             return Status;
         }
@@ -36,6 +42,7 @@ public sealed class FileJob
             CurrentStep = "Importando dados";
             ProgressPercent = 0;
             ProcessedRows = 0;
+            StartedAt ??= DateTime.UtcNow;
             TouchHeartbeat();
             return Status;
         }
@@ -49,6 +56,7 @@ public sealed class FileJob
         CurrentStep = string.IsNullOrWhiteSpace(reason)
             ? "Falha no processamento"
             : Truncate($"Falha: {reason}", 128);
+        FinishedAt = DateTime.UtcNow;
         TouchHeartbeat();
     }
 
@@ -66,6 +74,7 @@ public sealed class FileJob
         Status = FileJobStatus.ValidationFailed;
         CurrentStep = "Validacao com erros";
         ProgressPercent = 100;
+        FinishedAt = DateTime.UtcNow;
         TouchHeartbeat();
     }
 
@@ -83,6 +92,7 @@ public sealed class FileJob
         CurrentStep = "Processamento concluido";
         ProgressPercent = 100;
         ProcessedRows = finalProcessedRows;
+        FinishedAt = DateTime.UtcNow;
         TouchHeartbeat();
     }
 
@@ -93,6 +103,16 @@ public sealed class FileJob
         ProgressPercent = 0;
         ProcessedRows = 0;
         TotalRows = 0;
+        StartedAt = null;
+        FinishedAt = null;
+        TouchHeartbeat();
+    }
+
+    public void MarkCancelled()
+    {
+        Status = FileJobStatus.Cancelled;
+        CurrentStep = "Processamento cancelado";
+        FinishedAt = DateTime.UtcNow;
         TouchHeartbeat();
     }
 

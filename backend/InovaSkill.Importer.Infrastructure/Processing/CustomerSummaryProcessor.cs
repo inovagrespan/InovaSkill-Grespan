@@ -15,6 +15,22 @@ public sealed class CustomerSummaryProcessor(
     public async Task ProcessAsync(long fileJobId, CancellationToken cancellationToken)
     {
         logger.LogInformation("Starting customer summary processing for file job {FileJobId}.", fileJobId);
+        var step = new ProcessingStepExecution
+        {
+            FileJobId = fileJobId,
+            Step = "SUMMARY",
+            Status = "running",
+            StartedAt = DateTime.UtcNow
+        };
+        dbContext.ProcessingStepExecutions.Add(step);
+        dbContext.ProcessingJobLogs.Add(new ProcessingJobLog
+        {
+            FileJobId = fileJobId,
+            Stage = "SUMMARY",
+            Level = "Information",
+            Message = "Resumo de clientes iniciado."
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         var sourceRows = await dbContext.CommercialTransactions
             .AsNoTracking()
@@ -140,6 +156,18 @@ public sealed class CustomerSummaryProcessor(
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
+
+        step.Status = "completed";
+        step.FinishedAt = DateTime.UtcNow;
+        step.ProcessedRows = sourceRows.Count;
+        dbContext.ProcessingJobLogs.Add(new ProcessingJobLog
+        {
+            FileJobId = fileJobId,
+            Stage = "SUMMARY",
+            Level = "Information",
+            Message = $"Resumo de clientes concluido com {daily.Count} diario(s), {weekly.Count} semanal(is) e {monthly.Count} mensal(is)."
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
             "Finished customer summary processing for file job {FileJobId}. Generated {DailyCount} daily, {WeeklyCount} weekly and {MonthlyCount} monthly rows.",

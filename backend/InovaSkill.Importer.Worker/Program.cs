@@ -6,7 +6,6 @@ using InovaSkill.Importer.Worker;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddImportInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<RedisQueueWorkerService>();
-builder.Services.AddHostedService<PostImportWorkerService>();
 
 var host = builder.Build();
 

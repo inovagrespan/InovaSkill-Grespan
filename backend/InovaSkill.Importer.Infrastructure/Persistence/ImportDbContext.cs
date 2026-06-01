@@ -7,6 +7,10 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
 {
     public DbSet<FileJob> FileJobs => Set<FileJob>();
     public DbSet<ImportError> ImportErrors => Set<ImportError>();
+    public DbSet<ProcessingStepExecution> ProcessingStepExecutions => Set<ProcessingStepExecution>();
+    public DbSet<ProcessingJobLog> ProcessingJobLogs => Set<ProcessingJobLog>();
+    public DbSet<ProcessingJobEventLog> ProcessingJobEventLogs => Set<ProcessingJobEventLog>();
+    public DbSet<WorkerHeartbeat> WorkerHeartbeats => Set<WorkerHeartbeat>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Order> Orders => Set<Order>();
@@ -35,9 +39,14 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.ImportFileTypeCode).HasMaxLength(64);
             e.Property(x => x.CreatedAt).IsRequired();
             e.Property(x => x.LastHeartbeatAt).IsRequired();
+            e.Property(x => x.StartedAt);
+            e.Property(x => x.FinishedAt);
+            e.Property(x => x.LockedBy).HasMaxLength(128).IsRequired();
+            e.Property(x => x.LockedAt);
             e.Property(x => x.CurrentStep).HasMaxLength(128).IsRequired();
             e.HasIndex(x => new { x.Status, x.CreatedAt });
             e.HasIndex(x => new { x.Status, x.LastHeartbeatAt });
+            e.HasIndex(x => x.LockedAt);
         });
 
         modelBuilder.Entity<ImportError>(e =>
@@ -49,6 +58,42 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.RecordIdentifier).HasMaxLength(256).IsRequired();
             e.HasIndex(x => x.FileJobId);
             e.HasIndex(x => new { x.FileJobId, x.Stage });
+        });
+
+        modelBuilder.Entity<ProcessingStepExecution>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Step).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            e.HasIndex(x => x.FileJobId);
+            e.HasIndex(x => new { x.Step, x.StartedAt });
+        });
+
+        modelBuilder.Entity<ProcessingJobLog>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Stage).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Level).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Message).HasMaxLength(1024).IsRequired();
+            e.HasIndex(x => new { x.FileJobId, x.Timestamp });
+        });
+
+        modelBuilder.Entity<ProcessingJobEventLog>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.EventType).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            e.Property(x => x.ErrorMessage).HasMaxLength(1024).IsRequired();
+            e.HasIndex(x => new { x.FileJobId, x.EventType, x.CorrelationId });
+            e.HasIndex(x => new { x.Status, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<WorkerHeartbeat>(e =>
+        {
+            e.HasKey(x => x.WorkerId);
+            e.Property(x => x.WorkerId).HasMaxLength(128).IsRequired();
+            e.Property(x => x.CurrentTask).HasMaxLength(128).IsRequired();
+            e.HasIndex(x => x.LastSeenAt);
         });
 
         modelBuilder.Entity<Customer>(e =>

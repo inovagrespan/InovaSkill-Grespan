@@ -15,6 +15,22 @@ public sealed class SalesSummaryProcessor(
     public async Task ProcessAsync(long fileJobId, CancellationToken cancellationToken)
     {
         logger.LogInformation("Starting sales summary processing for file job {FileJobId}.", fileJobId);
+        var step = new ProcessingStepExecution
+        {
+            FileJobId = fileJobId,
+            Step = "SUMMARY",
+            Status = "running",
+            StartedAt = DateTime.UtcNow
+        };
+        dbContext.ProcessingStepExecutions.Add(step);
+        dbContext.ProcessingJobLogs.Add(new ProcessingJobLog
+        {
+            FileJobId = fileJobId,
+            Stage = "SUMMARY",
+            Level = "Information",
+            Message = "Resumo de vendas iniciado."
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         var sourceQuery = dbContext.CommercialTransactions
             .AsNoTracking()
@@ -103,6 +119,18 @@ public sealed class SalesSummaryProcessor(
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
+
+        step.Status = "completed";
+        step.FinishedAt = DateTime.UtcNow;
+        step.ProcessedRows = analyzedCount;
+        dbContext.ProcessingJobLogs.Add(new ProcessingJobLog
+        {
+            FileJobId = fileJobId,
+            Stage = "SUMMARY",
+            Level = "Information",
+            Message = $"Resumo de vendas concluido com {dailySummaries.Count} diario(s) e {weeklySummaries.Count} semanal(is)."
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
             "Finished sales summary processing for file job {FileJobId}. Analyzed {AnalyzedCount} rows and generated {DailyCount} daily summaries and {WeeklyCount} weekly summaries.",
