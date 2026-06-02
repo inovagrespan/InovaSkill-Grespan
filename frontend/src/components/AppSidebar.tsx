@@ -1,8 +1,9 @@
 ﻿import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, Menu, Moon, SlidersHorizontal, Sun, TrendingUp, Truck, Users } from "lucide-react";
+import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, SlidersHorizontal, Sun, TrendingUp, Truck, Users } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { logout } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 type AppSidebarProps = {
@@ -143,6 +144,14 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
                   {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
                   <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                >
+                  <LogOut className="size-4" />
+                  <span>Sair</span>
+                </button>
               </div>
             </div>
           </SheetContent>
@@ -188,7 +197,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
         </div>
 
         {renderNav(collapsed)}
-        <div className="mt-auto p-3">
+        <div className="mt-auto space-y-2 p-3">
           <button
             type="button"
             onClick={onToggleTheme}
@@ -200,6 +209,18 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
           >
             {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             {!collapsed ? <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span> : null}
+          </button>
+          <button
+            type="button"
+            onClick={logout}
+            aria-label="Sair"
+            className={cn(
+              "inline-flex w-full items-center rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+              collapsed ? "justify-center" : "justify-start gap-2",
+            )}
+          >
+            <LogOut className="size-4" />
+            {!collapsed ? <span>Sair</span> : null}
           </button>
         </div>
       </aside>

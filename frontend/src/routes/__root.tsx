@@ -6,11 +6,14 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  redirect,
+  useRouterState,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import appCss from "../styles.css?url";
 import { AppSidebar } from "../components/AppSidebar";
+import { isAuthenticated, redirectToLogin } from "../lib/auth";
 import { cn } from "../lib/utils";
 
 function NotFoundComponent() {
@@ -79,6 +82,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
     ],
   }),
+  beforeLoad: ({ location }) => {
+    if (typeof window === "undefined") return;
+
+    if (location.pathname === "/login") return;
+
+    if (!isAuthenticated()) {
+      throw redirect({
+        to: "/login",
+        search: { redirect: `${location.pathname}${location.searchStr}` },
+      });
+    }
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
@@ -101,8 +116,28 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const isLoginRoute = pathname === "/login";
+  const [authenticated, setAuthenticated] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return isAuthenticated();
+  });
+  const canRenderPrivateApp = useMemo(
+    () => !isLoginRoute && authenticated,
+    [authenticated, isLoginRoute],
+  );
+
+  useEffect(() => {
+    setAuthenticated(isAuthenticated());
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!isLoginRoute && !authenticated) {
+      redirectToLogin();
+    }
+  }, [authenticated, isLoginRoute]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("app.sidebar.collapsed");
@@ -131,19 +166,21 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className="app-background min-h-screen text-foreground font-body">
-        <AppSidebar
-          collapsed={sidebarCollapsed}
-          onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
-          theme={theme}
-          onToggleTheme={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
-        />
+        {canRenderPrivateApp ? (
+          <AppSidebar
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
+            theme={theme}
+            onToggleTheme={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
+          />
+        ) : null}
         <main
           className={cn(
             "min-h-screen transition-[margin] duration-200 ease-out motion-reduce:transition-none",
-            sidebarCollapsed ? "md:ml-[72px]" : "md:ml-[264px]",
+            canRenderPrivateApp && (sidebarCollapsed ? "md:ml-[72px]" : "md:ml-[264px]"),
           )}
         >
-          <Outlet />
+          {isLoginRoute || authenticated ? <Outlet /> : null}
         </main>
       </div>
     </QueryClientProvider>

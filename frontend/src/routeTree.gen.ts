@@ -14,6 +14,7 @@ import { Route as SimulacaoRouteImport } from './routes/simulacao'
 import { Route as RhRouteImport } from './routes/rh'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as LogisticaRouteImport } from './routes/logistica'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as IndexRouteImport } from './routes/index'
@@ -44,6 +45,11 @@ const RelatoriosRoute = RelatoriosRouteImport.update({
 const LogisticaRoute = LogisticaRouteImport.update({
   id: '/logistica',
   path: '/logistica',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImportacoesRoute = ImportacoesRouteImport.update({
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
+  '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
   '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRoute
+  '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
   '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
+  '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
   '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/'
     | '/clientes'
     | '/importacoes'
+    | '/login'
     | '/logistica'
     | '/relatorios'
     | '/rh'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/clientes'
+    | '/login'
     | '/logistica'
     | '/relatorios'
     | '/rh'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
     | '/'
     | '/clientes'
     | '/importacoes'
+    | '/login'
     | '/logistica'
     | '/relatorios'
     | '/rh'
@@ -161,6 +173,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ClientesRoute: typeof ClientesRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
+  LoginRoute: typeof LoginRoute
   LogisticaRoute: typeof LogisticaRoute
   RelatoriosRoute: typeof RelatoriosRoute
   RhRoute: typeof RhRoute
@@ -203,6 +216,13 @@ declare module '@tanstack/react-router' {
       path: '/logistica'
       fullPath: '/logistica'
       preLoaderRoute: typeof LogisticaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/importacoes': {
@@ -270,6 +290,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ClientesRoute: ClientesRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
+  LoginRoute: LoginRoute,
   LogisticaRoute: LogisticaRoute,
   RelatoriosRoute: RelatoriosRoute,
   RhRoute: RhRoute,

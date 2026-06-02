@@ -23,6 +23,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<ColumnMappingTransformRule> ColumnMappingTransformRules => Set<ColumnMappingTransformRule>();
     public DbSet<PreProcessorTemplate> PreProcessorTemplates => Set<PreProcessorTemplate>();
     public DbSet<PreProcessorTemplateRule> PreProcessorTemplateRules => Set<PreProcessorTemplateRule>();
+    public DbSet<AppUser> AppUsers => Set<AppUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -319,6 +320,18 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
                 .WithMany(x => x.Rules)
                 .HasForeignKey(x => x.PreProcessorTemplateId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AppUser>(e =>
+        {
+            e.ToTable("AppUsers");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            e.Property(x => x.PasswordHash).HasMaxLength(1024).IsRequired();
+            e.Property(x => x.CreatedAt).IsRequired();
+            e.HasIndex(x => x.Email).IsUnique();
+            e.HasIndex(x => x.Name).IsUnique();
         });
     }
 }

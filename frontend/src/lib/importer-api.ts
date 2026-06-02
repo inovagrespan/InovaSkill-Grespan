@@ -1,4 +1,5 @@
 import { extractHeadersInWorker } from "@/features/import-template-builder/utils/extract-headers-in-worker";
+import { authFetch } from "@/lib/auth";
 import { buildFallbackStages, type FileJobStageProgress } from "@/lib/importer-progress";
 
 export type FileType = "Unknown" | "Customers" | "Orders" | "Products" | "CommercialTransaction";
@@ -349,7 +350,7 @@ export async function uploadFile(file: File, importFileTypeCode?: UploadDestinat
   }
 
   try {
-    const response = await fetch(`${API_URL}/api/files/upload`, {
+    const response = await authFetch(`${API_URL}/api/files/upload`, {
       method: "POST",
       body: form,
     });
@@ -373,7 +374,7 @@ export async function uploadFile(file: File, importFileTypeCode?: UploadDestinat
 }
 
 export async function fetchJobs(page = 1, pageSize = 10): Promise<PagedResult<FileJob>> {
-  const response = await fetch(`${API_URL}/api/files/jobs?page=${page}&pageSize=${pageSize}`);
+  const response = await authFetch(`${API_URL}/api/files/jobs?page=${page}&pageSize=${pageSize}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar arquivos."));
 
   const raw = (await response.json()) as
@@ -451,7 +452,7 @@ export async function fetchJobErrors(
   page = 1,
   pageSize = 50,
 ): Promise<PagedResult<ImportError>> {
-  const response = await fetch(`${API_URL}/api/files/jobs/${jobId}/errors?page=${page}&pageSize=${pageSize}`);
+  const response = await authFetch(`${API_URL}/api/files/jobs/${jobId}/errors?page=${page}&pageSize=${pageSize}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar erros do arquivo."));
 
   const rawJson = await response.json();
@@ -498,7 +499,7 @@ export async function fetchJobErrors(
 }
 
 export async function fetchTemplateConfigs(): Promise<TemplateConfig[]> {
-  const response = await fetch(`${API_URL}/api/template-configs`);
+  const response = await authFetch(`${API_URL}/api/template-configs`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar configurações de template."));
   const data = (await response.json()) as Array<{
     id?: number;
@@ -519,7 +520,7 @@ export async function fetchTemplateConfigs(): Promise<TemplateConfig[]> {
 }
 
 export async function saveTemplateConfig(input: Omit<TemplateConfig, "id"> & { id?: number }): Promise<TemplateConfig> {
-  const response = await fetch(`${API_URL}/api/template-configs`, {
+  const response = await authFetch(`${API_URL}/api/template-configs`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -551,7 +552,7 @@ export async function fetchCommercialTransactions(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await fetch(`${API_URL}/api/commercial-transactions?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/commercial-transactions?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar vendas."));
 
   const raw = (await response.json()) as
@@ -599,7 +600,7 @@ export type ApiImportTemplate = {
 
 export async function fetchImportTemplateFileTypes(): Promise<ApiImportFileType[]> {
   try {
-    const response = await fetch(`${API_URL}/api/import-templates/file-types`);
+    const response = await authFetch(`${API_URL}/api/import-templates/file-types`);
     if (response.ok) {
       const data = (await response.json()) as Array<Record<string, unknown>>;
       return (data ?? []).map((item) => ({
@@ -649,7 +650,7 @@ export async function fetchCommercialTransactionsSummary(input: {
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
   if (input.referenceDate?.trim()) query.set("referenceDate", input.referenceDate.trim());
 
-  const response = await fetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de vendas."));
 
   return (await response.json()) as CommercialTransactionSummaryResponse;
@@ -673,7 +674,7 @@ export async function fetchCustomerAnalyticsSummary(input: {
   if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
   if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
 
-  const response = await fetch(`${API_URL}/api/customer-analytics-v2/summary?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/customer-analytics-v2/summary?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de clientes."));
   return (await response.json()) as CustomerAnalyticsSummary;
 }
@@ -703,7 +704,7 @@ export async function fetchCustomerRanking(input: {
   if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
   if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
 
-  const response = await fetch(`${API_URL}/api/customer-analytics-v2/ranking?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/customer-analytics-v2/ranking?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar ranking de clientes."));
   return (await response.json()) as CustomerRankingResponse;
 }
@@ -726,7 +727,7 @@ export async function fetchCustomerNewCustomersMonthly(input: {
   if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
   if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
 
-  const response = await fetch(`${API_URL}/api/customer-analytics-v2/new-customers-monthly?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/customer-analytics-v2/new-customers-monthly?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução mensal de novos clientes."));
   return (await response.json()) as CustomerNewCustomersMonthlyResponse;
 }
@@ -740,7 +741,7 @@ export async function fetchCustomerDetailsSummary(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/summary?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/summary?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo do cliente."));
   return (await response.json()) as CustomerDetailSummary;
 }
@@ -758,7 +759,7 @@ export async function fetchCustomerTimeline(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/timeline?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/timeline?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução temporal do cliente."));
   return (await response.json()) as CustomerTimelineResponse;
 }
@@ -772,7 +773,7 @@ export async function fetchCustomerTopProducts(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/top-products?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/top-products?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos mais comprados."));
   return (await response.json()) as CustomerTopProductItem[];
 }
@@ -790,7 +791,7 @@ export async function fetchCustomerPurchaseHistory(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/purchase-history?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/purchase-history?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar histórico de compras."));
   return (await response.json()) as CustomerPurchaseHistoryResponse;
 }
@@ -802,7 +803,7 @@ export async function fetchCustomerComparison(input: {
   const query = new URLSearchParams();
   if (input.referenceDate?.trim()) query.set("referenceDate", input.referenceDate.trim());
 
-  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/comparison?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/comparison?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar comparativo do cliente."));
   return (await response.json()) as CustomerComparisonResponse;
 }
@@ -814,14 +815,14 @@ export async function fetchCustomerInsights(input: {
   const query = new URLSearchParams();
   query.set("movingAverageWindowMonths", String(input.movingAverageWindowMonths ?? 3));
 
-  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`);
+  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar insights do cliente."));
   return (await response.json()) as CustomerInsightsResponse;
 }
 
 export async function fetchImportTemplateTargetFields(importFileTypeId: string): Promise<ApiTargetField[]> {
   try {
-    const response = await fetch(`${API_URL}/api/import-templates/file-types/${importFileTypeId}/fields`);
+    const response = await authFetch(`${API_URL}/api/import-templates/file-types/${importFileTypeId}/fields`);
     if (response.ok) {
       const data = (await response.json()) as Array<Record<string, unknown>>;
       return (data ?? []).map((item) => ({
@@ -879,7 +880,7 @@ export async function extractSpreadsheetHeaders(file: File, importFileTypeId?: s
   if (importFileTypeId) formData.append("importFileTypeId", importFileTypeId);
 
   try {
-    const response = await fetch(`${API_URL}/api/import-templates/extract-headers`, { method: "POST", body: formData });
+    const response = await authFetch(`${API_URL}/api/import-templates/extract-headers`, { method: "POST", body: formData });
     if (response.ok) {
       const payload = (await response.json()) as { headers?: string[]; Headers?: string[] } | string[];
       const apiHeaders = Array.isArray(payload) ? payload : payload.headers ?? payload.Headers ?? [];
@@ -894,7 +895,7 @@ export async function extractSpreadsheetHeaders(file: File, importFileTypeId?: s
 
 export async function fetchTransformRules(): Promise<ApiTransformRule[]> {
   try {
-    const response = await fetch(`${API_URL}/api/import-templates/transform-rules`);
+    const response = await authFetch(`${API_URL}/api/import-templates/transform-rules`);
     if (response.ok) {
       const data = (await response.json()) as Array<Record<string, unknown>>;
       return (data ?? []).map((item) => ({
@@ -919,7 +920,7 @@ export async function fetchTransformRules(): Promise<ApiTransformRule[]> {
   ];
 }
 export async function fetchImportTemplateById(templateId: string): Promise<ApiImportTemplate> {
-  const response = await fetch(`${API_URL}/api/import-templates/${templateId}`);
+  const response = await authFetch(`${API_URL}/api/import-templates/${templateId}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar template."));
   const item = (await response.json()) as Record<string, any>;
   return {
@@ -942,7 +943,7 @@ export async function fetchImportTemplateById(templateId: string): Promise<ApiIm
 }
 
 export async function createImportTemplate(input: ApiImportTemplate): Promise<ApiImportTemplate> {
-  const response = await fetch(`${API_URL}/api/import-templates`, {
+  const response = await authFetch(`${API_URL}/api/import-templates`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -952,7 +953,7 @@ export async function createImportTemplate(input: ApiImportTemplate): Promise<Ap
 }
 
 export async function updateImportTemplate(templateId: string, input: ApiImportTemplate): Promise<ApiImportTemplate> {
-  const response = await fetch(`${API_URL}/api/import-templates/${templateId}`, {
+  const response = await authFetch(`${API_URL}/api/import-templates/${templateId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
