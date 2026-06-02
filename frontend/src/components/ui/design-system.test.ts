@@ -29,6 +29,18 @@ describe("design system tokens", () => {
     expect(css).toContain("scrollbar-width: thin;");
     expect(css).toContain("::-webkit-scrollbar-thumb");
   });
+
+  it("define skeleton shimmer com fallback para redução de movimento", () => {
+    const css = read("src/styles.css");
+    const skeleton = read("src/components/ui/skeleton.tsx");
+
+    expect(css).toContain("@keyframes skeletonShimmer");
+    expect(css).toContain(".skeleton-shimmer");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(skeleton).toContain("SkeletonMetricCard");
+    expect(skeleton).toContain("SkeletonTable");
+    expect(skeleton).toContain("SkeletonChart");
+  });
 });
 
 describe("component states", () => {

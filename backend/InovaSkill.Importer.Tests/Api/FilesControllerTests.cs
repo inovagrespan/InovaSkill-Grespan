@@ -1,6 +1,7 @@
 using InovaSkill.Importer.Api.Contracts;
 using InovaSkill.Importer.Api.Controllers;
 using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Application.Events;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Domain.ValueObjects;
@@ -30,7 +31,7 @@ public sealed class FilesControllerTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new FilesController(new StubUploadService(), new StubFileJobQueue(), db);
+        var controller = new FilesController(new StubUploadService(), new StubProcessingEventPublisher(), db);
 
         var result = await controller.GetJobs();
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -98,7 +99,7 @@ public sealed class FilesControllerTests
             });
         await db.SaveChangesAsync();
 
-        var controller = new FilesController(new StubUploadService(), new StubFileJobQueue(), db);
+        var controller = new FilesController(new StubUploadService(), new StubProcessingEventPublisher(), db);
 
         var result = await controller.GetJobs();
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -129,16 +130,8 @@ public sealed class FilesControllerTests
         }
     }
 
-    private sealed class StubFileJobQueue : IFileJobQueue
+    private sealed class StubProcessingEventPublisher : IProcessingEventPublisher
     {
-        public Task EnqueueAsync(long fileJobId, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task<long?> DequeueAsync(CancellationToken cancellationToken)
-        {
-            return Task.FromResult<long?>(null);
-        }
+        public Task PublishAsync(ProcessingEventEnvelope envelope, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

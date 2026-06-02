@@ -1,0 +1,140 @@
+using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Application.Events;
+using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Infrastructure.Persistence;
+using InovaSkill.Importer.Infrastructure.Processing;
+using Microsoft.EntityFrameworkCore;
+
+namespace InovaSkill.Importer.Tests.Processing;
+
+public sealed class ProcessingEventDispatcherTests
+{
+    [Fact]
+    public async Task DispatchAsync_CallsMatchingHandlerAndLogsProcessedEvent()
+    {
+        await using var db = CreateDb();
+        db.FileJobs.Add(new FileJob { Id = 10, FilePath = "file.csv", OriginalFileName = "file.csv" });
+        await db.SaveChangesAsync();
+        var handler = new RecordingHandler(ProcessingEventTypes.FileUploaded);
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([handler], queue, queue, db);
+        var envelope = ProcessingEventEnvelope.Create(ProcessingEventTypes.FileUploaded, 10);
+
+        await dispatcher.DispatchAsync(envelope, CancellationToken.None);
+
+        Assert.Single(handler.Handled);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("processed", log.Status);
+        Assert.Equal(ProcessingEventTypes.FileUploaded, log.EventType);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_RequeuesTransientFailureUntilRetryLimit()
+    {
+        await using var db = CreateDb();
+        db.FileJobs.Add(new FileJob { Id = 20, FilePath = "file.csv", OriginalFileName = "file.csv" });
+        await db.SaveChangesAsync();
+        var handler = new FailingHandler(ProcessingEventTypes.ImportRequested, new TimeoutException("temporary"));
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([handler], queue, queue, db);
+
+        await dispatcher.DispatchAsync(ProcessingEventEnvelope.Create(ProcessingEventTypes.ImportRequested, 20), CancellationToken.None);
+
+        var retry = Assert.Single(queue.Published);
+        Assert.Equal(1, retry.RetryCount);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("retry_scheduled", log.Status);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_SendsToDeadLetterAfterRetryLimit()
+    {
+        await using var db = CreateDb();
+        db.FileJobs.Add(new FileJob { Id = 30, FilePath = "file.csv", OriginalFileName = "file.csv" });
+        await db.SaveChangesAsync();
+        var handler = new FailingHandler(ProcessingEventTypes.ImportRequested, new TimeoutException("temporary"));
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([handler], queue, queue, db);
+        var envelope = ProcessingEventEnvelope.Create(ProcessingEventTypes.ImportRequested, 30) with { RetryCount = 2 };
+
+        await dispatcher.DispatchAsync(envelope, CancellationToken.None);
+
+        Assert.Empty(queue.Published);
+        Assert.Single(queue.DeadLetters);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("dead_letter", log.Status);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_SkipsLockedJobWithoutCallingHandler()
+    {
+        await using var db = CreateDb();
+        db.FileJobs.Add(new FileJob
+        {
+            Id = 40,
+            FilePath = "file.csv",
+            OriginalFileName = "file.csv",
+            LockedBy = "other-worker",
+            LockedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var handler = new RecordingHandler(ProcessingEventTypes.FileUploaded);
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([handler], queue, queue, db);
+
+        await dispatcher.DispatchAsync(ProcessingEventEnvelope.Create(ProcessingEventTypes.FileUploaded, 40), CancellationToken.None);
+
+        Assert.Empty(handler.Handled);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("skipped", log.Status);
+    }
+
+    private static ImportDbContext CreateDb()
+    {
+        var options = new DbContextOptionsBuilder<ImportDbContext>()
+            .UseInMemoryDatabase($"event-dispatcher-{Guid.NewGuid():N}")
+            .Options;
+
+        return new ImportDbContext(options);
+    }
+
+    private sealed class RecordingHandler(string eventType) : IProcessingEventHandler
+    {
+        public string EventType { get; } = eventType;
+        public List<ProcessingEventEnvelope> Handled { get; } = [];
+
+        public Task HandleAsync(ProcessingEventEnvelope envelope, CancellationToken cancellationToken)
+        {
+            Handled.Add(envelope);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FailingHandler(string eventType, Exception exception) : IProcessingEventHandler
+    {
+        public string EventType { get; } = eventType;
+
+        public Task HandleAsync(ProcessingEventEnvelope envelope, CancellationToken cancellationToken)
+        {
+            return Task.FromException(exception);
+        }
+    }
+
+    private sealed class RecordingEventQueue : IProcessingEventPublisher, IProcessingDeadLetterQueue
+    {
+        public List<ProcessingEventEnvelope> Published { get; } = [];
+        public List<ProcessingEventEnvelope> DeadLetters { get; } = [];
+
+        public Task PublishAsync(ProcessingEventEnvelope envelope, CancellationToken cancellationToken)
+        {
+            Published.Add(envelope);
+            return Task.CompletedTask;
+        }
+
+        public Task PublishDeadLetterAsync(ProcessingEventEnvelope envelope, string reason, CancellationToken cancellationToken)
+        {
+            DeadLetters.Add(envelope);
+            return Task.CompletedTask;
+        }
+    }
+}

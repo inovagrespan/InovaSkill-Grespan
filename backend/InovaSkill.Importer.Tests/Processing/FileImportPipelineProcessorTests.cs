@@ -1,4 +1,5 @@
 using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Application.Events;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Domain.ValueObjects;
@@ -16,6 +17,64 @@ namespace InovaSkill.Importer.Tests.Processing;
 
 public sealed class FileImportPipelineProcessorTests
 {
+    [Fact]
+    public async Task ProcessJobAsync_PersistsPreProcessingProgressWhileCountingRows()
+    {
+        await using var db = CreateDb();
+        var directory = Path.Combine(Path.GetTempPath(), $"pre-processing-progress-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var filePath = Path.Combine(directory, "clientes.csv");
+        await File.WriteAllTextAsync(filePath, "placeholder");
+        var snapshots = new List<FileJob>();
+
+        var job = new FileJob
+        {
+            Id = 200,
+            FilePath = filePath,
+            OriginalFileName = "clientes.csv",
+            ImportFileTypeCode = ImportFileTypeCodes.CustomerList,
+            Status = FileJobStatus.WaitingProcessing,
+            CurrentStep = "Aguardando processamento"
+        };
+        db.FileJobs.Add(job);
+        await db.SaveChangesAsync();
+
+        var parser = new SnapshotFileParser(
+            rowCount: ImportStageProgress.PreProcessingCountingHeartbeatRowInterval + 2,
+            captureBeforeFirstRow: async () =>
+            {
+                var snapshot = await db.FileJobs.AsNoTracking().SingleAsync(x => x.Id == job.Id);
+                snapshots.Add(snapshot);
+            },
+            captureAfterFirstCountingCheckpoint: async () =>
+            {
+                var snapshot = await db.FileJobs.AsNoTracking().SingleAsync(x => x.Id == job.Id);
+                snapshots.Add(snapshot);
+            });
+        var processor = CreateProcessor(db, parser);
+
+        try
+        {
+            await processor.ProcessJobAsync(job.Id, CancellationToken.None);
+
+            Assert.Contains(snapshots, snapshot =>
+                snapshot.Status == FileJobStatus.PreProcessing &&
+                snapshot.ProgressPercent > 0 &&
+                snapshot.CurrentStep == "Lendo estrutura do arquivo" &&
+                snapshot.ProcessedRows == 0);
+
+            Assert.Contains(snapshots, snapshot =>
+                snapshot.Status == FileJobStatus.PreProcessing &&
+                snapshot.ProgressPercent > 0 &&
+                snapshot.CurrentStep == "Contando linhas do arquivo" &&
+                snapshot.ProcessedRows >= ImportStageProgress.PreProcessingCountingHeartbeatRowInterval);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task ValidateRowsBeforeImportAsync_ReturnsErrorsForOldNormalizedRowsThatWouldOverflowDatabaseNumericColumns()
     {
@@ -123,13 +182,12 @@ public sealed class FileImportPipelineProcessorTests
         };
     }
 
-    private static FileImportPipelineProcessor CreateProcessor(ImportDbContext db)
+    private static FileImportPipelineProcessor CreateProcessor(ImportDbContext db, IFileParser? parser = null)
     {
         return new FileImportPipelineProcessor(
             db,
-            new StubFileJobQueue(),
-            new StubPostImportJobQueue(),
-            new StubFileParserFactory(),
+            new StubProcessingEventPublisher(),
+            new StubFileParserFactory(parser),
             new ImportPreProcessingPipeline(
                 new StubTemplateResolver(),
                 new ImportMappingEngine(new TransformRuleRegistry([new TrimRule()])),
@@ -149,23 +207,20 @@ public sealed class FileImportPipelineProcessorTests
         return new ImportDbContext(options);
     }
 
-    private sealed class StubFileJobQueue : IFileJobQueue
+    private sealed class StubProcessingEventPublisher : IProcessingEventPublisher
     {
-        public Task EnqueueAsync(long fileJobId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public List<ProcessingEventEnvelope> Published { get; } = [];
 
-        public Task<long?> DequeueAsync(CancellationToken cancellationToken) => Task.FromResult<long?>(null);
+        public Task PublishAsync(ProcessingEventEnvelope envelope, CancellationToken cancellationToken)
+        {
+            Published.Add(envelope);
+            return Task.CompletedTask;
+        }
     }
 
-    private sealed class StubPostImportJobQueue : IPostImportJobQueue
+    private sealed class StubFileParserFactory(IFileParser? parser = null) : IFileParserFactory
     {
-        public Task EnqueueAsync(PostImportJobItem job, CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task<PostImportJobItem?> DequeueAsync(CancellationToken cancellationToken) => Task.FromResult<PostImportJobItem?>(null);
-    }
-
-    private sealed class StubFileParserFactory : IFileParserFactory
-    {
-        public IFileParser Create(string filePath) => throw new NotSupportedException();
+        public IFileParser Create(string filePath) => parser ?? throw new NotSupportedException();
     }
 
     private sealed class StubTemplateResolver : IPreProcessorTemplateResolver
@@ -173,6 +228,44 @@ public sealed class FileImportPipelineProcessorTests
         public Task<ImportTemplate?> ResolveAsync(string fileName, IReadOnlyCollection<string> headers, CancellationToken cancellationToken)
         {
             return Task.FromResult<ImportTemplate?>(null);
+        }
+    }
+
+    private sealed class SnapshotFileParser(
+        int rowCount,
+        Func<Task> captureBeforeFirstRow,
+        Func<Task> captureAfterFirstCountingCheckpoint) : IFileParser
+    {
+        private int parseCount;
+
+        public async IAsyncEnumerable<ImportedRow> ParseAsync(
+            string filePath,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            parseCount++;
+            var currentParseCount = parseCount;
+
+            for (var i = 1; i <= rowCount; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (currentParseCount == 1 && i == 1)
+                {
+                    await captureBeforeFirstRow();
+                }
+
+                yield return new ImportedRow(i + 1, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["customercode"] = $"C-{i:D5}",
+                    ["name"] = $"Cliente {i}",
+                    ["email"] = $"cliente{i}@example.com"
+                });
+
+                if (currentParseCount == 1 && i == ImportStageProgress.PreProcessingCountingHeartbeatRowInterval + 1)
+                {
+                    await captureAfterFirstCountingCheckpoint();
+                }
+            }
         }
     }
 }

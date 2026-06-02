@@ -17,6 +17,7 @@ const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/vendas", label: "Vendas", icon: TrendingUp },
   { to: "/clientes", label: "Clientes", icon: Users },
+  { to: "/processamentos", label: "Processamentos", icon: ServerCog },
   { to: "/relatorios", label: "Relatorios", icon: BarChart3 },
   { to: "/logistica", label: "Logística", icon: Truck },
   { to: "/rh", label: "RH Atual", icon: Users },

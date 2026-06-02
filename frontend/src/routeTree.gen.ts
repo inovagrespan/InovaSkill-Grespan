@@ -13,6 +13,7 @@ import { Route as VendasRouteImport } from './routes/vendas'
 import { Route as SimulacaoRouteImport } from './routes/simulacao'
 import { Route as RhRouteImport } from './routes/rh'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
+import { Route as ProcessamentosRouteImport } from './routes/processamentos'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
@@ -40,6 +41,11 @@ const RhRoute = RhRouteImport.update({
 const RelatoriosRoute = RelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProcessamentosRoute = ProcessamentosRouteImport.update({
+  id: '/processamentos',
+  path: '/processamentos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LogisticaRoute = LogisticaRouteImport.update({
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
+  '/processamentos': typeof ProcessamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/clientes': typeof ClientesRoute
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
+  '/processamentos': typeof ProcessamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
+  '/processamentos': typeof ProcessamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/importacoes'
     | '/login'
     | '/logistica'
+    | '/processamentos'
     | '/relatorios'
     | '/rh'
     | '/simulacao'
@@ -146,6 +156,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/login'
     | '/logistica'
+    | '/processamentos'
     | '/relatorios'
     | '/rh'
     | '/simulacao'
@@ -160,6 +171,7 @@ export interface FileRouteTypes {
     | '/importacoes'
     | '/login'
     | '/logistica'
+    | '/processamentos'
     | '/relatorios'
     | '/rh'
     | '/simulacao'
@@ -175,6 +187,7 @@ export interface RootRouteChildren {
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LoginRoute: typeof LoginRoute
   LogisticaRoute: typeof LogisticaRoute
+  ProcessamentosRoute: typeof ProcessamentosRoute
   RelatoriosRoute: typeof RelatoriosRoute
   RhRoute: typeof RhRoute
   SimulacaoRoute: typeof SimulacaoRoute
@@ -209,6 +222,13 @@ declare module '@tanstack/react-router' {
       path: '/relatorios'
       fullPath: '/relatorios'
       preLoaderRoute: typeof RelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/processamentos': {
+      id: '/processamentos'
+      path: '/processamentos'
+      fullPath: '/processamentos'
+      preLoaderRoute: typeof ProcessamentosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/logistica': {
@@ -292,6 +312,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LoginRoute: LoginRoute,
   LogisticaRoute: LogisticaRoute,
+  ProcessamentosRoute: ProcessamentosRoute,
   RelatoriosRoute: RelatoriosRoute,
   RhRoute: RhRoute,
   SimulacaoRoute: SimulacaoRoute,

@@ -9,7 +9,7 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonChart, SkeletonMetricCard, SkeletonModalContent, SkeletonTable } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Building2, CalendarClock, DollarSign, MapPin, Minus, Receipt, TrendingUp, UserRound, Users, type LucideIcon } from "lucide-react";
 import { Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
@@ -215,7 +215,7 @@ function ClientesPage() {
   const [pageSize] = useState(20);
   const [totalItems, setTotalItems] = useState(0);
   const [sortBy, setSortBy] = useState<"revenue" | "growth" | "drop" | "quantity" | "weight" | "ticket">("revenue");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
   const [dateFrom, setDateFrom] = useState(() => toInputDate(new Date(Date.now() - 1000 * 60 * 60 * 24 * 30)));
@@ -496,17 +496,28 @@ function ClientesPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <KpiCard title="Clientes ativos" value={formatKpiCompactNumber(summary?.activeCustomers ?? 0)} valueTooltip={String(summary?.activeCustomers ?? 0)} showPercentageChange={false} icon={Users} periodLabel="Clientes com compras no período" />
-            <KpiCard title="Faturamento total" value={formatKpiCompactCurrency(summary?.totalRevenue ?? 0)} valueTooltip={formatCurrency(summary?.totalRevenue ?? 0)} showPercentageChange={false} icon={DollarSign} periodLabel={summary ? `${formatDate(summary.currentPeriodStart)} a ${formatDate(summary.currentPeriodEnd)}` : "Período atual"} />
-            <KpiCard title="Ticket médio" value={formatKpiCompactCurrency(summary?.averageTicket ?? 0)} valueTooltip={formatCurrency(summary?.averageTicket ?? 0)} showPercentageChange={false} icon={Receipt} periodLabel="Faturamento dividido por pedidos" />
+            {loading ? (
+              <>
+                <SkeletonMetricCard />
+                <SkeletonMetricCard />
+                <SkeletonMetricCard />
+                <SkeletonMetricCard />
+              </>
+            ) : (
+            <>
+            <KpiCard title="Clientes ativos" value={formatKpiCompactNumber(summary?.activeCustomers ?? 0)} valueTooltip={String(summary?.activeCustomers ?? 0)} showPercentageChange={false} icon={Users} periodLabel="Clientes com compras no período" loading={loading} />
+            <KpiCard title="Faturamento total" value={formatKpiCompactCurrency(summary?.totalRevenue ?? 0)} valueTooltip={formatCurrency(summary?.totalRevenue ?? 0)} showPercentageChange={false} icon={DollarSign} periodLabel={summary ? `${formatDate(summary.currentPeriodStart)} a ${formatDate(summary.currentPeriodEnd)}` : "Período atual"} loading={loading} />
+            <KpiCard title="Ticket médio" value={formatKpiCompactCurrency(summary?.averageTicket ?? 0)} valueTooltip={formatCurrency(summary?.averageTicket ?? 0)} showPercentageChange={false} icon={Receipt} periodLabel="Faturamento dividido por pedidos" loading={loading} />
             <button
               type="button"
               className="text-left"
               onClick={openNewCustomersModal}
               aria-label="Abrir detalhamento de novos clientes por mês"
             >
-              <KpiCard title="Novos clientes" value={formatKpiCompactNumber(summary?.newCustomers ?? 0)} valueTooltip={String(summary?.newCustomers ?? 0)} showPercentageChange={false} icon={TrendingUp} periodLabel={summary ? `Inativos no período: ${summary.inactiveCustomers}` : ""} />
+              <KpiCard title="Novos clientes" value={formatKpiCompactNumber(summary?.newCustomers ?? 0)} valueTooltip={String(summary?.newCustomers ?? 0)} showPercentageChange={false} icon={TrendingUp} periodLabel={summary ? `Inativos no período: ${summary.inactiveCustomers}` : ""} loading={loading} />
             </button>
+            </>
+            )}
           </div>
 
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -520,6 +531,9 @@ function ClientesPage() {
             </select>
           </div>
 
+          {loading ? (
+            <SkeletonTable rows={8} columns={7} />
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -533,9 +547,9 @@ function ClientesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.length === 0 && (
+              {!loading && items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">{loading ? "Carregando clientes..." : "Sem dados para os filtros selecionados."}</TableCell>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Sem dados para os filtros selecionados.</TableCell>
                 </TableRow>
               )}
               {items.map((item) => (
@@ -551,6 +565,7 @@ function ClientesPage() {
               ))}
             </TableBody>
           </Table>
+          )}
 
           <div className="flex items-center justify-end gap-2">
             <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => void load(page - 1)}>Anterior</Button>
@@ -879,13 +894,7 @@ function ClientesPage() {
 
           {!details && detailsLoading && (
             <div className="mt-4 space-y-3">
-              <Skeleton className="h-10 w-1/2" />
-              <Skeleton className="h-28 w-full" />
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {Array.from({ length: 8 }).map((_, idx) => (
-                  <Skeleton key={idx} className="h-28 w-full" />
-                ))}
-              </div>
+              <SkeletonModalContent />
             </div>
           )}
         </DialogContent>
@@ -908,8 +917,8 @@ function ClientesPage() {
 
           {newCustomersLoading && (
             <div className="mt-4 space-y-3">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-72 w-full" />
+              <SkeletonMetricCard />
+              <SkeletonChart className="h-72" />
             </div>
           )}
 

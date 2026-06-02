@@ -1,11 +1,12 @@
 using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Application.Events;
 using Microsoft.Extensions.Configuration;
 
 namespace InovaSkill.Importer.Infrastructure.Processing;
 
 public sealed class FileUploadService(
     IFileJobService fileJobService,
-    IFileJobQueue fileJobQueue,
+    IProcessingEventPublisher eventPublisher,
     IConfiguration configuration) : IFileUploadService
 {
     public async Task<long> UploadAndCreateJobAsync(
@@ -33,7 +34,9 @@ public sealed class FileUploadService(
         await stream.CopyToAsync(fileStream, cancellationToken);
 
         var jobId = await fileJobService.CreateFileJobAsync(filePath, originalFileName, importFileTypeCode, cancellationToken);
-        await fileJobQueue.EnqueueAsync(jobId, cancellationToken);
+        await eventPublisher.PublishAsync(
+            ProcessingEventEnvelope.Create(ProcessingEventTypes.FileUploaded, jobId),
+            cancellationToken);
         return jobId;
     }
 

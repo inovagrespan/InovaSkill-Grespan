@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
+import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
 import {
   MAX_UPLOAD_SIZE_BYTES,
   fetchJobErrors,
@@ -66,6 +67,7 @@ function ImportacoesPage() {
   const [message, setMessage] = useState("");
 
   const [jobs, setJobs] = useState<FileJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
   const [jobPage, setJobPage] = useState(1);
   const [jobTotal, setJobTotal] = useState(0);
   const jobPageSize = 10;
@@ -91,6 +93,8 @@ function ImportacoesPage() {
       jobPageRef.current = data.page;
     } catch (error) {
       if (requestId === jobsRequestIdRef.current) setMessage((error as Error).message);
+    } finally {
+      if (requestId === jobsRequestIdRef.current) setJobsLoading(false);
     }
   }
 
@@ -277,7 +281,8 @@ function ImportacoesPage() {
           <CardTitle>Arquivos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {jobs.length === 0 && <p className="text-sm text-muted-foreground">Nenhum arquivo encontrado.</p>}
+          {jobsLoading && jobs.length === 0 && <SkeletonList rows={5} />}
+          {!jobsLoading && jobs.length === 0 && <p className="text-sm text-muted-foreground">Nenhum arquivo encontrado.</p>}
 
           {jobs.map((job) => (
             <button
@@ -414,7 +419,7 @@ function ImportacoesPage() {
                 </AlertDescription>
               </Alert>
 
-              {errorsLoading && <p className="text-sm text-muted-foreground">Carregando erros...</p>}
+              {errorsLoading && <SkeletonModalContent />}
               {!errorsLoading && errors.length === 0 && (
                 <p className="text-sm text-muted-foreground">Sem erros para esse arquivo.</p>
               )}

@@ -14,7 +14,8 @@ export type JobStatus =
   | "ReadyToImport"
   | "Importing"
   | "Completed"
-  | "Failed";
+  | "Failed"
+  | "Cancelled";
 
 export type FileJob = {
   id: number;
@@ -104,6 +105,106 @@ export type CommercialTransactionSummaryResponse = {
   totalWeightKg: number;
   totalCompanies: number;
   items: CommercialTransactionCompanySummary[];
+};
+
+export type ProcessingMonitoringDashboard = {
+  summary: ProcessingMonitoringSummary;
+  jobs: ProcessingJobQueueItem[];
+  daily: ProcessingDailyPoint[];
+  stageDurations: ProcessingStageDuration[];
+  workers: WorkerHealth[];
+};
+
+export type ProcessingMonitoringSummary = {
+  runningJobs: number;
+  queuedJobs: number;
+  completedToday: number;
+  failedJobs: number;
+  averageProcessingSeconds: number;
+  processedRowsToday: number;
+  staleJobs: number;
+};
+
+export type ProcessingJobQueueItem = {
+  id: number;
+  company: string;
+  fileName: string;
+  template: string | null;
+  status: string;
+  statusLabel: string;
+  currentStep: string;
+  progressPercent: number;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  elapsedSeconds: number;
+  processedRows: number;
+  totalRows: number;
+  errorCount: number;
+};
+
+export type ProcessingDailyPoint = {
+  date: string;
+  jobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  processedRows: number;
+  averageProcessingSeconds: number;
+  successRatePercent: number;
+};
+
+export type ProcessingStageDuration = {
+  stage: string;
+  stageName: string;
+  averageDurationSeconds: number;
+  sharePercent: number;
+};
+
+export type WorkerHealth = {
+  workerId: string;
+  status: string;
+  lastSeenAt: string;
+  secondsSinceLastSeen: number;
+  processedJobsToday: number;
+  idleSeconds: number;
+  currentJobId: number | null;
+  currentTask: string;
+};
+
+export type ProcessingJobDetails = {
+  job: ProcessingJobQueueItem;
+  timeline: ProcessingStep[];
+  metrics: ProcessingJobMetrics;
+  performanceByStage: ProcessingStageDuration[];
+  logs: ProcessingLog[];
+};
+
+export type ProcessingStep = {
+  step: string;
+  stepName: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationSeconds: number;
+  status: string;
+  processedRows: number;
+  errorCount: number;
+};
+
+export type ProcessingJobMetrics = {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  importedRows: number;
+  errorCount: number;
+  warningCount: number;
+};
+
+export type ProcessingLog = {
+  timestamp: string;
+  fileJobId: number;
+  stage: string;
+  level: string;
+  message: string;
 };
 
 export type CustomerAnalyticsSummary = {
@@ -330,6 +431,7 @@ const statusMap: Record<number, JobStatus> = {
   5: "Importing",
   6: "Completed",
   7: "Failed",
+  8: "Cancelled",
 };
 
 function normalizeFileType(value: number | string): FileType {
@@ -498,6 +600,148 @@ export async function fetchJobErrors(
   };
 }
 
+export async function fetchProcessingMonitoringDashboard(): Promise<ProcessingMonitoringDashboard> {
+  const response = await fetch(`${API_URL}/api/processing-monitoring/dashboard`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar monitoramento de jobs."));
+  return normalizeProcessingDashboard(await response.json());
+}
+
+export async function fetchProcessingJobDetails(jobId: number): Promise<ProcessingJobDetails> {
+  const response = await fetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes do job."));
+  return normalizeProcessingJobDetails(await response.json());
+}
+
+export async function retryProcessingJob(jobId: number): Promise<void> {
+  const response = await fetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/retry`, { method: "POST" });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao reprocessar job."));
+}
+
+export async function cancelProcessingJob(jobId: number): Promise<void> {
+  const response = await fetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/cancel`, { method: "POST" });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao cancelar job."));
+}
+
+function normalizeProcessingDashboard(raw: any): ProcessingMonitoringDashboard {
+  return {
+    summary: normalizeProcessingSummary(raw.summary ?? raw.Summary ?? {}),
+    jobs: (raw.jobs ?? raw.Jobs ?? []).map(normalizeProcessingJobItem),
+    daily: (raw.daily ?? raw.Daily ?? []).map(normalizeProcessingDailyPoint),
+    stageDurations: (raw.stageDurations ?? raw.StageDurations ?? []).map(normalizeProcessingStageDuration),
+    workers: (raw.workers ?? raw.Workers ?? []).map(normalizeWorkerHealth),
+  };
+}
+
+function normalizeProcessingJobDetails(raw: any): ProcessingJobDetails {
+  return {
+    job: normalizeProcessingJobItem(raw.job ?? raw.Job ?? {}),
+    timeline: (raw.timeline ?? raw.Timeline ?? []).map(normalizeProcessingStep),
+    metrics: normalizeProcessingMetrics(raw.metrics ?? raw.Metrics ?? {}),
+    performanceByStage: (raw.performanceByStage ?? raw.PerformanceByStage ?? []).map(normalizeProcessingStageDuration),
+    logs: (raw.logs ?? raw.Logs ?? []).map(normalizeProcessingLog),
+  };
+}
+
+function normalizeProcessingSummary(raw: any): ProcessingMonitoringSummary {
+  return {
+    runningJobs: raw.runningJobs ?? raw.RunningJobs ?? 0,
+    queuedJobs: raw.queuedJobs ?? raw.QueuedJobs ?? 0,
+    completedToday: raw.completedToday ?? raw.CompletedToday ?? 0,
+    failedJobs: raw.failedJobs ?? raw.FailedJobs ?? 0,
+    averageProcessingSeconds: raw.averageProcessingSeconds ?? raw.AverageProcessingSeconds ?? 0,
+    processedRowsToday: raw.processedRowsToday ?? raw.ProcessedRowsToday ?? 0,
+    staleJobs: raw.staleJobs ?? raw.StaleJobs ?? 0,
+  };
+}
+
+function normalizeProcessingJobItem(raw: any): ProcessingJobQueueItem {
+  return {
+    id: raw.id ?? raw.Id ?? 0,
+    company: raw.company ?? raw.Company ?? "-",
+    fileName: raw.fileName ?? raw.FileName ?? "",
+    template: raw.template ?? raw.Template ?? null,
+    status: raw.status ?? raw.Status ?? "",
+    statusLabel: raw.statusLabel ?? raw.StatusLabel ?? "",
+    currentStep: raw.currentStep ?? raw.CurrentStep ?? "",
+    progressPercent: raw.progressPercent ?? raw.ProgressPercent ?? 0,
+    createdAt: raw.createdAt ?? raw.CreatedAt ?? "",
+    startedAt: raw.startedAt ?? raw.StartedAt ?? null,
+    finishedAt: raw.finishedAt ?? raw.FinishedAt ?? null,
+    elapsedSeconds: raw.elapsedSeconds ?? raw.ElapsedSeconds ?? 0,
+    processedRows: raw.processedRows ?? raw.ProcessedRows ?? 0,
+    totalRows: raw.totalRows ?? raw.TotalRows ?? 0,
+    errorCount: raw.errorCount ?? raw.ErrorCount ?? 0,
+  };
+}
+
+function normalizeProcessingDailyPoint(raw: any): ProcessingDailyPoint {
+  return {
+    date: raw.date ?? raw.Date ?? "",
+    jobs: raw.jobs ?? raw.Jobs ?? 0,
+    completedJobs: raw.completedJobs ?? raw.CompletedJobs ?? 0,
+    failedJobs: raw.failedJobs ?? raw.FailedJobs ?? 0,
+    processedRows: raw.processedRows ?? raw.ProcessedRows ?? 0,
+    averageProcessingSeconds: raw.averageProcessingSeconds ?? raw.AverageProcessingSeconds ?? 0,
+    successRatePercent: raw.successRatePercent ?? raw.SuccessRatePercent ?? 0,
+  };
+}
+
+function normalizeProcessingStageDuration(raw: any): ProcessingStageDuration {
+  return {
+    stage: raw.stage ?? raw.Stage ?? "",
+    stageName: raw.stageName ?? raw.StageName ?? "",
+    averageDurationSeconds: raw.averageDurationSeconds ?? raw.AverageDurationSeconds ?? 0,
+    sharePercent: raw.sharePercent ?? raw.SharePercent ?? 0,
+  };
+}
+
+function normalizeWorkerHealth(raw: any): WorkerHealth {
+  return {
+    workerId: raw.workerId ?? raw.WorkerId ?? "",
+    status: raw.status ?? raw.Status ?? "Offline",
+    lastSeenAt: raw.lastSeenAt ?? raw.LastSeenAt ?? "",
+    secondsSinceLastSeen: raw.secondsSinceLastSeen ?? raw.SecondsSinceLastSeen ?? 0,
+    processedJobsToday: raw.processedJobsToday ?? raw.ProcessedJobsToday ?? 0,
+    idleSeconds: raw.idleSeconds ?? raw.IdleSeconds ?? 0,
+    currentJobId: raw.currentJobId ?? raw.CurrentJobId ?? null,
+    currentTask: raw.currentTask ?? raw.CurrentTask ?? "",
+  };
+}
+
+function normalizeProcessingStep(raw: any): ProcessingStep {
+  return {
+    step: raw.step ?? raw.Step ?? "",
+    stepName: raw.stepName ?? raw.StepName ?? "",
+    startedAt: raw.startedAt ?? raw.StartedAt ?? null,
+    finishedAt: raw.finishedAt ?? raw.FinishedAt ?? null,
+    durationSeconds: raw.durationSeconds ?? raw.DurationSeconds ?? 0,
+    status: raw.status ?? raw.Status ?? "pending",
+    processedRows: raw.processedRows ?? raw.ProcessedRows ?? 0,
+    errorCount: raw.errorCount ?? raw.ErrorCount ?? 0,
+  };
+}
+
+function normalizeProcessingMetrics(raw: any): ProcessingJobMetrics {
+  return {
+    totalRows: raw.totalRows ?? raw.TotalRows ?? 0,
+    validRows: raw.validRows ?? raw.ValidRows ?? 0,
+    invalidRows: raw.invalidRows ?? raw.InvalidRows ?? 0,
+    importedRows: raw.importedRows ?? raw.ImportedRows ?? 0,
+    errorCount: raw.errorCount ?? raw.ErrorCount ?? 0,
+    warningCount: raw.warningCount ?? raw.WarningCount ?? 0,
+  };
+}
+
+function normalizeProcessingLog(raw: any): ProcessingLog {
+  return {
+    timestamp: raw.timestamp ?? raw.Timestamp ?? "",
+    fileJobId: raw.fileJobId ?? raw.FileJobId ?? 0,
+    stage: raw.stage ?? raw.Stage ?? "",
+    level: raw.level ?? raw.Level ?? "",
+    message: raw.message ?? raw.Message ?? "",
+  };
+}
+
 export async function fetchTemplateConfigs(): Promise<TemplateConfig[]> {
   const response = await authFetch(`${API_URL}/api/template-configs`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar configurações de template."));
@@ -569,8 +813,8 @@ export async function fetchCommercialTransactions(input: {
   };
 }
 
-export type ApiImportFileType = { id: string; name: string; code?: string };
-export type ApiTargetField = { name: string; displayName: string; required: boolean; description?: string };
+export type ApiImportFileType = { id: string; name: string; code?: string; description?: string; allowedExtensions?: string };
+export type ApiTargetField = { name: string; displayName: string; required: boolean; dataType?: "text" | "number" | "date" | "currency"; description?: string };
 export type ApiTransformRule = {
   id: string;
   name: string;
@@ -597,6 +841,10 @@ export type ApiImportTemplate = {
   importFileTypeId: string;
   columnMappings: ApiImportTemplateMapping[];
 };
+export type ApiSpreadsheetSample = {
+  headers: string[];
+  previewRows: Array<Record<string, string>>;
+};
 
 export async function fetchImportTemplateFileTypes(): Promise<ApiImportFileType[]> {
   try {
@@ -607,6 +855,8 @@ export async function fetchImportTemplateFileTypes(): Promise<ApiImportFileType[
         id: String(item.id ?? item.Id ?? item.value ?? item.Value ?? ""),
         name: String(item.name ?? item.Name ?? item.label ?? item.Label ?? ""),
         code: String(item.code ?? item.Code ?? ""),
+        description: String(item.description ?? item.Description ?? ""),
+        allowedExtensions: String(item.allowedExtensions ?? item.AllowedExtensions ?? ""),
       }));
     }
   } catch {
@@ -820,6 +1070,15 @@ export async function fetchCustomerInsights(input: {
   return (await response.json()) as CustomerInsightsResponse;
 }
 
+function normalizeTargetFieldType(value: unknown): ApiTargetField["dataType"] {
+  const normalized = String(value ?? "text").toLowerCase();
+  if (normalized === "number" || normalized === "date" || normalized === "currency") {
+    return normalized;
+  }
+
+  return "text";
+}
+
 export async function fetchImportTemplateTargetFields(importFileTypeId: string): Promise<ApiTargetField[]> {
   try {
     const response = await authFetch(`${API_URL}/api/import-templates/file-types/${importFileTypeId}/fields`);
@@ -829,6 +1088,7 @@ export async function fetchImportTemplateTargetFields(importFileTypeId: string):
         name: String(item.name ?? item.Name ?? ""),
         displayName: String(item.displayName ?? item.DisplayName ?? item.name ?? item.Name ?? ""),
         required: Boolean(item.required ?? item.Required ?? false),
+        dataType: normalizeTargetFieldType(item.dataType ?? item.DataType),
         description: String(item.description ?? item.Description ?? ""),
       }));
     }
@@ -874,7 +1134,7 @@ export async function fetchImportTemplateTargetFields(importFileTypeId: string):
   return fallbackFields[importFileTypeId] ?? [];
 }
 
-export async function extractSpreadsheetHeaders(file: File, importFileTypeId?: string): Promise<string[]> {
+export async function extractSpreadsheetSample(file: File, importFileTypeId?: string): Promise<ApiSpreadsheetSample> {
   const formData = new FormData();
   formData.append("file", file);
   if (importFileTypeId) formData.append("importFileTypeId", importFileTypeId);
@@ -882,15 +1142,26 @@ export async function extractSpreadsheetHeaders(file: File, importFileTypeId?: s
   try {
     const response = await authFetch(`${API_URL}/api/import-templates/extract-headers`, { method: "POST", body: formData });
     if (response.ok) {
-      const payload = (await response.json()) as { headers?: string[]; Headers?: string[] } | string[];
+      const payload = (await response.json()) as
+        | { headers?: string[]; Headers?: string[]; previewRows?: Array<Record<string, string>>; PreviewRows?: Array<Record<string, string>> }
+        | string[];
       const apiHeaders = Array.isArray(payload) ? payload : payload.headers ?? payload.Headers ?? [];
-      if (apiHeaders.length > 0) return apiHeaders;
+      if (apiHeaders.length > 0) {
+        return {
+          headers: apiHeaders,
+          previewRows: Array.isArray(payload) ? [] : payload.previewRows ?? payload.PreviewRows ?? [],
+        };
+      }
     }
   } catch {
     // fallback
   }
 
-  return extractHeadersInWorker(file);
+  return { headers: await extractHeadersInWorker(file), previewRows: [] };
+}
+
+export async function extractSpreadsheetHeaders(file: File, importFileTypeId?: string): Promise<string[]> {
+  return (await extractSpreadsheetSample(file, importFileTypeId)).headers;
 }
 
 export async function fetchTransformRules(): Promise<ApiTransformRule[]> {

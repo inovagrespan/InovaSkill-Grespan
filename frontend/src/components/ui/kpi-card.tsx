@@ -1,7 +1,8 @@
-import { Loader2, Minus, TrendingDown, TrendingUp } from "lucide-react";
+import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
 import { resolveTrendDirection, type TrendDirection } from "./kpi-card.utils";
+import { Skeleton } from "./skeleton";
 
 type KpiCardProps = {
   title: string;
@@ -69,7 +70,10 @@ export function KpiCard({
 
       <div className="flex min-h-20 flex-1 items-center justify-between gap-3">
         {loading ? (
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-3 w-40" />
+          </div>
         ) : (
           <p
             title={valueTooltip ?? value}

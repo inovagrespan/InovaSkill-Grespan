@@ -1,5 +1,6 @@
 ﻿using InovaSkill.Importer.Api.Contracts;
 using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Application.Events;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Domain.ValueObjects;
@@ -13,7 +14,7 @@ namespace InovaSkill.Importer.Api.Controllers;
 [Route("api/files")]
 public sealed class FilesController(
     IFileUploadService fileUploadService,
-    IFileJobQueue fileJobQueue,
+    IProcessingEventPublisher eventPublisher,
     ImportDbContext dbContext) : ControllerBase
 {
     private static readonly HashSet<string> AllowedImportFileTypeCodes = new(StringComparer.OrdinalIgnoreCase)
@@ -127,7 +128,9 @@ public sealed class FilesController(
         job.RequeueManually();
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        await fileJobQueue.EnqueueAsync(job.Id, cancellationToken);
+        await eventPublisher.PublishAsync(
+            ProcessingEventEnvelope.Create(ProcessingEventTypes.FileUploaded, job.Id),
+            cancellationToken);
         return Ok();
     }
 
