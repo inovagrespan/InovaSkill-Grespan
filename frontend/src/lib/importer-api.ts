@@ -337,6 +337,110 @@ export type CustomerInsightsResponse = {
   monthlyHistoryPeriods: number;
 };
 
+export type CustomerCommercialHealthReport = {
+  header: CustomerCommercialHealthHeader;
+  score: CustomerCommercialHealthScore;
+  health: CustomerCommercialHealthBlock;
+  trend: CustomerCommercialHealthBlock;
+  potential: CustomerCommercialHealthPotential;
+  dependency: CustomerCommercialHealthDependency;
+  products: CustomerCommercialHealthProduct[];
+  timeline: CustomerCommercialHealthTimelineItem[];
+  evolution: CustomerCommercialHealthEvolutionPoint[];
+  comparisons: CustomerCommercialHealthComparison[];
+  recommendations: CustomerCommercialHealthRecommendation[];
+  alerts: CustomerCommercialHealthAlert[];
+};
+
+export type CustomerCommercialHealthHeader = {
+  customerCode: string;
+  customerName: string;
+  city: string;
+  linkedCompany: string;
+  lastPurchaseDate: string | null;
+  daysWithoutPurchase: number;
+  averageDaysBetweenPurchases: number | null;
+  commercialStatus: string;
+};
+
+export type CustomerCommercialHealthScore = {
+  value: number;
+  label: string;
+  explanation: string;
+};
+
+export type CustomerCommercialHealthBlock = {
+  status: string;
+  tone: "success" | "warning" | "danger" | "neutral" | string;
+  summary: string;
+  detail: string;
+};
+
+export type CustomerCommercialHealthPotential = {
+  expectedRevenue: number | null;
+  expectedQuantity: number | null;
+  label: string;
+  explanation: string;
+};
+
+export type CustomerCommercialHealthDependency = {
+  status: string;
+  explanation: string;
+  productsToReachEightyPercent: number;
+  topProductSharePercent: number;
+};
+
+export type CustomerCommercialHealthProduct = {
+  productCode: string;
+  productDescription: string;
+  quantity: number;
+  revenue: number;
+  sharePercent: number;
+};
+
+export type CustomerCommercialHealthTimelineItem = {
+  date: string;
+  orders: number;
+  revenue: number;
+  quantity: number;
+};
+
+export type CustomerCommercialHealthEvolutionPoint = {
+  periodStart: string;
+  revenue: number;
+  quantity: number;
+  orders: number;
+  averageTicket: number;
+};
+
+export type CustomerCommercialHealthComparison = {
+  label: string;
+  revenue: number;
+  previousRevenue: number;
+  quantity: number;
+  previousQuantity: number;
+  orders: number;
+  previousOrders: number;
+  averageTicket: number;
+  previousAverageTicket: number;
+  revenueVariationPercent: number | null;
+  quantityVariationPercent: number | null;
+  ordersVariationPercent: number | null;
+  averageTicketVariationPercent: number | null;
+};
+
+export type CustomerCommercialHealthRecommendation = {
+  priority: string;
+  title: string;
+  detail: string;
+};
+
+export type CustomerCommercialHealthAlert = {
+  severity: "critical" | "warning" | "info" | string;
+  title: string;
+  detail: string;
+};
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
 export const MAX_UPLOAD_SIZE_BYTES = 524_288_000;
 
@@ -780,6 +884,8 @@ export async function fetchCommercialTransactions(input: {
   customerName?: string;
   productCode?: string;
   city?: string;
+  productGroup?: string;
+  transactionType?: string;
   dateFrom?: string;
   dateTo?: string;
 }): Promise<PagedResult<CommercialTransaction>> {
@@ -792,6 +898,8 @@ export async function fetchCommercialTransactions(input: {
   if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
   if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
   if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
@@ -880,6 +988,8 @@ export async function fetchCommercialTransactionsSummary(input: {
   customerName?: string;
   productCode?: string;
   city?: string;
+  productGroup?: string;
+  transactionType?: string;
   dateFrom?: string;
   dateTo?: string;
   referenceDate?: string;
@@ -895,6 +1005,8 @@ export async function fetchCommercialTransactionsSummary(input: {
   if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
   if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
   if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
   if (input.referenceDate?.trim()) query.set("referenceDate", input.referenceDate.trim());
@@ -1067,6 +1179,14 @@ export async function fetchCustomerInsights(input: {
   const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar insights do cliente."));
   return (await response.json()) as CustomerInsightsResponse;
+}
+
+export async function fetchCustomerCommercialHealth(input: {
+  customerId: string;
+}): Promise<CustomerCommercialHealthReport> {
+  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/commercial-health`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise comercial do cliente."));
+  return (await response.json()) as CustomerCommercialHealthReport;
 }
 
 function normalizeTargetFieldType(value: unknown): ApiTargetField["dataType"] {

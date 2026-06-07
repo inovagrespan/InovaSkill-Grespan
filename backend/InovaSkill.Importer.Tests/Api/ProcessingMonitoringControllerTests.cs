@@ -17,7 +17,7 @@ public sealed class ProcessingMonitoringControllerTests
     public async Task GetDashboard_ReturnsOperationalSummaryFromExistingJobsAndQueue()
     {
         await using var db = CreateDb();
-        var now = DateTime.UtcNow;
+        var now = DateTime.UtcNow.Date.AddHours(12);
         db.FileJobs.AddRange(
             new FileJob
             {
@@ -174,6 +174,69 @@ public sealed class ProcessingMonitoringControllerTests
         var job = await db.FileJobs.SingleAsync(x => x.Id == 9);
         Assert.Equal(FileJobStatus.Cancelled, job.Status);
         Assert.NotNull(job.FinishedAt);
+    }
+
+    [Fact]
+    public async Task GetDashboard_ClampsInvalidProgressAndFlagsStaleWorkers()
+    {
+        await using var db = CreateDb();
+        var now = DateTime.UtcNow;
+        db.FileJobs.Add(new FileJob
+        {
+            Id = 11,
+            FilePath = "vendas.xlsx",
+            OriginalFileName = "vendas.xlsx",
+            ImportFileTypeCode = ImportFileTypeCodes.SalesInvoice,
+            Status = FileJobStatus.Importing,
+            CurrentStep = "Importando dados",
+            ProgressPercent = 140,
+            ProcessedRows = 10,
+            TotalRows = 100,
+            CreatedAt = now.AddMinutes(-15),
+            StartedAt = now.AddMinutes(-10),
+            LastHeartbeatAt = now.AddMinutes(-10)
+        });
+        db.WorkerHeartbeats.Add(new WorkerHeartbeat
+        {
+            WorkerId = "worker-offline",
+            LastSeenAt = now.AddMinutes(-2),
+            ProcessedJobsToday = 1,
+            CurrentTask = "Importando dados"
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubProcessingEventPublisher());
+
+        var result = await controller.GetDashboard();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<ProcessingMonitoringDashboardDto>(ok.Value);
+        Assert.Equal(1, payload.Summary.StaleJobs);
+        Assert.Contains(payload.Jobs, job => job.Id == 11 && job.ProgressPercent == 100);
+        Assert.Contains(payload.Workers, worker => worker.WorkerId == "worker-offline" && worker.Status == "Offline");
+    }
+
+    [Fact]
+    public async Task Cancel_RejectsCompletedJobWithoutChangingItsTerminalState()
+    {
+        await using var db = CreateDb();
+        db.FileJobs.Add(new FileJob
+        {
+            Id = 12,
+            FilePath = "vendas.xlsx",
+            OriginalFileName = "vendas.xlsx",
+            Status = FileJobStatus.Completed,
+            CurrentStep = "Processamento concluido",
+            FinishedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubProcessingEventPublisher());
+
+        var result = await controller.Cancel(12);
+
+        Assert.IsType<ConflictObjectResult>(result);
+        var job = await db.FileJobs.SingleAsync(x => x.Id == 12);
+        Assert.Equal(FileJobStatus.Completed, job.Status);
     }
 
     private static ImportDbContext CreateDb()

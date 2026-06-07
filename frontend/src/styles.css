@@ -226,6 +226,10 @@
   @apply p-6 md:p-10 xl:p-12 space-y-6;
 }
 
+.processing-page-shell {
+  padding-top: clamp(3rem, 4vw, 4.5rem);
+}
+
 .page-header-kicker {
   @apply text-[10px] font-mono uppercase tracking-[0.3em] text-muted-foreground;
 }

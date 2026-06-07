@@ -19,6 +19,8 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
         [FromQuery] string? customerName = null,
         [FromQuery] string? productCode = null,
         [FromQuery] string? city = null,
+        [FromQuery] string? productGroup = null,
+        [FromQuery] string? transactionType = null,
         [FromQuery] DateTime? dateFrom = null,
         [FromQuery] DateTime? dateTo = null,
         CancellationToken cancellationToken = default)
@@ -58,15 +60,27 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
             query = query.Where(x => x.City.Contains(normalized));
         }
 
+        if (!string.IsNullOrWhiteSpace(productGroup))
+        {
+            var normalized = productGroup.Trim();
+            query = query.Where(x => x.ProductGroup.Contains(normalized));
+        }
+
+        if (!string.IsNullOrWhiteSpace(transactionType))
+        {
+            var normalized = transactionType.Trim();
+            query = query.Where(x => x.TransactionType.Contains(normalized));
+        }
+
         if (dateFrom.HasValue)
         {
-            var from = dateFrom.Value.Date;
+            var from = NormalizeToUtc(dateFrom.Value).Date;
             query = query.Where(x => x.TransactionDate >= from);
         }
 
         if (dateTo.HasValue)
         {
-            var toExclusive = dateTo.Value.Date.AddDays(1);
+            var toExclusive = NormalizeToUtc(dateTo.Value).Date.AddDays(1);
             query = query.Where(x => x.TransactionDate < toExclusive);
         }
 
@@ -110,6 +124,8 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
         [FromQuery] string? customerName = null,
         [FromQuery] string? productCode = null,
         [FromQuery] string? city = null,
+        [FromQuery] string? productGroup = null,
+        [FromQuery] string? transactionType = null,
         [FromQuery] DateTime? dateFrom = null,
         [FromQuery] DateTime? dateTo = null,
         CancellationToken cancellationToken = default)
@@ -149,15 +165,27 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
             query = query.Where(x => x.City.Contains(normalized));
         }
 
+        if (!string.IsNullOrWhiteSpace(productGroup))
+        {
+            var normalized = productGroup.Trim();
+            query = query.Where(x => x.ProductGroup.Contains(normalized));
+        }
+
+        if (!string.IsNullOrWhiteSpace(transactionType))
+        {
+            var normalized = transactionType.Trim();
+            query = query.Where(x => x.TransactionType.Contains(normalized));
+        }
+
         if (dateFrom.HasValue)
         {
-            var from = dateFrom.Value.Date;
+            var from = NormalizeToUtc(dateFrom.Value).Date;
             query = query.Where(x => x.TransactionDate >= from);
         }
 
         if (dateTo.HasValue)
         {
-            var toExclusive = dateTo.Value.Date.AddDays(1);
+            var toExclusive = NormalizeToUtc(dateTo.Value).Date.AddDays(1);
             query = query.Where(x => x.TransactionDate < toExclusive);
         }
 
@@ -226,5 +254,15 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
                 x.GrowthPercent)).ToList());
 
         return Ok(response);
+    }
+
+    private static DateTime NormalizeToUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
     }
 }

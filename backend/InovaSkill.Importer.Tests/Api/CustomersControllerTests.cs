@@ -1,5 +1,6 @@
 using InovaSkill.Importer.Api.Controllers;
 using InovaSkill.Importer.Api.Contracts;
+using InovaSkill.Importer.Application.Analytics;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
@@ -27,6 +28,27 @@ public sealed class CustomersControllerTests
         Assert.Equal(300m, payload.AverageRevenueMonthly);
         Assert.Equal(150m, payload.AverageRevenueWeekly);
         Assert.Equal("Em queda", payload.Status);
+    }
+
+    [Fact]
+    public async Task GetCommercialHealth_ReturnsExecutiveCustomerHealthReport()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetCommercialHealth("C1");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerCommercialHealthReport>(ok.Value);
+        Assert.Equal("C1", payload.Header.CustomerCode);
+        Assert.Equal("Cliente A", payload.Header.CustomerName);
+        Assert.Equal("Empresa Alpha", payload.Header.LinkedCompany);
+        Assert.InRange(payload.Score.Value, 0, 100);
+        Assert.NotEmpty(payload.Products);
+        Assert.NotEmpty(payload.Timeline);
+        Assert.Contains(payload.Comparisons, x => x.Label == "Últimos 30 dias");
+        Assert.NotEmpty(payload.Recommendations);
     }
 
     [Fact]
@@ -178,6 +200,86 @@ public sealed class CustomersControllerTests
         Assert.Equal(10, payload.PageSize);
         Assert.Equal(2, payload.TotalItems);
         Assert.Equal(2, payload.Items.Count);
+    }
+
+    [Fact]
+    public async Task GetPurchaseHistory_ClampsUnsafePaginationInputs()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetPurchaseHistory(
+            "C1",
+            page: -10,
+            pageSize: 1000,
+            dateFrom: new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc),
+            dateTo: new DateTime(2026, 5, 31, 0, 0, 0, DateTimeKind.Utc));
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerPurchaseHistoryResponseDto>(ok.Value);
+
+        Assert.Equal(1, payload.Page);
+        Assert.Equal(100, payload.PageSize);
+        Assert.Equal(2, payload.TotalItems);
+    }
+
+    [Fact]
+    public async Task GetTopProducts_ReturnsCoherentSharesWithoutDuplicatingRevenue()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        db.CommercialTransactions.Add(new Domain.Entities.CommercialTransaction
+        {
+            DocumentNumber = "NF-102",
+            TransactionDate = new DateTime(2026, 5, 20, 0, 0, 0, DateTimeKind.Utc),
+            CustomerCode = "C1",
+            CustomerName = "Cliente A",
+            ProductCode = "P1",
+            ProductDescription = "Produto 1",
+            Quantity = 5m,
+            UnitPrice = 10m,
+            TotalAmount = 50m,
+            TransactionType = "Venda",
+            City = "Campinas",
+            ProductGroup = "Grupo A",
+            GrossWeightKg = 1m,
+            SourceFileJobId = 1
+        });
+        await db.SaveChangesAsync();
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetTopProducts(
+            "C1",
+            dateFrom: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
+            dateTo: new DateTime(2026, 5, 31, 0, 0, 0, DateTimeKind.Utc));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsAssignableFrom<IReadOnlyList<CustomerProductItemDto>>(ok.Value);
+        Assert.Equal(2, payload.Count);
+        Assert.Equal(100m, payload.Sum(x => x.SharePercent));
+
+        var product1 = Assert.Single(payload, item => item.ProductCode == "P1");
+        Assert.Equal(150m, product1.Revenue);
+        Assert.Equal(15m, product1.Quantity);
+        Assert.Equal(42.86m, product1.SharePercent, precision: 2);
+
+        var product2 = Assert.Single(payload, item => item.ProductCode == "P2");
+        Assert.Equal(200m, product2.Revenue);
+        Assert.Equal(20m, product2.Quantity);
+        Assert.Equal(57.14m, product2.SharePercent, precision: 2);
+    }
+
+    [Fact]
+    public async Task GetInsights_RejectsUnsupportedMovingAverageWindow()
+    {
+        await using var db = await CreateDbAsync();
+        SeedBaseData(db);
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetInsights("C1", movingAverageWindowMonths: 5);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("3, 6 ou 12", Assert.IsType<string>(badRequest.Value));
     }
 
     [Fact]

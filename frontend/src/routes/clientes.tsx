@@ -1,5 +1,5 @@
 ﻿import { FormEvent, useEffect, useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -673,11 +673,18 @@ function ClientesPage() {
                     <AlertTriangle className="h-4 w-4 text-primary" />
                     <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Inteligência Comercial</h4>
                   </div>
-                  <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" aria-label="Base histórica para inteligência comercial" value={movingAverageWindow} onChange={(e) => setMovingAverageWindow(Number(e.target.value) as 3 | 6 | 12)}>
-                    <option value={3}>Base: últimos 3 meses</option>
-                    <option value={6}>Base: últimos 6 meses</option>
-                    <option value={12}>Base: últimos 12 meses</option>
-                  </select>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button size="sm" variant="outline" asChild>
+                      <Link to="/clientes/analise-comercial" search={{ cliente: selectedCustomerId ?? details.customerCode }}>
+                        Ver análise completa
+                      </Link>
+                    </Button>
+                    <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" aria-label="Base histórica para inteligência comercial" value={movingAverageWindow} onChange={(e) => setMovingAverageWindow(Number(e.target.value) as 3 | 6 | 12)}>
+                      <option value={3}>Base: últimos 3 meses</option>
+                      <option value={6}>Base: últimos 6 meses</option>
+                      <option value={12}>Base: últimos 12 meses</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   <IntelligenceDecisionCard title="Saúde do Cliente" card={commercialIntelligence.health} icon={AlertTriangle} />

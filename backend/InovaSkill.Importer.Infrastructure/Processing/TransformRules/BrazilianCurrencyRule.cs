@@ -96,7 +96,10 @@ public sealed class BrazilianCurrencyRule : ITransformRule
 
         if (lastDot >= 0)
         {
-            return value.Replace(",", string.Empty);
+            var digitsAfterDot = value.Length - lastDot - 1;
+            return digitsAfterDot == 3
+                ? value.Replace(".", string.Empty)
+                : value.Replace(",", string.Empty);
         }
 
         return value;

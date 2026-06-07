@@ -16,6 +16,19 @@ Guia local para qualquer IA que edite este repositório.
 - No frontend, criar casos de teste para funcionalidades importantes com cenários diferentes (fluxo feliz, bordas e entradas inválidas).
 - Não introduzir números mágicos em código de regra de negócio, cálculos, limites, paginação, datas ou timeouts; extrair para constantes nomeadas, configuração ou objetos de política conforme o contexto.
 - Antes de finalizar, executar a suíte de testes aplicável (frontend e backend quando houver alterações em ambos) e só encerrar a tarefa com testes passando.
+- Quando for solicitado criar commit, usar mensagens no padrão Conventional Commits.
+
+## Testing Philosophy
+- O objetivo principal dos testes é encontrar defeitos, inconsistências, regressões e violações de regra de negócio.
+- Testes devem desafiar a implementação, questionar premissas e validar intenção de negócio, não apenas executar código.
+- Não basta cobrir linhas: cobertura sem qualidade, sem cenários de risco e sem assertivas de negócio não tem valor.
+- Para cada regra relevante, cobrir caminho feliz, limites, entradas inválidas, dados contraditórios, casos reais, casos extremos e regressões conhecidas.
+- Edge cases são obrigatórios em regras críticas, especialmente parsing de planilhas, moeda, datas, filtros, agregações, dashboards, filas, workers, progresso e resumos.
+- Todo bug corrigido deve ganhar teste de regressão que falhe antes da correção e passe depois.
+- Identificar e testar invariantes do domínio, por exemplo: progresso entre 0 e 100, linhas importadas <= linhas lidas, totais coerentes, contagens não negativas e soma das partes igual ao total.
+- Evitar testes que repetem o algoritmo da implementação, validam detalhes internos sem necessidade ou apenas verificam que um método foi chamado.
+- Priorizar comportamento observável, resultado esperado, impacto para o usuário e sentido de negócio dos números retornados.
+- Preferir dados pequenos, explícitos e calculáveis manualmente; fixtures grandes só quando o volume em si for o comportamento testado.
 
 ## Encoding e Idioma
 - Textos de UI devem usar PT-BR com acentuação correta.

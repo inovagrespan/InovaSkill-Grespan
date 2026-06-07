@@ -10,6 +10,57 @@ namespace InovaSkill.Importer.Api.Controllers;
 [Route("api/customers")]
 public sealed class CustomersController(ImportDbContext dbContext) : ControllerBase
 {
+    private const int TopProductsLimit = 50;
+
+    [HttpGet("{customerId}/commercial-health")]
+    public async Task<ActionResult<CustomerCommercialHealthReport>> GetCommercialHealth(
+        [FromRoute] string customerId,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedId = customerId.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedId))
+        {
+            return BadRequest("CustomerId inválido.");
+        }
+
+        var resolvedCustomerCode = await ResolveCustomerCodeAsync(normalizedId, cancellationToken);
+        if (resolvedCustomerCode is null)
+        {
+            return NotFound("Cliente não encontrado para o identificador informado.");
+        }
+
+        var linkedCompany = await dbContext.Customers
+            .AsNoTracking()
+            .Where(x => x.CustomerCode == resolvedCustomerCode)
+            .Select(x => x.Name)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
+        var rows = await dbContext.CommercialTransactions
+            .AsNoTracking()
+            .Where(x => x.CustomerCode == resolvedCustomerCode)
+            .OrderBy(x => x.TransactionDate)
+            .Select(x => new CustomerCommercialHealthTransaction(
+                x.CustomerCode,
+                x.CustomerName,
+                x.City,
+                linkedCompany,
+                x.DocumentNumber,
+                x.ProductCode,
+                x.ProductDescription,
+                x.TotalAmount,
+                x.Quantity,
+                x.GrossWeightKg,
+                x.TransactionDate))
+            .ToListAsync(cancellationToken);
+
+        if (rows.Count == 0)
+        {
+            return NotFound("Cliente não possui transações para análise comercial.");
+        }
+
+        return Ok(CustomerCommercialHealthAnalyzer.Build(rows, DateTime.UtcNow));
+    }
+
     [HttpGet("{customerId}/summary")]
     public async Task<ActionResult<CustomerSummaryResponseDto>> GetSummary(
         [FromRoute] string customerId,
@@ -175,18 +226,23 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
         }
 
         var period = CustomerCalculators.ResolvePeriods(dateFrom, dateTo, defaultDays: 365);
-        var grouped = await dbContext.CommercialTransactions.AsNoTracking()
+        var groupedRows = await dbContext.CommercialTransactions.AsNoTracking()
             .Where(x => x.CustomerCode == resolvedCustomerCode && x.TransactionDate >= period.CurrentFrom && x.TransactionDate < period.CurrentTo)
             .GroupBy(x => new { x.ProductCode, x.ProductDescription })
-            .Select(g => new CustomerProductShareMetrics(
+            .Select(g => new
+            {
                 g.Key.ProductCode,
                 g.Key.ProductDescription,
-                (decimal)g.Sum(x => (double)x.Quantity),
-                (decimal)g.Sum(x => (double)x.TotalAmount),
-                0m))
+                Quantity = g.Sum(x => (double)x.Quantity),
+                Revenue = g.Sum(x => (double)x.TotalAmount)
+            })
             .OrderByDescending(x => x.Revenue)
-            .Take(50)
+            .Take(TopProductsLimit)
             .ToListAsync(cancellationToken);
+
+        var grouped = groupedRows
+            .Select(x => new CustomerProductShareMetrics(x.ProductCode, x.ProductDescription, (decimal)x.Quantity, (decimal)x.Revenue, 0m))
+            .ToList();
 
         var items = CustomerCalculators.BuildProductShares(grouped)
             .Select(x => new CustomerProductItemDto(x.ProductCode, x.ProductDescription, x.Quantity, x.Revenue, x.SharePercent))

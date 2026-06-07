@@ -21,6 +21,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
 import { Route as ImportacoesTemplatesRouteImport } from './routes/importacoes.templates'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
+import { Route as ClientesAnaliseComercialRouteImport } from './routes/clientes.analise-comercial'
 
 const VendasRoute = VendasRouteImport.update({
   id: '/vendas',
@@ -82,10 +83,16 @@ const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
   path: '/files',
   getParentRoute: () => ImportacoesRoute,
 } as any)
+const ClientesAnaliseComercialRoute =
+  ClientesAnaliseComercialRouteImport.update({
+    id: '/analise-comercial',
+    path: '/analise-comercial',
+    getParentRoute: () => ClientesRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/clientes': typeof ClientesRoute
+  '/clientes': typeof ClientesRouteWithChildren
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/logistica': typeof LogisticaRoute
   '/processamentos': typeof ProcessamentosRoute
@@ -93,19 +100,21 @@ export interface FileRoutesByFullPath {
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/importacoes/templates': typeof ImportacoesTemplatesRoute
   '/importacoes/': typeof ImportacoesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/clientes': typeof ClientesRoute
+  '/clientes': typeof ClientesRouteWithChildren
   '/logistica': typeof LogisticaRoute
   '/processamentos': typeof ProcessamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/importacoes/templates': typeof ImportacoesTemplatesRoute
   '/importacoes': typeof ImportacoesIndexRoute
@@ -113,7 +122,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/clientes': typeof ClientesRoute
+  '/clientes': typeof ClientesRouteWithChildren
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/logistica': typeof LogisticaRoute
   '/processamentos': typeof ProcessamentosRoute
@@ -121,6 +130,7 @@ export interface FileRoutesById {
   '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/importacoes/templates': typeof ImportacoesTemplatesRoute
   '/importacoes/': typeof ImportacoesIndexRoute
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/rh'
     | '/simulacao'
     | '/vendas'
+    | '/clientes/analise-comercial'
     | '/importacoes/files'
     | '/importacoes/templates'
     | '/importacoes/'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/rh'
     | '/simulacao'
     | '/vendas'
+    | '/clientes/analise-comercial'
     | '/importacoes/files'
     | '/importacoes/templates'
     | '/importacoes'
@@ -164,6 +176,7 @@ export interface FileRouteTypes {
     | '/rh'
     | '/simulacao'
     | '/vendas'
+    | '/clientes/analise-comercial'
     | '/importacoes/files'
     | '/importacoes/templates'
     | '/importacoes/'
@@ -171,7 +184,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ClientesRoute: typeof ClientesRoute
+  ClientesRoute: typeof ClientesRouteWithChildren
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LogisticaRoute: typeof LogisticaRoute
   ProcessamentosRoute: typeof ProcessamentosRoute
@@ -267,8 +280,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacoesFilesRouteImport
       parentRoute: typeof ImportacoesRoute
     }
+    '/clientes/analise-comercial': {
+      id: '/clientes/analise-comercial'
+      path: '/analise-comercial'
+      fullPath: '/clientes/analise-comercial'
+      preLoaderRoute: typeof ClientesAnaliseComercialRouteImport
+      parentRoute: typeof ClientesRoute
+    }
   }
 }
+
+interface ClientesRouteChildren {
+  ClientesAnaliseComercialRoute: typeof ClientesAnaliseComercialRoute
+}
+
+const ClientesRouteChildren: ClientesRouteChildren = {
+  ClientesAnaliseComercialRoute: ClientesAnaliseComercialRoute,
+}
+
+const ClientesRouteWithChildren = ClientesRoute._addFileChildren(
+  ClientesRouteChildren,
+)
 
 interface ImportacoesRouteChildren {
   ImportacoesFilesRoute: typeof ImportacoesFilesRoute
@@ -288,7 +320,7 @@ const ImportacoesRouteWithChildren = ImportacoesRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ClientesRoute: ClientesRoute,
+  ClientesRoute: ClientesRouteWithChildren,
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LogisticaRoute: LogisticaRoute,
   ProcessamentosRoute: ProcessamentosRoute,

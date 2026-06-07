@@ -89,6 +89,56 @@ public sealed class ProcessingEventDispatcherTests
         Assert.Equal("skipped", log.Status);
     }
 
+    [Fact]
+    public async Task DispatchAsync_MovesUnknownEventToDeadLetterWithoutClaimingJob()
+    {
+        await using var db = CreateDb();
+        db.FileJobs.Add(new FileJob { Id = 50, FilePath = "file.csv", OriginalFileName = "file.csv" });
+        await db.SaveChangesAsync();
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([], queue, queue, db);
+        var envelope = ProcessingEventEnvelope.Create("UnknownEvent", 50);
+
+        await dispatcher.DispatchAsync(envelope, CancellationToken.None);
+
+        Assert.Empty(queue.Published);
+        var deadLetter = Assert.Single(queue.DeadLetters);
+        Assert.Equal(envelope.CorrelationId, deadLetter.CorrelationId);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("dead_letter", log.Status);
+        Assert.Contains("No handler", log.ErrorMessage);
+        var job = await db.FileJobs.SingleAsync(x => x.Id == 50);
+        Assert.True(string.IsNullOrEmpty(job.LockedBy));
+        Assert.Null(job.LockedAt);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_ReclaimsStaleLockAndReleasesItAfterProcessing()
+    {
+        await using var db = CreateDb();
+        db.FileJobs.Add(new FileJob
+        {
+            Id = 60,
+            FilePath = "file.csv",
+            OriginalFileName = "file.csv",
+            LockedBy = "dead-worker",
+            LockedAt = DateTime.UtcNow.AddMinutes(-11)
+        });
+        await db.SaveChangesAsync();
+        var handler = new RecordingHandler(ProcessingEventTypes.FileUploaded);
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([handler], queue, queue, db);
+
+        await dispatcher.DispatchAsync(ProcessingEventEnvelope.Create(ProcessingEventTypes.FileUploaded, 60), CancellationToken.None);
+
+        Assert.Single(handler.Handled);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("processed", log.Status);
+        var job = await db.FileJobs.SingleAsync(x => x.Id == 60);
+        Assert.True(string.IsNullOrEmpty(job.LockedBy));
+        Assert.Null(job.LockedAt);
+    }
+
     private static ImportDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<ImportDbContext>()

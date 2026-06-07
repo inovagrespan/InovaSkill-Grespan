@@ -56,7 +56,10 @@ export function normalizeNumber(value: string, config: FieldRuleConfig): string 
 
   next = next.replace(/\s/g, "");
   const decimalSeparator = config.detectInternationalFormat && !config.detectBrazilianFormat ? "." : config.decimalSeparator;
-  const thousandSeparator = config.thousandSeparator === "none" ? "" : config.thousandSeparator;
+  const configuredThousandSeparator = config.thousandSeparator === "none" ? "" : config.thousandSeparator;
+  const thousandSeparator = config.detectInternationalFormat && !config.detectBrazilianFormat
+    ? ","
+    : configuredThousandSeparator;
   if (thousandSeparator) {
     next = next.split(thousandSeparator).join("");
   }
@@ -218,9 +221,11 @@ function normalizeByFieldType(value: string, fieldType: BuilderTargetField["data
 }
 
 function buildNumberParameters(config: FieldRuleConfig) {
+  const isInternationalOnly = config.detectInternationalFormat && !config.detectBrazilianFormat;
+
   return {
-    decimalSeparator: config.detectInternationalFormat && !config.detectBrazilianFormat ? "." : config.decimalSeparator,
-    thousandSeparator: config.thousandSeparator === "none" ? "" : config.thousandSeparator,
+    decimalSeparator: isInternationalOnly ? "." : config.decimalSeparator,
+    thousandSeparator: isInternationalOnly ? "," : config.thousandSeparator === "none" ? "" : config.thousandSeparator,
     allowNegative: config.allowNegative,
     minValue: parseOptionalNumber(config.minValue),
     maxValue: parseOptionalNumber(config.maxValue),

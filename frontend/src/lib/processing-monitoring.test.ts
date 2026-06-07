@@ -58,17 +58,64 @@ describe("processing monitoring", () => {
     expect(dashboard.workers[0]).toEqual(expect.objectContaining({ workerId: "worker-1", status: "Online" }));
   });
 
-  it("expõe a rota e o menu de Processamentos", () => {
+  it("normaliza detalhes do job preservando metricas e timeline criticas", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      Job: {
+        Id: 20,
+        FileName: "vendas.xlsx",
+        Status: "Processando",
+        StatusLabel: "Importacao",
+        CurrentStep: "Gerando resumo",
+        ProgressPercent: 100,
+        CreatedAt: "2026-06-01T10:00:00Z",
+        StartedAt: "2026-06-01T10:01:00Z",
+        FinishedAt: null,
+        ElapsedSeconds: 180,
+        ProcessedRows: 90,
+        TotalRows: 100,
+        ErrorCount: 10,
+      },
+      Timeline: [
+        { Step: "VALIDATION", StepName: "Validacao", StartedAt: "2026-06-01T10:01:00Z", FinishedAt: "2026-06-01T10:02:00Z", DurationSeconds: 60, Status: "completed", ProcessedRows: 100, ErrorCount: 10 },
+      ],
+      Metrics: {
+        TotalRows: 100,
+        ValidRows: 90,
+        InvalidRows: 10,
+        ImportedRows: 90,
+        ErrorCount: 10,
+        WarningCount: 0,
+      },
+      PerformanceByStage: [
+        { Stage: "VALIDATION", StageName: "Validacao", AverageDurationSeconds: 60, SharePercent: 100 },
+      ],
+      Logs: [
+        { Timestamp: "2026-06-01T10:02:00Z", FileJobId: 20, Stage: "VALIDATION", Level: "Warning", Message: "10 linhas invalidas" },
+      ],
+    }), { status: 200 })));
+    const { fetchProcessingJobDetails } = await import("./importer-api");
+
+    const details = await fetchProcessingJobDetails(20);
+
+    expect(details.job).toEqual(expect.objectContaining({ id: 20, progressPercent: 100, totalRows: 100 }));
+    expect(details.metrics).toEqual(expect.objectContaining({ totalRows: 100, validRows: 90, invalidRows: 10 }));
+    expect(details.timeline[0]).toEqual(expect.objectContaining({ step: "VALIDATION", errorCount: 10 }));
+    expect(details.performanceByStage[0]).toEqual(expect.objectContaining({ sharePercent: 100 }));
+    expect(details.logs[0]).toEqual(expect.objectContaining({ stage: "VALIDATION", level: "Warning" }));
+  });
+
+  it("expoe a rota e o menu de Processamentos", () => {
     const routeSource = fs.readFileSync(path.resolve(process.cwd(), "src/routes/processamentos.tsx"), "utf8");
     const sidebarSource = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
 
     expect(routeSource).toContain('createFileRoute("/processamentos")');
+    expect(routeSource).toContain("processing-page-shell");
     expect(routeSource).toContain("Central de Processamentos");
     expect(sidebarSource).toContain('to: "/processamentos"');
     expect(sidebarSource).toContain('label: "Processamentos"');
   });
 
-  it("usa skeletons nos principais fluxos assíncronos", () => {
+  it("usa skeletons nos principais fluxos assincronos", () => {
     const processamentos = fs.readFileSync(path.resolve(process.cwd(), "src/routes/processamentos.tsx"), "utf8");
     const vendas = fs.readFileSync(path.resolve(process.cwd(), "src/routes/vendas.tsx"), "utf8");
     const clientes = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
@@ -77,7 +124,9 @@ describe("processing monitoring", () => {
     expect(processamentos).toContain("SkeletonTable");
     expect(processamentos).toContain("SkeletonChart");
     expect(vendas).toContain("SkeletonMetricCard");
-    expect(vendas).toContain("!loading && items.length === 0");
+    expect(vendas).toContain("Filtros avançados");
+    expect(vendas).toContain("Sem resultado");
+    expect(vendas).toContain("periodOptions");
     expect(clientes).toContain("SkeletonModalContent");
     expect(clientes).toContain("!loading && items.length === 0");
     expect(importacoes).toContain("jobsLoading && jobs.length === 0");
