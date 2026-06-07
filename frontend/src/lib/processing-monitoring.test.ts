@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { saveAuthToken } from "./auth";
 
 vi.mock("@/features/import-template-builder/utils/extract-headers-in-worker", () => ({
   extractHeadersInWorker: vi.fn(),
@@ -11,8 +12,37 @@ vi.mock("@/lib/importer-progress", () => ({
 }));
 
 describe("processing monitoring", () => {
+  const localStorageMap = new Map<string, string>();
+  const sessionStorageMap = new Map<string, string>();
+
+  function createToken(exp: number): string {
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ sub: "1", exp })).toString("base64url");
+    return `${header}.${payload}.signature`;
+  }
+
+  beforeEach(() => {
+    localStorageMap.clear();
+    sessionStorageMap.clear();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => localStorageMap.get(key) ?? null,
+        setItem: (key: string, value: string) => localStorageMap.set(key, value),
+        removeItem: (key: string) => localStorageMap.delete(key),
+      },
+      sessionStorage: {
+        getItem: (key: string) => sessionStorageMap.get(key) ?? null,
+        setItem: (key: string, value: string) => sessionStorageMap.set(key, value),
+        removeItem: (key: string) => sessionStorageMap.delete(key),
+      },
+      location: { assign: vi.fn(), pathname: "/", search: "" },
+    });
+    saveAuthToken(createToken(Math.floor(Date.now() / 1000) + 60));
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("normaliza snapshot operacional vindo da API", async () => {
@@ -56,6 +86,19 @@ describe("processing monitoring", () => {
     expect(dashboard.jobs[0]).toEqual(expect.objectContaining({ id: 10, progressPercent: 66, errorCount: 3 }));
     expect(dashboard.stageDurations[0]).toEqual(expect.objectContaining({ stage: "IMPORT", sharePercent: 55 }));
     expect(dashboard.workers[0]).toEqual(expect.objectContaining({ workerId: "worker-1", status: "Online" }));
+  });
+
+  it("usa dashboard demo quando a API de monitoramento esta indisponivel", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("fetch failed");
+    }));
+    const { fetchProcessingMonitoringDashboard } = await import("./importer-api");
+
+    const dashboard = await fetchProcessingMonitoringDashboard();
+
+    expect(dashboard.summary.runningJobs).toBeGreaterThan(0);
+    expect(dashboard.jobs[0]).toEqual(expect.objectContaining({ fileName: "clientes-base-demo.xlsx" }));
+    expect(dashboard.workers[0]).toEqual(expect.objectContaining({ status: "Online" }));
   });
 
   it("normaliza detalhes do job preservando metricas e timeline criticas", async () => {

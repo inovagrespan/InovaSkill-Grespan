@@ -1,0 +1,5 @@
+Numero Pedido,E-mail Cliente,SKU Produto,Quantidade,Data Pedido,Observacao
+PED-2026-001,compras@saobento.test,ARROZ-5KG,20,2026-06-03,Reposicao semanal
+PED-2026-002,financeiro@primavera.test,FEIJAO-1KG,50,2026-06-04,Compra programada
+PED-2026-003,compras@superlopes.test,OLEO-900ML,36,2026-06-05,Entrega parcial permitida
+PED-2026-004,contato@central.test,CAFE-500G,18,2026-06-06,Prioridade normal

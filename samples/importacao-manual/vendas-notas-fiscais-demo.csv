@@ -1,0 +1,5 @@
+Documento,Data,Codigo Cliente,Nome Cliente,Codigo Produto,Descricao Produto,Quantidade,Valor Unitario,Valor Total,Tipo,Cidade,Grupo Produto,Peso Bruto Kg
+NF-2026-001,2026-06-03,CLI-001,Mercado Sao Bento,PRD-104,Arroz Tipo 1 5kg,240,27.90,6696.00,Venda,Campinas,Mercearia,1200
+NF-2026-002,2026-06-04,CLI-002,Atacado Primavera,PRD-221,Feijao Carioca 1kg,520,8.70,4524.00,Venda,Ribeirao Preto,Mercearia,520
+NF-2026-003,2026-06-05,CLI-003,Super Lopes,PRD-318,Oleo de Soja 900ml,360,6.40,2304.00,Venda,Sorocaba,Alimentos,340
+NF-2026-004,2026-06-06,CLI-004,Distribuidora Central,PRD-411,Cafe Tradicional 500g,180,18.50,3330.00,Venda,Sao Paulo,Bebidas,90

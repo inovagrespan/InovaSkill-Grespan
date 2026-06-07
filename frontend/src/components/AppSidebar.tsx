@@ -1,5 +1,5 @@
 ﻿import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, SlidersHorizontal, Sun, TrendingUp, Truck, Users } from "lucide-react";
+import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, ReceiptText, ServerCog, SlidersHorizontal, Sun, TrendingUp, Truck, Users } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -25,9 +25,9 @@ const items = [
     ],
   },
   { to: "/processamentos", label: "Processamentos", icon: ServerCog },
-  { to: "/relatorios", label: "Relatorios", icon: BarChart3 },
+  { to: "/financas", label: "Finanças", icon: ReceiptText },
+  { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/logistica", label: "Logística", icon: Truck },
-  { to: "/rh", label: "RH Atual", icon: Users },
   {
     to: "/importacoes",
     label: "Importações",

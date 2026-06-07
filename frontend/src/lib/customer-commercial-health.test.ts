@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { saveAuthToken } from "./auth";
 
 vi.mock("@/features/import-template-builder/utils/extract-headers-in-worker", () => ({
   extractHeadersInWorker: vi.fn(),
@@ -11,8 +12,37 @@ vi.mock("@/lib/importer-progress", () => ({
 }));
 
 describe("customer commercial health", () => {
+  const localStorageMap = new Map<string, string>();
+  const sessionStorageMap = new Map<string, string>();
+
+  function createToken(exp: number): string {
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ sub: "1", exp })).toString("base64url");
+    return `${header}.${payload}.signature`;
+  }
+
+  beforeEach(() => {
+    localStorageMap.clear();
+    sessionStorageMap.clear();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => localStorageMap.get(key) ?? null,
+        setItem: (key: string, value: string) => localStorageMap.set(key, value),
+        removeItem: (key: string) => localStorageMap.delete(key),
+      },
+      sessionStorage: {
+        getItem: (key: string) => sessionStorageMap.get(key) ?? null,
+        setItem: (key: string, value: string) => sessionStorageMap.set(key, value),
+        removeItem: (key: string) => sessionStorageMap.delete(key),
+      },
+      location: { assign: vi.fn(), pathname: "/", search: "" },
+    });
+    saveAuthToken(createToken(Math.floor(Date.now() / 1000) + 60));
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("carrega prontuario comercial pelo endpoint dedicado do cliente", async () => {
@@ -44,7 +74,14 @@ describe("customer commercial health", () => {
 
     const report = await fetchCustomerCommercialHealth({ customerId: "C1" });
 
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost:5279/api/customers/C1/commercial-health");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5279/api/customers/C1/commercial-health",
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+    const [, init] = fetchMock.mock.calls[0];
+    expect(new Headers(init?.headers).get("Authorization")).toMatch(/^Bearer /);
     expect(report.header.customerName).toBe("Cliente A");
     expect(report.score.value).toBe(64);
     expect(report.products[0].sharePercent).toBe(55);

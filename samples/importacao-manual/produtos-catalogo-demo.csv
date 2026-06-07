@@ -1,0 +1,5 @@
+Codigo Produto,Descricao Produto,SKU,Grupo Produto,Preco,Peso Kg,Ativo
+PRD-104,Arroz Tipo 1 5kg,ARROZ-5KG,Mercearia,27.90,5,true
+PRD-221,Feijao Carioca 1kg,FEIJAO-1KG,Mercearia,8.70,1,true
+PRD-318,Oleo de Soja 900ml,OLEO-900ML,Alimentos,6.40,0.9,true
+PRD-411,Cafe Tradicional 500g,CAFE-500G,Bebidas,18.50,0.5,true

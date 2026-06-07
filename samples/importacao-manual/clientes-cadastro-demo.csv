@@ -1,0 +1,5 @@
+Codigo Cliente,Nome,E-mail,Cidade,Empresa Vinculada,Documento,Data Cadastro
+CLI-001,Mercado Sao Bento,compras@saobento.test,Campinas,Grespan Distribuicao,12.345.678/0001-10,2026-01-15
+CLI-002,Atacado Primavera,financeiro@primavera.test,Ribeirao Preto,Grespan Distribuicao,23.456.789/0001-20,2026-02-03
+CLI-003,Super Lopes,compras@superlopes.test,Sorocaba,Grespan Distribuicao,34.567.890/0001-30,2026-03-22
+CLI-004,Distribuidora Central,contato@central.test,Sao Paulo,Grespan Distribuicao,45.678.901/0001-40,2026-04-08
