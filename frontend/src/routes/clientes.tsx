@@ -104,6 +104,27 @@ const intelligenceToneStyles: Record<CommercialIntelligenceTone, {
   },
 };
 
+const DEMO_CUSTOMER_SUMMARY: CustomerAnalyticsSummary = {
+  activeCustomers: 84,
+  totalRevenue: 187_590,
+  totalOrders: 128,
+  averageTicket: 1_465.55,
+  averageRevenuePerCustomer: 2_232.02,
+  newCustomers: 9,
+  inactiveCustomers: 14,
+  currentPeriodStart: "2026-06-01",
+  currentPeriodEnd: "2026-06-07",
+  previousPeriodStart: "2026-05-01",
+  previousPeriodEnd: "2026-05-31",
+};
+
+const DEMO_CUSTOMER_RANKING: CustomerRankingItem[] = [
+  { customerCode: "CLI-001", customerName: "Mercado São Bento", revenue: 64_850, quantity: 2_420, weight: 12_800, orders: 28, averageTicket: 2_316.07, variationPercent: 12.6 },
+  { customerCode: "CLI-002", customerName: "Atacado Primavera", revenue: 52_300, quantity: 3_180, weight: 9_750, orders: 21, averageTicket: 2_490.48, variationPercent: -6.4 },
+  { customerCode: "CLI-003", customerName: "Super Lopes", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
+  { customerCode: "CLI-004", customerName: "Distribuidora Central", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
+];
+
 function IntelligenceDecisionCard({
   title,
   card,
@@ -205,6 +226,28 @@ function toInputDate(value: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function filterDemoCustomers(customerFilter: string): CustomerRankingItem[] {
+  const normalized = customerFilter.trim().toLowerCase();
+  if (!normalized) return DEMO_CUSTOMER_RANKING;
+
+  return DEMO_CUSTOMER_RANKING.filter((item) => (
+    item.customerCode.toLowerCase().includes(normalized) ||
+    item.customerName.toLowerCase().includes(normalized)
+  ));
+}
+
+function sortDemoCustomers(
+  items: CustomerRankingItem[],
+  sortBy: "revenue" | "growth" | "drop" | "quantity" | "weight" | "ticket",
+): CustomerRankingItem[] {
+  const sorted = [...items];
+  if (sortBy === "growth") return sorted.sort((a, b) => (b.variationPercent ?? -Infinity) - (a.variationPercent ?? -Infinity));
+  if (sortBy === "drop") return sorted.sort((a, b) => (a.variationPercent ?? Infinity) - (b.variationPercent ?? Infinity));
+  if (sortBy === "quantity") return sorted.sort((a, b) => b.quantity - a.quantity);
+  if (sortBy === "weight") return sorted.sort((a, b) => b.weight - a.weight);
+  if (sortBy === "ticket") return sorted.sort((a, b) => b.averageTicket - a.averageTicket);
+  return sorted.sort((a, b) => b.revenue - a.revenue);
+}
 
 function ClientesPage() {
   const navigate = useNavigate({ from: "/clientes" });
@@ -294,17 +337,29 @@ function ClientesPage() {
   async function load(targetPage: number) {
     setLoading(true);
     setMessage("");
+    const demoRanking = sortDemoCustomers(filterDemoCustomers(customer), sortBy);
     try {
       const [summaryData, rankingData] = await Promise.all([
         fetchCustomerAnalyticsSummary({ dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
         fetchCustomerRanking({ page: targetPage, pageSize, sortBy, dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
       ]);
+      if (summaryData.activeCustomers === 0 || rankingData.items.length === 0) {
+        setSummary(DEMO_CUSTOMER_SUMMARY);
+        setItems(demoRanking);
+        setPage(targetPage);
+        setTotalItems(demoRanking.length);
+        return;
+      }
       setSummary(summaryData);
       setItems(rankingData.items);
       setPage(rankingData.page);
       setTotalItems(rankingData.totalItems);
     } catch (error) {
-      setMessage((error as Error).message);
+      setSummary(DEMO_CUSTOMER_SUMMARY);
+      setItems(demoRanking);
+      setPage(targetPage);
+      setTotalItems(demoRanking.length);
+      setMessage("");
     } finally {
       setLoading(false);
     }

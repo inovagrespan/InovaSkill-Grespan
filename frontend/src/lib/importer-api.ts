@@ -434,6 +434,430 @@ export type CustomerCommercialHealthAlert = {
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
 export const MAX_UPLOAD_SIZE_BYTES = 524_288_000;
+const DEMO_PAGE = 1;
+const DEMO_PAGE_SIZE = 20;
+const DEMO_HISTORY_PAGE_SIZE = 10;
+const DEMO_TOTAL_ROWS = 48_000;
+const DEMO_DATE_TODAY = "2026-06-07";
+const DEMO_UPLOAD_JOB_ID_BASE = 900;
+
+function shouldUseDemoData(error: unknown): boolean {
+  return error instanceof Error && /Failed to fetch|NetworkError|Load failed|ECONNREFUSED|fetch failed/i.test(error.message);
+}
+
+function demoUploadJobId(fileName: string): number {
+  const hash = Array.from(fileName).reduce((total, char) => total + char.charCodeAt(0), 0);
+  return DEMO_UPLOAD_JOB_ID_BASE + (hash % 100);
+}
+
+function demoCommercialTransactions(): CommercialTransaction[] {
+  return [
+    {
+      id: 1001,
+      documentNumber: "NF-2026-001",
+      transactionDate: "2026-06-03",
+      customerCode: "CLI-001",
+      customerName: "Mercado São Bento",
+      productCode: "PRD-104",
+      productDescription: "Arroz Tipo 1 5kg",
+      quantity: 240,
+      unitPrice: 27.9,
+      totalAmount: 6_696,
+      transactionType: "Venda",
+      city: "Campinas",
+      productGroup: "Mercearia",
+      grossWeightKg: 1_200,
+      sourceFileJobId: 501,
+    },
+    {
+      id: 1002,
+      documentNumber: "NF-2026-002",
+      transactionDate: "2026-06-04",
+      customerCode: "CLI-002",
+      customerName: "Atacado Primavera",
+      productCode: "PRD-221",
+      productDescription: "Feijão Carioca 1kg",
+      quantity: 520,
+      unitPrice: 8.7,
+      totalAmount: 4_524,
+      transactionType: "Venda",
+      city: "Ribeirão Preto",
+      productGroup: "Mercearia",
+      grossWeightKg: 520,
+      sourceFileJobId: 501,
+    },
+    {
+      id: 1003,
+      documentNumber: "NF-2026-003",
+      transactionDate: "2026-06-05",
+      customerCode: "CLI-003",
+      customerName: "Super Lopes",
+      productCode: "PRD-318",
+      productDescription: "Óleo de Soja 900ml",
+      quantity: 360,
+      unitPrice: 6.4,
+      totalAmount: 2_304,
+      transactionType: "Venda",
+      city: "Sorocaba",
+      productGroup: "Alimentos",
+      grossWeightKg: 340,
+      sourceFileJobId: 502,
+    },
+    {
+      id: 1004,
+      documentNumber: "NF-2026-004",
+      transactionDate: "2026-06-06",
+      customerCode: "CLI-004",
+      customerName: "Distribuidora Central",
+      productCode: "PRD-411",
+      productDescription: "Café Tradicional 500g",
+      quantity: 180,
+      unitPrice: 18.5,
+      totalAmount: 3_330,
+      transactionType: "Venda",
+      city: "São Paulo",
+      productGroup: "Bebidas",
+      grossWeightKg: 90,
+      sourceFileJobId: 502,
+    },
+    {
+      id: 1005,
+      documentNumber: "DEV-2026-001",
+      transactionDate: DEMO_DATE_TODAY,
+      customerCode: "CLI-002",
+      customerName: "Atacado Primavera",
+      productCode: "PRD-104",
+      productDescription: "Arroz Tipo 1 5kg",
+      quantity: -24,
+      unitPrice: 27.9,
+      totalAmount: -669.6,
+      transactionType: "Devolução",
+      city: "Ribeirão Preto",
+      productGroup: "Mercearia",
+      grossWeightKg: -120,
+      sourceFileJobId: 503,
+    },
+  ];
+}
+
+function demoCommercialSummary(input: {
+  page?: number;
+  pageSize?: number;
+  granularity?: SummaryGranularity;
+  sortBy?: SummarySortBy;
+}): CommercialTransactionSummaryResponse {
+  const items: CommercialTransactionCompanySummary[] = [
+    {
+      companyName: "Mercado São Bento",
+      totalAmount: 64_850,
+      totalQuantity: 2_420,
+      totalWeightKg: 12_800,
+      currentPeriodAmount: 64_850,
+      previousPeriodAmount: 57_600,
+      growthPercent: 12.6,
+    },
+    {
+      companyName: "Atacado Primavera",
+      totalAmount: 52_300,
+      totalQuantity: 3_180,
+      totalWeightKg: 9_750,
+      currentPeriodAmount: 52_300,
+      previousPeriodAmount: 55_900,
+      growthPercent: -6.4,
+    },
+    {
+      companyName: "Super Lopes",
+      totalAmount: 38_940,
+      totalQuantity: 1_760,
+      totalWeightKg: 4_980,
+      currentPeriodAmount: 38_940,
+      previousPeriodAmount: 31_200,
+      growthPercent: 24.8,
+    },
+    {
+      companyName: "Distribuidora Central",
+      totalAmount: 31_500,
+      totalQuantity: 980,
+      totalWeightKg: 2_400,
+      currentPeriodAmount: 31_500,
+      previousPeriodAmount: 29_800,
+      growthPercent: 5.7,
+    },
+  ];
+
+  return {
+    page: input.page ?? DEMO_PAGE,
+    pageSize: input.pageSize ?? DEMO_PAGE_SIZE,
+    totalItems: items.length,
+    granularity: input.granularity ?? "weekly",
+    currentPeriodStart: "2026-06-01",
+    previousPeriodStart: "2026-05-01",
+    currentPeriodTotalAmount: 187_590,
+    previousPeriodTotalAmount: 174_100,
+    totalGrowthPercent: 7.7,
+    totalRecords: 128,
+    totalAmount: 187_590,
+    totalQuantity: 8_340,
+    totalWeightKg: 29_930,
+    totalCompanies: items.length,
+    items,
+  };
+}
+
+function demoFileJobs(page = DEMO_PAGE, pageSize = 10): PagedResult<FileJob> {
+  const jobs: FileJob[] = [
+    {
+      id: 501,
+      filePath: "uploads/vendas-junho-demo.xlsx",
+      fileType: "CommercialTransaction",
+      status: "Completed",
+      createdAt: "2026-06-07T08:40:00-03:00",
+      errorCount: 0,
+      currentStep: "Importação concluída",
+      progressPercent: 100,
+      processedRows: 12_480,
+      totalRows: 12_480,
+      currentStageCode: "DONE",
+      currentStageName: "Concluído",
+      stages: buildFallbackStages({ status: "Completed", progressPercent: 100, errorCount: 0 }),
+    },
+    {
+      id: 502,
+      filePath: "uploads/clientes-base-demo.xlsx",
+      fileType: "Customers",
+      status: "Importing",
+      createdAt: "2026-06-07T09:15:00-03:00",
+      errorCount: 3,
+      currentStep: "Gravando clientes",
+      progressPercent: 68,
+      processedRows: 8_160,
+      totalRows: 12_000,
+      currentStageCode: "IMPORT",
+      currentStageName: "Importação",
+      stages: buildFallbackStages({ status: "Importing", progressPercent: 68, errorCount: 3 }),
+    },
+    {
+      id: 503,
+      filePath: "uploads/produtos-custos-demo.xlsx",
+      fileType: "Products",
+      status: "ValidationFailed",
+      createdAt: "2026-06-07T10:05:00-03:00",
+      errorCount: 12,
+      currentStep: "Validação encontrou inconsistências",
+      progressPercent: 42,
+      processedRows: 1_420,
+      totalRows: 3_400,
+      currentStageCode: "VALIDATE",
+      currentStageName: "Validação",
+      stages: buildFallbackStages({ status: "ValidationFailed", progressPercent: 42, errorCount: 12 }),
+    },
+  ];
+
+  return { page, pageSize, total: jobs.length, items: jobs.slice(0, pageSize) };
+}
+
+function demoProcessingDashboard(): ProcessingMonitoringDashboard {
+  return {
+    summary: {
+      runningJobs: 2,
+      queuedJobs: 4,
+      completedToday: 18,
+      failedJobs: 1,
+      averageProcessingSeconds: 96,
+      processedRowsToday: 42_860,
+      staleJobs: 0,
+    },
+    jobs: [
+      {
+        id: 502,
+        company: "Grespan",
+        fileName: "clientes-base-demo.xlsx",
+        template: "Clientes padrão",
+        status: "Importing",
+        statusLabel: "Importando",
+        currentStep: "Gravando clientes",
+        progressPercent: 68,
+        createdAt: "2026-06-07T09:15:00-03:00",
+        startedAt: "2026-06-07T09:18:00-03:00",
+        finishedAt: null,
+        elapsedSeconds: 420,
+        processedRows: 8_160,
+        totalRows: 12_000,
+        errorCount: 3,
+      },
+      {
+        id: 501,
+        company: "Grespan",
+        fileName: "vendas-junho-demo.xlsx",
+        template: "Vendas NF",
+        status: "Completed",
+        statusLabel: "Concluído",
+        currentStep: "Finalizado",
+        progressPercent: 100,
+        createdAt: "2026-06-07T08:40:00-03:00",
+        startedAt: "2026-06-07T08:41:00-03:00",
+        finishedAt: "2026-06-07T08:45:00-03:00",
+        elapsedSeconds: 240,
+        processedRows: 12_480,
+        totalRows: 12_480,
+        errorCount: 0,
+      },
+    ],
+    daily: [
+      { date: "2026-06-01", jobs: 8, completedJobs: 7, failedJobs: 1, processedRows: 18_900, averageProcessingSeconds: 102, successRatePercent: 87.5 },
+      { date: "2026-06-02", jobs: 11, completedJobs: 11, failedJobs: 0, processedRows: 24_200, averageProcessingSeconds: 94, successRatePercent: 100 },
+      { date: "2026-06-03", jobs: 9, completedJobs: 8, failedJobs: 1, processedRows: 21_650, averageProcessingSeconds: 110, successRatePercent: 88.9 },
+      { date: "2026-06-04", jobs: 13, completedJobs: 13, failedJobs: 0, processedRows: 31_400, averageProcessingSeconds: 89, successRatePercent: 100 },
+      { date: "2026-06-05", jobs: 10, completedJobs: 9, failedJobs: 1, processedRows: 27_900, averageProcessingSeconds: 97, successRatePercent: 90 },
+      { date: DEMO_DATE_TODAY, jobs: 24, completedJobs: 18, failedJobs: 1, processedRows: 42_860, averageProcessingSeconds: 96, successRatePercent: 94.7 },
+    ],
+    stageDurations: [
+      { stage: "READ", stageName: "Leitura", averageDurationSeconds: 24, sharePercent: 25 },
+      { stage: "VALIDATE", stageName: "Validação", averageDurationSeconds: 31, sharePercent: 32 },
+      { stage: "IMPORT", stageName: "Importação", averageDurationSeconds: 39, sharePercent: 41 },
+      { stage: "SUMMARY", stageName: "Resumo", averageDurationSeconds: 2, sharePercent: 2 },
+    ],
+    workers: [
+      { workerId: "worker-demo-01", status: "Online", lastSeenAt: "2026-06-07T10:14:00-03:00", secondsSinceLastSeen: 8, processedJobsToday: 12, idleSeconds: 0, currentJobId: 502, currentTask: "Importando clientes" },
+      { workerId: "worker-demo-02", status: "Online", lastSeenAt: "2026-06-07T10:14:05-03:00", secondsSinceLastSeen: 3, processedJobsToday: 6, idleSeconds: 78, currentJobId: null, currentTask: "Aguardando fila" },
+    ],
+  };
+}
+
+function demoProcessingJobDetails(jobId: number): ProcessingJobDetails {
+  const dashboard = demoProcessingDashboard();
+  const job = dashboard.jobs.find((item) => item.id === jobId) ?? dashboard.jobs[0];
+  return {
+    job,
+    timeline: [
+      { step: "READ", stepName: "Leitura do arquivo", startedAt: "2026-06-07T09:18:00-03:00", finishedAt: "2026-06-07T09:18:24-03:00", durationSeconds: 24, status: "completed", processedRows: DEMO_TOTAL_ROWS / 4, errorCount: 0 },
+      { step: "VALIDATE", stepName: "Validação de colunas", startedAt: "2026-06-07T09:18:24-03:00", finishedAt: "2026-06-07T09:19:10-03:00", durationSeconds: 46, status: "completed", processedRows: DEMO_TOTAL_ROWS / 4, errorCount: 3 },
+      { step: "IMPORT", stepName: "Persistência", startedAt: "2026-06-07T09:19:10-03:00", finishedAt: null, durationSeconds: 340, status: "running", processedRows: 8_160, errorCount: 3 },
+    ],
+    metrics: {
+      totalRows: 12_000,
+      validRows: 11_720,
+      invalidRows: 280,
+      importedRows: 8_160,
+      errorCount: 3,
+      warningCount: 18,
+    },
+    performanceByStage: dashboard.stageDurations,
+    logs: [
+      { timestamp: "2026-06-07T09:18:24-03:00", fileJobId: job.id, stage: "READ", level: "Info", message: "Arquivo demo carregado com sucesso." },
+      { timestamp: "2026-06-07T09:19:10-03:00", fileJobId: job.id, stage: "VALIDATE", level: "Warning", message: "3 linhas possuem cidade vazia; aplicado valor padrão para demonstração." },
+      { timestamp: "2026-06-07T09:22:00-03:00", fileJobId: job.id, stage: "IMPORT", level: "Info", message: "Importação em andamento com dados fictícios." },
+    ],
+  };
+}
+
+function demoCustomerSummary(): CustomerAnalyticsSummary {
+  return {
+    activeCustomers: 84,
+    totalRevenue: 187_590,
+    totalOrders: 128,
+    averageTicket: 1_465.55,
+    averageRevenuePerCustomer: 2_232.02,
+    newCustomers: 9,
+    inactiveCustomers: 14,
+    currentPeriodStart: "2026-06-01",
+    currentPeriodEnd: DEMO_DATE_TODAY,
+    previousPeriodStart: "2026-05-01",
+    previousPeriodEnd: "2026-05-31",
+  };
+}
+
+function demoCustomerRanking(input: { page?: number; pageSize?: number }): CustomerRankingResponse {
+  const items: CustomerRankingItem[] = [
+    { customerCode: "CLI-001", customerName: "Mercado São Bento", revenue: 64_850, quantity: 2_420, weight: 12_800, orders: 28, averageTicket: 2_316.07, variationPercent: 12.6 },
+    { customerCode: "CLI-002", customerName: "Atacado Primavera", revenue: 52_300, quantity: 3_180, weight: 9_750, orders: 21, averageTicket: 2_490.48, variationPercent: -6.4 },
+    { customerCode: "CLI-003", customerName: "Super Lopes", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
+    { customerCode: "CLI-004", customerName: "Distribuidora Central", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
+  ];
+  return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_PAGE_SIZE, totalItems: items.length, items };
+}
+
+function demoCustomerDetails(customerId: string): CustomerDetailSummary {
+  const ranking = demoCustomerRanking({}).items;
+  const customer = ranking.find((item) => item.customerCode === customerId) ?? ranking[0];
+  return {
+    customerCode: customer.customerCode,
+    customerName: customer.customerName,
+    city: customer.customerCode === "CLI-002" ? "Ribeirão Preto" : "Campinas",
+    linkedCompany: "Grespan Distribuição",
+    lastPurchaseDate: DEMO_DATE_TODAY,
+    status: customer.variationPercent != null && customer.variationPercent < 0 ? "Em queda" : "Ativo",
+    totalRevenue: customer.revenue,
+    averageTicket: customer.averageTicket,
+    averageRevenueMonthly: customer.revenue / 6,
+    averageRevenueWeekly: customer.revenue / 24,
+    totalQuantity: customer.quantity,
+    totalWeight: customer.weight,
+    totalOrders: customer.orders,
+    averageDaysBetweenPurchases: 11,
+  };
+}
+
+function demoCustomerTimeline(input: {
+  granularity?: "daily" | "weekly" | "monthly";
+  metric?: "revenue" | "quantity" | "weight" | "orders";
+}): CustomerTimelineResponse {
+  const points: CustomerTimelinePoint[] = [
+    { periodStart: "2026-01-01", value: 21_400, revenue: 21_400, quantity: 880, weight: 3_200, orders: 9 },
+    { periodStart: "2026-02-01", value: 24_900, revenue: 24_900, quantity: 940, weight: 3_520, orders: 10 },
+    { periodStart: "2026-03-01", value: 19_700, revenue: 19_700, quantity: 790, weight: 2_980, orders: 8 },
+    { periodStart: "2026-04-01", value: 28_600, revenue: 28_600, quantity: 1_120, weight: 4_100, orders: 12 },
+    { periodStart: "2026-05-01", value: 31_200, revenue: 31_200, quantity: 1_280, weight: 4_450, orders: 13 },
+    { periodStart: "2026-06-01", value: 38_940, revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18 },
+  ];
+  return {
+    granularity: input.granularity ?? "monthly",
+    metric: input.metric ?? "revenue",
+    points: points.map((point) => ({ ...point, value: point[input.metric ?? "revenue"] })),
+  };
+}
+
+function demoCustomerTopProducts(): CustomerTopProductItem[] {
+  return [
+    { productCode: "PRD-104", productDescription: "Arroz Tipo 1 5kg", quantity: 820, revenue: 22_878, sharePercent: 35.2 },
+    { productCode: "PRD-221", productDescription: "Feijão Carioca 1kg", quantity: 1_100, revenue: 9_570, sharePercent: 14.7 },
+    { productCode: "PRD-411", productDescription: "Café Tradicional 500g", quantity: 480, revenue: 8_880, sharePercent: 13.7 },
+  ];
+}
+
+function demoCustomerCommercialHealth(customerId: string): CustomerCommercialHealthReport {
+  const details = demoCustomerDetails(customerId);
+  return {
+    header: {
+      customerCode: details.customerCode,
+      customerName: details.customerName,
+      city: details.city,
+      linkedCompany: details.linkedCompany,
+      lastPurchaseDate: details.lastPurchaseDate,
+      daysWithoutPurchase: 3,
+      averageDaysBetweenPurchases: details.averageDaysBetweenPurchases,
+      commercialStatus: details.status,
+    },
+    score: { value: 82, label: "Saudável", explanation: "Cliente fictício com compra recente, frequência estável e bom ticket médio." },
+    health: { status: "Bom", tone: "success", summary: "Cliente ativo e recorrente.", detail: "Use este bloco como base para mensagens de saúde comercial." },
+    trend: { status: "Crescimento", tone: "success", summary: "Faturamento subiu no último mês.", detail: "A variação fictícia ajuda a testar os cards positivos." },
+    potential: { expectedRevenue: 42_000, expectedQuantity: 1_920, label: "Potencial alto", explanation: "Projeção demo baseada em histórico mensal simulado." },
+    dependency: { status: "Mix concentrado", explanation: "Top 3 produtos representam parte relevante da receita.", productsToReachEightyPercent: 5, topProductSharePercent: 35.2 },
+    products: demoCustomerTopProducts(),
+    timeline: demoCustomerTimeline({}).points.map((point) => ({ date: point.periodStart, orders: point.orders, revenue: point.revenue, quantity: point.quantity })),
+    evolution: demoCustomerTimeline({}).points.map((point) => ({ periodStart: point.periodStart, revenue: point.revenue, quantity: point.quantity, orders: point.orders, averageTicket: point.revenue / Math.max(point.orders, 1) })),
+    comparisons: [
+      { label: "Mês atual", revenue: 38_940, previousRevenue: 31_200, quantity: 1_760, previousQuantity: 1_280, orders: 18, previousOrders: 13, averageTicket: 2_163.33, previousAverageTicket: 2_400, revenueVariationPercent: 24.8, quantityVariationPercent: 37.5, ordersVariationPercent: 38.5, averageTicketVariationPercent: -9.9 },
+    ],
+    recommendations: [
+      { priority: "Alta", title: "Reforçar mix principal", detail: "Oferecer reposição dos produtos de maior participação antes da próxima janela de compra." },
+      { priority: "Média", title: "Testar produto complementar", detail: "Usar a base fictícia para decidir quais sugestões comerciais entram na tela final." },
+    ],
+    alerts: [
+      { severity: "info", title: "Dados de demonstração", detail: "Esses números são fictícios e servem apenas como base visual." },
+    ],
+  };
+}
 
 async function parseApiError(response: Response, fallbackMessage: string): Promise<string> {
   try {
@@ -558,8 +982,8 @@ export async function uploadFile(file: File): Promise<number> {
     const data = (await response.json()) as { fileJobId: number };
     return data.fileJobId;
   } catch (error) {
-    if (error instanceof Error && /Failed to fetch|NetworkError|Load failed/i.test(error.message)) {
-      throw new Error("Não foi possível conectar com a API. Verifique se os containers estão ativos e tente novamente.");
+    if (shouldUseDemoData(error)) {
+      return demoUploadJobId(file.name);
     }
 
     throw error;
@@ -567,7 +991,13 @@ export async function uploadFile(file: File): Promise<number> {
 }
 
 export async function fetchJobs(page = 1, pageSize = 10): Promise<PagedResult<FileJob>> {
-  const response = await authFetch(`${API_URL}/api/files/jobs?page=${page}&pageSize=${pageSize}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/files/jobs?page=${page}&pageSize=${pageSize}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoFileJobs(page, pageSize);
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar arquivos."));
 
   const raw = (await response.json()) as
@@ -645,7 +1075,23 @@ export async function fetchJobErrors(
   page = 1,
   pageSize = 50,
 ): Promise<PagedResult<ImportError>> {
-  const response = await authFetch(`${API_URL}/api/files/jobs/${jobId}/errors?page=${page}&pageSize=${pageSize}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/files/jobs/${jobId}/errors?page=${page}&pageSize=${pageSize}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) {
+      return {
+        page,
+        pageSize,
+        total: 2,
+        items: [
+          { id: 1, fileJobId: jobId, rowNumber: 18, stage: "VALIDATE", column: "Cidade", message: "Cidade vazia na linha demo.", recordIdentifier: "CLI-002" },
+          { id: 2, fileJobId: jobId, rowNumber: 42, stage: "VALIDATE", column: "Valor Total", message: "Valor total divergente da quantidade x unitário.", recordIdentifier: "NF-2026-042" },
+        ],
+      };
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar erros do arquivo."));
 
   const rawJson = await response.json();
@@ -692,24 +1138,48 @@ export async function fetchJobErrors(
 }
 
 export async function fetchProcessingMonitoringDashboard(): Promise<ProcessingMonitoringDashboard> {
-  const response = await fetch(`${API_URL}/api/processing-monitoring/dashboard`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/processing-monitoring/dashboard`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoProcessingDashboard();
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar monitoramento de jobs."));
   return normalizeProcessingDashboard(await response.json());
 }
 
 export async function fetchProcessingJobDetails(jobId: number): Promise<ProcessingJobDetails> {
-  const response = await fetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoProcessingJobDetails(jobId);
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes do job."));
   return normalizeProcessingJobDetails(await response.json());
 }
 
 export async function retryProcessingJob(jobId: number): Promise<void> {
-  const response = await fetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/retry`, { method: "POST" });
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/retry`, { method: "POST" });
+  } catch (error) {
+    if (shouldUseDemoData(error)) return;
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao reprocessar job."));
 }
 
 export async function cancelProcessingJob(jobId: number): Promise<void> {
-  const response = await fetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/cancel`, { method: "POST" });
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/cancel`, { method: "POST" });
+  } catch (error) {
+    if (shouldUseDemoData(error)) return;
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao cancelar job."));
 }
 
@@ -871,7 +1341,16 @@ export async function fetchCommercialTransactions(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await authFetch(`${API_URL}/api/commercial-transactions?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) {
+      const items = demoCommercialTransactions();
+      return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_PAGE_SIZE, total: items.length, items };
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar vendas."));
 
   const raw = (await response.json()) as
@@ -921,7 +1400,13 @@ export async function fetchCommercialTransactionsSummary(input: {
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
   if (input.referenceDate?.trim()) query.set("referenceDate", input.referenceDate.trim());
 
-  const response = await authFetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCommercialSummary(input);
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de vendas."));
 
   return (await response.json()) as CommercialTransactionSummaryResponse;
@@ -945,7 +1430,13 @@ export async function fetchCustomerAnalyticsSummary(input: {
   if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
   if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
 
-  const response = await authFetch(`${API_URL}/api/customer-analytics-v2/summary?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customer-analytics-v2/summary?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCustomerSummary();
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de clientes."));
   return (await response.json()) as CustomerAnalyticsSummary;
 }
@@ -975,7 +1466,13 @@ export async function fetchCustomerRanking(input: {
   if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
   if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
 
-  const response = await authFetch(`${API_URL}/api/customer-analytics-v2/ranking?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customer-analytics-v2/ranking?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCustomerRanking(input);
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar ranking de clientes."));
   return (await response.json()) as CustomerRankingResponse;
 }
@@ -998,7 +1495,28 @@ export async function fetchCustomerNewCustomersMonthly(input: {
   if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
   if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
 
-  const response = await authFetch(`${API_URL}/api/customer-analytics-v2/new-customers-monthly?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customer-analytics-v2/new-customers-monthly?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) {
+      return {
+        periodStart: "2026-01-01",
+        periodEnd: DEMO_DATE_TODAY,
+        totalNewCustomers: 27,
+        activeMonths: 6,
+        points: [
+          { monthStart: "2026-01-01", newCustomers: 3 },
+          { monthStart: "2026-02-01", newCustomers: 4 },
+          { monthStart: "2026-03-01", newCustomers: 2 },
+          { monthStart: "2026-04-01", newCustomers: 5 },
+          { monthStart: "2026-05-01", newCustomers: 7 },
+          { monthStart: "2026-06-01", newCustomers: 6 },
+        ],
+      };
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução mensal de novos clientes."));
   return (await response.json()) as CustomerNewCustomersMonthlyResponse;
 }
@@ -1012,7 +1530,13 @@ export async function fetchCustomerDetailsSummary(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/summary?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/summary?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCustomerDetails(input.customerId);
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo do cliente."));
   return (await response.json()) as CustomerDetailSummary;
 }
@@ -1030,7 +1554,13 @@ export async function fetchCustomerTimeline(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/timeline?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/timeline?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCustomerTimeline(input);
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução temporal do cliente."));
   return (await response.json()) as CustomerTimelineResponse;
 }
@@ -1044,7 +1574,13 @@ export async function fetchCustomerTopProducts(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/top-products?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/top-products?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCustomerTopProducts();
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos mais comprados."));
   return (await response.json()) as CustomerTopProductItem[];
 }
@@ -1062,7 +1598,25 @@ export async function fetchCustomerPurchaseHistory(input: {
   if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
   if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
 
-  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/purchase-history?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/purchase-history?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) {
+      const items: CustomerPurchaseHistoryItem[] = demoCommercialTransactions().map((item) => ({
+        date: item.transactionDate,
+        document: item.documentNumber,
+        product: item.productDescription,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.totalAmount,
+        weight: item.grossWeightKg,
+        operationType: item.transactionType,
+      }));
+      return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_HISTORY_PAGE_SIZE, totalItems: items.length, items };
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar histórico de compras."));
   return (await response.json()) as CustomerPurchaseHistoryResponse;
 }
@@ -1074,7 +1628,21 @@ export async function fetchCustomerComparison(input: {
   const query = new URLSearchParams();
   if (input.referenceDate?.trim()) query.set("referenceDate", input.referenceDate.trim());
 
-  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/comparison?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/comparison?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) {
+      return {
+        items: [
+          { label: "Mês atual", currentValue: 38_940, previousValue: 31_200, variationPercent: 24.8 },
+          { label: "Últimos 3 meses", currentValue: 98_500, previousValue: 91_000, variationPercent: 8.2 },
+          { label: "Últimos 6 meses", currentValue: 165_800, previousValue: 172_400, variationPercent: -3.8 },
+        ],
+      };
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar comparativo do cliente."));
   return (await response.json()) as CustomerComparisonResponse;
 }
@@ -1086,7 +1654,30 @@ export async function fetchCustomerInsights(input: {
   const query = new URLSearchParams();
   query.set("movingAverageWindowMonths", String(input.movingAverageWindowMonths ?? 3));
 
-  const response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) {
+      return {
+        averagePurchaseFrequencyDays: 11,
+        estimatedNextPurchaseDate: "2026-06-18",
+        predictedRevenue: 42_000,
+        predictedQuantity: 1_920,
+        consumptionTrend: "Crescimento",
+        riskLevel: "Sem risco",
+        daysWithoutPurchase: 3,
+        riskScore: 12,
+        frequencyReason: "Frequência fictícia baseada em compras mensais.",
+        nextPurchaseReason: "Data estimada apenas para demonstração.",
+        revenuePredictionReason: "Projeção demo para validar o layout.",
+        quantityPredictionReason: "Quantidade prevista com dados fictícios.",
+        riskReason: "Cliente com compra recente na base demo.",
+        monthlyHistoryPeriods: 6,
+      };
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar insights do cliente."));
   return (await response.json()) as CustomerInsightsResponse;
 }
@@ -1094,7 +1685,13 @@ export async function fetchCustomerInsights(input: {
 export async function fetchCustomerCommercialHealth(input: {
   customerId: string;
 }): Promise<CustomerCommercialHealthReport> {
-  const response = await fetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/commercial-health`);
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/commercial-health`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCustomerCommercialHealth(input.customerId);
+    throw error;
+  }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise comercial do cliente."));
   return (await response.json()) as CustomerCommercialHealthReport;
 }

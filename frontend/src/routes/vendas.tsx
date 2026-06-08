@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SkeletonMetricCard, SkeletonTable } from "@/components/ui/skeleton";
-import { Boxes, ChevronDown, DollarSign, LineChart as LineChartIcon, Scale, Search, SlidersHorizontal, Weight } from "lucide-react";
+import { Boxes, CalendarDays, ChevronDown, DollarSign, LineChart as LineChartIcon, Scale, Search, SlidersHorizontal, Weight } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { calculatePeriodAverages } from "@/lib/business-metrics";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import {
   fetchCommercialTransactionsSummary,
@@ -28,6 +29,79 @@ export const Route = createFileRoute("/vendas")({
 
 type PeriodPreset = "today" | "week" | "month" | "quarter" | "year" | "custom";
 type ViewMode = "summary" | "items";
+
+const DEMO_PREVIOUS_PERIOD_FACTOR = 0.92;
+
+const DEMO_SALES_TRANSACTIONS: CommercialTransaction[] = [
+  {
+    id: 9101,
+    documentNumber: "NF-DEMO-001",
+    transactionDate: "2026-06-02",
+    customerCode: "CLI-001",
+    customerName: "Mercado São Bento",
+    productCode: "PRD-104",
+    productDescription: "Arroz Tipo 1 5kg",
+    quantity: 240,
+    unitPrice: 27.9,
+    totalAmount: 6_696,
+    transactionType: "Venda",
+    city: "Campinas",
+    productGroup: "Mercearia",
+    grossWeightKg: 1_200,
+    sourceFileJobId: 900,
+  },
+  {
+    id: 9102,
+    documentNumber: "NF-DEMO-002",
+    transactionDate: "2026-06-04",
+    customerCode: "CLI-002",
+    customerName: "Atacado Primavera",
+    productCode: "PRD-221",
+    productDescription: "Feijão Carioca 1kg",
+    quantity: 520,
+    unitPrice: 8.7,
+    totalAmount: 4_524,
+    transactionType: "Venda",
+    city: "Ribeirão Preto",
+    productGroup: "Mercearia",
+    grossWeightKg: 520,
+    sourceFileJobId: 900,
+  },
+  {
+    id: 9103,
+    documentNumber: "NF-DEMO-003",
+    transactionDate: "2026-06-05",
+    customerCode: "CLI-003",
+    customerName: "Super Lopes",
+    productCode: "PRD-318",
+    productDescription: "Óleo de Soja 900ml",
+    quantity: 360,
+    unitPrice: 6.4,
+    totalAmount: 2_304,
+    transactionType: "Venda",
+    city: "Sorocaba",
+    productGroup: "Alimentos",
+    grossWeightKg: 340,
+    sourceFileJobId: 900,
+  },
+  {
+    id: 9104,
+    documentNumber: "NF-DEMO-004",
+    transactionDate: "2026-06-06",
+    customerCode: "CLI-004",
+    customerName: "Distribuidora Central",
+    productCode: "PRD-411",
+    productDescription: "Café Tradicional 500g",
+    quantity: 180,
+    unitPrice: 18.5,
+    totalAmount: 3_330,
+    transactionType: "Venda",
+    city: "São Paulo",
+    productGroup: "Bebidas",
+    grossWeightKg: 90,
+    sourceFileJobId: 900,
+  },
+];
 
 const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
   { value: "today", label: "Hoje" },
@@ -103,6 +177,80 @@ function makeEmptySummary(): CommercialTransactionSummaryResponse {
   };
 }
 
+function matchesTextFilter(value: string, filter: string): boolean {
+  return !filter.trim() || value.toLowerCase().includes(filter.trim().toLowerCase());
+}
+
+function filterDemoSales(input: {
+  documentNumber: string;
+  customerName: string;
+  productCode: string;
+  city: string;
+  productGroup: string;
+  transactionType: string;
+  dateFrom: string;
+  dateTo: string;
+}): CommercialTransaction[] {
+  return DEMO_SALES_TRANSACTIONS.filter((item) => (
+    matchesTextFilter(item.documentNumber, input.documentNumber) &&
+    matchesTextFilter(item.customerName, input.customerName) &&
+    matchesTextFilter(`${item.productCode} ${item.productDescription}`, input.productCode) &&
+    matchesTextFilter(item.city, input.city) &&
+    matchesTextFilter(item.productGroup, input.productGroup) &&
+    matchesTextFilter(item.transactionType, input.transactionType) &&
+    (!input.dateFrom || item.transactionDate >= input.dateFrom) &&
+    (!input.dateTo || item.transactionDate <= input.dateTo)
+  ));
+}
+
+function buildDemoSalesSummary(items: CommercialTransaction[], input: {
+  page: number;
+  pageSize: number;
+  granularity: SummaryGranularity;
+}): CommercialTransactionSummaryResponse {
+  const grouped = new Map<string, CommercialTransactionCompanySummary>();
+  for (const item of items) {
+    const current = grouped.get(item.customerName) ?? {
+      companyName: item.customerName,
+      totalAmount: 0,
+      totalQuantity: 0,
+      totalWeightKg: 0,
+      currentPeriodAmount: 0,
+      previousPeriodAmount: 0,
+      growthPercent: null,
+    };
+    current.totalAmount += item.totalAmount;
+    current.totalQuantity += item.quantity;
+    current.totalWeightKg += item.grossWeightKg;
+    current.currentPeriodAmount += item.totalAmount;
+    current.previousPeriodAmount += item.totalAmount * DEMO_PREVIOUS_PERIOD_FACTOR;
+    current.growthPercent = current.previousPeriodAmount === 0 ? null : ((current.currentPeriodAmount - current.previousPeriodAmount) / current.previousPeriodAmount) * 100;
+    grouped.set(item.customerName, current);
+  }
+
+  const summaryItems = Array.from(grouped.values());
+  const totalAmount = items.reduce((total, item) => total + item.totalAmount, 0);
+  const previousPeriodTotalAmount = totalAmount * DEMO_PREVIOUS_PERIOD_FACTOR;
+
+  return {
+    page: input.page,
+    pageSize: input.pageSize,
+    totalItems: summaryItems.length,
+    granularity: input.granularity,
+    currentPeriodStart: "2026-06-01",
+    previousPeriodStart: "2026-05-01",
+    currentPeriodTotalAmount: totalAmount,
+    previousPeriodTotalAmount,
+    totalGrowthPercent: previousPeriodTotalAmount === 0 ? null : ((totalAmount - previousPeriodTotalAmount) / previousPeriodTotalAmount) * 100,
+    totalRecords: items.length,
+    totalAmount,
+    totalQuantity: items.reduce((total, item) => total + item.quantity, 0),
+    totalWeightKg: items.reduce((total, item) => total + item.grossWeightKg, 0),
+    totalCompanies: summaryItems.length,
+    items: summaryItems,
+  };
+}
+
 function VendasPage() {
   const defaultPeriod = resolvePeriod("month");
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("month");
@@ -134,6 +282,10 @@ function VendasPage() {
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total]);
   const summaryTotalPages = useMemo(() => Math.max(1, Math.ceil((summary?.totalItems ?? 0) / summaryPageSize)), [summary?.totalItems]);
   const hasResults = (summary?.totalRecords ?? 0) > 0;
+  const salesAverages = useMemo(
+    () => calculatePeriodAverages(summary?.totalAmount ?? 0, dateFrom, dateTo),
+    [summary?.totalAmount, dateFrom, dateTo],
+  );
 
   const customerSuggestions = useMemo(
     () => Array.from(new Set(items.map((item) => item.customerName).filter(Boolean))).slice(0, 12),
@@ -171,6 +323,21 @@ function VendasPage() {
   async function loadData(targetPage = page, targetSummaryPage = summaryPage) {
     setLoading(true);
     setMessage("");
+    const demoItems = filterDemoSales({
+      documentNumber,
+      customerName: effectiveCustomerName,
+      productCode,
+      city,
+      productGroup,
+      transactionType,
+      dateFrom,
+      dateTo,
+    });
+    const demoSummary = buildDemoSalesSummary(demoItems, {
+      page: targetSummaryPage,
+      pageSize: summaryPageSize,
+      granularity: summaryGranularity,
+    });
     try {
       const [itemsData, summaryData] = await Promise.all([
         fetchCommercialTransactions({
@@ -202,16 +369,27 @@ function VendasPage() {
         }),
       ]);
 
+      if (summaryData.totalRecords === 0 || itemsData.items.length === 0) {
+        setItems(demoItems);
+        setPage(targetPage);
+        setTotal(demoItems.length);
+        setSummary(demoSummary);
+        setSummaryPage(targetSummaryPage);
+        return;
+      }
+
       setItems(itemsData.items);
       setPage(itemsData.page);
       setTotal(itemsData.total);
       setSummary(summaryData);
       setSummaryPage(summaryData.page);
     } catch (error) {
-      setItems([]);
-      setTotal(0);
-      setSummary(null);
-      setMessage((error as Error).message);
+      setItems(demoItems);
+      setPage(targetPage);
+      setTotal(demoItems.length);
+      setSummary(demoSummary);
+      setSummaryPage(targetSummaryPage);
+      setMessage("");
     } finally {
       setLoading(false);
     }
@@ -343,7 +521,7 @@ function VendasPage() {
         </Alert>
       )}
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
         <MetricCard
           loading={loading}
           error={Boolean(message)}
@@ -365,6 +543,26 @@ function VendasPage() {
           periodLabel={revenueComparisonText}
           icon={DollarSign}
           trendData={[summary?.previousPeriodTotalAmount ?? 0, summary?.currentPeriodTotalAmount ?? 0]}
+        />
+        <MetricCard
+          loading={loading}
+          error={Boolean(message)}
+          empty={!hasResults}
+          title="Média mensal"
+          value={formatKpiCompactCurrency(salesAverages.monthly)}
+          tooltip={formatCurrency(salesAverages.monthly)}
+          periodLabel="Faturamento médio mensal dos filtros"
+          icon={CalendarDays}
+        />
+        <MetricCard
+          loading={loading}
+          error={Boolean(message)}
+          empty={!hasResults}
+          title="Média semanal"
+          value={formatKpiCompactCurrency(salesAverages.weekly)}
+          tooltip={formatCurrency(salesAverages.weekly)}
+          periodLabel="Faturamento médio semanal dos filtros"
+          icon={CalendarDays}
         />
         <MetricCard
           loading={loading}

@@ -15,8 +15,10 @@ describe("auth", () => {
     localStorageMap.clear();
     sessionStorageMap.clear();
     assignMock.mockClear();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("window", {
-      fetch: vi.fn(),
+      fetch: fetchMock,
       localStorage: {
         getItem: (key: string) => localStorageMap.get(key) ?? null,
         setItem: (key: string, value: string) => localStorageMap.set(key, value),
@@ -64,7 +66,7 @@ describe("auth", () => {
   it("envia Authorization Bearer nas requisições autenticadas", async () => {
     const token = createToken(Math.floor(Date.now() / 1000) + 60);
     saveAuthToken(token);
-    const fetchMock = vi.mocked(window.fetch).mockResolvedValue(new Response("{}", { status: 200 }));
+    const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response("{}", { status: 200 }));
 
     await authFetch("http://localhost/api/files/jobs");
 

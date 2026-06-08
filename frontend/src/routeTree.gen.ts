@@ -11,12 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VendasRouteImport } from './routes/vendas'
 import { Route as SimulacaoRouteImport } from './routes/simulacao'
-import { Route as RhRouteImport } from './routes/rh'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as ProcessamentosRouteImport } from './routes/processamentos'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
+import { Route as FinancasRouteImport } from './routes/financas'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
@@ -31,11 +31,6 @@ const VendasRoute = VendasRouteImport.update({
 const SimulacaoRoute = SimulacaoRouteImport.update({
   id: '/simulacao',
   path: '/simulacao',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RhRoute = RhRouteImport.update({
-  id: '/rh',
-  path: '/rh',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RelatoriosRoute = RelatoriosRouteImport.update({
@@ -61,6 +56,11 @@ const LoginRoute = LoginRouteImport.update({
 const ImportacoesRoute = ImportacoesRouteImport.update({
   id: '/importacoes',
   path: '/importacoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinancasRoute = FinancasRouteImport.update({
+  id: '/financas',
+  path: '/financas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientesRoute = ClientesRouteImport.update({
@@ -93,12 +93,12 @@ const ClientesAnaliseComercialRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
   '/processamentos': typeof ProcessamentosRoute
   '/relatorios': typeof RelatoriosRoute
-  '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
@@ -108,11 +108,11 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/financas': typeof FinancasRoute
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
   '/processamentos': typeof ProcessamentosRoute
   '/relatorios': typeof RelatoriosRoute
-  '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
@@ -123,12 +123,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
   '/processamentos': typeof ProcessamentosRoute
   '/relatorios': typeof RelatoriosRoute
-  '/rh': typeof RhRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
@@ -140,12 +140,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/clientes'
+    | '/financas'
     | '/importacoes'
     | '/login'
     | '/logistica'
     | '/processamentos'
     | '/relatorios'
-    | '/rh'
     | '/simulacao'
     | '/vendas'
     | '/clientes/analise-comercial'
@@ -155,11 +155,11 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/clientes'
+    | '/financas'
     | '/login'
     | '/logistica'
     | '/processamentos'
     | '/relatorios'
-    | '/rh'
     | '/simulacao'
     | '/vendas'
     | '/clientes/analise-comercial'
@@ -169,12 +169,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/clientes'
+    | '/financas'
     | '/importacoes'
     | '/login'
     | '/logistica'
     | '/processamentos'
     | '/relatorios'
-    | '/rh'
     | '/simulacao'
     | '/vendas'
     | '/clientes/analise-comercial'
@@ -185,12 +185,12 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ClientesRoute: typeof ClientesRouteWithChildren
+  FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LoginRoute: typeof LoginRoute
   LogisticaRoute: typeof LogisticaRoute
   ProcessamentosRoute: typeof ProcessamentosRoute
   RelatoriosRoute: typeof RelatoriosRoute
-  RhRoute: typeof RhRoute
   SimulacaoRoute: typeof SimulacaoRoute
   VendasRoute: typeof VendasRoute
 }
@@ -209,13 +209,6 @@ declare module '@tanstack/react-router' {
       path: '/simulacao'
       fullPath: '/simulacao'
       preLoaderRoute: typeof SimulacaoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/rh': {
-      id: '/rh'
-      path: '/rh'
-      fullPath: '/rh'
-      preLoaderRoute: typeof RhRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/relatorios': {
@@ -251,6 +244,13 @@ declare module '@tanstack/react-router' {
       path: '/importacoes'
       fullPath: '/importacoes'
       preLoaderRoute: typeof ImportacoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/financas': {
+      id: '/financas'
+      path: '/financas'
+      fullPath: '/financas'
+      preLoaderRoute: typeof FinancasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clientes': {
@@ -320,12 +320,12 @@ const ImportacoesRouteWithChildren = ImportacoesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ClientesRoute: ClientesRouteWithChildren,
+  FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LoginRoute: LoginRoute,
   LogisticaRoute: LogisticaRoute,
   ProcessamentosRoute: ProcessamentosRoute,
   RelatoriosRoute: RelatoriosRoute,
-  RhRoute: RhRoute,
   SimulacaoRoute: SimulacaoRoute,
   VendasRoute: VendasRoute,
 }
