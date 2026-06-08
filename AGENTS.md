@@ -12,6 +12,7 @@ Guia local para qualquer IA que edite este repositório.
 - Não renomear pastas de arquitetura existente sem pedido explícito.
 - Não quebrar separação entre `frontend` e `backend`.
 - Não mudar contratos de API sem atualizar frontend e backend no mesmo PR.
+- Quando a tarefa envolver subir o ambiente em desenvolvimento local, subir apenas `postgres` e `redis` via Docker e executar `frontend`, `api` e `worker` localmente com os comandos próprios de cada projeto.
 - Para qualquer alteração de código, criar/atualizar testes cobrindo o comportamento alterado.
 - No frontend, criar casos de teste para funcionalidades importantes com cenários diferentes (fluxo feliz, bordas e entradas inválidas).
 - Não introduzir números mágicos em código de regra de negócio, cálculos, limites, paginação, datas ou timeouts; extrair para constantes nomeadas, configuração ou objetos de política conforme o contexto.
@@ -82,7 +83,7 @@ rg "Ã|��|�" -n frontend backend -S
 - Serviços padrão: `frontend`, `api`, `worker`, `postgres`, `redis`.
 - Persistência obrigatória via volumes para Postgres/Redis/uploads.
 - Evitar alterações que removam `restart: unless-stopped`.
-- Durante desenvolvimento local, subir no Docker somente a infraestrutura (`postgres` e `redis`); rodar `frontend`, `api` e `worker` localmente pelos comandos próprios de cada projeto.
+- Durante desenvolvimento local, subir no Docker somente a infraestrutura (`postgres` e `redis`) com `docker compose up -d postgres redis`; rodar `frontend`, `api` e `worker` localmente pelos comandos próprios de cada projeto.
 
 ## Checklist Antes de Entregar
 - Build frontend:

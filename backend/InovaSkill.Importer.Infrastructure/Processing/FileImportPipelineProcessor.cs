@@ -18,6 +18,7 @@ namespace InovaSkill.Importer.Infrastructure.Processing;
 public sealed class FileImportPipelineProcessor(
     ImportDbContext dbContext,
     IProcessingEventPublisher eventPublisher,
+    IFileJobProgressNotifier fileJobProgressNotifier,
     IFileParserFactory fileParserFactory,
     IImportPreProcessingPipeline importPreProcessingPipeline,
     IFileSchemaProvider fileSchemaProvider,
@@ -46,7 +47,7 @@ public sealed class FileImportPipelineProcessor(
         }
 
         var nextStatus = job.StartNextStage();
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         try
         {
@@ -69,7 +70,7 @@ public sealed class FileImportPipelineProcessor(
         {
             job.MarkFailed(BuildFailureReason(ex));
             AddJobLog(job.Id, CurrentStageFromStatus(job.Status), "Error", job.CurrentStep);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
             logger.LogError(ex, "Failed processing job {JobId}. File: {FilePath}", job.Id, job.FilePath);
         }
     }
@@ -81,7 +82,7 @@ public sealed class FileImportPipelineProcessor(
         if (!string.Equals(resolvedSourcePath, job.FilePath, StringComparison.Ordinal))
         {
             job.FilePath = resolvedSourcePath;
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
         }
 
         var existingErrors = await dbContext.ImportErrors
@@ -91,7 +92,7 @@ public sealed class FileImportPipelineProcessor(
         if (existingErrors.Count > 0)
         {
             dbContext.ImportErrors.RemoveRange(existingErrors);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
         }
 
         job.NormalizedFilePath = BuildNormalizedFilePath(job);
@@ -99,7 +100,7 @@ public sealed class FileImportPipelineProcessor(
 
         var parser = fileParserFactory.Create(job.FilePath);
         job.UpdateProgress("Lendo estrutura do arquivo", ImportStageProgress.CalculatePreProcessingCountingPercent(1), 0);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         var totalRows = await CountRowsAsync(job, parser, job.FilePath, cancellationToken);
         job.TotalRows = totalRows;
@@ -109,7 +110,7 @@ public sealed class FileImportPipelineProcessor(
             job.UpdateProgress("Normalizando linhas do arquivo", ImportStageProgress.PreProcessingCountingMaxPercent, 0);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         var errors = new List<ImportError>();
         var processedRows = 0;
@@ -161,10 +162,10 @@ public sealed class FileImportPipelineProcessor(
         job.UpdateProgress("Pre-processamento concluido", ImportStageProgress.CompletePercent, processedRows);
         FinishStep(preProcessingStep, "completed", processedRows, errors.Count);
         AddJobLog(job.Id, ImportProcessingStages.PreProcessing, "Information", "Pre-processamento concluido.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         job.MarkValidating();
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         await ValidateNormalizedFileAsync(job, errors, cancellationToken);
     }
@@ -226,7 +227,7 @@ public sealed class FileImportPipelineProcessor(
         }
 
         job.ProcessedRows = job.TotalRows;
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
     }
 
     private async Task ImportValidatedFileAsync(FileJob job, CancellationToken cancellationToken)
@@ -237,7 +238,7 @@ public sealed class FileImportPipelineProcessor(
             job.MarkFailed("Tipo de arquivo nao identificado para importacao.");
             FinishStep(importStep, "failed", job.ProcessedRows, 1);
             AddJobLog(job.Id, ImportProcessingStages.Import, "Error", job.CurrentStep);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
             return;
         }
 
@@ -246,7 +247,7 @@ public sealed class FileImportPipelineProcessor(
             job.MarkFailed("Arquivo normalizado nao encontrado para importacao.");
             FinishStep(importStep, "failed", job.ProcessedRows, 1);
             AddJobLog(job.Id, ImportProcessingStages.Import, "Error", job.CurrentStep);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
             logger.LogError("Normalized file not found for job {JobId}: {Path}", job.Id, job.NormalizedFilePath);
             return;
         }
@@ -258,7 +259,7 @@ public sealed class FileImportPipelineProcessor(
             job.MarkValidationFailed();
             FinishStep(importStep, "failed", 0, importValidationErrors.Count);
             AddJobLog(job.Id, ImportProcessingStages.Import, "Warning", $"Importacao bloqueada por {importValidationErrors.Count} erro(s) de validacao.");
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
             return;
         }
 
@@ -289,7 +290,7 @@ public sealed class FileImportPipelineProcessor(
         job.MarkCompleted(job.TotalRows > 0 ? job.TotalRows : processedRows);
         FinishStep(importStep, "completed", processedRows, 0);
         AddJobLog(job.Id, ImportProcessingStages.Import, "Information", "Importacao concluida.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.SalesInvoice, StringComparison.OrdinalIgnoreCase))
         {
@@ -321,7 +322,7 @@ public sealed class FileImportPipelineProcessor(
         var progressPercent = ImportStageProgress.CalculatePercent(processedRows, totalRows);
 
         job.UpdateProgress(step, progressPercent, processedRows);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
     }
 
     private async Task<ProcessingStepExecution> StartStepAsync(long fileJobId, string step, string message, CancellationToken cancellationToken)
@@ -370,7 +371,7 @@ public sealed class FileImportPipelineProcessor(
         var progressPercent = ImportStageProgress.CalculatePreProcessingNormalizationPercent(processedRows, totalRows);
 
         job.UpdateProgress(step, progressPercent, processedRows);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
     }
 
     internal async Task<List<ImportError>> ValidateRowsBeforeImportAsync(FileJob job, CancellationToken cancellationToken)
@@ -435,7 +436,7 @@ public sealed class FileImportPipelineProcessor(
             {
                 job.TotalRows = total;
                 job.UpdateProgress("Contando linhas do arquivo", currentPercent, total);
-                await dbContext.SaveChangesAsync(cancellationToken);
+                await SaveJobStateAsync(job.Id, cancellationToken);
             }
         }
 
@@ -475,6 +476,16 @@ public sealed class FileImportPipelineProcessor(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        foreach (var job in staleJobs)
+        {
+            await fileJobProgressNotifier.NotifyAsync(job.Id, cancellationToken);
+        }
+    }
+
+    private async Task SaveJobStateAsync(long jobId, CancellationToken cancellationToken)
+    {
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await fileJobProgressNotifier.NotifyAsync(jobId, cancellationToken);
     }
 
     private async Task CleanupImportedDataByJobAsync(FileJob job, CancellationToken cancellationToken)

@@ -19,7 +19,7 @@ import {
   type ProcessingJobQueueItem,
   type ProcessingMonitoringDashboard,
 } from "@/lib/importer-api";
-import { clampProgressPercent } from "@/lib/importer-progress";
+import { clampProgressPercent, stageStatusLabel } from "@/lib/importer-progress";
 
 export const Route = createFileRoute("/processamentos")({
   component: ProcessamentosPage,
@@ -70,9 +70,25 @@ function ProcessamentosPage() {
 
   useEffect(() => {
     void loadDashboard();
-    const interval = setInterval(() => void loadDashboard(), 3000);
+    const interval = setInterval(() => void loadDashboard(), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!detailsOpen || !selectedJob) {
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        setSelectedJob(await fetchProcessingJobDetails(selectedJob.job.id));
+      } catch {
+        // dashboard refresh already surfaces failures
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [detailsOpen, selectedJob]);
 
   const summaryCards = useMemo(() => {
     const summary = dashboard?.summary;
@@ -161,11 +177,16 @@ function ProcessamentosPage() {
                       <td className="max-w-[220px] truncate py-3 pr-3">{job.fileName}</td>
                       <td className="py-3 pr-3">{job.template ?? "-"}</td>
                       <td className="py-3 pr-3"><Badge variant={statusVariant(job.status)}>{job.statusLabel || job.status}</Badge></td>
-                      <td className="max-w-[220px] truncate py-3 pr-3 text-muted-foreground">{job.currentStep}</td>
+                      <td className="max-w-[220px] truncate py-3 pr-3 text-muted-foreground">
+                        {job.currentStageName ?? job.currentStep}
+                      </td>
                       <td className="w-[160px] py-3 pr-3">
                         <div className="flex items-center gap-2">
                           <Progress value={clampProgressPercent(job.progressPercent)} className="h-1.5" />
                           <span className="w-9 text-right font-mono text-xs text-muted-foreground">{clampProgressPercent(job.progressPercent)}%</span>
+                        </div>
+                        <div className="mt-2">
+                          <StageProgressInline stages={job.stages} />
                         </div>
                       </td>
                       <td className="py-3 pr-3 text-xs text-muted-foreground">{formatDate(job.createdAt)}</td>
@@ -312,6 +333,26 @@ function JobDetails({ details, onRetry, onCancel }: { details: ProcessingJobDeta
       </div>
 
       <div className="rounded-lg border border-border p-3">
+        <p className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">Progresso por etapa</p>
+        <div className="space-y-3">
+          {details.job.stages.map((stage) => (
+            <div key={stage.code} className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{stage.name}</span>
+                  <Badge variant={stage.status === "failed" ? "destructive" : stage.status === "completed" ? "default" : stage.status === "running" ? "secondary" : "outline"}>
+                    {stageStatusLabel(stage.status)}
+                  </Badge>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground">{clampProgressPercent(stage.progressPercent)}%</span>
+              </div>
+              <Progress value={clampProgressPercent(stage.progressPercent)} className="h-1.5" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border p-3">
         <p className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">Timeline</p>
         <div className="space-y-2">
           {details.timeline.map((step) => (
@@ -370,6 +411,18 @@ function Info({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-border p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 break-all font-medium">{value}</p>
+    </div>
+  );
+}
+
+function StageProgressInline({ stages }: { stages: ProcessingJobQueueItem["stages"] }) {
+  return (
+    <div className="flex gap-1">
+      {stages.map((stage) => (
+        <div key={stage.code} className="flex-1">
+          <Progress value={clampProgressPercent(stage.progressPercent)} className="h-1" />
+        </div>
+      ))}
     </div>
   );
 }

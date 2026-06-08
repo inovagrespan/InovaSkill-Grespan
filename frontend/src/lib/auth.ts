@@ -28,6 +28,14 @@ type TokenResponse = {
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
 
+function getFetch(): typeof fetch {
+  if (typeof window !== "undefined" && typeof window.fetch === "function") {
+    return window.fetch.bind(window);
+  }
+
+  return fetch;
+}
+
 function getStorage(): Storage | null {
   if (typeof window === "undefined") return null;
   return window.localStorage;
@@ -102,7 +110,10 @@ export function redirectToLogin(): void {
   if (typeof window === "undefined") return;
   clearAuthToken();
   const currentPath = `${window.location.pathname}${window.location.search}`;
-  const redirect = currentPath && currentPath !== LOGIN_PATH ? `?redirect=${encodeURIComponent(currentPath)}` : "";
+  const redirect =
+    currentPath && currentPath !== LOGIN_PATH
+      ? `?redirect=${encodeURIComponent(currentPath)}`
+      : "";
   window.location.assign(`${LOGIN_PATH}${redirect}`);
 }
 
@@ -118,7 +129,15 @@ async function parseAuthError(response: Response, fallbackMessage: string): Prom
         title?: string;
         Title?: string;
       };
-      return payload.detail ?? payload.Detail ?? payload.message ?? payload.Message ?? payload.title ?? payload.Title ?? fallbackMessage;
+      return (
+        payload.detail ??
+        payload.Detail ??
+        payload.message ??
+        payload.Message ??
+        payload.title ??
+        payload.Title ??
+        fallbackMessage
+      );
     }
 
     const text = (await response.text()).trim();
@@ -129,7 +148,7 @@ async function parseAuthError(response: Response, fallbackMessage: string): Prom
 }
 
 export async function login(input: LoginInput): Promise<string> {
-  const response = await fetch(`${API_URL}/login`, {
+  const response = await getFetch()(`${API_URL}/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -141,7 +160,7 @@ export async function login(input: LoginInput): Promise<string> {
 
   const payload = (await response.json()) as TokenResponse;
   const token = payload.token ?? payload.Token;
-  if (!isTokenValid(token ?? null)) {
+  if (!isTokenValid(token ?? null) || !token) {
     throw new Error("A API retornou um token inválido.");
   }
 
@@ -150,7 +169,7 @@ export async function login(input: LoginInput): Promise<string> {
 }
 
 export async function registerUser(input: RegisterInput): Promise<void> {
-  const response = await fetch(`${API_URL}/register`, {
+  const response = await getFetch()(`${API_URL}/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -161,7 +180,10 @@ export async function registerUser(input: RegisterInput): Promise<void> {
   }
 }
 
-export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+export async function authFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
   const token = getAuthToken();
   if (!isAuthenticated() || !token) {
     redirectToLogin();
@@ -171,7 +193,7 @@ export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetch(input, { ...init, headers });
+  const response = await getFetch()(input, { ...init, headers });
   if (response.status === 401 || response.status === 403) {
     redirectToLogin();
   }

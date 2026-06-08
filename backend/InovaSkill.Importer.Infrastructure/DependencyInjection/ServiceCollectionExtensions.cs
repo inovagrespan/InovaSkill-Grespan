@@ -3,11 +3,13 @@ using InovaSkill.Importer.Infrastructure.Mappings;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.Processing;
 using InovaSkill.Importer.Infrastructure.Processing.EventHandlers;
+using InovaSkill.Importer.Infrastructure.Processing.Patterns;
 using InovaSkill.Importer.Infrastructure.Processing.TransformRules;
 using InovaSkill.Importer.Infrastructure.Validation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using StackExchange.Redis;
 
 namespace InovaSkill.Importer.Infrastructure.DependencyInjection;
@@ -21,6 +23,10 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<ImportDbContext>(opt => opt.UseNpgsql(connectionString));
         services.AddScoped<IFileParserFactory, FileParserFactory>();
+        services.AddScoped<ISpreadsheetImportPattern, CustomerListSpreadsheetImportPattern>();
+        services.AddScoped<ISpreadsheetImportPattern, ProductListSpreadsheetImportPattern>();
+        services.AddScoped<ISpreadsheetImportPattern, FinancialEntrySpreadsheetImportPattern>();
+        services.AddScoped<ISpreadsheetImportPattern, SalesInvoiceSpreadsheetImportPattern>();
         services.AddScoped<IFileTypeDetector, FileTypeDetector>();
         services.AddScoped<IFileSchemaProvider, FileSchemaProvider>();
         services.AddScoped<IPreProcessorTemplateResolver, PreProcessorTemplateResolver>();
@@ -36,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITransformRule, LowerCaseRule>();
         services.AddScoped<ITransformRule, RemoveSpecialCharactersRule>();
         services.AddScoped<IRowValidator, RowValidator>();
+        services.TryAddScoped<IFileJobProgressNotifier, NullFileJobProgressNotifier>();
         services.AddScoped<IFileImportPipelineProcessor, FileImportPipelineProcessor>();
         services.AddScoped<IProcessingEventHandler, FileUploadedEventHandler>();
         services.AddScoped<IProcessingEventHandler, ImportRequestedEventHandler>();

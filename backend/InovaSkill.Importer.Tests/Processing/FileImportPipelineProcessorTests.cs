@@ -187,11 +187,12 @@ public sealed class FileImportPipelineProcessorTests
         return new FileImportPipelineProcessor(
             db,
             new StubProcessingEventPublisher(),
+            new StubFileJobProgressNotifier(),
             new StubFileParserFactory(parser),
             new ImportPreProcessingPipeline(
                 new StubTemplateResolver(),
                 new ImportMappingEngine(new TransformRuleRegistry([new TrimRule()])),
-                new FileTypeDetector()),
+                new StubFileTypeDetector()),
             new FileSchemaProvider(),
             new RowValidator(),
             new ConfigurationBuilder().Build(),
@@ -215,6 +216,24 @@ public sealed class FileImportPipelineProcessorTests
         {
             Published.Add(envelope);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubFileJobProgressNotifier : IFileJobProgressNotifier
+    {
+        public Task NotifyAsync(long jobId, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubFileTypeDetector : IFileTypeDetector
+    {
+        public string? DetectCode(IReadOnlyDictionary<string, string> row)
+        {
+            return row.ContainsKey("documentnumber")
+                ? ImportFileTypeCodes.SalesInvoice
+                : null;
         }
     }
 

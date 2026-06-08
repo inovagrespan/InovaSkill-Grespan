@@ -1,4 +1,6 @@
 using InovaSkill.Importer.Api.Auth;
+using InovaSkill.Importer.Api.Realtime;
+using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
 using InovaSkill.Importer.Infrastructure.Persistence;
@@ -12,7 +14,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSignalR();
 builder.Services.AddImportInfrastructure(builder.Configuration);
+builder.Services.AddScoped<IFileJobProgressNotifier, SignalRFileJobProgressNotifier>();
 builder.Services.Configure<JwtAuthOptions>(builder.Configuration.GetSection(JwtAuthOptions.SectionName));
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<PasswordHasher<AppUser>>();
@@ -52,6 +56,7 @@ if (!disableHttpsRedirection)
 app.UseCors("frontend");
 app.UseMiddleware<JwtAuthMiddleware>();
 app.MapControllers();
+app.MapHub<FileJobProgressHub>("/hubs/file-jobs");
 app.MapGet("/api/_debug/routes", (IEnumerable<EndpointDataSource> endpointSources) =>
 {
     var routes = endpointSources

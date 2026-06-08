@@ -2,6 +2,7 @@ using System.Text;
 using InovaSkill.Importer.Api.Contracts;
 using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Application.Events;
+using InovaSkill.Importer.Api.Presentation;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Domain.ValueObjects;
@@ -54,7 +55,8 @@ public sealed class ProcessingMonitoringController(
             .ToListAsync(cancellationToken);
 
         var summary = BuildSummary(historyJobs, queue, now, today);
-        var items = jobs.Select(job => BuildJobItem(job, errorCounts, now)).ToList();
+        var stageErrorCounts = await GetStageErrorCountsAsync(jobIds, cancellationToken);
+        var items = jobs.Select(job => BuildJobItem(job, errorCounts, stageErrorCounts, now)).ToList();
         var daily = BuildDailyPoints(historyJobs, historyStart, today);
         var stages = BuildStageDurations(stageExecutions);
         var workerHealth = workers.Select(worker => BuildWorkerHealth(worker, now)).ToList();
@@ -73,6 +75,7 @@ public sealed class ProcessingMonitoringController(
         }
 
         var errorCounts = await GetErrorCountsAsync([jobId], cancellationToken);
+        var stageErrorCounts = await GetStageErrorCountsAsync([jobId], cancellationToken);
         var logs = await dbContext.ProcessingJobLogs
             .AsNoTracking()
             .Where(x => x.FileJobId == jobId)
@@ -87,7 +90,7 @@ public sealed class ProcessingMonitoringController(
             .OrderBy(x => x.StartedAt)
             .ToListAsync(cancellationToken);
 
-        var jobItem = BuildJobItem(job, errorCounts, now);
+        var jobItem = BuildJobItem(job, errorCounts, stageErrorCounts, now);
         var timeline = BuildTimeline(job, executions);
         var metrics = BuildMetrics(job, errorCounts);
         var performance = BuildStageDurations(executions.Where(x => x.FinishedAt != null).ToList());
@@ -294,9 +297,15 @@ public sealed class ProcessingMonitoringController(
             0);
     }
 
-    private static ProcessingJobQueueItemDto BuildJobItem(FileJob job, IReadOnlyDictionary<long, int> errorCounts, DateTime now)
+    private static ProcessingJobQueueItemDto BuildJobItem(
+        FileJob job,
+        IReadOnlyDictionary<long, int> errorCounts,
+        IReadOnlyDictionary<(long FileJobId, string Stage), int> stageErrorCounts,
+        DateTime now)
     {
         var errors = errorCounts.TryGetValue(job.Id, out var count) ? count : 0;
+        var stages = FileJobStageProgressPresenter.Build(job, stageErrorCounts);
+        var currentStage = FileJobStageProgressPresenter.ResolveCurrentStage(stages);
         return new ProcessingJobQueueItemDto(
             job.Id,
             "-",
@@ -306,6 +315,9 @@ public sealed class ProcessingMonitoringController(
             StatusLabel(job.Status),
             job.CurrentStep,
             Math.Clamp(job.ProgressPercent, 0, 100),
+            currentStage.Code,
+            currentStage.Name,
+            stages,
             job.CreatedAt,
             job.StartedAt,
             job.FinishedAt,
@@ -344,6 +356,30 @@ public sealed class ProcessingMonitoringController(
             .GroupBy(x => x.FileJobId)
             .Select(x => new { FileJobId = x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.FileJobId, x => x.Count, cancellationToken);
+    }
+
+    private async Task<IReadOnlyDictionary<(long FileJobId, string Stage), int>> GetStageErrorCountsAsync(long[] jobIds, CancellationToken cancellationToken)
+    {
+        if (jobIds.Length == 0)
+        {
+            return new Dictionary<(long FileJobId, string Stage), int>();
+        }
+
+        var grouped = await dbContext.ImportErrors
+            .AsNoTracking()
+            .Where(x => jobIds.Contains(x.FileJobId))
+            .GroupBy(x => new { x.FileJobId, x.Stage })
+            .Select(x => new
+            {
+                x.Key.FileJobId,
+                x.Key.Stage,
+                Count = x.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        return grouped
+            .GroupBy(x => (x.FileJobId, NormalizeStageCode(x.Stage)))
+            .ToDictionary(x => x.Key, x => x.Sum(item => item.Count));
     }
 
     private static bool IsRunning(FileJobStatus status)
@@ -398,12 +434,17 @@ public sealed class ProcessingMonitoringController(
         return stage switch
         {
             "UPLOAD" => "Upload",
-            ImportProcessingStages.PreProcessing => "Pre-processamento",
-            ImportProcessingStages.Validation => "Validacao",
-            ImportProcessingStages.Import => "Importacao",
+            ImportProcessingStages.PreProcessing => "Pré-processamento",
+            ImportProcessingStages.Validation => "Validação",
+            ImportProcessingStages.Import => "Processamento",
             "SUMMARY" => "Resumo",
-            "COMPLETED" => "Concluido",
+            "COMPLETED" => "Concluído",
             _ => stage
         };
+    }
+
+    private static string NormalizeStageCode(string? stage)
+    {
+        return string.IsNullOrWhiteSpace(stage) ? ImportProcessingStages.Validation : stage.Trim().ToUpperInvariant();
     }
 }

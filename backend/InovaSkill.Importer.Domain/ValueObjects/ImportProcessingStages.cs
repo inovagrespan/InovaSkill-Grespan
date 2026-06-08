@@ -10,7 +10,7 @@ public static class ImportProcessingStages
     [
         new(PreProcessing, "Pré-processamento"),
         new(Validation, "Validação"),
-        new(Import, "Importação")
+        new(Import, "Processamento")
     ];
 }
 

@@ -14,9 +14,13 @@ public sealed class JwtAuthMiddleware(RequestDelegate next)
             return;
         }
 
-        var header = context.Request.Headers.Authorization.ToString();
         const string bearerPrefix = "Bearer ";
-        if (!header.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+        var header = context.Request.Headers.Authorization.ToString();
+        var token = header.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase)
+            ? header[bearerPrefix.Length..].Trim()
+            : ResolveHubAccessToken(context);
+
+        if (string.IsNullOrWhiteSpace(token))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsJsonAsync(new ProblemDetails
@@ -28,7 +32,7 @@ public sealed class JwtAuthMiddleware(RequestDelegate next)
             return;
         }
 
-        var principal = tokenService.Validate(header[bearerPrefix.Length..].Trim());
+        var principal = tokenService.Validate(token);
         if (principal is null)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -43,5 +47,17 @@ public sealed class JwtAuthMiddleware(RequestDelegate next)
 
         context.User = principal;
         await next(context);
+    }
+
+    private static string? ResolveHubAccessToken(HttpContext context)
+    {
+        if (!context.Request.Path.StartsWithSegments("/hubs"))
+        {
+            return null;
+        }
+
+        return context.Request.Query.TryGetValue("access_token", out var accessToken)
+            ? accessToken.ToString()
+            : null;
     }
 }

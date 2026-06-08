@@ -20,7 +20,6 @@ import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
-import { Route as ImportacoesTemplatesRouteImport } from './routes/importacoes.templates'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
 import { Route as ClientesAnaliseComercialRouteImport } from './routes/clientes.analise-comercial'
 
@@ -79,11 +78,6 @@ const ImportacoesIndexRoute = ImportacoesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ImportacoesRoute,
 } as any)
-const ImportacoesTemplatesRoute = ImportacoesTemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => ImportacoesRoute,
-} as any)
 const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
   id: '/files',
   path: '/files',
@@ -109,17 +103,12 @@ export interface FileRoutesByFullPath {
   '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
-  '/importacoes/templates': typeof ImportacoesTemplatesRoute
   '/importacoes/': typeof ImportacoesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-<<<<<<< HEAD
   '/clientes': typeof ClientesRouteWithChildren
-=======
-  '/clientes': typeof ClientesRoute
   '/login': typeof LoginRoute
->>>>>>> c1cc4c0ab88a97800c42a4b744f0941757256f33
   '/logistica': typeof LogisticaRoute
   '/processamentos': typeof ProcessamentosRoute
   '/relatorios': typeof RelatoriosRoute
@@ -128,7 +117,6 @@ export interface FileRoutesByTo {
   '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
-  '/importacoes/templates': typeof ImportacoesTemplatesRoute
   '/importacoes': typeof ImportacoesIndexRoute
 }
 export interface FileRoutesById {
@@ -145,7 +133,6 @@ export interface FileRoutesById {
   '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
-  '/importacoes/templates': typeof ImportacoesTemplatesRoute
   '/importacoes/': typeof ImportacoesIndexRoute
 }
 export interface FileRouteTypes {
@@ -163,7 +150,6 @@ export interface FileRouteTypes {
     | '/vendas'
     | '/clientes/analise-comercial'
     | '/importacoes/files'
-    | '/importacoes/templates'
     | '/importacoes/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -178,7 +164,6 @@ export interface FileRouteTypes {
     | '/vendas'
     | '/clientes/analise-comercial'
     | '/importacoes/files'
-    | '/importacoes/templates'
     | '/importacoes'
   id:
     | '__root__'
@@ -194,7 +179,6 @@ export interface FileRouteTypes {
     | '/vendas'
     | '/clientes/analise-comercial'
     | '/importacoes/files'
-    | '/importacoes/templates'
     | '/importacoes/'
   fileRoutesById: FileRoutesById
 }
@@ -290,13 +274,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacoesIndexRouteImport
       parentRoute: typeof ImportacoesRoute
     }
-    '/importacoes/templates': {
-      id: '/importacoes/templates'
-      path: '/templates'
-      fullPath: '/importacoes/templates'
-      preLoaderRoute: typeof ImportacoesTemplatesRouteImport
-      parentRoute: typeof ImportacoesRoute
-    }
     '/importacoes/files': {
       id: '/importacoes/files'
       path: '/files'
@@ -328,13 +305,11 @@ const ClientesRouteWithChildren = ClientesRoute._addFileChildren(
 
 interface ImportacoesRouteChildren {
   ImportacoesFilesRoute: typeof ImportacoesFilesRoute
-  ImportacoesTemplatesRoute: typeof ImportacoesTemplatesRoute
   ImportacoesIndexRoute: typeof ImportacoesIndexRoute
 }
 
 const ImportacoesRouteChildren: ImportacoesRouteChildren = {
   ImportacoesFilesRoute: ImportacoesFilesRoute,
-  ImportacoesTemplatesRoute: ImportacoesTemplatesRoute,
   ImportacoesIndexRoute: ImportacoesIndexRoute,
 }
 
@@ -357,13 +332,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

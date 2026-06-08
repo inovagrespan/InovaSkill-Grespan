@@ -1,10 +1,7 @@
-import { extractHeadersInWorker } from "@/features/import-template-builder/utils/extract-headers-in-worker";
-import { authFetch } from "@/lib/auth";
+﻿import { authFetch } from "@/lib/auth";
 import { buildFallbackStages, type FileJobStageProgress } from "@/lib/importer-progress";
 
 export type FileType = "Unknown" | "Customers" | "Orders" | "Products" | "CommercialTransaction";
-export type UploadDestinationMode = "auto" | "manual";
-export type UploadDestinationCode = "SALES_INVOICE" | "CUSTOMER_LIST" | "PRODUCT_LIST" | "FINANCIAL_ENTRY";
 
 export type JobStatus =
   | "WaitingProcessing"
@@ -48,16 +45,6 @@ export type PagedResult<T> = {
   pageSize: number;
   total: number;
   items: T[];
-};
-
-export type TemplateAlias = { from: string; to: string };
-export type TemplateConfig = {
-  id: number;
-  fileType: FileType;
-  name: string;
-  isActive: boolean;
-  requiredHeadersCsv: string;
-  aliases: TemplateAlias[];
 };
 
 export type CommercialTransaction = {
@@ -134,6 +121,9 @@ export type ProcessingJobQueueItem = {
   statusLabel: string;
   currentStep: string;
   progressPercent: number;
+  currentStageCode: string | null;
+  currentStageName: string | null;
+  stages: FileJobStageProgress[];
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -548,12 +538,9 @@ function normalizeStatus(value: number | string): JobStatus {
   return (value as JobStatus) ?? "Failed";
 }
 
-export async function uploadFile(file: File, importFileTypeCode?: UploadDestinationCode): Promise<number> {
+export async function uploadFile(file: File): Promise<number> {
   const form = new FormData();
   form.append("file", file);
-  if (importFileTypeCode) {
-    form.append("importFileTypeCode", importFileTypeCode);
-  }
 
   try {
     const response = await authFetch(`${API_URL}/api/files/upload`, {
@@ -759,6 +746,14 @@ function normalizeProcessingSummary(raw: any): ProcessingMonitoringSummary {
 }
 
 function normalizeProcessingJobItem(raw: any): ProcessingJobQueueItem {
+  const stages = normalizeStages(
+    raw.stages ?? raw.Stages,
+    normalizeStatus(raw.status ?? raw.Status ?? "Failed"),
+    raw.progressPercent ?? raw.ProgressPercent ?? 0,
+    raw.errorCount ?? raw.ErrorCount ?? 0,
+  );
+  const runningStage = stages.find((stage) => stage.status === "running");
+
   return {
     id: raw.id ?? raw.Id ?? 0,
     company: raw.company ?? raw.Company ?? "-",
@@ -768,6 +763,9 @@ function normalizeProcessingJobItem(raw: any): ProcessingJobQueueItem {
     statusLabel: raw.statusLabel ?? raw.StatusLabel ?? "",
     currentStep: raw.currentStep ?? raw.CurrentStep ?? "",
     progressPercent: raw.progressPercent ?? raw.ProgressPercent ?? 0,
+    currentStageCode: raw.currentStageCode ?? raw.CurrentStageCode ?? runningStage?.code ?? null,
+    currentStageName: raw.currentStageName ?? raw.CurrentStageName ?? runningStage?.name ?? null,
+    stages,
     createdAt: raw.createdAt ?? raw.CreatedAt ?? "",
     startedAt: raw.startedAt ?? raw.StartedAt ?? null,
     finishedAt: raw.finishedAt ?? raw.FinishedAt ?? null,
@@ -846,37 +844,6 @@ function normalizeProcessingLog(raw: any): ProcessingLog {
   };
 }
 
-export async function fetchTemplateConfigs(): Promise<TemplateConfig[]> {
-  const response = await authFetch(`${API_URL}/api/template-configs`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar configurações de template."));
-  const data = (await response.json()) as Array<{
-    id?: number;
-    fileType?: number | string;
-    name?: string;
-    isActive?: boolean;
-    requiredHeadersCsv?: string;
-    aliases?: TemplateAlias[];
-  }>;
-  return (data ?? []).map((item) => ({
-    id: item.id ?? 0,
-    fileType: normalizeFileType(item.fileType ?? "Unknown"),
-    name: item.name ?? "",
-    isActive: item.isActive ?? true,
-    requiredHeadersCsv: item.requiredHeadersCsv ?? "",
-    aliases: item.aliases ?? [],
-  }));
-}
-
-export async function saveTemplateConfig(input: Omit<TemplateConfig, "id"> & { id?: number }): Promise<TemplateConfig> {
-  const response = await authFetch(`${API_URL}/api/template-configs`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao salvar configuração de template."));
-  return (await response.json()) as TemplateConfig;
-}
-
 export async function fetchCommercialTransactions(input: {
   page?: number;
   pageSize?: number;
@@ -919,64 +886,6 @@ export async function fetchCommercialTransactions(input: {
     total: (raw as PagedResult<CommercialTransaction>).total ?? (raw as { Total?: number }).Total ?? 0,
     items,
   };
-}
-
-export type ApiImportFileType = { id: string; name: string; code?: string; description?: string; allowedExtensions?: string };
-export type ApiTargetField = { name: string; displayName: string; required: boolean; dataType?: "text" | "number" | "date" | "currency"; description?: string };
-export type ApiTransformRule = {
-  id: string;
-  name: string;
-  code: string;
-  description?: string;
-  requiresParameters?: boolean;
-};
-export type ApiImportTemplateRule = {
-  transformRuleId: string;
-  order: number;
-  parametersJson: unknown;
-};
-export type ApiImportTemplateMapping = {
-  sourceColumnName: string;
-  targetFieldName: string;
-  isRequired: boolean;
-  defaultValue: string | null;
-  transformRules: ApiImportTemplateRule[];
-};
-export type ApiImportTemplate = {
-  id?: string;
-  name: string;
-  description: string;
-  importFileTypeId: string;
-  columnMappings: ApiImportTemplateMapping[];
-};
-export type ApiSpreadsheetSample = {
-  headers: string[];
-  previewRows: Array<Record<string, string>>;
-};
-
-export async function fetchImportTemplateFileTypes(): Promise<ApiImportFileType[]> {
-  try {
-    const response = await authFetch(`${API_URL}/api/import-templates/file-types`);
-    if (response.ok) {
-      const data = (await response.json()) as Array<Record<string, unknown>>;
-      return (data ?? []).map((item) => ({
-        id: String(item.id ?? item.Id ?? item.value ?? item.Value ?? ""),
-        name: String(item.name ?? item.Name ?? item.label ?? item.Label ?? ""),
-        code: String(item.code ?? item.Code ?? ""),
-        description: String(item.description ?? item.Description ?? ""),
-        allowedExtensions: String(item.allowedExtensions ?? item.AllowedExtensions ?? ""),
-      }));
-    }
-  } catch {
-    // fallback
-  }
-
-  return [
-    { id: "Customers", name: "Clientes", code: "CUSTOMERS" },
-    { id: "Products", name: "Produtos", code: "PRODUCTS" },
-    { id: "CommercialTransaction", name: "Vendas", code: "COMMERCIAL_TRANSACTION" },
-    { id: "Orders", name: "Pedidos", code: "ORDERS" },
-  ];
 }
 
 export async function fetchCommercialTransactionsSummary(input: {
@@ -1189,168 +1098,4 @@ export async function fetchCustomerCommercialHealth(input: {
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise comercial do cliente."));
   return (await response.json()) as CustomerCommercialHealthReport;
 }
-
-function normalizeTargetFieldType(value: unknown): ApiTargetField["dataType"] {
-  const normalized = String(value ?? "text").toLowerCase();
-  if (normalized === "number" || normalized === "date" || normalized === "currency") {
-    return normalized;
-  }
-
-  return "text";
-}
-
-export async function fetchImportTemplateTargetFields(importFileTypeId: string): Promise<ApiTargetField[]> {
-  try {
-    const response = await authFetch(`${API_URL}/api/import-templates/file-types/${importFileTypeId}/fields`);
-    if (response.ok) {
-      const data = (await response.json()) as Array<Record<string, unknown>>;
-      return (data ?? []).map((item) => ({
-        name: String(item.name ?? item.Name ?? ""),
-        displayName: String(item.displayName ?? item.DisplayName ?? item.name ?? item.Name ?? ""),
-        required: Boolean(item.required ?? item.Required ?? false),
-        dataType: normalizeTargetFieldType(item.dataType ?? item.DataType),
-        description: String(item.description ?? item.Description ?? ""),
-      }));
-    }
-  } catch {
-    // fallback
-  }
-
-  const fallbackFields: Record<string, ApiTargetField[]> = {
-    Customers: [
-      { name: "customercode", displayName: "Codigo do Cliente", required: true },
-      { name: "name", displayName: "Nome", required: true },
-      { name: "email", displayName: "E-mail", required: false },
-    ],
-    Products: [
-      { name: "sku", displayName: "SKU", required: true },
-      { name: "name", displayName: "Nome", required: true },
-      { name: "price", displayName: "Preço", required: false },
-    ],
-    Orders: [
-      { name: "ordernumber", displayName: "Número do Pedido", required: true },
-      { name: "customeremail", displayName: "E-mail do Cliente", required: true },
-      { name: "productsku", displayName: "SKU do Produto", required: true },
-      { name: "quantity", displayName: "Quantidade", required: true },
-      { name: "orderdate", displayName: "Data do Pedido", required: false },
-    ],
-    CommercialTransaction: [
-      { name: "documentnumber", displayName: "Documento", required: true },
-      { name: "transactiondate", displayName: "Data", required: true },
-      { name: "customercode", displayName: "Código Cliente", required: true },
-      { name: "customername", displayName: "Nome Cliente", required: true },
-      { name: "productcode", displayName: "Código Produto", required: true },
-      { name: "productdescription", displayName: "Descrição Produto", required: false },
-      { name: "quantity", displayName: "Quantidade", required: true },
-      { name: "unitprice", displayName: "Valor Unitário", required: false },
-      { name: "totalamount", displayName: "Valor Total", required: false },
-      { name: "transactiontype", displayName: "Tipo", required: false },
-      { name: "city", displayName: "Cidade", required: false },
-      { name: "productgroup", displayName: "Grupo Produto", required: false },
-      { name: "grossweightkg", displayName: "Peso Bruto (Kg)", required: false },
-    ],
-  };
-
-  return fallbackFields[importFileTypeId] ?? [];
-}
-
-export async function extractSpreadsheetSample(file: File, importFileTypeId?: string): Promise<ApiSpreadsheetSample> {
-  const formData = new FormData();
-  formData.append("file", file);
-  if (importFileTypeId) formData.append("importFileTypeId", importFileTypeId);
-
-  try {
-    const response = await authFetch(`${API_URL}/api/import-templates/extract-headers`, { method: "POST", body: formData });
-    if (response.ok) {
-      const payload = (await response.json()) as
-        | { headers?: string[]; Headers?: string[]; previewRows?: Array<Record<string, string>>; PreviewRows?: Array<Record<string, string>> }
-        | string[];
-      const apiHeaders = Array.isArray(payload) ? payload : payload.headers ?? payload.Headers ?? [];
-      if (apiHeaders.length > 0) {
-        return {
-          headers: apiHeaders,
-          previewRows: Array.isArray(payload) ? [] : payload.previewRows ?? payload.PreviewRows ?? [],
-        };
-      }
-    }
-  } catch {
-    // fallback
-  }
-
-  return { headers: await extractHeadersInWorker(file), previewRows: [] };
-}
-
-export async function extractSpreadsheetHeaders(file: File, importFileTypeId?: string): Promise<string[]> {
-  return (await extractSpreadsheetSample(file, importFileTypeId)).headers;
-}
-
-export async function fetchTransformRules(): Promise<ApiTransformRule[]> {
-  try {
-    const response = await authFetch(`${API_URL}/api/import-templates/transform-rules`);
-    if (response.ok) {
-      const data = (await response.json()) as Array<Record<string, unknown>>;
-      return (data ?? []).map((item) => ({
-        id: String(item.id ?? item.Id ?? ""),
-        name: String(item.name ?? item.Name ?? item.code ?? item.Code ?? ""),
-        code: String(item.code ?? item.Code ?? ""),
-        description: String(item.description ?? item.Description ?? ""),
-        requiresParameters: Boolean(item.requiresParameters ?? item.RequiresParameters ?? false),
-      }));
-    }
-  } catch {
-    // fallback
-  }
-
-  return [
-    { id: "trim", name: "Trim", code: "Trim", requiresParameters: false },
-    { id: "onlydigits", name: "OnlyDigits", code: "OnlyDigits", requiresParameters: false },
-    { id: "brcurrency", name: "BrazilianCurrency", code: "BrazilianCurrency", requiresParameters: true },
-    { id: "brdate", name: "BrazilianDate", code: "BrazilianDate", requiresParameters: true },
-    { id: "uppercase", name: "UpperCase", code: "UpperCase", requiresParameters: false },
-    { id: "lowercase", name: "LowerCase", code: "LowerCase", requiresParameters: false },
-  ];
-}
-export async function fetchImportTemplateById(templateId: string): Promise<ApiImportTemplate> {
-  const response = await authFetch(`${API_URL}/api/import-templates/${templateId}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar template."));
-  const item = (await response.json()) as Record<string, any>;
-  return {
-    id: String(item.id ?? item.Id ?? ""),
-    name: String(item.name ?? item.Name ?? ""),
-    description: String(item.description ?? item.Description ?? ""),
-    importFileTypeId: String(item.importFileTypeId ?? item.ImportFileTypeId ?? ""),
-    columnMappings: (item.columnMappings ?? item.ColumnMappings ?? []).map((mapping: any) => ({
-      sourceColumnName: String(mapping.sourceColumnName ?? mapping.SourceColumnName ?? ""),
-      targetFieldName: String(mapping.targetFieldName ?? mapping.TargetFieldName ?? ""),
-      isRequired: Boolean(mapping.isRequired ?? mapping.IsRequired ?? false),
-      defaultValue: mapping.defaultValue ?? mapping.DefaultValue ?? null,
-      transformRules: (mapping.transformRules ?? mapping.TransformRules ?? []).map((rule: any) => ({
-        transformRuleId: String(rule.transformRuleId ?? rule.TransformRuleId ?? ""),
-        order: Number(rule.order ?? rule.Order ?? 0),
-        parametersJson: rule.parametersJson ?? rule.ParametersJson ?? null,
-      })),
-    })),
-  };
-}
-
-export async function createImportTemplate(input: ApiImportTemplate): Promise<ApiImportTemplate> {
-  const response = await authFetch(`${API_URL}/api/import-templates`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao criar template."));
-  return (await response.json()) as ApiImportTemplate;
-}
-
-export async function updateImportTemplate(templateId: string, input: ApiImportTemplate): Promise<ApiImportTemplate> {
-  const response = await authFetch(`${API_URL}/api/import-templates/${templateId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao atualizar template."));
-  return (await response.json()) as ApiImportTemplate;
-}
-
 

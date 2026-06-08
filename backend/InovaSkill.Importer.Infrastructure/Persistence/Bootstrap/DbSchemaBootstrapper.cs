@@ -25,11 +25,7 @@ public static class DbSchemaBootstrapper
         await EnsureCustomerSummariesWeeklyTableAsync(context, cancellationToken);
         await EnsureCustomerSummariesMonthlyTableAsync(context, cancellationToken);
         await EnsureImportFileTypesAsync(context, cancellationToken);
-        await EnsureImportTemplateV2TablesAsync(context, cancellationToken);
         await EnsureAppUsersTableAsync(context, cancellationToken);
-        await EnsureDefaultTemplatesAsync(context, cancellationToken);
-        await EnsureTransformRulesCatalogAsync(context, cancellationToken);
-        await EnsureSalesInvoiceTemplateV2Async(context, cancellationToken);
     }
 
     private static async Task EnsureAppUsersTableAsync(ImportDbContext db, CancellationToken cancellationToken)

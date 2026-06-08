@@ -1,5 +1,5 @@
 ﻿import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, SlidersHorizontal, Sun, TrendingUp, Truck, Users } from "lucide-react";
+import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, ServerCog, Sun, TrendingUp, Truck, Users } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -34,7 +34,6 @@ const items = [
     icon: FileUp,
     children: [
       { to: "/importacoes/files", label: "Files", icon: FileUp },
-      { to: "/importacoes/templates", label: "Templates", icon: SlidersHorizontal },
     ],
   },
   { to: "/simulacao", label: "Simulação", icon: Activity },
@@ -235,3 +234,4 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
     </TooltipProvider>
   );
 }
+

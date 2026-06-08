@@ -2,10 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/features/import-template-builder/utils/extract-headers-in-worker", () => ({
-  extractHeadersInWorker: vi.fn(),
-}));
-
 vi.mock("@/lib/importer-progress", () => ({
   buildFallbackStages: vi.fn(() => []),
 }));

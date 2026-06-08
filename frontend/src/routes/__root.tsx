@@ -1,17 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  Outlet,
   Link,
+  Outlet,
   createRootRouteWithContext,
-  useRouter,
-  HeadContent,
-  Scripts,
   redirect,
+  useRouter,
   useRouterState,
 } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-
-import appCss from "../styles.css?url";
 import { AppSidebar } from "../components/AppSidebar";
 import { isAuthenticated, redirectToLogin } from "../lib/auth";
 import { cn } from "../lib/utils";
@@ -61,30 +57,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "AAI Seguri - ERP Corporativo" },
-      {
-        name: "description",
-        content:
-          "Plataforma corporativa para gestão integrada de Vendas, Logística, RH e Importações.",
-      },
-    ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap",
-      },
-    ],
-  }),
   beforeLoad: ({ location }) => {
-    if (typeof window === "undefined") return;
-
     if (location.pathname === "/login") return;
 
     if (!isAuthenticated()) {
@@ -94,25 +67,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       });
     }
   },
-  shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
 });
-
-function RootShell({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="pt-BR">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  );
-}
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
@@ -120,14 +78,16 @@ function RootComponent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const isLoginRoute = pathname === "/login";
-  const [authenticated, setAuthenticated] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return isAuthenticated();
-  });
+  const [authenticated, setAuthenticated] = useState<boolean>(() => isAuthenticated());
   const canRenderPrivateApp = useMemo(
     () => !isLoginRoute && authenticated,
     [authenticated, isLoginRoute],
   );
+
+  useEffect(() => {
+    document.title = "AAI Seguri - ERP Corporativo";
+    document.documentElement.lang = "pt-BR";
+  }, []);
 
   useEffect(() => {
     setAuthenticated(isAuthenticated());
@@ -165,7 +125,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="app-background min-h-screen text-foreground font-body">
+      <div className="app-background min-h-screen font-body text-foreground">
         {canRenderPrivateApp ? (
           <AppSidebar
             collapsed={sidebarCollapsed}

@@ -1,4 +1,4 @@
-export type JobStageStatus = "pending" | "running" | "completed" | "failed";
+﻿export type JobStageStatus = "pending" | "running" | "completed" | "failed";
 
 export type FileJobStageProgress = {
   code: string;
@@ -15,7 +15,7 @@ const ERROR_COUNT_NONE = 0;
 export const IMPORT_PROGRESS_STAGES = [
   { code: "PRE_PROCESSING", name: "Pré-processamento" },
   { code: "VALIDATION", name: "Validação" },
-  { code: "IMPORT", name: "Importação" },
+  { code: "IMPORT", name: "Processamento" },
 ] as const;
 
 export function clampProgressPercent(value: number): number {
@@ -89,3 +89,4 @@ function resolveFallbackStageProgress(jobStatus: string, stageCode: string, prog
   if (jobStatus === "Completed") return PROGRESS_MAX_PERCENT;
   return PROGRESS_MIN_PERCENT;
 }
+
