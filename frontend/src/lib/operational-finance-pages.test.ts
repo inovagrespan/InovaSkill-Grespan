@@ -37,12 +37,34 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("buildDemoSalesSummary");
   });
 
+  it("mantém vendas focada em busca por nota fiscal sem gráficos agregados", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/vendas.tsx"), "utf8");
+
+    expect(source).toContain('Label htmlFor="sales-document"');
+    expect(source).toContain("Buscar por nota fiscal");
+    expect(source).not.toContain('title="Registros"');
+    expect(source).not.toContain('title="Quantidade"');
+    expect(source).not.toContain("<CardTitle>Faturamento no período</CardTitle>");
+    expect(source).not.toContain("<CardTitle>Ranking por empresa</CardTitle>");
+  });
+
   it("exibe dados fictícios na tela de clientes quando não há base real", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
 
     expect(source).toContain("DEMO_CUSTOMER_SUMMARY");
     expect(source).toContain("DEMO_CUSTOMER_RANKING");
     expect(source).toContain("sortDemoCustomers");
+  });
+
+  it("move gráficos de faturamento e ranking para clientes no modelo de área escuro", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
+
+    expect(source).toContain("Faturamento no período");
+    expect(source).toContain("Ranking por empresa");
+    expect(source).toContain("RevenueAreaChart");
+    expect(source).toContain("AreaChart");
+    expect(source).toContain("fetchCommercialTransactionsSummary");
+    expect(source).toContain('bg-[#070b14]');
   });
 
   it("remove a aba de RH da navegação e do dashboard", () => {
