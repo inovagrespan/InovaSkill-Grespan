@@ -4,14 +4,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SkeletonMetricCard, SkeletonTable } from "@/components/ui/skeleton";
-import { Boxes, CalendarDays, ChevronDown, DollarSign, LineChart as LineChartIcon, Scale, Search, SlidersHorizontal, Weight } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { CalendarDays, ChevronDown, DollarSign, Search, SlidersHorizontal, Weight, type LucideIcon } from "lucide-react";
 import { calculatePeriodAverages } from "@/lib/business-metrics";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import {
@@ -19,7 +17,6 @@ import {
   fetchCommercialTransactions,
   type CommercialTransactionSummaryResponse,
   type SummaryGranularity,
-  type SummarySortBy,
   type CommercialTransaction,
 } from "@/lib/importer-api";
 
@@ -31,6 +28,8 @@ type PeriodPreset = "today" | "week" | "month" | "quarter" | "year" | "custom";
 type ViewMode = "summary" | "items";
 
 const DEMO_PREVIOUS_PERIOD_FACTOR = 0.92;
+const DEFAULT_SUMMARY_GRANULARITY: SummaryGranularity = "weekly";
+const DEFAULT_COMPANY_SORT_BY = "amount";
 
 const DEMO_SALES_TRANSACTIONS: CommercialTransaction[] = [
   {
@@ -265,8 +264,6 @@ function VendasPage() {
   const [transactionType, setTransactionType] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("summary");
-  const [companySortBy, setCompanySortBy] = useState<SummarySortBy>("amount");
-  const [summaryGranularity, setSummaryGranularity] = useState<SummaryGranularity>("weekly");
   const [summaryPage, setSummaryPage] = useState(1);
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<CommercialTransaction[]>([]);
@@ -287,30 +284,14 @@ function VendasPage() {
     [summary?.totalAmount, dateFrom, dateTo],
   );
 
-  const customerSuggestions = useMemo(
-    () => Array.from(new Set(items.map((item) => item.customerName).filter(Boolean))).slice(0, 12),
+  const invoiceSuggestions = useMemo(
+    () => Array.from(new Set(items.map((item) => item.documentNumber).filter(Boolean))).slice(0, 12),
     [items],
   );
   const productSuggestions = useMemo(
     () => Array.from(new Set(items.map((item) => `${item.productCode} - ${item.productDescription}`).filter(Boolean))).slice(0, 12),
     [items],
   );
-  const chartData = useMemo(
-    () => (summary?.items ?? []).slice(0, 8).map((item) => ({
-      companyName: item.companyName,
-      faturamento: item.totalAmount,
-      quantidade: item.totalQuantity,
-      crescimento: item.growthPercent ?? 0,
-    })),
-    [summary?.items],
-  );
-  const trendData = useMemo(() => {
-    if (!summary) return [];
-    return [
-      { label: "Anterior", value: summary.previousPeriodTotalAmount },
-      { label: "Atual", value: summary.currentPeriodTotalAmount },
-    ];
-  }, [summary]);
 
   const revenueComparisonText = useMemo(() => {
     if (!summary || summary.totalRecords === 0) return "Sem resultado para o período e filtros atuais.";
@@ -336,7 +317,7 @@ function VendasPage() {
     const demoSummary = buildDemoSalesSummary(demoItems, {
       page: targetSummaryPage,
       pageSize: summaryPageSize,
-      granularity: summaryGranularity,
+      granularity: DEFAULT_SUMMARY_GRANULARITY,
     });
     try {
       const [itemsData, summaryData] = await Promise.all([
@@ -353,8 +334,8 @@ function VendasPage() {
           dateTo,
         }),
         fetchCommercialTransactionsSummary({
-          granularity: summaryGranularity,
-          sortBy: companySortBy,
+          granularity: DEFAULT_SUMMARY_GRANULARITY,
+          sortBy: DEFAULT_COMPANY_SORT_BY,
           page: targetSummaryPage,
           pageSize: summaryPageSize,
           documentNumber,
@@ -426,14 +407,14 @@ function VendasPage() {
   useEffect(() => {
     setSummaryPage(1);
     setPage(1);
-  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, summaryGranularity, companySortBy]);
+  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadData(1, 1);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, summaryGranularity, companySortBy]);
+  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType]);
 
   useEffect(() => {
     void loadData(page, summaryPage);
@@ -467,13 +448,13 @@ function VendasPage() {
 
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
             <div className="space-y-1">
-              <Label htmlFor="sales-customer">Cliente</Label>
+              <Label htmlFor="sales-document">Nota fiscal</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="sales-customer" list="sales-customer-options" className="pl-9" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Buscar cliente ou empresa" />
+                <Input id="sales-document" list="sales-document-options" className="pl-9" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} placeholder="Buscar por nota fiscal" />
               </div>
-              <datalist id="sales-customer-options">
-                {customerSuggestions.map((value) => <option key={value} value={value} />)}
+              <datalist id="sales-document-options">
+                {invoiceSuggestions.map((value) => <option key={value} value={value} />)}
               </datalist>
             </div>
 
@@ -498,7 +479,7 @@ function VendasPage() {
 
           {advancedOpen && (
             <div className="grid grid-cols-1 gap-3 border-t border-border pt-3 md:grid-cols-2 xl:grid-cols-4">
-              <Field label="Documento" value={documentNumber} onChange={setDocumentNumber} placeholder="NF, pedido ou documento" />
+              <Field label="Cliente" value={customerName} onChange={setCustomerName} placeholder="Nome do cliente" />
               <Field label="Cidade" value={city} onChange={setCity} placeholder="Cidade" />
               <Field label="Empresa" value={companyName} onChange={setCompanyName} placeholder="Nome da empresa" />
               <Field label="Grupo" value={productGroup} onChange={setProductGroup} placeholder="Grupo do produto" />
@@ -521,17 +502,7 @@ function VendasPage() {
         </Alert>
       )}
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <MetricCard
-          loading={loading}
-          error={Boolean(message)}
-          empty={!hasResults}
-          title="Registros"
-          value={formatKpiCompactNumber(summary?.totalRecords ?? 0)}
-          tooltip={new Intl.NumberFormat("pt-BR").format(summary?.totalRecords ?? 0)}
-          periodLabel="Vendas encontradas"
-          icon={Boxes}
-        />
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           loading={loading}
           error={Boolean(message)}
@@ -568,88 +539,12 @@ function VendasPage() {
           loading={loading}
           error={Boolean(message)}
           empty={!hasResults}
-          title="Quantidade"
-          value={formatKpiCompactNumber(summary?.totalQuantity ?? 0)}
-          tooltip={formatDecimal(summary?.totalQuantity ?? 0)}
-          periodLabel="Somatório de itens vendidos"
-          icon={Scale}
-        />
-        <MetricCard
-          loading={loading}
-          error={Boolean(message)}
-          empty={!hasResults}
           title="Peso bruto"
           value={formatKpiCompactNumber(summary?.totalWeightKg ?? 0)}
           tooltip={`${formatDecimal(summary?.totalWeightKg ?? 0)} kg`}
           periodLabel="Peso bruto acumulado"
           icon={Weight}
         />
-      </section>
-
-      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[0.85fr_1.15fr]">
-        <Card className="border-border/80 bg-card/95">
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle>Faturamento no período</CardTitle>
-              <LineChartIcon className="size-5 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <SkeletonTable rows={4} columns={2} />
-            ) : !hasResults ? (
-              <EmptyState text="Sem resultado para gerar gráfico de faturamento." />
-            ) : (
-              <ChartContainer config={{ value: { label: "Faturamento", color: "var(--primary)" } }} className="h-[260px] min-h-[260px] w-full">
-                <LineChart data={trendData} margin={{ left: 8, right: 12, top: 10, bottom: 20 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis dataKey="label" />
-                  <YAxis width={86} tickFormatter={(value) => formatKpiCompactCurrency(Number(value))} />
-                  <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
-                  <Line dataKey="value" name="Faturamento" type="monotone" stroke="var(--color-value)" strokeWidth={2.6} dot={{ r: 4 }} />
-                </LineChart>
-              </ChartContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/80 bg-card/95">
-          <CardHeader>
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <CardTitle>Ranking por empresa</CardTitle>
-              <div className="flex flex-wrap gap-2">
-                <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={summaryGranularity} onChange={(event) => setSummaryGranularity(event.target.value as SummaryGranularity)}>
-                  <option value="daily">Diário</option>
-                  <option value="weekly">Semanal</option>
-                  <option value="monthly">Mensal</option>
-                </select>
-                <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={companySortBy} onChange={(event) => setCompanySortBy(event.target.value as SummarySortBy)}>
-                  <option value="amount">Maior faturamento</option>
-                  <option value="growth">Maior crescimento</option>
-                  <option value="weight">Maior peso</option>
-                  <option value="quantity">Maior quantidade</option>
-                </select>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <SkeletonTable rows={4} columns={3} />
-            ) : !hasResults ? (
-              <EmptyState text="Sem empresas para o ranking atual." />
-            ) : (
-              <ChartContainer config={{ faturamento: { label: "Faturamento", color: "var(--primary)" } }} className="h-[260px] min-h-[260px] w-full">
-                <BarChart data={chartData} margin={{ left: 8, right: 12, top: 10, bottom: 38 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis dataKey="companyName" interval={0} tick={{ fontSize: 11 }} angle={-18} textAnchor="end" height={58} />
-                  <YAxis width={86} tickFormatter={(value) => formatKpiCompactCurrency(Number(value))} />
-                  <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
-                  <Bar dataKey="faturamento" name="Faturamento" fill="var(--color-faturamento)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ChartContainer>
-            )}
-          </CardContent>
-        </Card>
       </section>
 
       <Card className="animate-soft-enter border-border/80 bg-card/95">
@@ -715,14 +610,6 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
   );
 }
 
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="flex min-h-[180px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-      {text}
-    </div>
-  );
-}
-
 function MetricCard({
   loading,
   error,
@@ -744,7 +631,7 @@ function MetricCard({
   percentageChange?: number | null;
   trendData?: number[];
   periodLabel: string;
-  icon: typeof Boxes;
+  icon: LucideIcon;
 }) {
   if (loading) return <SkeletonMetricCard />;
 

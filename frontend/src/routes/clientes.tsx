@@ -12,8 +12,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { SkeletonChart, SkeletonMetricCard, SkeletonModalContent, SkeletonTable } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Building2, CalendarClock, DollarSign, MapPin, Minus, Receipt, TrendingUp, UserRound, Users, type LucideIcon } from "lucide-react";
-import { Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
+  fetchCommercialTransactionsSummary,
   fetchCustomerAnalyticsSummary,
   fetchCustomerComparison,
   fetchCustomerDetailsSummary,
@@ -23,6 +24,7 @@ import {
   fetchCustomerInsights,
   fetchCustomerTimeline,
   fetchCustomerTopProducts,
+  type CommercialTransactionSummaryResponse,
   type CustomerAnalyticsSummary,
   type CustomerComparisonItem,
   type CustomerDetailSummary,
@@ -32,6 +34,8 @@ import {
   type CustomerInsightsResponse,
   type CustomerTimelineResponse,
   type CustomerTopProductItem,
+  type SummaryGranularity,
+  type SummarySortBy,
 } from "@/lib/importer-api";
 import {
   formatNullableCurrency,
@@ -50,6 +54,12 @@ export const Route = createFileRoute("/clientes")({
   }),
   component: ClientesPage,
 });
+
+const CLIENT_REVENUE_CHART_LIMIT = 8;
+const SALES_SUMMARY_CHART_PAGE_SIZE = 20;
+const DEMO_PREVIOUS_REVENUE_FACTOR = 0.92;
+const REVENUE_CHART_STROKE = "#f43f5e";
+const REVENUE_CHART_GRID = "rgba(148, 163, 184, 0.12)";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value ?? 0);
@@ -124,6 +134,41 @@ const DEMO_CUSTOMER_RANKING: CustomerRankingItem[] = [
   { customerCode: "CLI-003", customerName: "Super Lopes", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
   { customerCode: "CLI-004", customerName: "Distribuidora Central", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
 ];
+
+function makeDemoCommercialSummary(
+  page: number,
+  pageSize: number,
+  granularity: SummaryGranularity,
+): CommercialTransactionSummaryResponse {
+  const totalAmount = DEMO_CUSTOMER_RANKING.reduce((total, item) => total + item.revenue, 0);
+  const previousAmount = totalAmount * DEMO_PREVIOUS_REVENUE_FACTOR;
+
+  return {
+    page,
+    pageSize,
+    totalItems: DEMO_CUSTOMER_RANKING.length,
+    granularity,
+    currentPeriodStart: DEMO_CUSTOMER_SUMMARY.currentPeriodStart,
+    previousPeriodStart: DEMO_CUSTOMER_SUMMARY.previousPeriodStart,
+    currentPeriodTotalAmount: totalAmount,
+    previousPeriodTotalAmount: previousAmount,
+    totalGrowthPercent: previousAmount === 0 ? null : ((totalAmount - previousAmount) / previousAmount) * 100,
+    totalRecords: DEMO_CUSTOMER_SUMMARY.totalOrders,
+    totalAmount,
+    totalQuantity: DEMO_CUSTOMER_RANKING.reduce((total, item) => total + item.quantity, 0),
+    totalWeightKg: DEMO_CUSTOMER_RANKING.reduce((total, item) => total + item.weight, 0),
+    totalCompanies: DEMO_CUSTOMER_RANKING.length,
+    items: DEMO_CUSTOMER_RANKING.map((item) => ({
+      companyName: item.customerName,
+      totalAmount: item.revenue,
+      totalQuantity: item.quantity,
+      totalWeightKg: item.weight,
+      currentPeriodAmount: item.revenue,
+      previousPeriodAmount: item.variationPercent == null ? 0 : item.revenue / (1 + item.variationPercent / 100),
+      growthPercent: item.variationPercent,
+    })),
+  };
+}
 
 function IntelligenceDecisionCard({
   title,
@@ -249,6 +294,32 @@ function sortDemoCustomers(
   return sorted.sort((a, b) => b.revenue - a.revenue);
 }
 
+function RevenueAreaChart({
+  data,
+  gradientId,
+}: {
+  data: Array<{ label: string; value: number }>;
+  gradientId: string;
+}) {
+  return (
+    <ChartContainer config={{ value: { label: "Faturamento", color: REVENUE_CHART_STROKE } }} className="h-[260px] min-h-[260px] w-full text-[11px]">
+      <AreaChart data={data} margin={{ left: 6, right: 12, top: 14, bottom: 8 }}>
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={REVENUE_CHART_STROKE} stopOpacity={0.55} />
+            <stop offset="92%" stopColor={REVENUE_CHART_STROKE} stopOpacity={0.04} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} stroke={REVENUE_CHART_GRID} />
+        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "#8b95a7", fontSize: 11 }} minTickGap={16} />
+        <YAxis width={72} axisLine={false} tickLine={false} tick={{ fill: "#8b95a7", fontSize: 11 }} tickFormatter={(value) => formatKpiCompactCurrency(Number(value))} />
+        <ChartTooltip content={<ChartTooltipContent className="border-slate-700 bg-slate-950 text-slate-100" formatter={(value) => formatCurrency(Number(value))} />} />
+        <Area dataKey="value" name="Faturamento" type="monotone" stroke="var(--color-value)" strokeWidth={2.6} fill={`url(#${gradientId})`} dot={{ r: 3, fill: REVENUE_CHART_STROKE, strokeWidth: 0 }} activeDot={{ r: 5, fill: REVENUE_CHART_STROKE, stroke: "#fee2e2", strokeWidth: 2 }} />
+      </AreaChart>
+    </ChartContainer>
+  );
+}
+
 function ClientesPage() {
   const navigate = useNavigate({ from: "/clientes" });
   const { cliente } = Route.useSearch();
@@ -258,6 +329,9 @@ function ClientesPage() {
   const [pageSize] = useState(20);
   const [totalItems, setTotalItems] = useState(0);
   const [sortBy, setSortBy] = useState<"revenue" | "growth" | "drop" | "quantity" | "weight" | "ticket">("revenue");
+  const [salesSummary, setSalesSummary] = useState<CommercialTransactionSummaryResponse | null>(null);
+  const [salesSummaryGranularity, setSalesSummaryGranularity] = useState<SummaryGranularity>("monthly");
+  const [companySortBy, setCompanySortBy] = useState<SummarySortBy>("amount");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -292,6 +366,21 @@ function ClientesPage() {
   const historyTotalPages = useMemo(
     () => Math.max(1, Math.ceil((history?.totalItems ?? 0) / (history?.pageSize ?? 10))),
     [history?.totalItems, history?.pageSize],
+  );
+  const revenueTrendData = useMemo(() => {
+    if (!salesSummary) return [];
+
+    return [
+      { label: "Anterior", value: salesSummary.previousPeriodTotalAmount },
+      { label: "Atual", value: salesSummary.currentPeriodTotalAmount },
+    ];
+  }, [salesSummary]);
+  const companyRevenueChartData = useMemo(
+    () => (salesSummary?.items ?? []).slice(0, CLIENT_REVENUE_CHART_LIMIT).map((item) => ({
+      label: item.companyName,
+      value: item.totalAmount,
+    })),
+    [salesSummary?.items],
   );
   const timelineChartData = useMemo(
     () => {
@@ -338,25 +427,43 @@ function ClientesPage() {
     setLoading(true);
     setMessage("");
     const demoRanking = sortDemoCustomers(filterDemoCustomers(customer), sortBy);
+    const demoSalesSummary = makeDemoCommercialSummary(1, SALES_SUMMARY_CHART_PAGE_SIZE, salesSummaryGranularity);
     try {
-      const [summaryData, rankingData] = await Promise.all([
+      const [summaryData, rankingData, commercialSummaryData] = await Promise.all([
         fetchCustomerAnalyticsSummary({ dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
         fetchCustomerRanking({ page: targetPage, pageSize, sortBy, dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
+        fetchCommercialTransactionsSummary({
+          page: 1,
+          pageSize: SALES_SUMMARY_CHART_PAGE_SIZE,
+          granularity: salesSummaryGranularity,
+          sortBy: companySortBy,
+          customerName: customer,
+          city,
+          productGroup,
+          productCode,
+          transactionType,
+          dateFrom,
+          dateTo,
+          referenceDate: dateTo,
+        }),
       ]);
       if (summaryData.activeCustomers === 0 || rankingData.items.length === 0) {
         setSummary(DEMO_CUSTOMER_SUMMARY);
         setItems(demoRanking);
+        setSalesSummary(demoSalesSummary);
         setPage(targetPage);
         setTotalItems(demoRanking.length);
         return;
       }
       setSummary(summaryData);
       setItems(rankingData.items);
+      setSalesSummary(commercialSummaryData.totalRecords === 0 ? demoSalesSummary : commercialSummaryData);
       setPage(rankingData.page);
       setTotalItems(rankingData.totalItems);
     } catch (error) {
       setSummary(DEMO_CUSTOMER_SUMMARY);
       setItems(demoRanking);
+      setSalesSummary(demoSalesSummary);
       setPage(targetPage);
       setTotalItems(demoRanking.length);
       setMessage("");
@@ -408,7 +515,7 @@ function ClientesPage() {
 
   useEffect(() => {
     void load(1);
-  }, [sortBy]);
+  }, [sortBy, salesSummaryGranularity, companySortBy]);
 
   useEffect(() => {
     if (!selectedCustomerId || !detailsOpen) return;
@@ -544,6 +651,63 @@ function ClientesPage() {
           </form>
         </CardContent>
       </Card>
+
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <Card className="overflow-hidden border-[#182033] bg-[#070b14] text-slate-100 shadow-lg">
+          <CardHeader className="pb-2">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <CardTitle className="text-sm font-medium text-slate-100">Faturamento no período</CardTitle>
+              <select
+                className="h-8 rounded-md border border-slate-800 bg-[#0b1020] px-2 text-xs text-slate-200"
+                value={salesSummaryGranularity}
+                onChange={(event) => setSalesSummaryGranularity(event.target.value as SummaryGranularity)}
+                aria-label="Granularidade do faturamento no período"
+              >
+                <option value="daily">Diário</option>
+                <option value="weekly">Semanal</option>
+                <option value="monthly">Mensal</option>
+              </select>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {loading ? (
+              <SkeletonChart className="h-[260px] bg-slate-900/80" />
+            ) : revenueTrendData.length === 0 ? (
+              <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-slate-800 text-sm text-slate-400">Sem resultado para gerar gráfico de faturamento.</div>
+            ) : (
+              <RevenueAreaChart data={revenueTrendData} gradientId="clientes-faturamento-gradient" />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden border-[#182033] bg-[#070b14] text-slate-100 shadow-lg">
+          <CardHeader className="pb-2">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <CardTitle className="text-sm font-medium text-slate-100">Ranking por empresa</CardTitle>
+              <select
+                className="h-8 rounded-md border border-slate-800 bg-[#0b1020] px-2 text-xs text-slate-200"
+                value={companySortBy}
+                onChange={(event) => setCompanySortBy(event.target.value as SummarySortBy)}
+                aria-label="Ordenação do ranking por empresa"
+              >
+                <option value="amount">Maior faturamento</option>
+                <option value="growth">Maior crescimento</option>
+                <option value="weight">Maior peso</option>
+                <option value="quantity">Maior quantidade</option>
+              </select>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {loading ? (
+              <SkeletonChart className="h-[260px] bg-slate-900/80" />
+            ) : companyRevenueChartData.length === 0 ? (
+              <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-slate-800 text-sm text-slate-400">Sem empresas para o ranking atual.</div>
+            ) : (
+              <RevenueAreaChart data={companyRevenueChartData} gradientId="clientes-ranking-gradient" />
+            )}
+          </CardContent>
+        </Card>
+      </section>
 
       <Card className="animate-soft-enter">
         <CardHeader>
