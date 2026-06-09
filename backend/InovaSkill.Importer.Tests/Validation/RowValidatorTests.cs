@@ -12,7 +12,7 @@ public class RowValidatorTests
     [Fact]
     public void Validate_ReturnsValid_ForValidCustomerRow()
     {
-        var schema = _schemaProvider.GetSchema(ImportFileTypeCodes.CustomerList);
+        var schema = _schemaProvider.GetSchema(ImportFileTypeCodes.Customers);
         var row = new ImportedRow(2, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["customercode"] = "C-001",
@@ -30,7 +30,7 @@ public class RowValidatorTests
     [Fact]
     public void Validate_ReturnsErrors_ForInvalidCustomerRow()
     {
-        var schema = _schemaProvider.GetSchema(ImportFileTypeCodes.CustomerList);
+        var schema = _schemaProvider.GetSchema(ImportFileTypeCodes.Customers);
         var row = new ImportedRow(2, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["name"] = "",

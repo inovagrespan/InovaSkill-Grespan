@@ -13,10 +13,15 @@ Guia local para qualquer IA que edite este repositório.
 - Não quebrar separação entre `frontend` e `backend`.
 - Não mudar contratos de API sem atualizar frontend e backend no mesmo PR.
 - Quando a tarefa envolver subir o ambiente em desenvolvimento local, subir apenas `postgres` e `redis` via Docker e executar `frontend`, `api` e `worker` localmente com os comandos próprios de cada projeto.
+- Escolha de nomes é parte obrigatória da qualidade do código: nomes de tipos, métodos, variáveis, constantes, rotas e casos de uso devem refletir o domínio com clareza; nome ruim não é detalhe, é defeito de legibilidade.
 - Para qualquer alteração de código, criar/atualizar testes cobrindo o comportamento alterado.
+- Para qualquer alteração no frontend, criar ou atualizar testes de frontend cobrindo o comportamento alterado.
+- Toda métrica, KPI, score, resumo, agregação, comparação, ranking, timeline, previsão ou cálculo exibido em tela ou exposto por API deve ter teste automatizado dedicado, sem exceção.
+- É proibido entregar nova métrica ou alterar métrica existente sem cobrir fórmula, filtros, agrupamentos, limites, casos nulos, sinais, arredondamento e consistência entre partes e total.
 - No frontend, criar casos de teste para funcionalidades importantes com cenários diferentes (fluxo feliz, bordas e entradas inválidas).
+- Sempre que houver qualquer alteração, executar imediatamente os testes aplicáveis da área alterada antes de encerrar a tarefa.
 - Não introduzir números mágicos em código de regra de negócio, cálculos, limites, paginação, datas ou timeouts; extrair para constantes nomeadas, configuração ou objetos de política conforme o contexto.
-- Antes de finalizar, executar a suíte de testes aplicável (frontend e backend quando houver alterações em ambos) e só encerrar a tarefa com testes passando.
+- Antes de finalizar, executar toda a suíte de testes aplicável ao escopo alterado, incluindo testes de frontend quando houver mudanças no frontend e testes de backend quando houver mudanças no backend; só encerrar a tarefa com todos os testes aplicáveis passando.
 - Quando for solicitado criar commit, usar mensagens no padrão Conventional Commits.
 
 ## Testing Philosophy
@@ -27,6 +32,7 @@ Guia local para qualquer IA que edite este repositório.
 - Edge cases são obrigatórios em regras críticas, especialmente parsing de planilhas, moeda, datas, filtros, agregações, dashboards, filas, workers, progresso e resumos.
 - Todo bug corrigido deve ganhar teste de regressão que falhe antes da correção e passe depois.
 - Identificar e testar invariantes do domínio, por exemplo: progresso entre 0 e 100, linhas importadas <= linhas lidas, totais coerentes, contagens não negativas e soma das partes igual ao total.
+- Para métricas e dashboards, validar obrigatoriamente: fórmula, granularidade, período, filtros, agrupamento, ordenação, totais, subtotais, variação percentual, bases zeradas, valores negativos, ausência de dados, arredondamento e consistência com os dados persistidos.
 - Evitar testes que repetem o algoritmo da implementação, validam detalhes internos sem necessidade ou apenas verificam que um método foi chamado.
 - Priorizar comportamento observável, resultado esperado, impacto para o usuário e sentido de negócio dos números retornados.
 - Preferir dados pequenos, explícitos e calculáveis manualmente; fixtures grandes só quando o volume em si for o comportamento testado.
@@ -114,3 +120,4 @@ cd frontend; npm run test
 ```powershell
 cd backend; dotnet test
 ```
+- Nunca encerrar a tarefa sem rodar os testes aplicáveis ao que foi alterado e confirmar que todos passaram.

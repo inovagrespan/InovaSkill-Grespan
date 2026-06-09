@@ -1,6 +1,6 @@
 ﻿using InovaSkill.Importer.Api.Contracts;
 using InovaSkill.Importer.Application.Abstractions;
-using InovaSkill.Importer.Application.Events;
+using InovaSkill.Importer.Application.Jobs;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Domain.ValueObjects;
@@ -15,15 +15,16 @@ namespace InovaSkill.Importer.Api.Controllers;
 [Route("api/files")]
 public sealed class FilesController(
     IFileUploadService fileUploadService,
-    IProcessingEventPublisher eventPublisher,
+    IJobService jobService,
     ImportDbContext dbContext) : ControllerBase
 {
     private static readonly HashSet<string> AllowedImportFileTypeCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         ImportFileTypeCodes.SalesInvoice,
-        ImportFileTypeCodes.CustomerList,
-        ImportFileTypeCodes.ProductList,
-        ImportFileTypeCodes.FinancialEntry
+        ImportFileTypeCodes.Customers,
+        ImportFileTypeCodes.Products,
+        ImportFileTypeCodes.FinancialEntry,
+        ImportFileTypeCodes.RoutePlanning
     };
 
     [HttpPost("upload")]
@@ -103,11 +104,11 @@ public sealed class FilesController(
 
         if (job.Status == Domain.Enums.FileJobStatus.Importing)
         {
-            if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.CustomerList, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.Customers, StringComparison.OrdinalIgnoreCase))
             {
                 await dbContext.Customers.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             }
-            else if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.ProductList, StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.Products, StringComparison.OrdinalIgnoreCase))
             {
                 await dbContext.Products.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             }
@@ -119,6 +120,10 @@ public sealed class FilesController(
             {
                 await dbContext.CommercialTransactions.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             }
+            else if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.RoutePlanning, StringComparison.OrdinalIgnoreCase))
+            {
+                await dbContext.RoutePlanningImports.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
+            }
         }
 
         if (job.Status == Domain.Enums.FileJobStatus.ValidationFailed)
@@ -129,8 +134,10 @@ public sealed class FilesController(
         job.RequeueManually();
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        await eventPublisher.PublishAsync(
-            ProcessingEventEnvelope.Create(ProcessingEventTypes.FileUploaded, job.Id),
+        await jobService.EnqueueAsync(
+            JobTypeCodes.SpreadsheetImport,
+            new SpreadsheetImportJobPayload(job.Id, job.OriginalFileName, job.ImportFileTypeCode),
+            userId: null,
             cancellationToken);
         return Ok();
     }

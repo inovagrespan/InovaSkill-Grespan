@@ -92,7 +92,7 @@ public class ImportPreProcessingPipelineTests
         var pipeline = BuildPipeline(template: null);
 
         var result = await CollectAsync(pipeline.ProcessRowsAsync(
-            new ImportPreProcessingRequest("clientes.csv", ImportFileTypeCodes.CustomerList, Rows(
+            new ImportPreProcessingRequest("clientes.csv", ImportFileTypeCodes.Customers, Rows(
                 new TableRow(2, new Dictionary<string, string>
                 {
                     ["cliente"] = "C-001",
@@ -145,6 +145,66 @@ public class ImportPreProcessingPipelineTests
         Assert.Equal("NF-001", result[0].Row.Get("documentnumber"));
         Assert.Equal("2026-05-30", result[0].Row.Get("transactiondate"));
         Assert.Equal("31.00", result[0].Row.Get("totalamount"));
+    }
+
+    [Fact]
+    public async Task ProcessRowsAsync_MapsTotvsCustomerHeadersToCanonicalFields()
+    {
+        var services = new ServiceCollection();
+        services.AddImportInfrastructure(new ConfigurationBuilder().AddInMemoryCollection().Build());
+        using var provider = services.BuildServiceProvider();
+
+        var pipeline = new ImportPreProcessingPipeline(
+            provider.GetRequiredService<IPreProcessorTemplateResolver>(),
+            new ImportMappingEngine(new TransformRuleRegistry([new TrimRule(), new BrazilianCurrencyRule(), new BrazilianDateRule()])),
+            provider.GetRequiredService<IFileTypeDetector>());
+
+        var result = await CollectAsync(pipeline.ProcessRowsAsync(
+            new ImportPreProcessingRequest("cod clientes.xlsx", null, Rows(
+                new TableRow(2, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["cod totvs"] = "1",
+                    ["cliente (consumo bruto (vendas+bonif)"] = "NSA AREALVA"
+                }))),
+            CancellationToken.None));
+
+        Assert.Single(result);
+        Assert.Empty(result[0].Errors);
+        Assert.False(result[0].ShouldStopProcessing);
+        Assert.Equal(ImportFileTypeCodes.Customers, result[0].DetectedFileTypeCode);
+        Assert.Equal("1", result[0].Row.Get("customercode"));
+        Assert.Equal("NSA AREALVA", result[0].Row.Get("name"));
+    }
+
+    [Fact]
+    public async Task ProcessRowsAsync_MapsBrowseProductHeadersToCanonicalFields()
+    {
+        var services = new ServiceCollection();
+        services.AddImportInfrastructure(new ConfigurationBuilder().AddInMemoryCollection().Build());
+        using var provider = services.BuildServiceProvider();
+
+        var pipeline = new ImportPreProcessingPipeline(
+            provider.GetRequiredService<IPreProcessorTemplateResolver>(),
+            new ImportMappingEngine(new TransformRuleRegistry([new TrimRule(), new BrazilianCurrencyRule(), new BrazilianDateRule()])),
+            provider.GetRequiredService<IFileTypeDetector>());
+
+        var result = await CollectAsync(pipeline.ProcessRowsAsync(
+            new ImportPreProcessingRequest("Cadastro de produtos.xlsx", null, Rows(
+                new TableRow(3, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["codigo"] = "10000001",
+                    ["descricao"] = "AMOSTRA BAGUETE GRANDE PCT COM 2 UND COM 660G",
+                    ["ult. preco"] = "0"
+                }))),
+            CancellationToken.None));
+
+        Assert.Single(result);
+        Assert.Empty(result[0].Errors);
+        Assert.False(result[0].ShouldStopProcessing);
+        Assert.Equal(ImportFileTypeCodes.Products, result[0].DetectedFileTypeCode);
+        Assert.Equal("10000001", result[0].Row.Get("sku"));
+        Assert.Equal("AMOSTRA BAGUETE GRANDE PCT COM 2 UND COM 660G", result[0].Row.Get("name"));
+        Assert.Equal("0", result[0].Row.Get("price"));
     }
 
     [Fact]
@@ -249,8 +309,13 @@ public class ImportPreProcessingPipelineTests
                 return ImportFileTypeCodes.SalesInvoice;
             }
 
-            return row.ContainsKey("customercode") || row.ContainsKey("cliente")
-                ? ImportFileTypeCodes.CustomerList
+            if (row.ContainsKey("customercode") || row.ContainsKey("cliente"))
+            {
+                return ImportFileTypeCodes.Customers;
+            }
+
+            return row.ContainsKey("sku") || row.ContainsKey("codigo")
+                ? ImportFileTypeCodes.Products
                 : null;
         }
     }

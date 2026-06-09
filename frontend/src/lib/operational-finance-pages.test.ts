@@ -29,12 +29,18 @@ describe("operational, finance and reports pages", () => {
 
   it("exibe médias semanal e mensal na tela de vendas", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/vendas.tsx"), "utf8");
+    const dashboardHelper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/sales-dashboard.ts"), "utf8");
 
     expect(source).toContain("Média mensal");
     expect(source).toContain("Média semanal");
     expect(source).toContain("calculatePeriodAverages");
-    expect(source).toContain("DEMO_SALES_TRANSACTIONS");
-    expect(source).toContain("buildDemoSalesSummary");
+    expect(source).toContain("fetchCommercialTransactionsTimeline");
+    expect(source).toContain("resolveSalesTimelineGranularity");
+    expect(source).toContain("AreaChart");
+    expect(source).toContain("linearGradient");
+    expect(source).toContain("SALES_CHART_CARD_CLASS_NAME");
+    expect(dashboardHelper).toContain("formatSalesTimelineLabel");
+    expect(dashboardHelper).toContain("buildSalesTrendData");
   });
 
   it("mantém vendas focada em busca por nota fiscal sem gráficos agregados", () => {

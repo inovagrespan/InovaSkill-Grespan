@@ -93,6 +93,18 @@ export type CommercialTransactionSummaryResponse = {
   totalCompanies: number;
   items: CommercialTransactionCompanySummary[];
 };
+export type CommercialTransactionTimelineGranularity = "daily" | "weekly" | "monthly";
+export type CommercialTransactionTimelinePoint = {
+  periodStart: string;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  recordCount: number;
+};
+export type CommercialTransactionTimelineResponse = {
+  granularity: CommercialTransactionTimelineGranularity;
+  items: CommercialTransactionTimelinePoint[];
+};
 
 export type ProcessingMonitoringDashboard = {
   summary: ProcessingMonitoringSummary;
@@ -602,6 +614,80 @@ function demoCommercialSummary(input: {
     totalCompanies: items.length,
     items,
   };
+}
+
+function demoCommercialTimeline(input: {
+  granularity?: CommercialTransactionTimelineGranularity;
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  productGroup?: string;
+  transactionType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): CommercialTransactionTimelineResponse {
+  const filteredItems = demoCommercialTransactions().filter((item) => {
+    if (input.documentNumber?.trim() && !item.documentNumber.toLowerCase().includes(input.documentNumber.trim().toLowerCase())) return false;
+    if (input.customerCode?.trim() && !item.customerCode.toLowerCase().includes(input.customerCode.trim().toLowerCase())) return false;
+    if (input.customerName?.trim() && !item.customerName.toLowerCase().includes(input.customerName.trim().toLowerCase())) return false;
+    if (input.productCode?.trim()) {
+      const productText = `${item.productCode} ${item.productDescription}`.toLowerCase();
+      if (!productText.includes(input.productCode.trim().toLowerCase())) return false;
+    }
+    if (input.city?.trim() && !item.city.toLowerCase().includes(input.city.trim().toLowerCase())) return false;
+    if (input.productGroup?.trim() && !item.productGroup.toLowerCase().includes(input.productGroup.trim().toLowerCase())) return false;
+    if (input.transactionType?.trim() && !item.transactionType.toLowerCase().includes(input.transactionType.trim().toLowerCase())) return false;
+    if (input.dateFrom?.trim() && item.transactionDate < input.dateFrom.trim()) return false;
+    if (input.dateTo?.trim() && item.transactionDate > input.dateTo.trim()) return false;
+    return true;
+  });
+
+  const granularity = input.granularity ?? "monthly";
+  const grouped = new Map<string, CommercialTransactionTimelinePoint>();
+
+  for (const item of filteredItems) {
+    const periodStart = resolveDemoTimelinePeriodStart(item.transactionDate, granularity);
+    const current = grouped.get(periodStart) ?? {
+      periodStart,
+      totalAmount: 0,
+      totalQuantity: 0,
+      totalWeightKg: 0,
+      recordCount: 0,
+    };
+
+    current.totalAmount += item.totalAmount;
+    current.totalQuantity += item.quantity;
+    current.totalWeightKg += item.grossWeightKg;
+    current.recordCount += 1;
+    grouped.set(periodStart, current);
+  }
+
+  return {
+    granularity,
+    items: Array.from(grouped.values()).sort((left, right) => left.periodStart.localeCompare(right.periodStart)),
+  };
+}
+
+function resolveDemoTimelinePeriodStart(
+  transactionDate: string,
+  granularity: CommercialTransactionTimelineGranularity,
+): string {
+  const date = new Date(`${transactionDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return transactionDate;
+
+  if (granularity === "daily") {
+    return transactionDate;
+  }
+
+  if (granularity === "weekly") {
+    const dayOffset = (date.getUTCDay() + 6) % 7;
+    date.setUTCDate(date.getUTCDate() - dayOffset);
+    return date.toISOString().slice(0, 10);
+  }
+
+  return `${transactionDate.slice(0, 7)}-01`;
 }
 
 function demoFileJobs(page = DEMO_PAGE, pageSize = 10): PagedResult<FileJob> {
@@ -1410,6 +1496,43 @@ export async function fetchCommercialTransactionsSummary(input: {
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de vendas."));
 
   return (await response.json()) as CommercialTransactionSummaryResponse;
+}
+
+export async function fetchCommercialTransactionsTimeline(input: {
+  granularity?: CommercialTransactionTimelineGranularity;
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  productGroup?: string;
+  transactionType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<CommercialTransactionTimelineResponse> {
+  const query = new URLSearchParams();
+  query.set("granularity", input.granularity ?? "monthly");
+
+  if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
+  if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
+  if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions/timeline?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCommercialTimeline(input);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a evolução de vendas."));
+
+  return (await response.json()) as CommercialTransactionTimelineResponse;
 }
 
 export async function fetchCustomerAnalyticsSummary(input: {

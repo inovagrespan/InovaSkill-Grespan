@@ -93,7 +93,7 @@ public sealed class ImportPreProcessingPipeline(
 
     private static ImportedRow ApplyDefaultAliases(ImportedRow row, string importFileTypeCode)
     {
-        if (!string.Equals(importFileTypeCode, ImportFileTypeCodes.CustomerList, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(importFileTypeCode, ImportFileTypeCodes.Customers, StringComparison.OrdinalIgnoreCase))
         {
             return row;
         }

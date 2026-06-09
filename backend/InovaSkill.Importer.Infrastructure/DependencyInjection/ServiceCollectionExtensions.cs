@@ -1,5 +1,6 @@
 ﻿using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Infrastructure.Mappings;
+using InovaSkill.Importer.Infrastructure.Parsing;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.Processing;
 using InovaSkill.Importer.Infrastructure.Processing.EventHandlers;
@@ -23,8 +24,9 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<ImportDbContext>(opt => opt.UseNpgsql(connectionString));
         services.AddScoped<IFileParserFactory, FileParserFactory>();
-        services.AddScoped<ISpreadsheetImportPattern, CustomerListSpreadsheetImportPattern>();
-        services.AddScoped<ISpreadsheetImportPattern, ProductListSpreadsheetImportPattern>();
+        services.AddScoped<IRoutePlanningWorkbookParser, RoutePlanningWorkbookParser>();
+        services.AddScoped<ISpreadsheetImportPattern, CustomerSpreadsheetImportPattern>();
+        services.AddScoped<ISpreadsheetImportPattern, ProductSpreadsheetImportPattern>();
         services.AddScoped<ISpreadsheetImportPattern, FinancialEntrySpreadsheetImportPattern>();
         services.AddScoped<ISpreadsheetImportPattern, SalesInvoiceSpreadsheetImportPattern>();
         services.AddScoped<IFileTypeDetector, FileTypeDetector>();
@@ -44,6 +46,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRowValidator, RowValidator>();
         services.TryAddScoped<IFileJobProgressNotifier, NullFileJobProgressNotifier>();
         services.AddScoped<IFileImportPipelineProcessor, FileImportPipelineProcessor>();
+        services.AddScoped<IJobService, JobService>();
+        services.AddScoped<IJobPayloadValidator, SpreadsheetImportJobPayloadValidator>();
+        services.AddScoped<IJobHandler, SpreadsheetImportJobHandler>();
+        services.AddScoped<IProcessingEventHandler, JobRequestedEventHandler>();
         services.AddScoped<IProcessingEventHandler, FileUploadedEventHandler>();
         services.AddScoped<IProcessingEventHandler, ImportRequestedEventHandler>();
         services.AddScoped<IProcessingEventHandler, SummaryGenerationRequestedEventHandler>();

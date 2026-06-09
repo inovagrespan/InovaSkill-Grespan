@@ -13,7 +13,7 @@ internal sealed class PreProcessorTemplateResolver(IEnumerable<ISpreadsheetImpor
 
         var bestMatch = SpreadsheetImportPatternMatcher.SelectBest(patterns, fileName, headers);
         return bestMatch?.MeetsMinimumConfidence == true
-            ? bestMatch.Pattern.CreateTemplate()
+            ? bestMatch.Pattern.CreateTemplate(headers)
             : null;
     }
 }

@@ -1,7 +1,7 @@
 using System.Text;
 using InovaSkill.Importer.Api.Contracts;
 using InovaSkill.Importer.Application.Abstractions;
-using InovaSkill.Importer.Application.Events;
+using InovaSkill.Importer.Application.Jobs;
 using InovaSkill.Importer.Api.Presentation;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
@@ -17,7 +17,7 @@ namespace InovaSkill.Importer.Api.Controllers;
 public sealed class ProcessingMonitoringController(
     ImportDbContext dbContext,
     IProcessingQueueMonitor queueMonitor,
-    IProcessingEventPublisher eventPublisher) : ControllerBase
+    IJobService jobService) : ControllerBase
 {
     private static readonly TimeSpan StaleJobTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan WorkerOfflineTimeout = TimeSpan.FromSeconds(30);
@@ -122,8 +122,10 @@ public sealed class ProcessingMonitoringController(
             Message = "Job reenfileirado pela central de processamentos."
         });
         await dbContext.SaveChangesAsync(cancellationToken);
-        await eventPublisher.PublishAsync(
-            ProcessingEventEnvelope.Create(ProcessingEventTypes.FileUploaded, job.Id),
+        await jobService.EnqueueAsync(
+            JobTypeCodes.SpreadsheetImport,
+            new SpreadsheetImportJobPayload(job.Id, job.OriginalFileName, job.ImportFileTypeCode),
+            userId: null,
             cancellationToken);
         return Ok();
     }

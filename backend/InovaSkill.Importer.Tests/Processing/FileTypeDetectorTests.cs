@@ -29,7 +29,7 @@ public class FileTypeDetectorTests
 
         var result = _sut.DetectCode(row);
 
-        Assert.Equal(ImportFileTypeCodes.CustomerList, result);
+        Assert.Equal(ImportFileTypeCodes.Customers, result);
     }
 
     [Fact]
@@ -68,5 +68,34 @@ public class FileTypeDetectorTests
         var result = _sut.DetectCode(row);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public void Detect_ReturnsCustomers_WhenTotvsCustomerSpreadsheetHeadersMatch()
+    {
+        var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["cod totvs"] = "1",
+            ["cliente (consumo bruto (vendas+bonif)"] = "NSA AREALVA"
+        };
+
+        var result = _sut.DetectCode(row);
+
+        Assert.Equal(ImportFileTypeCodes.Customers, result);
+    }
+
+    [Fact]
+    public void Detect_ReturnsProducts_WhenBrowseProductHeadersMatch()
+    {
+        var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["codigo"] = "10000001",
+            ["descricao"] = "AMOSTRA BAGUETE GRANDE",
+            ["ult. preco"] = "0"
+        };
+
+        var result = _sut.DetectCode(row);
+
+        Assert.Equal(ImportFileTypeCodes.Products, result);
     }
 }

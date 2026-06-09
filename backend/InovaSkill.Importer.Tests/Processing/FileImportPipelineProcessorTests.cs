@@ -4,6 +4,7 @@ using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Domain.ValueObjects;
 using InovaSkill.Importer.Infrastructure.Mappings;
+using InovaSkill.Importer.Infrastructure.Parsing;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.Processing;
 using InovaSkill.Importer.Infrastructure.Processing.TransformRules;
@@ -11,6 +12,7 @@ using InovaSkill.Importer.Infrastructure.Validation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using ClosedXML.Excel;
 using System.Text.Json;
 
 namespace InovaSkill.Importer.Tests.Processing;
@@ -32,7 +34,7 @@ public sealed class FileImportPipelineProcessorTests
             Id = 200,
             FilePath = filePath,
             OriginalFileName = "clientes.csv",
-            ImportFileTypeCode = ImportFileTypeCodes.CustomerList,
+            ImportFileTypeCode = ImportFileTypeCodes.Customers,
             Status = FileJobStatus.WaitingProcessing,
             CurrentStep = "Aguardando processamento"
         };
@@ -162,6 +164,200 @@ public sealed class FileImportPipelineProcessorTests
         }
     }
 
+    [Fact]
+    public async Task ProcessJobAsync_WhenWorkbookMatchesRoutePlanning_PersistsRoutePlanningImport()
+    {
+        await using var db = CreateDb();
+        var directory = Path.Combine(Path.GetTempPath(), $"route-planning-import-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var filePath = Path.Combine(directory, "rotas.xlsx");
+        CreateRoutePlanningWorkbook(filePath);
+
+        try
+        {
+            var job = new FileJob
+            {
+                FilePath = filePath,
+                OriginalFileName = "Rotas por Cidades - Inova v2.xlsx",
+                Status = FileJobStatus.WaitingProcessing,
+                CurrentStep = "Aguardando processamento"
+            };
+            db.FileJobs.Add(job);
+            await db.SaveChangesAsync();
+
+            var processor = CreateProcessor(db);
+
+            await processor.ProcessJobAsync(job.Id, CancellationToken.None);
+
+            var afterValidation = await db.FileJobs.AsNoTracking().SingleAsync(x => x.Id == job.Id);
+            Assert.Equal(ImportFileTypeCodes.RoutePlanning, afterValidation.ImportFileTypeCode);
+            Assert.Equal(FileJobStatus.ReadyToImport, afterValidation.Status);
+
+            await processor.ProcessJobAsync(job.Id, CancellationToken.None);
+
+            var completedJob = await db.FileJobs.AsNoTracking().SingleAsync(x => x.Id == job.Id);
+            Assert.Equal(FileJobStatus.Completed, completedJob.Status);
+            Assert.Equal(2, completedJob.TotalRows);
+
+            var routeImport = await db.RoutePlanningImports
+                .Include(x => x.TruckCapacities)
+                .Include(x => x.Routes)
+                .ThenInclude(x => x.Stops)
+                .SingleAsync();
+
+            Assert.Equal(job.Id, routeImport.SourceFileJobId);
+            Assert.Equal("Rotas por Cidades - Inova v2.xlsx", routeImport.SourceFileName);
+            Assert.Single(routeImport.TruckCapacities);
+
+            var route = Assert.Single(routeImport.Routes);
+            Assert.Equal("RIO PRETO", route.RouteName);
+            Assert.Equal("Truck", route.VehicleType);
+            Assert.Equal(10300m, route.VehicleCapacityKg);
+            Assert.Equal(61.35m, route.OccupancyPercent);
+            Assert.Equal(2, route.Stops.Count);
+            Assert.Contains(route.Stops, stop => stop.DestinationName == "BADY BASSITT");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessJobAsync_WhenExplicitRoutePlanningWorkbookIsUnknown_FailsJobWithClearReason()
+    {
+        await using var db = CreateDb();
+        var directory = Path.Combine(Path.GetTempPath(), $"route-planning-unknown-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var filePath = Path.Combine(directory, "nao-e-rota.xlsx");
+        CreateNonRouteWorkbook(filePath);
+
+        try
+        {
+            var job = new FileJob
+            {
+                FilePath = filePath,
+                OriginalFileName = "nao-e-rota.xlsx",
+                ImportFileTypeCode = ImportFileTypeCodes.RoutePlanning,
+                Status = FileJobStatus.WaitingProcessing,
+                CurrentStep = "Aguardando processamento"
+            };
+            db.FileJobs.Add(job);
+            await db.SaveChangesAsync();
+
+            var processor = CreateProcessor(db);
+
+            await processor.ProcessJobAsync(job.Id, CancellationToken.None);
+
+            var failedJob = await db.FileJobs.AsNoTracking().SingleAsync(x => x.Id == job.Id);
+            Assert.Equal(FileJobStatus.Failed, failedJob.Status);
+            Assert.Contains("layout da planilha de rotas por cidade nao foi reconhecido", failedJob.CurrentStep, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessJobAsync_WhenSalesInvoiceImportCompletes_EnqueuesBothSummaryJobs()
+    {
+        await using var db = await CreateSqliteDbAsync();
+        var normalizedFilePath = Path.Combine(Path.GetTempPath(), $"normalized-sales-summary-{Guid.NewGuid():N}.ndjson");
+        await File.WriteAllLinesAsync(normalizedFilePath,
+        [
+            JsonSerializer.Serialize(new
+            {
+                rowNumber = 2,
+                values = BuildSalesInvoiceRow(quantity: "2", unitPrice: "15.50", totalAmount: "31.00")
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        ]);
+
+        try
+        {
+            var publisher = new StubProcessingEventPublisher();
+            var job = new FileJob
+            {
+                Id = 301,
+                FilePath = "vendas.csv",
+                OriginalFileName = "vendas.csv",
+                NormalizedFilePath = normalizedFilePath,
+                ImportFileTypeCode = ImportFileTypeCodes.SalesInvoice,
+                Status = FileJobStatus.ReadyToImport,
+                CurrentStep = "Aguardando importacao",
+                TotalRows = 1
+            };
+            db.FileJobs.Add(job);
+            await db.SaveChangesAsync();
+
+            var processor = CreateProcessor(db, eventPublisher: publisher);
+            await processor.ProcessJobAsync(job.Id, CancellationToken.None);
+
+            var summaryEvents = publisher.Published
+                .Where(x => x.EventType == ProcessingEventTypes.SummaryGenerationRequested)
+                .ToList();
+
+            var persistedJob = await db.FileJobs.AsNoTracking().SingleAsync(x => x.Id == job.Id);
+            Assert.Equal(FileJobStatus.Completed, persistedJob.Status);
+            Assert.Equal(2, summaryEvents.Count);
+            Assert.Contains(summaryEvents, x => HasJobType(x.Payload, PostImportJobType.SalesSummary));
+            Assert.Contains(summaryEvents, x => HasJobType(x.Payload, PostImportJobType.CustomerSummary));
+        }
+        finally
+        {
+            File.Delete(normalizedFilePath);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessJobAsync_WhenImportTypeIsNotSalesInvoice_DoesNotEnqueueSummaryJobs()
+    {
+        await using var db = await CreateSqliteDbAsync();
+        var normalizedFilePath = Path.Combine(Path.GetTempPath(), $"normalized-customers-{Guid.NewGuid():N}.ndjson");
+        await File.WriteAllLinesAsync(normalizedFilePath,
+        [
+            JsonSerializer.Serialize(new
+            {
+                rowNumber = 2,
+                values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["customercode"] = "C-001",
+                    ["name"] = "Cliente Teste",
+                    ["email"] = "cliente@example.com"
+                }
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        ]);
+
+        try
+        {
+            var publisher = new StubProcessingEventPublisher();
+            var job = new FileJob
+            {
+                Id = 302,
+                FilePath = "clientes.csv",
+                OriginalFileName = "clientes.csv",
+                NormalizedFilePath = normalizedFilePath,
+                ImportFileTypeCode = ImportFileTypeCodes.Customers,
+                Status = FileJobStatus.ReadyToImport,
+                CurrentStep = "Aguardando importacao",
+                TotalRows = 1
+            };
+            db.FileJobs.Add(job);
+            await db.SaveChangesAsync();
+
+            var processor = CreateProcessor(db, eventPublisher: publisher);
+            await processor.ProcessJobAsync(job.Id, CancellationToken.None);
+
+            Assert.DoesNotContain(
+                publisher.Published,
+                x => x.EventType == ProcessingEventTypes.SummaryGenerationRequested);
+        }
+        finally
+        {
+            File.Delete(normalizedFilePath);
+        }
+    }
+
     private static Dictionary<string, string> BuildSalesInvoiceRow(string quantity, string unitPrice, string totalAmount)
     {
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -182,13 +378,17 @@ public sealed class FileImportPipelineProcessorTests
         };
     }
 
-    private static FileImportPipelineProcessor CreateProcessor(ImportDbContext db, IFileParser? parser = null)
+    private static FileImportPipelineProcessor CreateProcessor(
+        ImportDbContext db,
+        IFileParser? parser = null,
+        IProcessingEventPublisher? eventPublisher = null)
     {
         return new FileImportPipelineProcessor(
             db,
-            new StubProcessingEventPublisher(),
+            eventPublisher ?? new StubProcessingEventPublisher(),
             new StubFileJobProgressNotifier(),
             new StubFileParserFactory(parser),
+            new RoutePlanningWorkbookParser(),
             new ImportPreProcessingPipeline(
                 new StubTemplateResolver(),
                 new ImportMappingEngine(new TransformRuleRegistry([new TrimRule()])),
@@ -199,6 +399,13 @@ public sealed class FileImportPipelineProcessorTests
             NullLogger<FileImportPipelineProcessor>.Instance);
     }
 
+    private static bool HasJobType(JsonElement? payload, PostImportJobType expectedJobType)
+    {
+        return payload is not null &&
+            payload.Value.TryGetProperty("jobType", out var jobTypeElement) &&
+            string.Equals(jobTypeElement.GetString(), expectedJobType.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ImportDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<ImportDbContext>()
@@ -206,6 +413,60 @@ public sealed class FileImportPipelineProcessorTests
             .Options;
 
         return new ImportDbContext(options);
+    }
+
+    private static async Task<ImportDbContext> CreateSqliteDbAsync()
+    {
+        var connection = new Microsoft.Data.Sqlite.SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ImportDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var db = new ImportDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+        return db;
+    }
+
+    private static void CreateRoutePlanningWorkbook(string filePath)
+    {
+        using var workbook = new XLWorkbook();
+
+        var monday = workbook.AddWorksheet("SEGUNDA NOVA");
+        monday.Cell(1, 2).Value = "ROTAS POR CIDADE E DIA DA SEMANA";
+        monday.Cell(3, 2).Value = "SEGUNDA";
+        monday.Cell(4, 2).Value = "RIO PRETO";
+        monday.Cell(4, 3).Value = "CIDADES DA ROTA";
+        monday.Cell(4, 4).Value = "Entregas";
+        monday.Cell(4, 5).Value = "Media/Dia";
+        monday.Cell(5, 3).Value = "SAO JOSE DO RIO PRETO";
+        monday.Cell(5, 4).Value = 4;
+        monday.Cell(5, 5).Value = 4_200m;
+        monday.Cell(6, 3).Value = "BADY BASSITT";
+        monday.Cell(6, 4).Value = 2;
+        monday.Cell(6, 5).Value = 2_119.5m;
+        monday.Cell(7, 2).Value = "Truck";
+        monday.Cell(7, 4).Value = 6;
+        monday.Cell(7, 5).Value = 6_319.5m;
+
+        var capacity = workbook.AddWorksheet("Capacidade dos Caminhoes");
+        capacity.Cell(3, 2).Value = "Caminhao";
+        capacity.Cell(3, 3).Value = "Capacidade - KG";
+        capacity.Cell(4, 2).Value = "Truck";
+        capacity.Cell(4, 3).Value = 10_300m;
+
+        workbook.SaveAs(filePath);
+    }
+
+    private static void CreateNonRouteWorkbook(string filePath)
+    {
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.AddWorksheet("Planilha1");
+        sheet.Cell(1, 1).Value = "Codigo";
+        sheet.Cell(1, 2).Value = "Descricao";
+        sheet.Cell(2, 1).Value = "001";
+        sheet.Cell(2, 2).Value = "Produto";
+        workbook.SaveAs(filePath);
     }
 
     private sealed class StubProcessingEventPublisher : IProcessingEventPublisher

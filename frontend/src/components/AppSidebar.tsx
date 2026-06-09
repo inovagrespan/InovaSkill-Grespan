@@ -20,9 +20,6 @@ const items = [
     to: "/clientes",
     label: "Clientes",
     icon: Users,
-    children: [
-      { to: "/clientes/analise-comercial", label: "Análise Comercial", icon: Activity },
-    ],
   },
   { to: "/processamentos", label: "Processamentos", icon: ServerCog },
   { to: "/financas", label: "Finanças", icon: ReceiptText },

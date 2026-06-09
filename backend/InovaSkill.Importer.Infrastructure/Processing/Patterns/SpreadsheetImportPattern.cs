@@ -10,7 +10,7 @@ internal interface ISpreadsheetImportPattern
     string DisplayName { get; }
     decimal MinimumConfidence { get; }
     SpreadsheetImportPatternMatch Evaluate(string fileName, IReadOnlyCollection<string> headers);
-    ImportTemplate CreateTemplate();
+    ImportTemplate CreateTemplate(IReadOnlyCollection<string>? headers = null);
 }
 
 internal sealed record SpreadsheetImportPatternMatch(
@@ -73,8 +73,10 @@ internal abstract class SpreadsheetImportPattern : ISpreadsheetImportPattern
         return new SpreadsheetImportPatternMatch(this, confidence, matchedRequiredColumns, missingRequiredColumns, matchedColumns);
     }
 
-    public ImportTemplate CreateTemplate()
+    public ImportTemplate CreateTemplate(IReadOnlyCollection<string>? headers = null)
     {
+        var resolvedHeaders = headers ?? Array.Empty<string>();
+
         return new ImportTemplate
         {
             Name = DisplayName,
@@ -91,7 +93,7 @@ internal abstract class SpreadsheetImportPattern : ISpreadsheetImportPattern
                 IsActive = true
             },
             ColumnMappings = Columns
-                .Select((column, index) => column.CreateMapping(index + 1))
+                .Select((column, index) => column.CreateMapping(index + 1, resolvedHeaders))
                 .ToList()
         };
     }
@@ -115,12 +117,36 @@ internal sealed record SpreadsheetImportColumnPattern(
         return _normalizedAcceptedHeaders.Any(normalizedHeaders.Contains);
     }
 
-    public ImportColumnMapping CreateMapping(int order)
+    public string ResolveSourceHeader(IReadOnlyCollection<string>? headers)
     {
+        if (headers is not null)
+        {
+            foreach (var header in headers)
+            {
+                if (string.IsNullOrWhiteSpace(header))
+                {
+                    continue;
+                }
+
+                var normalizedHeader = SpreadsheetImportPatternNormalizer.Normalize(header);
+                if (_normalizedAcceptedHeaders.Contains(normalizedHeader))
+                {
+                    return header.Trim();
+                }
+            }
+        }
+
+        return SourceColumnName;
+    }
+
+    public ImportColumnMapping CreateMapping(int order, IReadOnlyCollection<string>? headers = null)
+    {
+        var resolvedSourceHeader = ResolveSourceHeader(headers);
+
         return new ImportColumnMapping
         {
             Id = order,
-            SourceColumnName = SourceColumnName,
+            SourceColumnName = resolvedSourceHeader,
             TargetFieldName = TargetFieldName,
             IsRequired = IsRequired,
             DefaultValue = DefaultValue,

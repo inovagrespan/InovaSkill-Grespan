@@ -3,35 +3,35 @@ using static InovaSkill.Importer.Infrastructure.Processing.Patterns.SpreadsheetI
 
 namespace InovaSkill.Importer.Infrastructure.Processing.Patterns;
 
-internal sealed class CustomerListSpreadsheetImportPattern : SpreadsheetImportPattern
+internal sealed class CustomerSpreadsheetImportPattern : SpreadsheetImportPattern
 {
     private static readonly IReadOnlyList<SpreadsheetImportColumnPattern> PatternColumns =
     [
-        Text("customercode", "customercode", true, "customer code", "codigo cliente", "codigo do cliente", "cliente"),
-        Text("name", "name", true, "nome", "razao social", "cliente nome"),
+        Text("customercode", "customercode", true, "customer code", "codigo cliente", "codigo do cliente", "cliente", "cod totvs", "codigo totvs"),
+        Text("name", "name", true, "nome", "razao social", "cliente nome", "cliente consumo bruto vendas bonif", "cliente consumo bruto"),
         Text("email", "email", false, "e-mail", "mail", "email cliente"),
         Date("createdat", "createdat", false, "created at", "data cadastro", "criado em", "data de cadastro")
     ];
 
-    public override string ImportFileTypeCode => ImportFileTypeCodes.CustomerList;
-    public override string DisplayName => "Lista de Clientes";
-    protected override IReadOnlyList<string> FileNameHints => ["cliente", "clientes", "customer"];
+    public override string ImportFileTypeCode => ImportFileTypeCodes.Customers;
+    public override string DisplayName => "Clientes";
+    protected override IReadOnlyList<string> FileNameHints => ["cliente", "clientes", "customer", "cod clientes", "totvs"];
     protected override IReadOnlyList<SpreadsheetImportColumnPattern> Columns => PatternColumns;
 }
 
-internal sealed class ProductListSpreadsheetImportPattern : SpreadsheetImportPattern
+internal sealed class ProductSpreadsheetImportPattern : SpreadsheetImportPattern
 {
     private static readonly IReadOnlyList<SpreadsheetImportColumnPattern> PatternColumns =
     [
-        Text("sku", "sku", true, "codigo produto", "codigo do produto", "produto codigo", "product sku"),
+        Text("sku", "sku", true, "codigo", "codigo produto", "codigo do produto", "produto codigo", "product sku"),
         Text("name", "name", true, "nome", "descricao", "descricao produto", "product name"),
-        Decimal("price", "price", true, "preco", "preco unitario", "valor", "price"),
+        Decimal("price", "price", true, "ult. preco", "ult preco", "ultimo preco", "preco", "preco unitario", "valor", "price"),
         Date("createdat", "createdat", false, "created at", "criado em", "data cadastro")
     ];
 
-    public override string ImportFileTypeCode => ImportFileTypeCodes.ProductList;
-    public override string DisplayName => "Lista de Produtos";
-    protected override IReadOnlyList<string> FileNameHints => ["produto", "produtos", "catalogo", "product"];
+    public override string ImportFileTypeCode => ImportFileTypeCodes.Products;
+    public override string DisplayName => "Produtos";
+    protected override IReadOnlyList<string> FileNameHints => ["produto", "produtos", "cadastro de produtos", "catalogo", "browse", "product"];
     protected override IReadOnlyList<SpreadsheetImportColumnPattern> Columns => PatternColumns;
 }
 

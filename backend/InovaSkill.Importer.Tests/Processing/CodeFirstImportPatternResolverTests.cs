@@ -51,6 +51,35 @@ public class CodeFirstImportPatternResolverTests
             CancellationToken.None);
 
         Assert.NotNull(template);
-        Assert.Equal(ImportFileTypeCodes.ProductList, template!.ImportFileType?.Code);
+        Assert.Equal(ImportFileTypeCodes.Products, template!.ImportFileType?.Code);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_UsesActualSpreadsheetHeaders_WhenCustomerSheetMatchesTotvsAliases()
+    {
+        var template = await _resolver.ResolveAsync(
+            "cod clientes.xlsx",
+            ["COD TOTVS", "Cliente (CONSUMO BRUTO (VENDAS+BONIF)"],
+            CancellationToken.None);
+
+        Assert.NotNull(template);
+        Assert.Equal(ImportFileTypeCodes.Customers, template!.ImportFileType?.Code);
+        Assert.Contains(template.ColumnMappings, mapping => mapping.TargetFieldName == "customercode" && mapping.SourceColumnName == "COD TOTVS");
+        Assert.Contains(template.ColumnMappings, mapping => mapping.TargetFieldName == "name" && mapping.SourceColumnName == "Cliente (CONSUMO BRUTO (VENDAS+BONIF)");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_UsesActualSpreadsheetHeaders_WhenProductSheetMatchesBrowseLayout()
+    {
+        var template = await _resolver.ResolveAsync(
+            "Cadastro de produtos.xlsx",
+            ["Codigo", "*Cod.OnClick", "Descricao", "Descr.Espec.", "Ult. Preco"],
+            CancellationToken.None);
+
+        Assert.NotNull(template);
+        Assert.Equal(ImportFileTypeCodes.Products, template!.ImportFileType?.Code);
+        Assert.Contains(template.ColumnMappings, mapping => mapping.TargetFieldName == "sku" && mapping.SourceColumnName == "Codigo");
+        Assert.Contains(template.ColumnMappings, mapping => mapping.TargetFieldName == "name" && mapping.SourceColumnName == "Descricao");
+        Assert.Contains(template.ColumnMappings, mapping => mapping.TargetFieldName == "price" && mapping.SourceColumnName == "Ult. Preco");
     }
 }

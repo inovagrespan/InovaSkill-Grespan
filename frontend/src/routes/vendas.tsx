@@ -4,21 +4,39 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SkeletonMetricCard, SkeletonTable } from "@/components/ui/skeleton";
-import { CalendarDays, ChevronDown, DollarSign, Search, SlidersHorizontal, Weight, type LucideIcon } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { calculatePeriodAverages } from "@/lib/business-metrics";
+import {
+  buildSalesRevenueComparisonText,
+  buildSalesTrendData,
+} from "@/lib/sales-dashboard";
+import {
+  type CommercialTransaction,
+  type CommercialTransactionSummaryResponse,
+  type CommercialTransactionTimelineResponse,
+  fetchCommercialTransactions,
+  fetchCommercialTransactionsSummary,
+  fetchCommercialTransactionsTimeline,
+  type SummaryGranularity,
+  type SummarySortBy,
+} from "@/lib/importer-api";
+import { resolveSalesTimelineGranularity } from "@/lib/sales-timeline";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import {
-  fetchCommercialTransactionsSummary,
-  fetchCommercialTransactions,
-  type CommercialTransactionSummaryResponse,
-  type SummaryGranularity,
-  type CommercialTransaction,
-} from "@/lib/importer-api";
+  CalendarDays,
+  ChevronDown,
+  DollarSign,
+  Search,
+  SlidersHorizontal,
+  Weight,
+  type LucideIcon,
+} from "lucide-react";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, XAxis, YAxis } from "recharts";
 
 export const Route = createFileRoute("/vendas")({
   component: VendasPage,
@@ -27,80 +45,21 @@ export const Route = createFileRoute("/vendas")({
 type PeriodPreset = "today" | "week" | "month" | "quarter" | "year" | "custom";
 type ViewMode = "summary" | "items";
 
-const DEMO_PREVIOUS_PERIOD_FACTOR = 0.92;
-const DEFAULT_SUMMARY_GRANULARITY: SummaryGranularity = "weekly";
-const DEFAULT_COMPANY_SORT_BY = "amount";
+const FILTER_DEBOUNCE_MS = 300;
+const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_SUMMARY_PAGE_SIZE = 20;
+const SALES_CHART_CARD_CLASS_NAME = "overflow-hidden border-white/10 bg-[#0b111b]/95 shadow-[0_22px_60px_rgba(0,0,0,0.32)]";
+const SALES_REVENUE_PANEL_CLASS_NAME = "rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,#111827_0%,#0f1724_100%)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+const SALES_RANKING_PANEL_CLASS_NAME = "rounded-xl border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-2";
+const SALES_REVENUE_GRID_STROKE = "rgba(148,163,184,0.08)";
+const SALES_REVENUE_AXIS_COLOR = "#7c8aa5";
+const SALES_REVENUE_CURSOR_STROKE = "rgba(239,68,68,0.20)";
 
-const DEMO_SALES_TRANSACTIONS: CommercialTransaction[] = [
-  {
-    id: 9101,
-    documentNumber: "NF-DEMO-001",
-    transactionDate: "2026-06-02",
-    customerCode: "CLI-001",
-    customerName: "Mercado São Bento",
-    productCode: "PRD-104",
-    productDescription: "Arroz Tipo 1 5kg",
-    quantity: 240,
-    unitPrice: 27.9,
-    totalAmount: 6_696,
-    transactionType: "Venda",
-    city: "Campinas",
-    productGroup: "Mercearia",
-    grossWeightKg: 1_200,
-    sourceFileJobId: 900,
-  },
-  {
-    id: 9102,
-    documentNumber: "NF-DEMO-002",
-    transactionDate: "2026-06-04",
-    customerCode: "CLI-002",
-    customerName: "Atacado Primavera",
-    productCode: "PRD-221",
-    productDescription: "Feijão Carioca 1kg",
-    quantity: 520,
-    unitPrice: 8.7,
-    totalAmount: 4_524,
-    transactionType: "Venda",
-    city: "Ribeirão Preto",
-    productGroup: "Mercearia",
-    grossWeightKg: 520,
-    sourceFileJobId: 900,
-  },
-  {
-    id: 9103,
-    documentNumber: "NF-DEMO-003",
-    transactionDate: "2026-06-05",
-    customerCode: "CLI-003",
-    customerName: "Super Lopes",
-    productCode: "PRD-318",
-    productDescription: "Óleo de Soja 900ml",
-    quantity: 360,
-    unitPrice: 6.4,
-    totalAmount: 2_304,
-    transactionType: "Venda",
-    city: "Sorocaba",
-    productGroup: "Alimentos",
-    grossWeightKg: 340,
-    sourceFileJobId: 900,
-  },
-  {
-    id: 9104,
-    documentNumber: "NF-DEMO-004",
-    transactionDate: "2026-06-06",
-    customerCode: "CLI-004",
-    customerName: "Distribuidora Central",
-    productCode: "PRD-411",
-    productDescription: "Café Tradicional 500g",
-    quantity: 180,
-    unitPrice: 18.5,
-    totalAmount: 3_330,
-    transactionType: "Venda",
-    city: "São Paulo",
-    productGroup: "Bebidas",
-    grossWeightKg: 90,
-    sourceFileJobId: 900,
-  },
-];
+const revenueModeOptions = [
+  { value: "daily", label: "Diário" },
+  { value: "weekly", label: "Semanal" },
+  { value: "monthly", label: "Mensal" },
+] as const;
 
 const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
   { value: "today", label: "Hoje" },
@@ -123,6 +82,28 @@ function formatCurrency(value: number): string {
 
 function formatDecimal(value: number): string {
   return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 }).format(value ?? 0);
+}
+
+function formatRevenueAxisTick(value: number): string {
+  const numericValue = Number(value);
+
+  if (numericValue === 0) {
+    return "0";
+  }
+
+  if (Math.abs(numericValue) >= 1_000_000_000) {
+    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(numericValue / 1_000_000_000)}B`;
+  }
+
+  if (Math.abs(numericValue) >= 1_000_000) {
+    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(numericValue / 1_000_000)}M`;
+  }
+
+  if (Math.abs(numericValue) >= 1_000) {
+    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(numericValue / 1_000)}k`;
+  }
+
+  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(numericValue);
 }
 
 function formatDelta(value: number | null): string {
@@ -159,7 +140,7 @@ function resolvePeriod(preset: PeriodPreset): { dateFrom: string; dateTo: string
 function makeEmptySummary(): CommercialTransactionSummaryResponse {
   return {
     page: 1,
-    pageSize: 20,
+    pageSize: DEFAULT_SUMMARY_PAGE_SIZE,
     totalItems: 0,
     granularity: "weekly",
     currentPeriodStart: "",
@@ -176,78 +157,19 @@ function makeEmptySummary(): CommercialTransactionSummaryResponse {
   };
 }
 
-function matchesTextFilter(value: string, filter: string): boolean {
-  return !filter.trim() || value.toLowerCase().includes(filter.trim().toLowerCase());
+function makeEmptyTimeline(granularity: CommercialTransactionTimelineResponse["granularity"]): CommercialTransactionTimelineResponse {
+  return {
+    granularity,
+    items: [],
+  };
 }
 
-function filterDemoSales(input: {
-  documentNumber: string;
-  customerName: string;
-  productCode: string;
-  city: string;
-  productGroup: string;
-  transactionType: string;
-  dateFrom: string;
-  dateTo: string;
-}): CommercialTransaction[] {
-  return DEMO_SALES_TRANSACTIONS.filter((item) => (
-    matchesTextFilter(item.documentNumber, input.documentNumber) &&
-    matchesTextFilter(item.customerName, input.customerName) &&
-    matchesTextFilter(`${item.productCode} ${item.productDescription}`, input.productCode) &&
-    matchesTextFilter(item.city, input.city) &&
-    matchesTextFilter(item.productGroup, input.productGroup) &&
-    matchesTextFilter(item.transactionType, input.transactionType) &&
-    (!input.dateFrom || item.transactionDate >= input.dateFrom) &&
-    (!input.dateTo || item.transactionDate <= input.dateTo)
-  ));
-}
-
-function buildDemoSalesSummary(items: CommercialTransaction[], input: {
-  page: number;
-  pageSize: number;
-  granularity: SummaryGranularity;
-}): CommercialTransactionSummaryResponse {
-  const grouped = new Map<string, CommercialTransactionCompanySummary>();
-  for (const item of items) {
-    const current = grouped.get(item.customerName) ?? {
-      companyName: item.customerName,
-      totalAmount: 0,
-      totalQuantity: 0,
-      totalWeightKg: 0,
-      currentPeriodAmount: 0,
-      previousPeriodAmount: 0,
-      growthPercent: null,
-    };
-    current.totalAmount += item.totalAmount;
-    current.totalQuantity += item.quantity;
-    current.totalWeightKg += item.grossWeightKg;
-    current.currentPeriodAmount += item.totalAmount;
-    current.previousPeriodAmount += item.totalAmount * DEMO_PREVIOUS_PERIOD_FACTOR;
-    current.growthPercent = current.previousPeriodAmount === 0 ? null : ((current.currentPeriodAmount - current.previousPeriodAmount) / current.previousPeriodAmount) * 100;
-    grouped.set(item.customerName, current);
+function buildFriendlyError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
   }
 
-  const summaryItems = Array.from(grouped.values());
-  const totalAmount = items.reduce((total, item) => total + item.totalAmount, 0);
-  const previousPeriodTotalAmount = totalAmount * DEMO_PREVIOUS_PERIOD_FACTOR;
-
-  return {
-    page: input.page,
-    pageSize: input.pageSize,
-    totalItems: summaryItems.length,
-    granularity: input.granularity,
-    currentPeriodStart: "2026-06-01",
-    previousPeriodStart: "2026-05-01",
-    currentPeriodTotalAmount: totalAmount,
-    previousPeriodTotalAmount,
-    totalGrowthPercent: previousPeriodTotalAmount === 0 ? null : ((totalAmount - previousPeriodTotalAmount) / previousPeriodTotalAmount) * 100,
-    totalRecords: items.length,
-    totalAmount,
-    totalQuantity: items.reduce((total, item) => total + item.quantity, 0),
-    totalWeightKg: items.reduce((total, item) => total + item.grossWeightKg, 0),
-    totalCompanies: summaryItems.length,
-    items: summaryItems,
-  };
+  return "Não foi possível carregar os dados de vendas.";
 }
 
 function VendasPage() {
@@ -264,24 +186,31 @@ function VendasPage() {
   const [transactionType, setTransactionType] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("summary");
+  const [companySortBy, setCompanySortBy] = useState<SummarySortBy>("amount");
+  const [summaryGranularity, setSummaryGranularity] = useState<SummaryGranularity>("weekly");
   const [summaryPage, setSummaryPage] = useState(1);
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<CommercialTransaction[]>([]);
   const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<CommercialTransactionSummaryResponse | null>(null);
+  const [timeline, setTimeline] = useState<CommercialTransactionTimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
-  const pageSize = 20;
-  const summaryPageSize = 20;
+  const pageSize = DEFAULT_PAGE_SIZE;
+  const summaryPageSize = DEFAULT_SUMMARY_PAGE_SIZE;
   const effectiveCustomerName = customerName.trim() || companyName.trim();
-  const hasAdvancedFilters = Boolean(documentNumber || city || companyName || productGroup || transactionType || periodPreset === "custom");
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total]);
-  const summaryTotalPages = useMemo(() => Math.max(1, Math.ceil((summary?.totalItems ?? 0) / summaryPageSize)), [summary?.totalItems]);
+  const hasAdvancedFilters = Boolean(customerName || city || companyName || productGroup || transactionType || periodPreset === "custom");
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+  const summaryTotalPages = useMemo(() => Math.max(1, Math.ceil((summary?.totalItems ?? 0) / summaryPageSize)), [summary?.totalItems, summaryPageSize]);
   const hasResults = (summary?.totalRecords ?? 0) > 0;
   const salesAverages = useMemo(
     () => calculatePeriodAverages(summary?.totalAmount ?? 0, dateFrom, dateTo),
     [summary?.totalAmount, dateFrom, dateTo],
+  );
+  const timelineGranularity = useMemo(
+    () => resolveSalesTimelineGranularity({ periodPreset, dateFrom, dateTo }),
+    [dateFrom, dateTo, periodPreset],
   );
 
   const invoiceSuggestions = useMemo(
@@ -292,35 +221,24 @@ function VendasPage() {
     () => Array.from(new Set(items.map((item) => `${item.productCode} - ${item.productDescription}`).filter(Boolean))).slice(0, 12),
     [items],
   );
-
-  const revenueComparisonText = useMemo(() => {
-    if (!summary || summary.totalRecords === 0) return "Sem resultado para o período e filtros atuais.";
-    if (summary.totalGrowthPercent == null) return "Sem base comparativa para o período anterior.";
-    if (summary.totalGrowthPercent < 0) return "Faturamento abaixo do período anterior.";
-    if (summary.totalGrowthPercent > 0) return "Faturamento acima do período anterior.";
-    return "Faturamento igual ao período anterior.";
-  }, [summary]);
+  const chartData = useMemo(
+    () => (summary?.items ?? []).slice(0, 8).map((item) => ({
+      companyName: item.companyName,
+      faturamento: item.totalAmount,
+      quantidade: item.totalQuantity,
+      crescimento: item.growthPercent ?? 0,
+    })),
+    [summary?.items],
+  );
+  const trendData = useMemo(() => buildSalesTrendData(timeline), [timeline]);
+  const revenueComparisonText = useMemo(() => buildSalesRevenueComparisonText(summary), [summary]);
 
   async function loadData(targetPage = page, targetSummaryPage = summaryPage) {
     setLoading(true);
     setMessage("");
-    const demoItems = filterDemoSales({
-      documentNumber,
-      customerName: effectiveCustomerName,
-      productCode,
-      city,
-      productGroup,
-      transactionType,
-      dateFrom,
-      dateTo,
-    });
-    const demoSummary = buildDemoSalesSummary(demoItems, {
-      page: targetSummaryPage,
-      pageSize: summaryPageSize,
-      granularity: DEFAULT_SUMMARY_GRANULARITY,
-    });
+
     try {
-      const [itemsData, summaryData] = await Promise.all([
+      const [itemsData, summaryData, timelineData] = await Promise.all([
         fetchCommercialTransactions({
           page: targetPage,
           pageSize,
@@ -334,8 +252,8 @@ function VendasPage() {
           dateTo,
         }),
         fetchCommercialTransactionsSummary({
-          granularity: DEFAULT_SUMMARY_GRANULARITY,
-          sortBy: DEFAULT_COMPANY_SORT_BY,
+          granularity: summaryGranularity,
+          sortBy: companySortBy,
           page: targetSummaryPage,
           pageSize: summaryPageSize,
           documentNumber,
@@ -348,29 +266,33 @@ function VendasPage() {
           dateTo,
           referenceDate: dateTo,
         }),
+        fetchCommercialTransactionsTimeline({
+          granularity: timelineGranularity,
+          documentNumber,
+          customerName: effectiveCustomerName,
+          productCode,
+          city,
+          productGroup,
+          transactionType,
+          dateFrom,
+          dateTo,
+        }),
       ]);
-
-      if (summaryData.totalRecords === 0 || itemsData.items.length === 0) {
-        setItems(demoItems);
-        setPage(targetPage);
-        setTotal(demoItems.length);
-        setSummary(demoSummary);
-        setSummaryPage(targetSummaryPage);
-        return;
-      }
 
       setItems(itemsData.items);
       setPage(itemsData.page);
       setTotal(itemsData.total);
       setSummary(summaryData);
       setSummaryPage(summaryData.page);
+      setTimeline(timelineData);
     } catch (error) {
-      setItems(demoItems);
+      setItems([]);
       setPage(targetPage);
-      setTotal(demoItems.length);
-      setSummary(demoSummary);
+      setTotal(0);
+      setSummary(makeEmptySummary());
       setSummaryPage(targetSummaryPage);
-      setMessage("");
+      setTimeline(makeEmptyTimeline(timelineGranularity));
+      setMessage(buildFriendlyError(error));
     } finally {
       setLoading(false);
     }
@@ -407,14 +329,14 @@ function VendasPage() {
   useEffect(() => {
     setSummaryPage(1);
     setPage(1);
-  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType]);
+  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, summaryGranularity, companySortBy]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadData(1, 1);
-    }, 300);
+    }, FILTER_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType]);
+  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, summaryGranularity, companySortBy, timelineGranularity]);
 
   useEffect(() => {
     void loadData(page, summaryPage);
@@ -513,7 +435,7 @@ function VendasPage() {
           percentageChange={summary?.totalGrowthPercent ?? null}
           periodLabel={revenueComparisonText}
           icon={DollarSign}
-          trendData={[summary?.previousPeriodTotalAmount ?? 0, summary?.currentPeriodTotalAmount ?? 0]}
+          trendData={trendData.map((item) => item.value)}
         />
         <MetricCard
           loading={loading}
@@ -545,6 +467,138 @@ function VendasPage() {
           periodLabel="Peso bruto acumulado"
           icon={Weight}
         />
+      </section>
+
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[0.85fr_1.15fr]">
+        <Card className={SALES_CHART_CARD_CLASS_NAME}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-sm font-medium text-slate-100">Evolução da Receita</CardTitle>
+              </div>
+              <select
+                className="h-8 rounded-md border border-white/10 bg-white/4 px-3 text-xs text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                value={timelineGranularity}
+                onChange={() => undefined}
+                aria-label="Modo do gráfico de receita"
+              >
+                {revenueModeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <SkeletonTable rows={4} columns={2} />
+            ) : !hasResults || trendData.length === 0 ? (
+              <EmptyState text="Sem resultado para gerar gráfico de faturamento." />
+            ) : (
+              <div className={SALES_REVENUE_PANEL_CLASS_NAME}>
+                <ChartContainer
+                  config={{ value: { label: "Faturamento", color: "#ef4444" } }}
+                  className="h-[188px] min-h-[188px] w-full [&_.recharts-cartesian-axis-tick_text]:fill-[#7c8aa5]"
+                >
+                  <AreaChart data={trendData} margin={{ left: 6, right: 8, top: 14, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="sales-revenue-fill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#ff3347" stopOpacity={0.34} />
+                        <stop offset="55%" stopColor="#b91c2c" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#0f1724" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke={SALES_REVENUE_GRID_STROKE} strokeDasharray="2 7" />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={10}
+                      tick={{ fill: SALES_REVENUE_AXIS_COLOR, fontSize: 10 }}
+                    />
+                    <YAxis
+                      width={52}
+                      tickCount={4}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={10}
+                      tick={{ fill: SALES_REVENUE_AXIS_COLOR, fontSize: 10 }}
+                      tickFormatter={formatRevenueAxisTick}
+                    />
+                    <ChartTooltip
+                      cursor={{ stroke: SALES_REVENUE_CURSOR_STROKE, strokeWidth: 1 }}
+                      content={<SalesRevenueTooltip />}
+                    />
+                    <Area
+                      dataKey="value"
+                      type="monotone"
+                      fill="url(#sales-revenue-fill)"
+                      stroke="none"
+                      strokeWidth={0}
+                      isAnimationActive={false}
+                    />
+                    <Line
+                      dataKey="value"
+                      type="monotone"
+                      stroke="#ff3347"
+                      strokeWidth={2}
+                      dot={{ r: 2.8, fill: "#ff3347", stroke: "#ff3347", strokeWidth: 0 }}
+                      activeDot={{ r: 3.5, fill: "#ff3347", stroke: "#ffd3d8", strokeWidth: 1.2 }}
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ChartContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className={SALES_CHART_CARD_CLASS_NAME}>
+          <CardHeader>
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <CardTitle className="text-slate-50">Ranking por empresa</CardTitle>
+              <div className="flex flex-wrap gap-2">
+                <select className="h-9 rounded-md border border-white/10 bg-white/5 px-2 text-sm text-slate-100" value={summaryGranularity} onChange={(event) => setSummaryGranularity(event.target.value as SummaryGranularity)}>
+                  <option value="daily">Diário</option>
+                  <option value="weekly">Semanal</option>
+                  <option value="monthly">Mensal</option>
+                </select>
+                <select className="h-9 rounded-md border border-white/10 bg-white/5 px-2 text-sm text-slate-100" value={companySortBy} onChange={(event) => setCompanySortBy(event.target.value as SummarySortBy)}>
+                  <option value="amount">Maior faturamento</option>
+                  <option value="growth">Maior crescimento</option>
+                  <option value="weight">Maior peso</option>
+                  <option value="quantity">Maior quantidade</option>
+                </select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <SkeletonTable rows={4} columns={3} />
+            ) : !hasResults ? (
+              <EmptyState text="Sem empresas para o ranking atual." />
+            ) : (
+              <div className={SALES_RANKING_PANEL_CLASS_NAME}>
+                <ChartContainer config={{ faturamento: { label: "Faturamento", color: "#ff4d5e" } }} className="h-[260px] min-h-[260px] w-full">
+                  <BarChart data={chartData} margin={{ left: 6, right: 12, top: 12, bottom: 38 }}>
+                    <defs>
+                      <linearGradient id="sales-ranking-bar" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#ff4d5e" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="#b61f31" stopOpacity={0.72} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} strokeDasharray="3 6" />
+                    <XAxis dataKey="companyName" interval={0} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} angle={-18} textAnchor="end" height={58} />
+                    <YAxis width={86} tickLine={false} axisLine={false} tickFormatter={(value) => formatKpiCompactCurrency(Number(value))} />
+                    <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
+                    <Bar dataKey="faturamento" name="Faturamento" fill="url(#sales-ranking-bar)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <Card className="animate-soft-enter border-border/80 bg-card/95">
@@ -606,6 +660,37 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
     <div className="space-y-1">
       <Label>{label}</Label>
       <Input type="date" value={value} onChange={(event) => onChange(event.target.value)} />
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="flex min-h-[180px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+      {text}
+    </div>
+  );
+}
+
+function SalesRevenueTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number; payload?: { tooltipLabel?: string } }>;
+}) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const point = payload[0];
+  const amount = typeof point?.value === "number" ? point.value : Number(point?.value ?? 0);
+  const tooltipLabel = point?.payload?.tooltipLabel ?? "";
+
+  return (
+    <div className="min-w-[196px] rounded-[18px] border border-white/8 bg-[#080b1a] px-4 py-3 text-left shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
+      <p className="text-[12px] font-semibold tracking-[0.01em] text-slate-200">{tooltipLabel}</p>
+      <p className="mt-1 text-[13px] font-semibold text-slate-50">{formatCurrency(amount)}</p>
     </div>
   );
 }

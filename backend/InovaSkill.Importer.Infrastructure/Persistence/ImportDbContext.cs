@@ -5,6 +5,7 @@ namespace InovaSkill.Importer.Infrastructure.Persistence;
 
 public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) : DbContext(options)
 {
+    public DbSet<Job> Jobs => Set<Job>();
     public DbSet<FileJob> FileJobs => Set<FileJob>();
     public DbSet<ImportError> ImportErrors => Set<ImportError>();
     public DbSet<ProcessingStepExecution> ProcessingStepExecutions => Set<ProcessingStepExecution>();
@@ -13,6 +14,10 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<WorkerHeartbeat> WorkerHeartbeats => Set<WorkerHeartbeat>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<RoutePlanningImport> RoutePlanningImports => Set<RoutePlanningImport>();
+    public DbSet<RoutePlan> RoutePlans => Set<RoutePlan>();
+    public DbSet<RouteStop> RouteStops => Set<RouteStop>();
+    public DbSet<TruckCapacityProfile> TruckCapacityProfiles => Set<TruckCapacityProfile>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<CommercialTransaction> CommercialTransactions => Set<CommercialTransaction>();
     public DbSet<SalesSummaryDaily> SalesSummariesDaily => Set<SalesSummaryDaily>();
@@ -31,6 +36,23 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Job>(e =>
+        {
+            e.ToTable("Jobs");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Type).HasMaxLength(128).IsRequired();
+            e.Property(x => x.CurrentStep).HasMaxLength(128).IsRequired();
+            e.Property(x => x.CreatedAt).IsRequired();
+            e.Property(x => x.UserId).HasMaxLength(128);
+            e.Property(x => x.PayloadJson).HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.ResultJson).HasColumnType("jsonb");
+            e.Property(x => x.Error).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.LockedBy).HasMaxLength(128).IsRequired();
+            e.HasIndex(x => new { x.Status, x.CreatedAt });
+            e.HasIndex(x => new { x.Type, x.Status, x.CreatedAt });
+            e.HasIndex(x => x.LockedAt);
+        });
+
         modelBuilder.Entity<FileJob>(e =>
         {
             e.HasKey(x => x.Id);
@@ -116,6 +138,61 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.Price).HasColumnType("decimal(18,2)");
             e.HasIndex(x => x.Sku).IsUnique();
             e.HasIndex(x => x.SourceFileJobId);
+        });
+
+        modelBuilder.Entity<RoutePlanningImport>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.SourceFileJobId).IsRequired();
+            e.Property(x => x.SourceFileName).HasMaxLength(512).IsRequired();
+            e.Property(x => x.ImportedAt).IsRequired();
+            e.HasIndex(x => x.SourceFileJobId).IsUnique();
+            e.HasIndex(x => x.ImportedAt);
+        });
+
+        modelBuilder.Entity<RoutePlan>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.SheetName).HasMaxLength(128).IsRequired();
+            e.Property(x => x.WeekdayLabel).HasMaxLength(64).IsRequired();
+            e.Property(x => x.RouteName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.VehicleType).HasMaxLength(64).IsRequired();
+            e.Property(x => x.VehicleCapacityKg).HasColumnType("decimal(18,2)");
+            e.Property(x => x.TotalAverageLoadKg).HasColumnType("decimal(18,3)");
+            e.Property(x => x.OccupancyPercent).HasColumnType("decimal(9,2)");
+            e.HasIndex(x => new { x.RoutePlanningImportId, x.WeekdayOrder, x.RouteOrder });
+            e.HasIndex(x => new { x.WeekdayOrder, x.RouteName });
+            e.HasOne(x => x.RoutePlanningImport)
+                .WithMany(x => x.Routes)
+                .HasForeignKey(x => x.RoutePlanningImportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RouteStop>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.DestinationName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.DeliveriesRaw).HasMaxLength(64).IsRequired();
+            e.Property(x => x.AverageLoadKg).HasColumnType("decimal(18,3)");
+            e.Property(x => x.Note).HasMaxLength(2000).IsRequired();
+            e.HasIndex(x => new { x.RoutePlanId, x.StopOrder });
+            e.HasIndex(x => x.DestinationName);
+            e.HasOne(x => x.RoutePlan)
+                .WithMany(x => x.Stops)
+                .HasForeignKey(x => x.RoutePlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TruckCapacityProfile>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.VehicleType).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CapacityKg).HasColumnType("decimal(18,2)");
+            e.HasIndex(x => new { x.RoutePlanningImportId, x.VehicleType }).IsUnique();
+            e.HasOne(x => x.RoutePlanningImport)
+                .WithMany(x => x.TruckCapacities)
+                .HasForeignKey(x => x.RoutePlanningImportId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Order>(e =>
