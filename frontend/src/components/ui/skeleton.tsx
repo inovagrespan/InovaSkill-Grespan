@@ -12,7 +12,7 @@ function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>)
 
 function SkeletonMetricCard({ className }: { className?: string }) {
   return (
-    <div className={cn("rounded-xl border border-border bg-surface p-4 shadow-xs", className)}>
+    <div className={cn("metric-card-item rounded-xl border border-border bg-surface p-4 shadow-xs", className)}>
       <div className="flex items-start justify-between gap-3">
         <Skeleton className="h-3 w-24" />
         <Skeleton className="h-5 w-14 rounded-full" />

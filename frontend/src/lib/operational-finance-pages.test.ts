@@ -16,6 +16,7 @@ describe("operational, finance and reports pages", () => {
   it("cria aba de finanças com filtros e métricas fictícias", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/financas.tsx"), "utf8");
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
+    const styles = fs.readFileSync(path.resolve(process.cwd(), "src/styles.css"), "utf8");
 
     expect(source).toContain('createFileRoute("/financas")');
     expect(source).toContain("Faturamento total");
@@ -23,6 +24,25 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("Peso / quantidade");
     expect(source).toContain("Tempo total");
     expect(source).toContain("financeDemoTransactions");
+    expect(source).toContain("Evolução da Receita");
+    expect(source).toContain("Ranking por empresa");
+    expect(source).toContain("buildFinanceRevenueTrend");
+    expect(source).toContain("buildFinanceCustomerRevenueRanking");
+    expect(source).toContain("revenueGranularityOptions");
+    expect(source).toContain("Semanal");
+    expect(source).toContain("Mensal");
+    expect(source).toContain("Anual");
+    expect(source).toContain("AreaChart");
+    expect(source).toContain("FINANCE_CHART_CARD_CLASS_NAME");
+    expect(source).toContain("finance-chart-card");
+    expect(source).toContain("FINANCE_CHART_SELECT_CLASS_NAME");
+    expect(source).toContain("finance-revenue-fill");
+    expect(source).toContain("finance-ranking-fill");
+    expect(source).not.toContain("Ordenação do ranking financeiro");
+    expect(styles).toContain(".finance-chart-card");
+    expect(styles).toContain(".dark .finance-chart-card");
+    expect(styles).toContain("--finance-chart-title: #020617");
+    expect(styles).toContain("--finance-chart-title: #f8fafc");
     expect(sidebar).toContain('to: "/financas"');
     expect(sidebar).toContain('label: "Finanças"');
   });
@@ -70,7 +90,8 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("RevenueAreaChart");
     expect(source).toContain("AreaChart");
     expect(source).toContain("fetchCommercialTransactionsSummary");
-    expect(source).toContain('bg-[#070b14]');
+    expect(source).toContain('dark:bg-[#070b14]');
+    expect(source).toContain("text-foreground dark:text-slate-100");
   });
 
   it("remove a aba de RH da navegação e do dashboard", () => {

@@ -37,14 +37,14 @@ function Logistica() {
         <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">Sync · há 4 min</span>
       </header>
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="metric-row">
         {[
           { label: "Frota ativa", value: "86", sub: "de 92 veículos", icon: Truck, tone: "text-foreground" },
           { label: "Ocupação por rota", value: `${averageOccupancy}%`, sub: `${criticalRoutes} rotas acima de 90%`, icon: Activity, tone: "text-primary" },
           { label: "Ruptura de estoque", value: `${ruptureItems}`, sub: "SKUs com risco alto", icon: Package, tone: "text-amber-600" },
           { label: "SLA entregas", value: "93,1%", sub: "alerta em 2 rotas", icon: Clock, tone: "text-foreground" },
         ].map((item) => (
-          <div key={item.label} className="rounded-xl border border-border bg-surface p-5 shadow-xs">
+          <div key={item.label} className="metric-card-item rounded-xl border border-border bg-surface p-5 shadow-xs">
             <div className="mb-3 flex items-start justify-between">
               <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{item.label}</p>
               <item.icon className="size-3.5 text-muted-foreground" />

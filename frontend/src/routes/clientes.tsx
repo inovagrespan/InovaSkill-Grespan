@@ -653,12 +653,12 @@ function ClientesPage() {
       </Card>
 
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <Card className="overflow-hidden border-[#182033] bg-[#070b14] text-slate-100 shadow-lg">
+        <Card className="overflow-hidden border-border bg-surface text-foreground shadow-sm dark:border-[#182033] dark:bg-[#070b14] dark:text-slate-100 dark:shadow-lg">
           <CardHeader className="pb-2">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <CardTitle className="text-sm font-medium text-slate-100">Faturamento no período</CardTitle>
+              <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Faturamento no período</CardTitle>
               <select
-                className="h-8 rounded-md border border-slate-800 bg-[#0b1020] px-2 text-xs text-slate-200"
+                className="h-8 rounded-md border border-input bg-surface px-2 text-xs text-foreground dark:border-slate-800 dark:bg-[#0b1020] dark:text-slate-200"
                 value={salesSummaryGranularity}
                 onChange={(event) => setSalesSummaryGranularity(event.target.value as SummaryGranularity)}
                 aria-label="Granularidade do faturamento no período"
@@ -680,12 +680,12 @@ function ClientesPage() {
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden border-[#182033] bg-[#070b14] text-slate-100 shadow-lg">
+        <Card className="overflow-hidden border-border bg-surface text-foreground shadow-sm dark:border-[#182033] dark:bg-[#070b14] dark:text-slate-100 dark:shadow-lg">
           <CardHeader className="pb-2">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <CardTitle className="text-sm font-medium text-slate-100">Ranking por empresa</CardTitle>
+              <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Ranking por empresa</CardTitle>
               <select
-                className="h-8 rounded-md border border-slate-800 bg-[#0b1020] px-2 text-xs text-slate-200"
+                className="h-8 rounded-md border border-input bg-surface px-2 text-xs text-foreground dark:border-slate-800 dark:bg-[#0b1020] dark:text-slate-200"
                 value={companySortBy}
                 onChange={(event) => setCompanySortBy(event.target.value as SummarySortBy)}
                 aria-label="Ordenação do ranking por empresa"
@@ -714,7 +714,7 @@ function ClientesPage() {
           <CardTitle>Resumo</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="metric-row">
             {loading ? (
               <>
                 <SkeletonMetricCard />
@@ -729,7 +729,7 @@ function ClientesPage() {
             <KpiCard title="Ticket médio" value={formatKpiCompactCurrency(summary?.averageTicket ?? 0)} valueTooltip={formatCurrency(summary?.averageTicket ?? 0)} showPercentageChange={false} icon={Receipt} periodLabel="Faturamento dividido por pedidos" loading={loading} />
             <button
               type="button"
-              className="text-left"
+              className="min-w-0 text-left"
               onClick={openNewCustomersModal}
               aria-label="Abrir detalhamento de novos clientes por mês"
             >
@@ -865,7 +865,7 @@ function ClientesPage() {
                   <DollarSign className="h-4 w-4 text-primary" />
                   <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Indicadores financeiros</h4>
                 </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="metric-row">
                   <KpiCard className="border-primary/25 bg-gradient-to-b from-surface to-muted/35" title="Faturamento total" value={formatKpiCompactCurrency(details.totalRevenue)} valueTooltip={formatCurrency(details.totalRevenue)} showPercentageChange={false} icon={DollarSign} periodLabel="Faturamento acumulado no período selecionado" />
                   <KpiCard className="border-primary/20 bg-gradient-to-b from-surface to-muted/30" title="Ticket médio" value={formatNullableCurrency(details.averageTicket, formatKpiCompactCurrency)} valueTooltip={formatNullableCurrencyTooltip(details.averageTicket, formatCurrency)} showPercentageChange={false} icon={Receipt} periodLabel="Faturamento total dividido pelo total de pedidos" />
                   <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Média mensal" value={formatNullableCurrency(details.averageRevenueMonthly, formatKpiCompactCurrency)} valueTooltip={formatNullableCurrencyTooltip(details.averageRevenueMonthly, formatCurrency)} showPercentageChange={false} icon={CalendarClock} periodLabel="Média das receitas por meses com compra no período" />
@@ -878,7 +878,7 @@ function ClientesPage() {
                   <TrendingUp className="h-4 w-4 text-primary" />
                   <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Indicadores operacionais</h4>
                 </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="metric-row">
                   <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Quantidade total" value={formatKpiCompactNumber(details.totalQuantity)} valueTooltip={formatDecimal(details.totalQuantity)} showPercentageChange={false} icon={TrendingUp} periodLabel="Soma das quantidades no período filtrado" />
                   <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Peso total" value={formatKpiCompactNumber(details.totalWeight)} valueTooltip={formatDecimal(details.totalWeight)} showPercentageChange={false} icon={TrendingUp} periodLabel="Peso acumulado das compras no período" />
                   <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Total de pedidos" value={formatKpiCompactNumber(details.totalOrders)} valueTooltip={String(details.totalOrders)} showPercentageChange={false} icon={UserRound} periodLabel="Pedidos distintos por documento no período" />
@@ -1150,7 +1150,7 @@ function ClientesPage() {
 
           {!newCustomersLoading && newCustomersMonthly && (
             <div className="mt-4 space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="metric-row">
                 <KpiCard
                   title="Total no período"
                   value={formatKpiCompactNumber(newCustomersMonthly.totalNewCustomers)}

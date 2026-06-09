@@ -127,9 +127,9 @@ function ProcessamentosPage() {
         </Alert>
       )}
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <section className="metric-row">
         {loading && !dashboard ? Array.from({ length: 6 }).map((_, index) => <SkeletonMetricCard key={index} />) : summaryCards.map((card) => (
-          <Card key={card.title} className="bg-surface border-border">
+          <Card key={card.title} className="metric-card-item bg-surface border-border">
             <CardContent className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -311,7 +311,7 @@ function JobDetails({ details, onRetry, onCancel }: { details: ProcessingJobDeta
   const logUrl = `${import.meta.env.VITE_API_URL ?? "http://localhost:5279"}/api/processing-monitoring/jobs/${details.job.id}/logs/download`;
   return (
     <div className="max-h-[75vh] space-y-4 overflow-auto pr-1">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="metric-row">
         <Info label="Arquivo" value={details.job.fileName} />
         <Info label="Template" value={details.job.template ?? "-"} />
         <Info label="Tempo total" value={formatDuration(details.job.elapsedSeconds)} />
@@ -408,7 +408,7 @@ function ChartCard({ title, children }: { title: string; children: ReactNode }) 
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border p-3">
+    <div className="metric-card-item rounded-lg border border-border p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 break-all font-medium">{value}</p>
     </div>

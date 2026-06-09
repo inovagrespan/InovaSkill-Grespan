@@ -121,6 +121,10 @@
   --dashboard-card-shadow: var(--shadow-sm);
   --dashboard-card-shadow-hover: var(--shadow-md);
 
+  --metric-card-base-width: 248px;
+  --metric-card-column-width: 248px;
+  --metric-card-zoom: 1;
+
   --duration-fast: 150ms;
   --duration-base: 200ms;
   --duration-slow: 280ms;
@@ -278,6 +282,70 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: rgba(148, 163, 184, 0.72);
+}
+
+.metric-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--metric-card-column-width);
+  gap: 0.75rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+}
+
+.metric-row::-webkit-scrollbar {
+  height: 10px;
+}
+
+.metric-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.metric-row::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+  background-color: rgba(148, 163, 184, 0.55);
+}
+
+.metric-row::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.72);
+}
+
+.metric-card-item {
+  min-width: 0;
+  width: var(--metric-card-base-width);
+  transform-origin: left top;
+  zoom: var(--metric-card-zoom);
+}
+
+.finance-chart-card {
+  --finance-chart-title: #020617;
+  --finance-chart-muted: #64748b;
+  --finance-chart-axis: #667085;
+  --finance-chart-grid: rgba(100, 116, 139, 0.14);
+  --finance-chart-line: #ff3f5f;
+  --finance-chart-fill: rgba(255, 63, 95, 0.34);
+  --finance-chart-fill-end: rgba(255, 63, 95, 0.02);
+  --finance-chart-cursor: rgba(255, 63, 95, 0.22);
+  --finance-chart-select-bg: #ffffff;
+  --finance-chart-select-border: #d7dde8;
+}
+
+.dark .finance-chart-card {
+  --finance-chart-title: #f8fafc;
+  --finance-chart-muted: #98a4b8;
+  --finance-chart-axis: #98a4b8;
+  --finance-chart-grid: rgba(148, 163, 184, 0.11);
+  --finance-chart-line: #ff3158;
+  --finance-chart-fill: rgba(255, 49, 88, 0.34);
+  --finance-chart-fill-end: rgba(255, 49, 88, 0.03);
+  --finance-chart-cursor: rgba(255, 49, 88, 0.24);
+  --finance-chart-select-bg: #0b1020;
+  --finance-chart-select-border: #1d2a44;
 }
 
 .dark .app-background {

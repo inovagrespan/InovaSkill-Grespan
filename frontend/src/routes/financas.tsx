@@ -1,11 +1,21 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { CalendarDays, DollarSign, ReceiptText, Scale, Search } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Label } from "@/components/ui/label";
-import { calculateFinanceMetrics, financeDemoTransactions, listFinanceCustomers } from "@/lib/finance-demo-metrics";
+import {
+  buildFinanceCustomerRevenueRanking,
+  buildFinanceRevenueTrend,
+  calculateFinanceMetrics,
+  financeDemoTransactions,
+  listFinanceCustomers,
+  type FinanceRevenueGranularity,
+} from "@/lib/finance-demo-metrics";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
 export const Route = createFileRoute("/financas")({
@@ -14,6 +24,21 @@ export const Route = createFileRoute("/financas")({
 
 const DEFAULT_DATE_FROM = "2026-01-01";
 const DEFAULT_DATE_TO = "2026-06-30";
+const FINANCE_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]";
+const FINANCE_CHART_CARD_CLASS_NAME = "finance-chart-card overflow-hidden rounded-xl border bg-surface text-foreground shadow-sm dark:bg-[#111821] dark:text-slate-100 dark:shadow-lg";
+const FINANCE_CHART_SELECT_CLASS_NAME = "h-8 rounded-[10px] border border-[var(--finance-chart-select-border)] bg-[var(--finance-chart-select-bg)] px-3 text-xs font-medium text-[var(--finance-chart-title)] outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/20";
+const FINANCE_CHART_GRID_STROKE = "var(--finance-chart-grid)";
+const FINANCE_AXIS_COLOR = "var(--finance-chart-axis)";
+const FINANCE_CURSOR_STROKE = "var(--finance-chart-cursor)";
+const FINANCE_REVENUE_COLOR = "var(--finance-chart-line)";
+const FINANCE_REVENUE_FILL = "var(--finance-chart-fill)";
+const FINANCE_REVENUE_FILL_END = "var(--finance-chart-fill-end)";
+
+const revenueGranularityOptions: Array<{ value: FinanceRevenueGranularity; label: string }> = [
+  { value: "weekly", label: "Semanal" },
+  { value: "monthly", label: "Mensal" },
+  { value: "yearly", label: "Anual" },
+];
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -32,12 +57,15 @@ function FinancasPage() {
   const [dateFrom, setDateFrom] = useState(DEFAULT_DATE_FROM);
   const [dateTo, setDateTo] = useState(DEFAULT_DATE_TO);
   const [allTime, setAllTime] = useState(true);
+  const [revenueGranularity, setRevenueGranularity] = useState<FinanceRevenueGranularity>("monthly");
 
   const customers = useMemo(() => listFinanceCustomers(financeDemoTransactions), []);
   const metrics = useMemo(
     () => calculateFinanceMetrics({ customer, dateFrom, dateTo, allTime }, financeDemoTransactions),
     [customer, dateFrom, dateTo, allTime],
   );
+  const revenueTrend = useMemo(() => buildFinanceRevenueTrend(metrics.items, revenueGranularity), [metrics.items, revenueGranularity]);
+  const customerRanking = useMemo(() => buildFinanceCustomerRevenueRanking(metrics.items), [metrics.items]);
   const periodLabel = allTime ? "Tempo total" : `${formatDate(dateFrom)} até ${formatDate(dateTo)}`;
 
   function clearFilters() {
@@ -98,7 +126,7 @@ function FinancasPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <section className="metric-row">
         <KpiCard
           title="Faturamento total"
           value={formatKpiCompactCurrency(metrics.totalRevenue)}
@@ -123,6 +151,121 @@ function FinancasPage() {
           periodLabel="Quantidade comprada pelo cliente"
           icon={Scale}
         />
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Card className={FINANCE_CHART_CARD_CLASS_NAME}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base text-[var(--finance-chart-title)]">Evolução da Receita</CardTitle>
+                <p className="mt-1 text-xs text-[var(--finance-chart-muted)]">{periodLabel}</p>
+              </div>
+              <select
+                className={FINANCE_CHART_SELECT_CLASS_NAME}
+                value={revenueGranularity}
+                onChange={(event) => setRevenueGranularity(event.target.value as FinanceRevenueGranularity)}
+                aria-label="Granularidade do faturamento em finanças"
+              >
+                {revenueGranularityOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+              <ChartContainer
+                config={{ revenue: { label: "Faturamento", color: FINANCE_REVENUE_COLOR } }}
+                className={`${FINANCE_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--finance-chart-axis)]`}
+              >
+                <AreaChart data={revenueTrend} margin={{ left: 0, right: 8, top: 12, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id="finance-revenue-fill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={FINANCE_REVENUE_FILL} stopOpacity={1} />
+                      <stop offset="100%" stopColor={FINANCE_REVENUE_FILL_END} stopOpacity={1} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid vertical={false} stroke={FINANCE_CHART_GRID_STROKE} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={18} stroke={FINANCE_AXIS_COLOR} />
+                  <YAxis
+                    width={64}
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => formatKpiCompactCurrency(Number(value))}
+                    stroke={FINANCE_AXIS_COLOR}
+                  />
+                  <ChartTooltip
+                    cursor={{ stroke: FINANCE_CURSOR_STROKE, strokeWidth: 2 }}
+                    content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    name="Faturamento"
+                    stroke={FINANCE_REVENUE_COLOR}
+                    strokeWidth={2.8}
+                    fill="url(#finance-revenue-fill)"
+                    dot={{ r: 3, fill: FINANCE_REVENUE_COLOR, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: FINANCE_REVENUE_COLOR }}
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card className={FINANCE_CHART_CARD_CLASS_NAME}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base text-[var(--finance-chart-title)]">Ranking por empresa</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ChartContainer config={{ revenue: { label: "Faturamento", color: FINANCE_REVENUE_COLOR } }} className={`${FINANCE_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--finance-chart-axis)]`}>
+              <AreaChart data={customerRanking} margin={{ left: 0, right: 8, top: 12, bottom: 4 }}>
+                <defs>
+                  <linearGradient id="finance-ranking-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={FINANCE_REVENUE_FILL} stopOpacity={1} />
+                    <stop offset="100%" stopColor={FINANCE_REVENUE_FILL_END} stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke={FINANCE_CHART_GRID_STROKE} />
+                <XAxis
+                  dataKey="customer"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={10}
+                  interval={0}
+                  minTickGap={10}
+                  tickFormatter={(value) => String(value).split(" ")[0] ?? String(value)}
+                  stroke={FINANCE_AXIS_COLOR}
+                />
+                <YAxis
+                  width={64}
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tickFormatter={(value) => formatKpiCompactCurrency(Number(value))}
+                  stroke={FINANCE_AXIS_COLOR}
+                />
+                <ChartTooltip
+                  cursor={{ stroke: FINANCE_CURSOR_STROKE, strokeWidth: 2 }}
+                  content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  name="Faturamento"
+                  stroke={FINANCE_REVENUE_COLOR}
+                  strokeWidth={2.8}
+                  fill="url(#finance-ranking-fill)"
+                  dot={{ r: 3, fill: FINANCE_REVENUE_COLOR, strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: FINANCE_REVENUE_COLOR }}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
       </section>
 
       <section className="rounded-xl border border-border bg-surface p-5">

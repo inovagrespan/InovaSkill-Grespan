@@ -40,7 +40,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
 
   function renderNav(showCollapsed: boolean, onNavigate?: () => void) {
     return (
-      <nav className="flex-1 space-y-2 px-3">
+      <nav className="custom-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-3 pb-2">
         {items.map((item) => {
           const active = isItemActive(item.to);
           const Icon = item.icon;
@@ -107,9 +107,9 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
             <SheetHeader className="border-b border-border px-4 py-4 text-left">
               <SheetTitle>Menu</SheetTitle>
             </SheetHeader>
-            <div className="flex h-full flex-col py-3">
+            <div className="flex h-full min-h-0 flex-col py-3">
               {renderNav(false, () => setMobileOpen(false))}
-              <div className="mt-auto px-3 pb-3">
+              <div className="shrink-0 border-t border-border bg-surface px-3 pt-3 pb-3">
                 <button
                   type="button"
                   onClick={onToggleTheme}
@@ -171,7 +171,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
         </div>
 
         {renderNav(collapsed)}
-        <div className="mt-auto space-y-2 p-3">
+        <div className="shrink-0 space-y-2 border-t border-border bg-surface/80 p-3">
           <button
             type="button"
             onClick={onToggleTheme}

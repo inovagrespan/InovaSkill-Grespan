@@ -23,6 +23,23 @@ export type FinanceMetrics = {
   items: FinanceDemoTransaction[];
 };
 
+export type FinanceRevenueGranularity = "weekly" | "monthly" | "yearly";
+
+export type FinanceRevenueTrendPoint = {
+  period: string;
+  label: string;
+  revenue: number;
+};
+
+export type FinanceCustomerRevenuePoint = {
+  customer: string;
+  revenue: number;
+};
+
+const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("pt-BR", { month: "short" });
+const TOP_FINANCE_CUSTOMERS_LIMIT = 5;
+const DAYS_IN_WEEK = 7;
+
 export const financeDemoTransactions: FinanceDemoTransaction[] = [
   { customer: "Mercado São Bento", date: "2026-01-12", revenue: 18_900, orders: 8, quantity: 720 },
   { customer: "Mercado São Bento", date: "2026-02-18", revenue: 21_300, orders: 9, quantity: 840 },
@@ -68,4 +85,71 @@ export function calculateFinanceMetrics(
     averageTicket: calculateAverageTicket(totalRevenue, totalOrders),
     items: filtered,
   };
+}
+
+function toWeekStart(value: string): Date {
+  const date = new Date(`${value}T00:00:00`);
+  const mondayOffset = (date.getDay() + 6) % DAYS_IN_WEEK;
+  date.setDate(date.getDate() - mondayOffset);
+  return date;
+}
+
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function resolveFinanceRevenuePeriod(item: FinanceDemoTransaction, granularity: FinanceRevenueGranularity): FinanceRevenueTrendPoint {
+  if (granularity === "weekly") {
+    const weekStart = toWeekStart(item.date);
+    return {
+      period: toDateKey(weekStart),
+      label: `Sem ${weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`,
+      revenue: 0,
+    };
+  }
+
+  if (granularity === "yearly") {
+    const year = item.date.slice(0, 4);
+    return { period: year, label: year, revenue: 0 };
+  }
+
+  const month = item.date.slice(0, 7);
+  const [year, monthNumber] = month.split("-").map(Number);
+  const monthLabel = MONTH_LABEL_FORMATTER.format(new Date(year, monthNumber - 1, 1)).replace(".", "");
+  return { period: month, label: monthLabel, revenue: 0 };
+}
+
+export function buildFinanceRevenueTrend(
+  items: FinanceDemoTransaction[],
+  granularity: FinanceRevenueGranularity = "monthly",
+): FinanceRevenueTrendPoint[] {
+  const revenueByPeriod = new Map<string, FinanceRevenueTrendPoint>();
+
+  for (const item of items) {
+    const period = resolveFinanceRevenuePeriod(item, granularity);
+    const current = revenueByPeriod.get(period.period) ?? period;
+    revenueByPeriod.set(period.period, { ...current, revenue: current.revenue + item.revenue });
+  }
+
+  return Array.from(revenueByPeriod.values()).sort((left, right) => left.period.localeCompare(right.period));
+}
+
+export function buildFinanceMonthlyRevenue(items: FinanceDemoTransaction[]): FinanceRevenueTrendPoint[] {
+  return buildFinanceRevenueTrend(items, "monthly");
+}
+
+export function buildFinanceCustomerRevenueRanking(items: FinanceDemoTransaction[]): FinanceCustomerRevenuePoint[] {
+  const revenueByCustomer = new Map<string, number>();
+
+  for (const item of items) {
+    revenueByCustomer.set(item.customer, (revenueByCustomer.get(item.customer) ?? 0) + item.revenue);
+  }
+
+  return Array.from(revenueByCustomer.entries())
+    .map(([customer, revenue]) => ({ customer, revenue }))
+    .sort((left, right) => right.revenue - left.revenue || left.customer.localeCompare(right.customer, "pt-BR"))
+    .slice(0, TOP_FINANCE_CUSTOMERS_LIMIT);
 }

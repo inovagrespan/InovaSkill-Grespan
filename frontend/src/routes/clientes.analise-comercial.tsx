@@ -148,7 +148,7 @@ function CustomerCommercialAnalysisPage() {
       )}
 
       {loading && !report && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="metric-row">
           <SkeletonMetricCard />
           <SkeletonMetricCard />
           <SkeletonMetricCard />

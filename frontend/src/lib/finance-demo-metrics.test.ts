@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { calculateFinanceMetrics, listFinanceCustomers, type FinanceDemoTransaction } from "./finance-demo-metrics";
+import {
+  buildFinanceCustomerRevenueRanking,
+  buildFinanceMonthlyRevenue,
+  buildFinanceRevenueTrend,
+  calculateFinanceMetrics,
+  listFinanceCustomers,
+  type FinanceDemoTransaction,
+} from "./finance-demo-metrics";
 
 const sample: FinanceDemoTransaction[] = [
   { customer: "Cliente A", date: "2026-01-10", revenue: 1_000, orders: 2, quantity: 10 },
@@ -57,5 +64,38 @@ describe("finance demo metrics", () => {
     expect(result.totalQuantity).toBe(0);
     expect(result.averageTicket).toBe(0);
     expect(result.items).toEqual([]);
+  });
+
+  it("agrega faturamento mensal em ordem cronologica para graficos", () => {
+    const result = buildFinanceMonthlyRevenue(sample);
+
+    expect(result).toEqual([
+      { period: "2026-01", label: "jan", revenue: 1_000 },
+      { period: "2026-02", label: "fev", revenue: 6_000 },
+    ]);
+  });
+
+  it("agrega faturamento semanal e anual para busca do grafico financeiro", () => {
+    expect(buildFinanceRevenueTrend(sample, "weekly")).toEqual([
+      { period: "2026-01-05", label: "Sem 05/01", revenue: 1_000 },
+      { period: "2026-02-09", label: "Sem 09/02", revenue: 6_000 },
+    ]);
+
+    expect(buildFinanceRevenueTrend(sample, "yearly")).toEqual([
+      { period: "2026", label: "2026", revenue: 7_000 },
+    ]);
+  });
+
+  it("monta ranking de faturamento por cliente com desempate alfabetico", () => {
+    const result = buildFinanceCustomerRevenueRanking([
+      ...sample,
+      { customer: "Cliente C", date: "2026-03-10", revenue: 3_000, orders: 1, quantity: 5 },
+    ]);
+
+    expect(result).toEqual([
+      { customer: "Cliente B", revenue: 4_000 },
+      { customer: "Cliente A", revenue: 3_000 },
+      { customer: "Cliente C", revenue: 3_000 },
+    ]);
   });
 });
