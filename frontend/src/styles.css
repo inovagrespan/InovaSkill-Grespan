@@ -114,6 +114,13 @@
   --elevation-3: var(--shadow-md);
   --elevation-4: var(--shadow-lg);
 
+  --dashboard-card-radius: 0.75rem;
+  --dashboard-panel-radius: 0.5rem;
+  --dashboard-control-radius: 0.375rem;
+  --dashboard-chart-height: 16.25rem;
+  --dashboard-card-shadow: var(--shadow-sm);
+  --dashboard-card-shadow-hover: var(--shadow-md);
+
   --duration-fast: 150ms;
   --duration-base: 200ms;
   --duration-slow: 280ms;

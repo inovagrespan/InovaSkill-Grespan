@@ -170,6 +170,72 @@ public sealed class CommercialTransactionsControllerTests
             });
     }
 
+    [Fact]
+    public async Task GetPaged_CalculatesTotalAmountFromQuantityAndUnitPrice()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.Add(new Domain.Entities.CommercialTransaction
+        {
+            DocumentNumber = "NF-CALC",
+            TransactionDate = new DateTime(2026, 6, 10, 0, 0, 0, DateTimeKind.Utc),
+            CustomerCode = "C1",
+            CustomerName = "Empresa A",
+            ProductCode = "P1",
+            ProductDescription = "Produto 1",
+            Quantity = -3m,
+            UnitPrice = 12.5m,
+            TotalAmount = 9999m,
+            TransactionType = "Devolução",
+            City = "Campinas",
+            ProductGroup = "Grupo A",
+            GrossWeightKg = -6m,
+            SourceFileJobId = 1
+        });
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetPaged(documentNumber: "NF-CALC");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<PagedResult<CommercialTransactionDto>>(ok.Value);
+        var item = Assert.Single(payload.Items);
+        Assert.Equal(-37.5m, item.TotalAmount);
+    }
+
+    [Fact]
+    public async Task GetTimeline_CalculatesTotalAmountFromQuantityAndUnitPrice()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.Add(new Domain.Entities.CommercialTransaction
+        {
+            DocumentNumber = "NF-CALC",
+            TransactionDate = new DateTime(2026, 6, 10, 0, 0, 0, DateTimeKind.Utc),
+            CustomerCode = "C1",
+            CustomerName = "Empresa A",
+            ProductCode = "P1",
+            ProductDescription = "Produto 1",
+            Quantity = -3m,
+            UnitPrice = 12.5m,
+            TotalAmount = 9999m,
+            TransactionType = "Devolução",
+            City = "Campinas",
+            ProductGroup = "Grupo A",
+            GrossWeightKg = -6m,
+            SourceFileJobId = 1
+        });
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetTimeline(granularity: "daily", documentNumber: "NF-CALC");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CommercialTransactionTimelineResponseDto>(ok.Value);
+        var point = Assert.Single(payload.Items);
+        Assert.Equal(-37.5m, point.TotalAmount);
+        Assert.Equal(-3m, point.TotalQuantity);
+        Assert.Equal(-6m, point.TotalWeightKg);
+    }
+
     private static async Task<ImportDbContext> CreateDbAsync()
     {
         var connection = new SqliteConnection("DataSource=:memory:");

@@ -10,9 +10,9 @@ public sealed class SalesCompanySummaryCalculatorTests
     {
         var rows = new List<CommercialTransaction>
         {
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = 200m, Quantity = 2m, GrossWeightKg = 10m },
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 5), TotalAmount = 100m, Quantity = 1m, GrossWeightKg = 5m },
-            new() { CustomerName = "Empresa Y", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = 50m, Quantity = 1m, GrossWeightKg = 2m }
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = 200m, Quantity = 2m, UnitPrice = 100m, GrossWeightKg = 10m },
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 5), TotalAmount = 100m, Quantity = 1m, UnitPrice = 100m, GrossWeightKg = 5m },
+            new() { CustomerName = "Empresa Y", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = 50m, Quantity = 1m, UnitPrice = 50m, GrossWeightKg = 2m }
         };
 
         var result = SalesCompanySummaryCalculator.Build(
@@ -37,8 +37,8 @@ public sealed class SalesCompanySummaryCalculatorTests
     {
         var rows = new List<CommercialTransaction>
         {
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = 120m, Quantity = 1m, GrossWeightKg = 1m },
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 11), TotalAmount = 100m, Quantity = 1m, GrossWeightKg = 1m }
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = 120m, Quantity = 1m, UnitPrice = 120m, GrossWeightKg = 1m },
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 11), TotalAmount = 100m, Quantity = 1m, UnitPrice = 100m, GrossWeightKg = 1m }
         };
 
         var result = SalesCompanySummaryCalculator.Build(
@@ -63,9 +63,9 @@ public sealed class SalesCompanySummaryCalculatorTests
     {
         var rows = new List<CommercialTransaction>
         {
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = 200m, Quantity = 2m, GrossWeightKg = 10m },
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 5), TotalAmount = 100m, Quantity = 1m, GrossWeightKg = 5m },
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 19), TotalAmount = 999m, Quantity = 9m, GrossWeightKg = 9m }
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = 200m, Quantity = 2m, UnitPrice = 100m, GrossWeightKg = 10m },
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 5), TotalAmount = 100m, Quantity = 1m, UnitPrice = 100m, GrossWeightKg = 5m },
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 19), TotalAmount = 999m, Quantity = 9m, UnitPrice = 111m, GrossWeightKg = 9m }
         };
 
         var result = SalesCompanySummaryCalculator.Build(
@@ -86,8 +86,8 @@ public sealed class SalesCompanySummaryCalculatorTests
     {
         var rows = new List<CommercialTransaction>
         {
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 15), TotalAmount = 200m, Quantity = 2m, GrossWeightKg = 10m },
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 4, 10), TotalAmount = 100m, Quantity = 1m, GrossWeightKg = 5m }
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 15), TotalAmount = 200m, Quantity = 2m, UnitPrice = 100m, GrossWeightKg = 10m },
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 4, 10), TotalAmount = 100m, Quantity = 1m, UnitPrice = 100m, GrossWeightKg = 5m }
         };
 
         var result = SalesCompanySummaryCalculator.Build(
@@ -110,8 +110,8 @@ public sealed class SalesCompanySummaryCalculatorTests
     {
         var rows = new List<CommercialTransaction>
         {
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = -120m, Quantity = 1m, GrossWeightKg = 1m },
-            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 5), TotalAmount = -100m, Quantity = 1m, GrossWeightKg = 1m }
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 12), TotalAmount = 120m, Quantity = -1m, UnitPrice = 120m, GrossWeightKg = 1m },
+            new() { CustomerName = "Empresa X", TransactionDate = new DateTime(2026, 5, 5), TotalAmount = 100m, Quantity = -1m, UnitPrice = 100m, GrossWeightKg = 1m }
         };
 
         var result = SalesCompanySummaryCalculator.Build(
@@ -128,7 +128,7 @@ public sealed class SalesCompanySummaryCalculatorTests
     }
 
     [Fact]
-    public void Build_UsesQuantityTimesUnitPrice_WhenTotalAmountIsInconsistent()
+    public void Build_UsesQuantityTimesUnitPrice_IgnoringInputTotalAmount()
     {
         var rows = new List<CommercialTransaction>
         {

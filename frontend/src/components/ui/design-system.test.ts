@@ -20,6 +20,12 @@ describe("design system tokens", () => {
     expect(css).toContain("--text-primary:");
     expect(css).toContain("--text-secondary:");
     expect(css).toContain("--text-muted:");
+    expect(css).toContain("--dashboard-card-radius:");
+    expect(css).toContain("--dashboard-panel-radius:");
+    expect(css).toContain("--dashboard-control-radius:");
+    expect(css).toContain("--dashboard-chart-height:");
+    expect(css).toContain("--dashboard-card-shadow:");
+    expect(css).toContain("--dashboard-card-shadow-hover:");
   });
 
   it("define estilo de scrollbar customizado", () => {

@@ -451,6 +451,7 @@ const DEMO_PAGE_SIZE = 20;
 const DEMO_HISTORY_PAGE_SIZE = 10;
 const DEMO_TOTAL_ROWS = 48_000;
 const DEMO_DATE_TODAY = "2026-06-07";
+const DEMO_SALES_DATE_TODAY = "2026-06-08";
 const DEMO_UPLOAD_JOB_ID_BASE = 900;
 
 function shouldUseDemoData(error: unknown): boolean {
@@ -535,7 +536,7 @@ function demoCommercialTransactions(): CommercialTransaction[] {
     {
       id: 1005,
       documentNumber: "DEV-2026-001",
-      transactionDate: DEMO_DATE_TODAY,
+      transactionDate: DEMO_SALES_DATE_TODAY,
       customerCode: "CLI-002",
       customerName: "Atacado Primavera",
       productCode: "PRD-104",
@@ -552,72 +553,7 @@ function demoCommercialTransactions(): CommercialTransaction[] {
   ];
 }
 
-function demoCommercialSummary(input: {
-  page?: number;
-  pageSize?: number;
-  granularity?: SummaryGranularity;
-  sortBy?: SummarySortBy;
-}): CommercialTransactionSummaryResponse {
-  const items: CommercialTransactionCompanySummary[] = [
-    {
-      companyName: "Mercado São Bento",
-      totalAmount: 64_850,
-      totalQuantity: 2_420,
-      totalWeightKg: 12_800,
-      currentPeriodAmount: 64_850,
-      previousPeriodAmount: 57_600,
-      growthPercent: 12.6,
-    },
-    {
-      companyName: "Atacado Primavera",
-      totalAmount: 52_300,
-      totalQuantity: 3_180,
-      totalWeightKg: 9_750,
-      currentPeriodAmount: 52_300,
-      previousPeriodAmount: 55_900,
-      growthPercent: -6.4,
-    },
-    {
-      companyName: "Super Lopes",
-      totalAmount: 38_940,
-      totalQuantity: 1_760,
-      totalWeightKg: 4_980,
-      currentPeriodAmount: 38_940,
-      previousPeriodAmount: 31_200,
-      growthPercent: 24.8,
-    },
-    {
-      companyName: "Distribuidora Central",
-      totalAmount: 31_500,
-      totalQuantity: 980,
-      totalWeightKg: 2_400,
-      currentPeriodAmount: 31_500,
-      previousPeriodAmount: 29_800,
-      growthPercent: 5.7,
-    },
-  ];
-
-  return {
-    page: input.page ?? DEMO_PAGE,
-    pageSize: input.pageSize ?? DEMO_PAGE_SIZE,
-    totalItems: items.length,
-    granularity: input.granularity ?? "weekly",
-    currentPeriodStart: "2026-06-01",
-    previousPeriodStart: "2026-05-01",
-    currentPeriodTotalAmount: 187_590,
-    previousPeriodTotalAmount: 174_100,
-    totalGrowthPercent: 7.7,
-    totalRecords: 128,
-    totalAmount: 187_590,
-    totalQuantity: 8_340,
-    totalWeightKg: 29_930,
-    totalCompanies: items.length,
-    items,
-  };
-}
-
-function demoCommercialTimeline(input: {
-  granularity?: CommercialTransactionTimelineGranularity;
+type DemoCommercialTransactionFilters = {
   documentNumber?: string;
   customerCode?: string;
   customerName?: string;
@@ -627,22 +563,97 @@ function demoCommercialTimeline(input: {
   transactionType?: string;
   dateFrom?: string;
   dateTo?: string;
-}): CommercialTransactionTimelineResponse {
-  const filteredItems = demoCommercialTransactions().filter((item) => {
-    if (input.documentNumber?.trim() && !item.documentNumber.toLowerCase().includes(input.documentNumber.trim().toLowerCase())) return false;
-    if (input.customerCode?.trim() && !item.customerCode.toLowerCase().includes(input.customerCode.trim().toLowerCase())) return false;
-    if (input.customerName?.trim() && !item.customerName.toLowerCase().includes(input.customerName.trim().toLowerCase())) return false;
-    if (input.productCode?.trim()) {
-      const productText = `${item.productCode} ${item.productDescription}`.toLowerCase();
-      if (!productText.includes(input.productCode.trim().toLowerCase())) return false;
-    }
-    if (input.city?.trim() && !item.city.toLowerCase().includes(input.city.trim().toLowerCase())) return false;
-    if (input.productGroup?.trim() && !item.productGroup.toLowerCase().includes(input.productGroup.trim().toLowerCase())) return false;
-    if (input.transactionType?.trim() && !item.transactionType.toLowerCase().includes(input.transactionType.trim().toLowerCase())) return false;
+};
+
+function includesNormalized(value: string, filter?: string): boolean {
+  const normalizedFilter = filter?.trim().toLowerCase();
+  if (!normalizedFilter) return true;
+  return value.toLowerCase().includes(normalizedFilter);
+}
+
+function filterDemoCommercialTransactions(input: DemoCommercialTransactionFilters): CommercialTransaction[] {
+  return demoCommercialTransactions().filter((item) => {
+    if (!includesNormalized(item.documentNumber, input.documentNumber)) return false;
+    if (!includesNormalized(item.customerCode, input.customerCode)) return false;
+    if (!includesNormalized(item.customerName, input.customerName)) return false;
+    if (!includesNormalized(`${item.productCode} ${item.productDescription}`, input.productCode)) return false;
+    if (!includesNormalized(item.city, input.city)) return false;
+    if (!includesNormalized(item.productGroup, input.productGroup)) return false;
+    if (!includesNormalized(item.transactionType, input.transactionType)) return false;
     if (input.dateFrom?.trim() && item.transactionDate < input.dateFrom.trim()) return false;
     if (input.dateTo?.trim() && item.transactionDate > input.dateTo.trim()) return false;
     return true;
   });
+}
+
+function paginateDemoItems<T>(items: T[], page = DEMO_PAGE, pageSize = DEMO_PAGE_SIZE): T[] {
+  const start = Math.max(0, page - 1) * pageSize;
+  return items.slice(start, start + pageSize);
+}
+
+function demoCommercialSummary(input: {
+  page?: number;
+  pageSize?: number;
+  granularity?: SummaryGranularity;
+  sortBy?: SummarySortBy;
+} & DemoCommercialTransactionFilters): CommercialTransactionSummaryResponse {
+  const filteredItems = filterDemoCommercialTransactions(input);
+  const groups = new Map<string, CommercialTransactionCompanySummary>();
+
+  for (const item of filteredItems) {
+    const current = groups.get(item.customerName) ?? {
+      companyName: item.customerName,
+      totalAmount: 0,
+      totalQuantity: 0,
+      totalWeightKg: 0,
+      currentPeriodAmount: 0,
+      previousPeriodAmount: 0,
+      growthPercent: null,
+    };
+
+    current.totalAmount += item.totalAmount;
+    current.totalQuantity += item.quantity;
+    current.totalWeightKg += item.grossWeightKg;
+    current.currentPeriodAmount += item.totalAmount;
+    groups.set(item.customerName, current);
+  }
+
+  const sortBy = input.sortBy ?? "amount";
+  const sortedItems = Array.from(groups.values()).sort((left, right) => {
+    if (sortBy === "quantity") return right.totalQuantity - left.totalQuantity;
+    if (sortBy === "weight") return right.totalWeightKg - left.totalWeightKg;
+    if (sortBy === "growth") return (right.growthPercent ?? Number.NEGATIVE_INFINITY) - (left.growthPercent ?? Number.NEGATIVE_INFINITY);
+    return right.totalAmount - left.totalAmount;
+  });
+  const page = input.page ?? DEMO_PAGE;
+  const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+  const totalAmount = filteredItems.reduce((total, item) => total + item.totalAmount, 0);
+  const totalQuantity = filteredItems.reduce((total, item) => total + item.quantity, 0);
+  const totalWeightKg = filteredItems.reduce((total, item) => total + item.grossWeightKg, 0);
+
+  return {
+    page,
+    pageSize,
+    totalItems: sortedItems.length,
+    granularity: input.granularity ?? "weekly",
+    currentPeriodStart: input.dateFrom ?? "2026-06-01",
+    previousPeriodStart: "",
+    currentPeriodTotalAmount: totalAmount,
+    previousPeriodTotalAmount: 0,
+    totalGrowthPercent: null,
+    totalRecords: filteredItems.length,
+    totalAmount,
+    totalQuantity,
+    totalWeightKg,
+    totalCompanies: sortedItems.length,
+    items: paginateDemoItems(sortedItems, page, pageSize),
+  };
+}
+
+function demoCommercialTimeline(input: {
+  granularity?: CommercialTransactionTimelineGranularity;
+} & DemoCommercialTransactionFilters): CommercialTransactionTimelineResponse {
+  const filteredItems = filterDemoCommercialTransactions(input);
 
   const granularity = input.granularity ?? "monthly";
   const grouped = new Map<string, CommercialTransactionTimelinePoint>();
@@ -1432,8 +1443,10 @@ export async function fetchCommercialTransactions(input: {
     response = await authFetch(`${API_URL}/api/commercial-transactions?${query.toString()}`);
   } catch (error) {
     if (shouldUseDemoData(error)) {
-      const items = demoCommercialTransactions();
-      return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_PAGE_SIZE, total: items.length, items };
+      const page = input.page ?? DEMO_PAGE;
+      const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+      const items = filterDemoCommercialTransactions(input);
+      return { page, pageSize, total: items.length, items: paginateDemoItems(items, page, pageSize) };
     }
     throw error;
   }

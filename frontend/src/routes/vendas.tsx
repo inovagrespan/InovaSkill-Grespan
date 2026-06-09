@@ -48,12 +48,18 @@ type ViewMode = "summary" | "items";
 const FILTER_DEBOUNCE_MS = 300;
 const DEFAULT_PAGE_SIZE = 20;
 const DEFAULT_SUMMARY_PAGE_SIZE = 20;
-const SALES_CHART_CARD_CLASS_NAME = "overflow-hidden border-white/10 bg-[#0b111b]/95 shadow-[0_22px_60px_rgba(0,0,0,0.32)]";
-const SALES_REVENUE_PANEL_CLASS_NAME = "rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,#111827_0%,#0f1724_100%)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
-const SALES_RANKING_PANEL_CLASS_NAME = "rounded-xl border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-2";
-const SALES_REVENUE_GRID_STROKE = "rgba(148,163,184,0.08)";
-const SALES_REVENUE_AXIS_COLOR = "#7c8aa5";
-const SALES_REVENUE_CURSOR_STROKE = "rgba(239,68,68,0.20)";
+const SALES_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]";
+const SALES_CHART_CARD_CLASS_NAME = "overflow-hidden border-border/80 bg-card/95 shadow-sm hover:translate-y-0 hover:border-border/80 hover:shadow-sm";
+const SALES_CHART_SELECT_CLASS_NAME = "h-9 rounded-[var(--dashboard-control-radius)] border border-input bg-surface px-3 text-sm text-foreground shadow-xs outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-ring/40";
+const SALES_ANALYTICS_PANEL_CLASS_NAME = "rounded-[var(--dashboard-panel-radius)] border border-border/70 bg-[var(--surface-soft)]/70 p-4";
+const SALES_CHART_EMPTY_STATE_CLASS_NAME = "flex h-[var(--dashboard-chart-height)] items-center justify-center rounded-[var(--dashboard-panel-radius)] border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground";
+const SALES_GRID_STROKE = "rgba(107,114,128,0.18)";
+const SALES_AXIS_COLOR = "var(--text-muted)";
+const SALES_CURSOR_STROKE = "rgba(180,35,47,0.22)";
+const SALES_REVENUE_COLOR = "var(--primary-red)";
+const SALES_REVENUE_COLOR_SOFT = "rgba(180,35,47,0.10)";
+const SALES_RANKING_COLOR = "rgba(180,35,47,0.82)";
+const SALES_RANKING_COLOR_SOFT = "rgba(180,35,47,0.58)";
 
 const revenueModeOptions = [
   { value: "daily", label: "Diário" },
@@ -343,17 +349,17 @@ function VendasPage() {
   }, [page, summaryPage]);
 
   return (
-    <div className="page-shell space-y-6">
-      <header className="animate-soft-enter space-y-4">
-        <div>
+    <div className="page-shell space-y-8">
+      <header className="animate-soft-enter space-y-5">
+        <div className="max-w-3xl">
           <span className="page-header-kicker">Smart Core / Vendas</span>
-          <h1 className="mt-2 text-4xl font-display tracking-tight">Vendas</h1>
+          <h1 className="mt-2 text-3xl font-display tracking-tight text-foreground md:text-4xl">Vendas</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Dashboard analítico para descobrir desempenho, ranking e itens importados sem começar por um formulário.
           </p>
         </div>
 
-        <section className="space-y-3 rounded-lg border border-border bg-surface p-3">
+        <section className="space-y-4 rounded-xl border border-border/80 bg-surface/95 p-4 shadow-xs">
           <div className="flex flex-wrap gap-2">
             {periodOptions.map((option) => (
               <Button
@@ -368,8 +374,8 @@ function VendasPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-            <div className="space-y-1">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+            <div className="space-y-1.5">
               <Label htmlFor="sales-document">Nota fiscal</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -380,7 +386,7 @@ function VendasPage() {
               </datalist>
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="sales-product">Produto</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -391,7 +397,7 @@ function VendasPage() {
               </datalist>
             </div>
 
-            <Button type="button" variant="outline" onClick={() => setAdvancedOpen((value) => !value)}>
+            <Button type="button" variant="outline" className="h-10" onClick={() => setAdvancedOpen((value) => !value)}>
               <SlidersHorizontal className="mr-2 size-4" />
               Filtros avançados
               {hasAdvancedFilters && <Badge className="ml-2" variant="secondary">ativo</Badge>}
@@ -400,7 +406,7 @@ function VendasPage() {
           </div>
 
           {advancedOpen && (
-            <div className="grid grid-cols-1 gap-3 border-t border-border pt-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 border-t border-border pt-4 md:grid-cols-2 xl:grid-cols-4">
               <Field label="Cliente" value={customerName} onChange={setCustomerName} placeholder="Nome do cliente" />
               <Field label="Cidade" value={city} onChange={setCity} placeholder="Cidade" />
               <Field label="Empresa" value={companyName} onChange={setCompanyName} placeholder="Nome da empresa" />
@@ -424,7 +430,7 @@ function VendasPage() {
         </Alert>
       )}
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           loading={loading}
           error={Boolean(message)}
@@ -469,15 +475,16 @@ function VendasPage() {
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[0.85fr_1.15fr]">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className={SALES_CHART_CARD_CLASS_NAME}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <CardTitle className="text-sm font-medium text-slate-100">Evolução da Receita</CardTitle>
+                <CardTitle className="text-base text-foreground">Evolução da receita</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Faturamento acumulado por período.</p>
               </div>
               <select
-                className="h-8 rounded-md border border-white/10 bg-white/4 px-3 text-xs text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                className={SALES_CHART_SELECT_CLASS_NAME}
                 value={timelineGranularity}
                 onChange={() => undefined}
                 aria-label="Modo do gráfico de receita"
@@ -490,44 +497,44 @@ function VendasPage() {
               </select>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0">
             {loading ? (
               <SkeletonTable rows={4} columns={2} />
             ) : !hasResults || trendData.length === 0 ? (
               <EmptyState text="Sem resultado para gerar gráfico de faturamento." />
             ) : (
-              <div className={SALES_REVENUE_PANEL_CLASS_NAME}>
+              <div className={SALES_ANALYTICS_PANEL_CLASS_NAME}>
                 <ChartContainer
-                  config={{ value: { label: "Faturamento", color: "#ef4444" } }}
-                  className="h-[188px] min-h-[188px] w-full [&_.recharts-cartesian-axis-tick_text]:fill-[#7c8aa5]"
+                  config={{ value: { label: "Faturamento", color: SALES_REVENUE_COLOR } }}
+                  className={`${SALES_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--text-muted)]`}
                 >
-                  <AreaChart data={trendData} margin={{ left: 6, right: 8, top: 14, bottom: 0 }}>
+                  <AreaChart data={trendData} margin={{ left: 0, right: 8, top: 12, bottom: 4 }}>
                     <defs>
                       <linearGradient id="sales-revenue-fill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#ff3347" stopOpacity={0.34} />
-                        <stop offset="55%" stopColor="#b91c2c" stopOpacity={0.18} />
-                        <stop offset="100%" stopColor="#0f1724" stopOpacity={0.02} />
+                        <stop offset="0%" stopColor={SALES_REVENUE_COLOR} stopOpacity={0.22} />
+                        <stop offset="60%" stopColor={SALES_REVENUE_COLOR_SOFT} stopOpacity={0.10} />
+                        <stop offset="100%" stopColor={SALES_REVENUE_COLOR_SOFT} stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke={SALES_REVENUE_GRID_STROKE} strokeDasharray="2 7" />
+                    <CartesianGrid vertical={false} stroke={SALES_GRID_STROKE} strokeDasharray="3 6" />
                     <XAxis
                       dataKey="label"
                       tickLine={false}
                       axisLine={false}
                       tickMargin={10}
-                      tick={{ fill: SALES_REVENUE_AXIS_COLOR, fontSize: 10 }}
+                      tick={{ fill: SALES_AXIS_COLOR, fontSize: 11 }}
                     />
                     <YAxis
-                      width={52}
+                      width={58}
                       tickCount={4}
                       tickLine={false}
                       axisLine={false}
                       tickMargin={10}
-                      tick={{ fill: SALES_REVENUE_AXIS_COLOR, fontSize: 10 }}
+                      tick={{ fill: SALES_AXIS_COLOR, fontSize: 11 }}
                       tickFormatter={formatRevenueAxisTick}
                     />
                     <ChartTooltip
-                      cursor={{ stroke: SALES_REVENUE_CURSOR_STROKE, strokeWidth: 1 }}
+                      cursor={{ stroke: SALES_CURSOR_STROKE, strokeWidth: 1 }}
                       content={<SalesRevenueTooltip />}
                     />
                     <Area
@@ -541,10 +548,10 @@ function VendasPage() {
                     <Line
                       dataKey="value"
                       type="monotone"
-                      stroke="#ff3347"
+                      stroke={SALES_REVENUE_COLOR}
                       strokeWidth={2}
-                      dot={{ r: 2.8, fill: "#ff3347", stroke: "#ff3347", strokeWidth: 0 }}
-                      activeDot={{ r: 3.5, fill: "#ff3347", stroke: "#ffd3d8", strokeWidth: 1.2 }}
+                      dot={false}
+                      activeDot={{ r: 4, fill: SALES_REVENUE_COLOR, stroke: "#ffffff", strokeWidth: 2 }}
                       isAnimationActive={false}
                     />
                   </AreaChart>
@@ -555,16 +562,19 @@ function VendasPage() {
         </Card>
 
         <Card className={SALES_CHART_CARD_CLASS_NAME}>
-          <CardHeader>
+          <CardHeader className="pb-3">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <CardTitle className="text-slate-50">Ranking por empresa</CardTitle>
+              <div>
+                <CardTitle className="text-base text-foreground">Ranking por empresa</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Comparação das empresas com maior impacto nos filtros.</p>
+              </div>
               <div className="flex flex-wrap gap-2">
-                <select className="h-9 rounded-md border border-white/10 bg-white/5 px-2 text-sm text-slate-100" value={summaryGranularity} onChange={(event) => setSummaryGranularity(event.target.value as SummaryGranularity)}>
+                <select className={SALES_CHART_SELECT_CLASS_NAME} value={summaryGranularity} onChange={(event) => setSummaryGranularity(event.target.value as SummaryGranularity)}>
                   <option value="daily">Diário</option>
                   <option value="weekly">Semanal</option>
                   <option value="monthly">Mensal</option>
                 </select>
-                <select className="h-9 rounded-md border border-white/10 bg-white/5 px-2 text-sm text-slate-100" value={companySortBy} onChange={(event) => setCompanySortBy(event.target.value as SummarySortBy)}>
+                <select className={SALES_CHART_SELECT_CLASS_NAME} value={companySortBy} onChange={(event) => setCompanySortBy(event.target.value as SummarySortBy)}>
                   <option value="amount">Maior faturamento</option>
                   <option value="growth">Maior crescimento</option>
                   <option value="weight">Maior peso</option>
@@ -573,24 +583,38 @@ function VendasPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0">
             {loading ? (
               <SkeletonTable rows={4} columns={3} />
             ) : !hasResults ? (
               <EmptyState text="Sem empresas para o ranking atual." />
             ) : (
-              <div className={SALES_RANKING_PANEL_CLASS_NAME}>
-                <ChartContainer config={{ faturamento: { label: "Faturamento", color: "#ff4d5e" } }} className="h-[260px] min-h-[260px] w-full">
-                  <BarChart data={chartData} margin={{ left: 6, right: 12, top: 12, bottom: 38 }}>
+              <div className={SALES_ANALYTICS_PANEL_CLASS_NAME}>
+                <ChartContainer config={{ faturamento: { label: "Faturamento", color: SALES_RANKING_COLOR } }} className={`${SALES_CHART_HEIGHT_CLASS_NAME} w-full`}>
+                  <BarChart data={chartData} margin={{ left: 0, right: 8, top: 12, bottom: 18 }}>
                     <defs>
                       <linearGradient id="sales-ranking-bar" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#ff4d5e" stopOpacity={0.95} />
-                        <stop offset="100%" stopColor="#b61f31" stopOpacity={0.72} />
+                        <stop offset="0%" stopColor={SALES_RANKING_COLOR} stopOpacity={0.92} />
+                        <stop offset="100%" stopColor={SALES_RANKING_COLOR_SOFT} stopOpacity={0.72} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} strokeDasharray="3 6" />
-                    <XAxis dataKey="companyName" interval={0} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} angle={-18} textAnchor="end" height={58} />
-                    <YAxis width={86} tickLine={false} axisLine={false} tickFormatter={(value) => formatKpiCompactCurrency(Number(value))} />
+                    <CartesianGrid vertical={false} stroke={SALES_GRID_STROKE} strokeDasharray="3 6" />
+                    <XAxis
+                      dataKey="companyName"
+                      interval={0}
+                      tick={{ fill: SALES_AXIS_COLOR, fontSize: 10 }}
+                      tickFormatter={(value) => String(value).length > 12 ? `${String(value).slice(0, 12)}...` : String(value)}
+                      tickLine={false}
+                      axisLine={false}
+                      height={38}
+                    />
+                    <YAxis
+                      width={76}
+                      tick={{ fill: SALES_AXIS_COLOR, fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => formatKpiCompactCurrency(Number(value))}
+                    />
                     <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
                     <Bar dataKey="faturamento" name="Faturamento" fill="url(#sales-ranking-bar)" radius={[6, 6, 0, 0]} />
                   </BarChart>
@@ -601,7 +625,7 @@ function VendasPage() {
         </Card>
       </section>
 
-      <Card className="animate-soft-enter border-border/80 bg-card/95">
+      <Card className="animate-soft-enter border-border/80 bg-card/95 hover:translate-y-0 hover:border-border/80 hover:shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -666,7 +690,7 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="flex min-h-[180px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+    <div className={SALES_CHART_EMPTY_STATE_CLASS_NAME}>
       {text}
     </div>
   );
@@ -688,9 +712,9 @@ function SalesRevenueTooltip({
   const tooltipLabel = point?.payload?.tooltipLabel ?? "";
 
   return (
-    <div className="min-w-[196px] rounded-[18px] border border-white/8 bg-[#080b1a] px-4 py-3 text-left shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
-      <p className="text-[12px] font-semibold tracking-[0.01em] text-slate-200">{tooltipLabel}</p>
-      <p className="mt-1 text-[13px] font-semibold text-slate-50">{formatCurrency(amount)}</p>
+    <div className="min-w-[196px] rounded-lg border border-border/70 bg-surface px-4 py-3 text-left shadow-md">
+      <p className="text-xs font-medium text-muted-foreground">{tooltipLabel}</p>
+      <p className="mt-1 text-sm font-semibold text-foreground">{formatCurrency(amount)}</p>
     </div>
   );
 }

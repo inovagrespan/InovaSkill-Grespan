@@ -60,7 +60,7 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
                 x.ProductDescription,
                 x.Quantity,
                 x.UnitPrice,
-                x.TotalAmount,
+                x.Quantity * x.UnitPrice,
                 x.TransactionType,
                 x.City,
                 x.ProductGroup,
@@ -109,7 +109,6 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
             {
                 TransactionDate = x.TransactionDate,
                 CustomerName = x.CustomerName,
-                TotalAmount = x.TotalAmount,
                 Quantity = x.Quantity,
                 UnitPrice = x.UnitPrice,
                 GrossWeightKg = x.GrossWeightKg
@@ -182,8 +181,8 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
             .Select(x => new
             {
                 x.TransactionDate,
-                x.TotalAmount,
                 x.Quantity,
+                x.UnitPrice,
                 x.GrossWeightKg
             })
             .ToListAsync(cancellationToken);
@@ -193,7 +192,7 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
             .OrderBy(x => x.Key)
             .Select(group => new CommercialTransactionTimelinePointDto(
                 group.Key,
-                group.Sum(x => x.TotalAmount),
+                group.Sum(x => x.Quantity * x.UnitPrice),
                 group.Sum(x => x.Quantity),
                 group.Sum(x => x.GrossWeightKg),
                 group.Count()))

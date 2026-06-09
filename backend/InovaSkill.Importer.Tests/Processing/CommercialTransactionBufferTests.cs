@@ -43,6 +43,41 @@ public sealed class CommercialTransactionBufferTests
     }
 
     [Fact]
+    public void Add_PreservesNegativeCalculatedTotalForReturns()
+    {
+        var row = new ImportedRow(10, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["documentnumber"] = "0002",
+            ["transactiondate"] = "2025-07-31",
+            ["customercode"] = "C1",
+            ["customername"] = "Empresa X",
+            ["productcode"] = "P1",
+            ["productdescription"] = "Produto X",
+            ["quantity"] = "-2",
+            ["unitprice"] = "10.5",
+            ["totalamount"] = "9999.99",
+            ["transactiontype"] = "Devolução",
+            ["city"] = "SP",
+            ["productgroup"] = "G1",
+            ["grossweightkg"] = "-1.2"
+        });
+
+        var buffer = new CommercialTransactionBuffer();
+        buffer.Add(row, 77);
+
+        var itemsField = typeof(CommercialTransactionBuffer)
+            .GetField("_items", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(itemsField);
+
+        var items = Assert.IsType<List<CommercialTransaction>>(itemsField!.GetValue(buffer));
+        var stored = Assert.Single(items);
+
+        Assert.Equal(-2m, stored.Quantity);
+        Assert.Equal(10.5m, stored.UnitPrice);
+        Assert.Equal(-21m, stored.TotalAmount);
+    }
+
+    [Fact]
     public void Add_IgnoresDuplicateCommercialTransactionInSameBuffer()
     {
         var row = new ImportedRow(10, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
