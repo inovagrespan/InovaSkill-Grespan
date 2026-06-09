@@ -1,5 +1,5 @@
 ﻿import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, ReceiptText, ServerCog, Sun, TrendingUp, Truck, Users } from "lucide-react";
+import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, PackageSearch, ServerCog, Sun, TrendingUp, Truck, Users } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -16,13 +16,13 @@ type AppSidebarProps = {
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/vendas", label: "Vendas", icon: TrendingUp },
+  { to: "/produtos", label: "Produtos", icon: PackageSearch },
   {
     to: "/clientes",
     label: "Clientes",
     icon: Users,
   },
   { to: "/processamentos", label: "Processamentos", icon: ServerCog, adminOnly: true },
-  { to: "/financas", label: "Finanças", icon: ReceiptText },
   { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/logistica", label: "Logística", icon: Truck },
   { to: "/importacoes", label: "Importações", icon: FileUp },

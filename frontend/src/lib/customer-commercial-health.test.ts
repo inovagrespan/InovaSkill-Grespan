@@ -84,7 +84,7 @@ describe("customer commercial health", () => {
     expect(report.recommendations[0].priority).toBe("Alta");
   });
 
-  it("expoe rota e atalho para analise comercial completa sem submenu dedicado", () => {
+  it("mantem rota de analise comercial completa sem submenu dedicado", () => {
     const routeSource = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.analise-comercial.tsx"), "utf8");
     const clientsSource = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
     const sidebarSource = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
@@ -92,7 +92,8 @@ describe("customer commercial health", () => {
     expect(routeSource).toContain('createFileRoute("/clientes/analise-comercial")');
     expect(routeSource).toContain("Score comercial");
     expect(routeSource).toContain("Recomendações comerciais");
-    expect(clientsSource).toContain("Ver análise completa");
+    expect(clientsSource).not.toContain("Ver análise completa");
+    expect(clientsSource).not.toContain("Inteligência Comercial");
     expect(sidebarSource).toContain('to: "/clientes"');
     expect(sidebarSource).toContain('label: "Clientes"');
     expect(sidebarSource).not.toContain('to: "/clientes/analise-comercial"');

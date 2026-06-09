@@ -54,6 +54,15 @@ export type PagedResult<T> = {
   items: T[];
 };
 
+export type Product = {
+  id: number;
+  sku: string;
+  name: string;
+  price: number;
+  createdAt: string;
+  sourceFileJobId: number;
+};
+
 export type CommercialTransaction = {
   id: number;
   documentNumber: string;
@@ -76,6 +85,8 @@ export type SummaryGranularity = "daily" | "weekly" | "monthly";
 export type SummarySortBy = "growth" | "amount" | "weight" | "quantity";
 export type CommercialTransactionCompanySummary = {
   companyName: string;
+  documentCount: number;
+  singleDocumentNumber: string | null;
   totalAmount: number;
   totalQuantity: number;
   totalWeightKg: number;
@@ -100,7 +111,7 @@ export type CommercialTransactionSummaryResponse = {
   totalCompanies: number;
   items: CommercialTransactionCompanySummary[];
 };
-export type CommercialTransactionTimelineGranularity = "daily" | "weekly" | "monthly";
+export type CommercialTransactionTimelineGranularity = "hour" | "day" | "week" | "month" | "quarter";
 export type CommercialTransactionTimelinePoint = {
   periodStart: string;
   totalAmount: number;
@@ -480,6 +491,11 @@ export type FinanceCustomerRevenuePoint = {
   revenue: number;
 };
 
+export type FinanceCustomerOption = {
+  id: string;
+  nome: string;
+};
+
 export type FinanceDashboardResponse = {
   customers: string[];
   summary: FinanceDashboardSummary;
@@ -639,6 +655,25 @@ function paginateDemoItems<T>(items: T[], page = DEMO_PAGE, pageSize = DEMO_PAGE
   return items.slice(start, start + pageSize);
 }
 
+function demoProducts(): Product[] {
+  return [
+    { id: 2001, sku: "PRD-104", name: "Arroz Tipo 1 5kg", price: 27.9, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: 501 },
+    { id: 2002, sku: "PRD-221", name: "Feijão Carioca 1kg", price: 8.7, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: 501 },
+    { id: 2003, sku: "PRD-318", name: "Óleo de Soja 900ml", price: 6.4, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
+    { id: 2004, sku: "PRD-411", name: "Café Tradicional 500g", price: 18.5, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
+  ];
+}
+
+function filterDemoProducts(search?: string): Product[] {
+  const normalizedSearch = search?.trim().toLowerCase();
+  return demoProducts()
+    .filter((item) => {
+      if (!normalizedSearch) return true;
+      return item.sku.toLowerCase().includes(normalizedSearch) || item.name.toLowerCase().includes(normalizedSearch);
+    })
+    .sort((left, right) => left.name.localeCompare(right.name, "pt-BR") || left.sku.localeCompare(right.sku, "pt-BR"));
+}
+
 function demoCommercialSummary(input: {
   page?: number;
   pageSize?: number;
@@ -651,6 +686,8 @@ function demoCommercialSummary(input: {
   for (const item of filteredItems) {
     const current = groups.get(item.customerName) ?? {
       companyName: item.customerName,
+      documentCount: 0,
+      singleDocumentNumber: null,
       totalAmount: 0,
       totalQuantity: 0,
       totalWeightKg: 0,
@@ -663,6 +700,12 @@ function demoCommercialSummary(input: {
     current.totalQuantity += item.quantity;
     current.totalWeightKg += item.grossWeightKg;
     current.currentPeriodAmount += item.totalAmount;
+    const documents = filteredItems
+      .filter((candidate) => candidate.customerName === item.customerName)
+      .map((candidate) => candidate.documentNumber);
+    const uniqueDocuments = Array.from(new Set(documents));
+    current.documentCount = uniqueDocuments.length;
+    current.singleDocumentNumber = uniqueDocuments.length === 1 ? uniqueDocuments[0] : null;
     groups.set(item.customerName, current);
   }
 
@@ -703,7 +746,7 @@ function demoCommercialTimeline(input: {
 } & DemoCommercialTransactionFilters): CommercialTransactionTimelineResponse {
   const filteredItems = filterDemoCommercialTransactions(input);
 
-  const granularity = input.granularity ?? "monthly";
+  const granularity = input.granularity ?? "month";
   const grouped = new Map<string, CommercialTransactionTimelinePoint>();
 
   for (const item of filteredItems) {
@@ -736,13 +779,23 @@ function resolveDemoTimelinePeriodStart(
   const date = new Date(`${transactionDate}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return transactionDate;
 
-  if (granularity === "daily") {
+  if (granularity === "hour") {
+    return `${transactionDate}T00:00:00Z`;
+  }
+
+  if (granularity === "day") {
     return transactionDate;
   }
 
-  if (granularity === "weekly") {
+  if (granularity === "week") {
     const dayOffset = (date.getUTCDay() + 6) % 7;
     date.setUTCDate(date.getUTCDate() - dayOffset);
+    return date.toISOString().slice(0, 10);
+  }
+
+  if (granularity === "quarter") {
+    const quarterStartMonth = Math.floor(date.getUTCMonth() / 3) * 3;
+    date.setUTCMonth(quarterStartMonth, 1);
     return date.toISOString().slice(0, 10);
   }
 
@@ -1515,6 +1568,14 @@ function demoFinanceDashboard(input: {
   };
 }
 
+function demoFinanceCustomers(input: { search?: string; limit?: number }): FinanceCustomerOption[] {
+  const normalizedSearch = input.search?.trim().toLowerCase() ?? "";
+  return listFinanceCustomers(financeDemoTransactions)
+    .filter((customer) => !normalizedSearch || customer.toLowerCase().includes(normalizedSearch))
+    .slice(0, input.limit ?? 20)
+    .map((customer) => ({ id: customer, nome: customer }));
+}
+
 function normalizeFinanceDashboard(raw: any): FinanceDashboardResponse {
   return {
     customers: raw.customers ?? raw.Customers ?? [],
@@ -1579,6 +1640,92 @@ export async function fetchFinanceDashboard(input: {
   return normalizeFinanceDashboard(await response.json());
 }
 
+export async function fetchFinanceCustomers(input: {
+  search?: string;
+  limit?: number;
+  signal?: AbortSignal;
+} = {}): Promise<FinanceCustomerOption[]> {
+  const query = new URLSearchParams();
+  if (input.search?.trim()) query.set("search", input.search.trim());
+  query.set("limit", String(input.limit ?? 20));
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/finance/customers?${query.toString()}`, {
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) {
+      return demoFinanceCustomers(input);
+    }
+
+    throw error;
+  }
+
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao buscar clientes."));
+  return ((await response.json()) as any[]).map((item) => ({
+    id: item.id ?? item.Id ?? item.nome ?? item.Nome ?? "",
+    nome: item.nome ?? item.Nome ?? item.name ?? item.Name ?? "",
+  }));
+}
+
+export async function fetchProducts(input: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  signal?: AbortSignal;
+} = {}): Promise<PagedResult<Product>> {
+  const query = new URLSearchParams();
+  const page = input.page ?? DEMO_PAGE;
+  const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+  query.set("page", String(page));
+  query.set("pageSize", String(pageSize));
+  if (input.search?.trim()) query.set("search", input.search.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/products?${query.toString()}`, {
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) {
+      const items = filterDemoProducts(input.search);
+      return { page, pageSize, total: items.length, items: paginateDemoItems(items, page, pageSize) };
+    }
+
+    throw error;
+  }
+
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos."));
+
+  const raw = (await response.json()) as
+    | PagedResult<Product>
+    | { Page?: number; PageSize?: number; Total?: number; Items?: Array<Product | { Id?: number; Sku?: string; Name?: string; Price?: number; CreatedAt?: string; SourceFileJobId?: number }> };
+  const rawItems = (raw as PagedResult<Product>).items ?? (raw as { Items?: Product[] }).Items ?? [];
+
+  return {
+    page: (raw as PagedResult<Product>).page ?? (raw as { Page?: number }).Page ?? page,
+    pageSize: (raw as PagedResult<Product>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? pageSize,
+    total: (raw as PagedResult<Product>).total ?? (raw as { Total?: number }).Total ?? 0,
+    items: rawItems.map((item: any) => ({
+      id: item.id ?? item.Id ?? 0,
+      sku: item.sku ?? item.Sku ?? "",
+      name: item.name ?? item.Name ?? "",
+      price: item.price ?? item.Price ?? 0,
+      createdAt: item.createdAt ?? item.CreatedAt ?? "",
+      sourceFileJobId: item.sourceFileJobId ?? item.SourceFileJobId ?? 0,
+    })),
+  };
+}
+
 export async function fetchCommercialTransactions(input: {
   page?: number;
   pageSize?: number;
@@ -1591,6 +1738,7 @@ export async function fetchCommercialTransactions(input: {
   transactionType?: string;
   dateFrom?: string;
   dateTo?: string;
+  signal?: AbortSignal;
 }): Promise<PagedResult<CommercialTransaction>> {
   const query = new URLSearchParams();
   query.set("page", String(input.page ?? 1));
@@ -1608,8 +1756,14 @@ export async function fetchCommercialTransactions(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions?${query.toString()}`);
+    response = await authFetch(`${API_URL}/api/commercial-transactions?${query.toString()}`, {
+      signal: input.signal,
+    });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
     if (shouldUseDemoData(error)) {
       const page = input.page ?? DEMO_PAGE;
       const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
@@ -1649,6 +1803,7 @@ export async function fetchCommercialTransactionsSummary(input: {
   dateFrom?: string;
   dateTo?: string;
   referenceDate?: string;
+  signal?: AbortSignal;
 }): Promise<CommercialTransactionSummaryResponse> {
   const query = new URLSearchParams();
   query.set("page", String(input.page ?? 1));
@@ -1669,8 +1824,14 @@ export async function fetchCommercialTransactionsSummary(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`);
+    response = await authFetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`, {
+      signal: input.signal,
+    });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
     if (shouldUseDemoData(error)) return demoCommercialSummary(input);
     throw error;
   }
@@ -1690,9 +1851,10 @@ export async function fetchCommercialTransactionsTimeline(input: {
   transactionType?: string;
   dateFrom?: string;
   dateTo?: string;
+  signal?: AbortSignal;
 }): Promise<CommercialTransactionTimelineResponse> {
   const query = new URLSearchParams();
-  query.set("granularity", input.granularity ?? "monthly");
+  query.set("groupBy", input.granularity ?? "month");
 
   if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
   if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
@@ -1706,8 +1868,14 @@ export async function fetchCommercialTransactionsTimeline(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions/timeline?${query.toString()}`);
+    response = await authFetch(`${API_URL}/api/commercial-transactions/timeline?${query.toString()}`, {
+      signal: input.signal,
+    });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
     if (shouldUseDemoData(error)) return demoCommercialTimeline(input);
     throw error;
   }

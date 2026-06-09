@@ -58,25 +58,14 @@ describe("clientes - refinamento visual do modal de detalhes", () => {
     expect(source).toContain("Primeiro vs último ponto");
   });
 
-  it("transforma insights em inteligencia comercial acionavel", () => {
+  it("remove inteligencia comercial e produtos mais comprados do modal", () => {
     const source = readClientesRoute();
 
-    expect(source).toContain("Inteligência Comercial");
-    expect(source).toContain("Saúde do Cliente");
-    expect(source).toContain("Tendência de Consumo");
-    expect(source).toContain("Potencial Esperado");
-    expect(source).toContain("Recomendação Comercial");
-    expect(source).toContain("Estabilidade de Consumo");
-    expect(source).toContain("Produtos Mais Relevantes");
-    expect(source).not.toContain("Previsão indisponível");
-    expect(source).not.toContain("Previsão com média móvel");
-  });
-
-  it("exibe produtos mais comprados com nome do produto", () => {
-    const source = readClientesRoute();
-
-    expect(source).toContain("<CardTitle>Produtos mais comprados</CardTitle>");
-    expect(source).toContain("<TableHead>Produto</TableHead>");
-    expect(source).toContain("<TableCell>{item.productDescription}</TableCell>");
+    expect(source).not.toContain("Inteligência Comercial");
+    expect(source).not.toContain("Saúde do Cliente");
+    expect(source).not.toContain("Recomendação Comercial");
+    expect(source).not.toContain("Produtos Mais Relevantes");
+    expect(source).not.toContain("<CardTitle>Produtos mais comprados</CardTitle>");
+    expect(source).not.toContain("fetchCustomerTopProducts");
   });
 });

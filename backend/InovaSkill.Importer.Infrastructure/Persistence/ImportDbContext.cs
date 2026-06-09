@@ -137,6 +137,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.Name).HasMaxLength(256).IsRequired();
             e.Property(x => x.Price).HasColumnType("decimal(18,2)");
             e.HasIndex(x => x.Sku).IsUnique();
+            e.HasIndex(x => x.Name);
             e.HasIndex(x => x.SourceFileJobId);
         });
 
@@ -225,6 +226,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.HasIndex(x => x.TransactionDate);
             e.HasIndex(x => x.CustomerName);
             e.HasIndex(x => x.ProductCode);
+            e.HasIndex(x => x.ProductDescription);
             e.HasIndex(x => x.City);
             e.HasIndex(x => new { x.SourceFileJobId, x.TransactionDate });
             e.HasIndex(x => new

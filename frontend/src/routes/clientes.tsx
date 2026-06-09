@@ -1,5 +1,5 @@
 ﻿import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,31 +11,27 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SkeletonChart, SkeletonMetricCard, SkeletonModalContent, SkeletonTable } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Building2, CalendarClock, DollarSign, MapPin, Minus, Receipt, TrendingUp, UserRound, Users, type LucideIcon } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Building2, CalendarClock, DollarSign, MapPin, Minus, Receipt, TrendingUp, UserRound, Users } from "lucide-react";
 import { Area, AreaChart, Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
-  fetchCommercialTransactionsSummary,
   fetchCustomerAnalyticsSummary,
   fetchCustomerComparison,
   fetchCustomerDetailsSummary,
+  fetchFinanceDashboard,
   fetchCustomerNewCustomersMonthly,
   fetchCustomerPurchaseHistory,
   fetchCustomerRanking,
   fetchCustomerInsights,
   fetchCustomerTimeline,
-  fetchCustomerTopProducts,
-  type CommercialTransactionSummaryResponse,
   type CustomerAnalyticsSummary,
   type CustomerComparisonItem,
   type CustomerDetailSummary,
+  type FinanceDashboardResponse,
   type CustomerNewCustomersMonthlyResponse,
   type CustomerPurchaseHistoryResponse,
   type CustomerRankingItem,
   type CustomerInsightsResponse,
   type CustomerTimelineResponse,
-  type CustomerTopProductItem,
-  type SummaryGranularity,
-  type SummarySortBy,
 } from "@/lib/importer-api";
 import {
   formatNullableCurrency,
@@ -45,7 +41,6 @@ import {
   resolveRankingTrend,
   resolveCustomerStatusVariant,
 } from "@/lib/customer-details";
-import { buildCustomerCommercialIntelligence, type CommercialIntelligenceCard, type CommercialIntelligenceTone, type CustomerCommercialIntelligence } from "@/lib/customer-commercial-intelligence";
 import { computeNewCustomersInsights } from "@/lib/customer-new-customers";
 import { buildCustomerPeriodTrend } from "@/lib/customer-period-insights";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
@@ -58,10 +53,10 @@ export const Route = createFileRoute("/clientes")({
 });
 
 const CLIENT_REVENUE_CHART_LIMIT = 8;
-const SALES_SUMMARY_CHART_PAGE_SIZE = 20;
 const DEMO_PREVIOUS_REVENUE_FACTOR = 0.92;
 const REVENUE_CHART_STROKE = "#f43f5e";
 const REVENUE_CHART_GRID = "rgba(148, 163, 184, 0.12)";
+const FINANCE_PAGE_SIZE = 20;
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value ?? 0);
@@ -101,33 +96,6 @@ function describeTimelineGranularityPlural(granularity: CustomerTimelineResponse
   return "meses";
 }
 
-const intelligenceToneStyles: Record<CommercialIntelligenceTone, {
-  className: string;
-  iconClassName: string;
-  badgeVariant: "default" | "destructive" | "secondary" | "outline";
-}> = {
-  success: {
-    className: "border-[var(--success)]/30 bg-[var(--success)]/10",
-    iconClassName: "text-[var(--success)]",
-    badgeVariant: "default",
-  },
-  warning: {
-    className: "border-[var(--warning)]/35 bg-[var(--warning)]/10",
-    iconClassName: "text-[var(--warning)]",
-    badgeVariant: "outline",
-  },
-  danger: {
-    className: "border-[var(--danger)]/35 bg-[var(--danger)]/10",
-    iconClassName: "text-[var(--danger)]",
-    badgeVariant: "destructive",
-  },
-  neutral: {
-    className: "border-border/80 bg-gradient-to-b from-surface to-muted/25",
-    iconClassName: "text-primary",
-    badgeVariant: "secondary",
-  },
-};
-
 const DEMO_CUSTOMER_SUMMARY: CustomerAnalyticsSummary = {
   activeCustomers: 84,
   totalRevenue: 187_590,
@@ -149,101 +117,28 @@ const DEMO_CUSTOMER_RANKING: CustomerRankingItem[] = [
   { customerCode: "CLI-004", customerName: "Distribuidora Central", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
 ];
 
-function makeDemoCommercialSummary(
-  page: number,
-  pageSize: number,
-  granularity: SummaryGranularity,
-): CommercialTransactionSummaryResponse {
+function makeDemoFinanceDashboard(): FinanceDashboardResponse {
   const totalAmount = DEMO_CUSTOMER_RANKING.reduce((total, item) => total + item.revenue, 0);
-  const previousAmount = totalAmount * DEMO_PREVIOUS_REVENUE_FACTOR;
 
   return {
-    page,
-    pageSize,
-    totalItems: DEMO_CUSTOMER_RANKING.length,
-    granularity,
-    currentPeriodStart: DEMO_CUSTOMER_SUMMARY.currentPeriodStart,
-    previousPeriodStart: DEMO_CUSTOMER_SUMMARY.previousPeriodStart,
-    currentPeriodTotalAmount: totalAmount,
-    previousPeriodTotalAmount: previousAmount,
-    totalGrowthPercent: previousAmount === 0 ? null : ((totalAmount - previousAmount) / previousAmount) * 100,
-    totalRecords: DEMO_CUSTOMER_SUMMARY.totalOrders,
-    totalAmount,
-    totalQuantity: DEMO_CUSTOMER_RANKING.reduce((total, item) => total + item.quantity, 0),
-    totalWeightKg: DEMO_CUSTOMER_RANKING.reduce((total, item) => total + item.weight, 0),
-    totalCompanies: DEMO_CUSTOMER_RANKING.length,
-    items: DEMO_CUSTOMER_RANKING.map((item) => ({
-      companyName: item.customerName,
-      totalAmount: item.revenue,
-      totalQuantity: item.quantity,
-      totalWeightKg: item.weight,
-      currentPeriodAmount: item.revenue,
-      previousPeriodAmount: item.variationPercent == null ? 0 : item.revenue / (1 + item.variationPercent / 100),
-      growthPercent: item.variationPercent,
+    customers: DEMO_CUSTOMER_RANKING.map((item) => item.customerName),
+    summary: {
+      totalRevenue: totalAmount,
+      totalOrders: DEMO_CUSTOMER_SUMMARY.totalOrders,
+      totalQuantity: DEMO_CUSTOMER_RANKING.reduce((total, item) => total + item.quantity, 0),
+      averageTicket: DEMO_CUSTOMER_SUMMARY.averageTicket,
+    },
+    revenueTrend: [],
+    customerRanking: DEMO_CUSTOMER_RANKING.map((item) => ({
+      customer: item.customerName,
+      revenue: item.revenue,
     })),
+    items: [],
+    page: 1,
+    pageSize: FINANCE_PAGE_SIZE,
+    totalItems: DEMO_CUSTOMER_RANKING.length,
+    totalPages: 1,
   };
-}
-
-function IntelligenceDecisionCard({
-  title,
-  card,
-  icon: Icon,
-  metric,
-  className = "",
-}: {
-  title: string;
-  card: CommercialIntelligenceCard;
-  icon: LucideIcon;
-  metric?: string;
-  className?: string;
-}) {
-  const tone = intelligenceToneStyles[card.tone];
-
-  return (
-    <div className={`rounded-xl border p-4 ${tone.className} ${className}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Icon className={`h-4 w-4 shrink-0 ${tone.iconClassName}`} />
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-        </div>
-        <Badge variant={tone.badgeVariant} className="shrink-0">{card.status}</Badge>
-      </div>
-      {metric && <p className="mt-3 text-2xl font-display tracking-tight text-foreground">{metric}</p>}
-      <p className="mt-3 text-sm font-semibold text-foreground">{card.summary}</p>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{card.detail}</p>
-    </div>
-  );
-}
-
-function ProductsIntelligenceCard({ intelligence }: { intelligence: CustomerCommercialIntelligence }) {
-  const tone = intelligenceToneStyles[intelligence.productsTone];
-
-  return (
-    <div className={`rounded-xl border p-4 ${tone.className}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Receipt className={`h-4 w-4 shrink-0 ${tone.iconClassName}`} />
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Produtos Mais Relevantes</p>
-        </div>
-        <Badge variant={tone.badgeVariant} className="shrink-0">{intelligence.relevantProducts.length > 0 ? "Mix principal" : "Sem base"}</Badge>
-      </div>
-      <p className="mt-3 text-sm font-semibold text-foreground">{intelligence.productsSummary}</p>
-      <div className="mt-3 space-y-2">
-        {intelligence.relevantProducts.length === 0 && (
-          <p className="rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">Amplie o período ou aguarde novas compras para identificar produtos sustentadores.</p>
-        )}
-        {intelligence.relevantProducts.map((product) => (
-          <div key={`${product.code}-${product.name}`} className="rounded-md bg-background/70 p-3">
-            <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 truncate text-sm font-medium" title={product.name}>{product.name}</p>
-              <span className="shrink-0 text-sm font-semibold">{product.sharePercent.toFixed(1)}%</span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">{product.summary}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function canComparePeriod(item: CustomerComparisonItem): boolean {
@@ -339,13 +234,11 @@ function ClientesPage() {
   const { cliente } = Route.useSearch();
   const [summary, setSummary] = useState<CustomerAnalyticsSummary | null>(null);
   const [items, setItems] = useState<CustomerRankingItem[]>([]);
+  const [financeDashboard, setFinanceDashboard] = useState<FinanceDashboardResponse | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [totalItems, setTotalItems] = useState(0);
   const [sortBy, setSortBy] = useState<"revenue" | "growth" | "drop" | "quantity" | "weight" | "ticket">("revenue");
-  const [salesSummary, setSalesSummary] = useState<CommercialTransactionSummaryResponse | null>(null);
-  const [salesSummaryGranularity, setSalesSummaryGranularity] = useState<SummaryGranularity>("monthly");
-  const [companySortBy, setCompanySortBy] = useState<SummarySortBy>("amount");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -363,14 +256,12 @@ function ClientesPage() {
   const [detailsMessage, setDetailsMessage] = useState("");
   const [details, setDetails] = useState<CustomerDetailSummary | null>(null);
   const [timeline, setTimeline] = useState<CustomerTimelineResponse | null>(null);
-  const [topProducts, setTopProducts] = useState<CustomerTopProductItem[]>([]);
   const [comparison, setComparison] = useState<CustomerComparisonItem[]>([]);
   const [insights, setInsights] = useState<CustomerInsightsResponse | null>(null);
   const [history, setHistory] = useState<CustomerPurchaseHistoryResponse | null>(null);
   const [historyPage, setHistoryPage] = useState(1);
   const [timelineGranularity, setTimelineGranularity] = useState<"daily" | "weekly" | "monthly">("monthly");
   const [timelineMetric, setTimelineMetric] = useState<"revenue" | "quantity" | "weight" | "orders">("revenue");
-  const [movingAverageWindow, setMovingAverageWindow] = useState<3 | 6 | 12>(3);
   const [newCustomersOpen, setNewCustomersOpen] = useState(false);
   const [newCustomersLoading, setNewCustomersLoading] = useState(false);
   const [newCustomersMessage, setNewCustomersMessage] = useState("");
@@ -381,20 +272,20 @@ function ClientesPage() {
     () => Math.max(1, Math.ceil((history?.totalItems ?? 0) / (history?.pageSize ?? 10))),
     [history?.totalItems, history?.pageSize],
   );
-  const revenueTrendData = useMemo(() => {
-    if (!salesSummary) return [];
-
-    return [
-      { label: "Anterior", value: salesSummary.previousPeriodTotalAmount },
-      { label: "Atual", value: salesSummary.currentPeriodTotalAmount },
-    ];
-  }, [salesSummary]);
-  const companyRevenueChartData = useMemo(
-    () => (salesSummary?.items ?? []).slice(0, CLIENT_REVENUE_CHART_LIMIT).map((item) => ({
-      label: item.companyName,
-      value: item.totalAmount,
+  const financeMetrics = financeDashboard?.summary ?? makeDemoFinanceDashboard().summary;
+  const financeRevenueTrendData = useMemo(
+    () => (financeDashboard?.revenueTrend ?? []).map((item) => ({
+      label: item.label,
+      value: item.revenue,
     })),
-    [salesSummary?.items],
+    [financeDashboard?.revenueTrend],
+  );
+  const financeCustomerRankingData = useMemo(
+    () => (financeDashboard?.customerRanking ?? []).slice(0, CLIENT_REVENUE_CHART_LIMIT).map((item) => ({
+      label: item.customer,
+      value: item.revenue,
+    })),
+    [financeDashboard?.customerRanking],
   );
   const timelineChartData = useMemo(
     () => {
@@ -436,52 +327,42 @@ function ClientesPage() {
     () => buildCustomerPeriodTrend(timeline?.points ?? []),
     [timeline],
   );
-  const commercialIntelligence = useMemo(
-    () => buildCustomerCommercialIntelligence({ details, insights, comparison, topProducts }),
-    [details, insights, comparison, topProducts],
-  );
 
   async function load(targetPage: number) {
     setLoading(true);
     setMessage("");
     const demoRanking = sortDemoCustomers(filterDemoCustomers(customer), sortBy);
-    const demoSalesSummary = makeDemoCommercialSummary(1, SALES_SUMMARY_CHART_PAGE_SIZE, salesSummaryGranularity);
+    const demoFinanceDashboard = makeDemoFinanceDashboard();
     try {
-      const [summaryData, rankingData, commercialSummaryData] = await Promise.all([
+      const [summaryData, rankingData, financeData] = await Promise.all([
         fetchCustomerAnalyticsSummary({ dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
         fetchCustomerRanking({ page: targetPage, pageSize, sortBy, dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
-        fetchCommercialTransactionsSummary({
-          page: 1,
-          pageSize: SALES_SUMMARY_CHART_PAGE_SIZE,
-          granularity: salesSummaryGranularity,
-          sortBy: companySortBy,
-          customerName: customer,
-          city,
-          productGroup,
-          productCode,
-          transactionType,
+        fetchFinanceDashboard({
+          customer,
           dateFrom,
           dateTo,
-          referenceDate: dateTo,
+          revenueGranularity: "monthly",
+          page: 1,
+          pageSize: FINANCE_PAGE_SIZE,
         }),
       ]);
       if (summaryData.activeCustomers === 0 || rankingData.items.length === 0) {
         setSummary(DEMO_CUSTOMER_SUMMARY);
         setItems(demoRanking);
-        setSalesSummary(demoSalesSummary);
+        setFinanceDashboard(demoFinanceDashboard);
         setPage(targetPage);
         setTotalItems(demoRanking.length);
         return;
       }
       setSummary(summaryData);
       setItems(rankingData.items);
-      setSalesSummary(commercialSummaryData.totalRecords === 0 ? demoSalesSummary : commercialSummaryData);
+      setFinanceDashboard(financeData.summary.totalRevenue === 0 ? demoFinanceDashboard : financeData);
       setPage(rankingData.page);
       setTotalItems(rankingData.totalItems);
     } catch (error) {
       setSummary(DEMO_CUSTOMER_SUMMARY);
       setItems(demoRanking);
-      setSalesSummary(demoSalesSummary);
+      setFinanceDashboard(demoFinanceDashboard);
       setPage(targetPage);
       setTotalItems(demoRanking.length);
       setMessage("");
@@ -494,13 +375,12 @@ function ClientesPage() {
     setDetailsLoading(true);
     setDetailsMessage("");
     try {
-      const [summaryData, timelineData, topProductsData, comparisonData, historyData, insightsData] = await Promise.allSettled([
+      const [summaryData, timelineData, comparisonData, historyData, insightsData] = await Promise.allSettled([
         fetchCustomerDetailsSummary({ customerId, dateFrom, dateTo }),
         fetchCustomerTimeline({ customerId, dateFrom, dateTo, granularity, metric }),
-        fetchCustomerTopProducts({ customerId, dateFrom, dateTo }),
         fetchCustomerComparison({ customerId, referenceDate: dateTo }),
         fetchCustomerPurchaseHistory({ customerId, dateFrom, dateTo, page: targetHistoryPage, pageSize: 10 }),
-        fetchCustomerInsights({ customerId, movingAverageWindowMonths: movingAverageWindow }),
+        fetchCustomerInsights({ customerId, movingAverageWindowMonths: 3 }),
       ]);
 
       if (summaryData.status === "rejected") {
@@ -509,7 +389,6 @@ function ClientesPage() {
 
       setDetails(summaryData.value);
       setTimeline(timelineData.status === "fulfilled" ? timelineData.value : null);
-      setTopProducts(topProductsData.status === "fulfilled" ? topProductsData.value : []);
       setComparison(comparisonData.status === "fulfilled" ? comparisonData.value.items : []);
       setInsights(insightsData.status === "fulfilled" ? insightsData.value : null);
       setHistory(historyData.status === "fulfilled" ? historyData.value : { page: targetHistoryPage, pageSize: 10, totalItems: 0, items: [] });
@@ -517,7 +396,6 @@ function ClientesPage() {
 
       const partialErrors: string[] = [];
       if (timelineData.status === "rejected") partialErrors.push("evolução temporal");
-      if (topProductsData.status === "rejected") partialErrors.push("produtos");
       if (comparisonData.status === "rejected") partialErrors.push("comparativo");
       if (historyData.status === "rejected") partialErrors.push("histórico");
       if (insightsData.status === "rejected") partialErrors.push("insights");
@@ -533,12 +411,12 @@ function ClientesPage() {
 
   useEffect(() => {
     void load(1);
-  }, [sortBy, salesSummaryGranularity, companySortBy]);
+  }, [sortBy]);
 
   useEffect(() => {
     if (!selectedCustomerId || !detailsOpen) return;
     void loadCustomerDetails(selectedCustomerId, 1, timelineGranularity, timelineMetric);
-  }, [timelineGranularity, timelineMetric, movingAverageWindow]);
+  }, [timelineGranularity, timelineMetric]);
 
   useEffect(() => {
     if (!detailsOpen && !newCustomersOpen) return;
@@ -670,58 +548,81 @@ function ClientesPage() {
         </CardContent>
       </Card>
 
+      <section className="metric-row">
+        {loading ? (
+          <>
+            <SkeletonMetricCard />
+            <SkeletonMetricCard />
+            <SkeletonMetricCard />
+            <SkeletonMetricCard />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              title="Faturamento total"
+              value={formatKpiCompactCurrency(financeMetrics.totalRevenue)}
+              valueTooltip={formatCurrency(financeMetrics.totalRevenue)}
+              showPercentageChange={false}
+              icon={DollarSign}
+              periodLabel="Métrica financeira consolidada pelos filtros"
+            />
+            <KpiCard
+              title="Ticket médio"
+              value={formatKpiCompactCurrency(financeMetrics.averageTicket)}
+              valueTooltip={formatCurrency(financeMetrics.averageTicket)}
+              showPercentageChange={false}
+              icon={Receipt}
+              periodLabel="Faturamento dividido pelos pedidos"
+            />
+            <KpiCard
+              title="Pedidos"
+              value={formatKpiCompactNumber(financeMetrics.totalOrders)}
+              valueTooltip={String(financeMetrics.totalOrders)}
+              showPercentageChange={false}
+              icon={Users}
+              periodLabel="Documentos financeiros do período"
+            />
+            <KpiCard
+              title="Quantidade"
+              value={formatKpiCompactNumber(financeMetrics.totalQuantity)}
+              valueTooltip={formatDecimal(financeMetrics.totalQuantity)}
+              showPercentageChange={false}
+              icon={TrendingUp}
+              periodLabel="Quantidade comprada na base filtrada"
+            />
+          </>
+        )}
+      </section>
+
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <Card className="overflow-hidden border-border bg-surface text-foreground shadow-sm dark:border-[#182033] dark:bg-[#070b14] dark:text-slate-100 dark:shadow-lg">
           <CardHeader className="pb-2">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Faturamento no período</CardTitle>
-              <select
-                className="h-8 rounded-md border border-input bg-surface px-2 text-xs text-foreground dark:border-slate-800 dark:bg-[#0b1020] dark:text-slate-200"
-                value={salesSummaryGranularity}
-                onChange={(event) => setSalesSummaryGranularity(event.target.value as SummaryGranularity)}
-                aria-label="Granularidade do faturamento no período"
-              >
-                <option value="daily">Diário</option>
-                <option value="weekly">Semanal</option>
-                <option value="monthly">Mensal</option>
-              </select>
-            </div>
+            <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Evolução da Receita</CardTitle>
+            <p className="text-xs text-muted-foreground">Faturamento financeiro consolidado pelos filtros.</p>
           </CardHeader>
           <CardContent className="pt-0">
             {loading ? (
               <SkeletonChart className="h-[260px] bg-slate-900/80" />
-            ) : revenueTrendData.length === 0 ? (
+            ) : financeRevenueTrendData.length === 0 ? (
               <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-slate-800 text-sm text-slate-400">Sem resultado para gerar gráfico de faturamento.</div>
             ) : (
-              <RevenueAreaChart data={revenueTrendData} gradientId="clientes-faturamento-gradient" />
+              <RevenueAreaChart data={financeRevenueTrendData} gradientId="clientes-finance-revenue-gradient" />
             )}
           </CardContent>
         </Card>
 
         <Card className="overflow-hidden border-border bg-surface text-foreground shadow-sm dark:border-[#182033] dark:bg-[#070b14] dark:text-slate-100 dark:shadow-lg">
           <CardHeader className="pb-2">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Ranking por empresa</CardTitle>
-              <select
-                className="h-8 rounded-md border border-input bg-surface px-2 text-xs text-foreground dark:border-slate-800 dark:bg-[#0b1020] dark:text-slate-200"
-                value={companySortBy}
-                onChange={(event) => setCompanySortBy(event.target.value as SummarySortBy)}
-                aria-label="Ordenação do ranking por empresa"
-              >
-                <option value="amount">Maior faturamento</option>
-                <option value="growth">Maior crescimento</option>
-                <option value="weight">Maior peso</option>
-                <option value="quantity">Maior quantidade</option>
-              </select>
-            </div>
+            <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Ranking por empresa</CardTitle>
+            <p className="text-xs text-muted-foreground">Clientes com maior faturamento financeiro no período.</p>
           </CardHeader>
           <CardContent className="pt-0">
             {loading ? (
               <SkeletonChart className="h-[260px] bg-slate-900/80" />
-            ) : companyRevenueChartData.length === 0 ? (
+            ) : financeCustomerRankingData.length === 0 ? (
               <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-slate-800 text-sm text-slate-400">Sem empresas para o ranking atual.</div>
             ) : (
-              <RevenueAreaChart data={companyRevenueChartData} gradientId="clientes-ranking-gradient" />
+              <RevenueAreaChart data={financeCustomerRankingData} gradientId="clientes-finance-ranking-gradient" />
             )}
           </CardContent>
         </Card>
@@ -729,36 +630,11 @@ function ClientesPage() {
 
       <Card className="animate-soft-enter">
         <CardHeader>
-          <CardTitle>Resumo</CardTitle>
+          <CardTitle>Clientes</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="metric-row">
-            {loading ? (
-              <>
-                <SkeletonMetricCard />
-                <SkeletonMetricCard />
-                <SkeletonMetricCard />
-                <SkeletonMetricCard />
-              </>
-            ) : (
-            <>
-            <KpiCard title="Clientes ativos" value={formatKpiCompactNumber(summary?.activeCustomers ?? 0)} valueTooltip={String(summary?.activeCustomers ?? 0)} showPercentageChange={false} icon={Users} periodLabel="Clientes com compras no período" loading={loading} />
-            <KpiCard title="Faturamento total" value={formatKpiCompactCurrency(summary?.totalRevenue ?? 0)} valueTooltip={formatCurrency(summary?.totalRevenue ?? 0)} showPercentageChange={false} icon={DollarSign} periodLabel={summary ? `${formatDate(summary.currentPeriodStart)} a ${formatDate(summary.currentPeriodEnd)}` : "Período atual"} loading={loading} />
-            <KpiCard title="Ticket médio" value={formatKpiCompactCurrency(summary?.averageTicket ?? 0)} valueTooltip={formatCurrency(summary?.averageTicket ?? 0)} showPercentageChange={false} icon={Receipt} periodLabel="Faturamento dividido por pedidos" loading={loading} />
-            <button
-              type="button"
-              className="min-w-0 text-left"
-              onClick={openNewCustomersModal}
-              aria-label="Abrir detalhamento de novos clientes por mês"
-            >
-              <KpiCard title="Novos clientes" value={formatKpiCompactNumber(summary?.newCustomers ?? 0)} valueTooltip={String(summary?.newCustomers ?? 0)} showPercentageChange={false} icon={TrendingUp} periodLabel={summary ? `Inativos no período: ${summary.inactiveCustomers}` : ""} loading={loading} />
-            </button>
-            </>
-            )}
-          </div>
-
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm font-medium">Ranking de clientes (a lista resume a tendência; o detalhe mostra a evolução do período)</p>
+            <p className="text-sm font-medium">Clique em um cliente para abrir a tela de detalhes.</p>
             <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}>
               <option value="revenue">Maior faturamento</option>
               <option value="growth">Melhor tendência</option>
@@ -913,45 +789,6 @@ function ClientesPage() {
                   <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Peso total" value={formatKpiCompactNumber(details.totalWeight)} valueTooltip={formatDecimal(details.totalWeight)} showPercentageChange={false} icon={TrendingUp} periodLabel="Peso acumulado das compras no período" />
                   <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Total de pedidos" value={formatKpiCompactNumber(details.totalOrders)} valueTooltip={String(details.totalOrders)} showPercentageChange={false} icon={UserRound} periodLabel="Pedidos distintos por documento no período" />
                   <KpiCard className="border-primary/20 bg-gradient-to-b from-surface to-muted/30" title="Frequência média" value={formatPurchaseFrequency(details.averageDaysBetweenPurchases).value} valueTooltip={formatPurchaseFrequency(details.averageDaysBetweenPurchases).tooltip} showPercentageChange={false} icon={CalendarClock} periodLabel={`Compra em média a cada ${formatPurchaseFrequency(details.averageDaysBetweenPurchases).value}`} />
-                </div>
-              </section>
-
-              <section className="space-y-3">
-                <div className="flex items-center justify-between gap-3 px-0.5">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-primary" />
-                    <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Inteligência Comercial</h4>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button size="sm" variant="outline" asChild>
-                      <Link to="/clientes/analise-comercial" search={{ cliente: selectedCustomerId ?? details.customerCode }}>
-                        Ver análise completa
-                      </Link>
-                    </Button>
-                    <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" aria-label="Base histórica para inteligência comercial" value={movingAverageWindow} onChange={(e) => setMovingAverageWindow(Number(e.target.value) as 3 | 6 | 12)}>
-                      <option value={3}>Base: últimos 3 meses</option>
-                      <option value={6}>Base: últimos 6 meses</option>
-                      <option value={12}>Base: últimos 12 meses</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <IntelligenceDecisionCard title="Saúde do Cliente" card={commercialIntelligence.health} icon={AlertTriangle} />
-                  <IntelligenceDecisionCard title="Tendência de Consumo" card={commercialIntelligence.trend} icon={TrendingUp} />
-                  <IntelligenceDecisionCard
-                    title="Potencial Esperado"
-                    card={commercialIntelligence.potential}
-                    icon={DollarSign}
-                    metric={commercialIntelligence.potential.metricValue == null ? undefined : formatKpiCompactCurrency(commercialIntelligence.potential.metricValue)}
-                  />
-                  <IntelligenceDecisionCard title="Recomendação Comercial" card={commercialIntelligence.recommendation} icon={UserRound} />
-                  <IntelligenceDecisionCard
-                    title="Estabilidade de Consumo"
-                    card={commercialIntelligence.stability}
-                    icon={CalendarClock}
-                    metric={commercialIntelligence.stability.metricValue == null ? undefined : formatVariationPercent(commercialIntelligence.stability.metricValue)}
-                  />
-                  <ProductsIntelligenceCard intelligence={commercialIntelligence} />
                 </div>
               </section>
 
@@ -1118,39 +955,6 @@ function ClientesPage() {
                       })}
                     </div>
                   )}
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/80 bg-card/95">
-                <CardHeader>
-                  <CardTitle>Produtos mais comprados</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Produto</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Faturamento</TableHead>
-                        <TableHead>Participação</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {topProducts.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">Sem produtos para o período selecionado.</TableCell>
-                        </TableRow>
-                      )}
-                      {topProducts.map((item) => (
-                        <TableRow key={`${item.productCode}-${item.productDescription}`}>
-                          <TableCell>{item.productDescription}</TableCell>
-                          <TableCell>{formatDecimal(item.quantity)}</TableCell>
-                          <TableCell>{formatCurrency(item.revenue)}</TableCell>
-                          <TableCell>{item.sharePercent.toFixed(1)}%</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
                 </CardContent>
               </Card>
 

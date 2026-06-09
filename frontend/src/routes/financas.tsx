@@ -1,22 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, DollarSign, ReceiptText, Scale, Search } from "lucide-react";
+import { AlertTriangle, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, DollarSign, Loader2, ReceiptText, Scale, Search } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  fetchFinanceCustomers,
   fetchFinanceDashboard,
+  type FinanceCustomerOption,
   type FinanceCustomerRevenuePoint,
   type FinanceDashboardItem,
   type FinanceDashboardResponse,
   type FinanceRevenueGranularity,
   type FinanceRevenueTrendPoint,
 } from "@/lib/importer-api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
 export const Route = createFileRoute("/financas")({
@@ -26,6 +31,9 @@ export const Route = createFileRoute("/financas")({
 const DEFAULT_DATE_FROM = "2026-01-01";
 const DEFAULT_DATE_TO = "2026-06-30";
 const DEFAULT_PAGE_SIZE = 20;
+const CUSTOMER_SEARCH_DEBOUNCE_MS = 300;
+const CUSTOMER_SEARCH_LIMIT = 20;
+const MIN_CUSTOMER_SEARCH_LENGTH = 2;
 const FINANCE_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]";
 const FINANCE_CHART_CARD_CLASS_NAME = "finance-chart-card overflow-hidden rounded-xl border bg-surface text-foreground shadow-sm dark:bg-[#111821] dark:text-slate-100 dark:shadow-lg";
 const FINANCE_CHART_SELECT_CLASS_NAME = "h-8 rounded-[10px] border border-[var(--finance-chart-select-border)] bg-[var(--finance-chart-select-bg)] px-3 text-xs font-medium text-[var(--finance-chart-title)] outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/20";
@@ -64,6 +72,14 @@ function FinancasPage() {
   const [dashboard, setDashboard] = useState<FinanceDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [customerComboboxOpen, setCustomerComboboxOpen] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerOptions, setCustomerOptions] = useState<FinanceCustomerOption[]>([]);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [customerSearchMessage, setCustomerSearchMessage] = useState("");
+  const customerSearchRequestId = useRef(0);
+  const customerSearchValue = useRef(customerSearch);
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch, CUSTOMER_SEARCH_DEBOUNCE_MS);
 
   useEffect(() => {
     setPage(1);
@@ -104,7 +120,59 @@ function FinancasPage() {
     };
   }, [allTime, customer, dateFrom, dateTo, page, revenueGranularity]);
 
-  const customers = useMemo(() => dashboard?.customers ?? [], [dashboard?.customers]);
+  useEffect(() => {
+    if (!customerComboboxOpen) return;
+    setCustomerSearch(customer);
+  }, [customer, customerComboboxOpen]);
+
+  useEffect(() => {
+    customerSearchValue.current = customerSearch;
+  }, [customerSearch]);
+
+  useEffect(() => {
+    if (!customerComboboxOpen) return;
+
+    const normalizedSearch = debouncedCustomerSearch.trim();
+    if (normalizedSearch.length > 0 && normalizedSearch.length < MIN_CUSTOMER_SEARCH_LENGTH) {
+      setCustomerOptions([]);
+      setCustomerSearchMessage(`Digite pelo menos ${MIN_CUSTOMER_SEARCH_LENGTH} caracteres para buscar.`);
+      setCustomerSearchLoading(false);
+      return;
+    }
+
+    const requestId = customerSearchRequestId.current + 1;
+    customerSearchRequestId.current = requestId;
+    const controller = new AbortController();
+
+    async function loadCustomerOptions() {
+      setCustomerSearchLoading(true);
+      setCustomerSearchMessage("");
+      try {
+        const result = await fetchFinanceCustomers({
+          search: normalizedSearch,
+          limit: CUSTOMER_SEARCH_LIMIT,
+          signal: controller.signal,
+        });
+        if (customerSearchRequestId.current !== requestId || customerSearchValue.current.trim() !== normalizedSearch) return;
+        setCustomerOptions(result);
+        setCustomerSearchMessage(result.length === 0 ? "Nenhum cliente encontrado." : "");
+      } catch (error) {
+        if (controller.signal.aborted || customerSearchRequestId.current !== requestId) return;
+        setCustomerOptions([]);
+        setCustomerSearchMessage((error as Error).message);
+      } finally {
+        if (!controller.signal.aborted && customerSearchRequestId.current === requestId) {
+          setCustomerSearchLoading(false);
+        }
+      }
+    }
+
+    void loadCustomerOptions();
+    return () => {
+      controller.abort();
+    };
+  }, [customerComboboxOpen, debouncedCustomerSearch]);
+
   const metrics = useMemo(
     () => dashboard?.summary ?? { totalRevenue: 0, totalOrders: 0, totalQuantity: 0, averageTicket: 0 },
     [dashboard],
@@ -119,12 +187,20 @@ function FinancasPage() {
   const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const pageEnd = totalItems === 0 ? 0 : Math.min(currentPage * pageSize, totalItems);
   const periodLabel = allTime ? "Tempo total" : `${formatDate(dateFrom)} até ${formatDate(dateTo)}`;
+  const selectedCustomerLabel = customer.trim() || "Todos os clientes";
 
   function clearFilters() {
     setCustomer("");
+    setCustomerSearch("");
     setDateFrom(DEFAULT_DATE_FROM);
     setDateTo(DEFAULT_DATE_TO);
     setAllTime(false);
+  }
+
+  function selectCustomer(value: string) {
+    setCustomer(value);
+    setCustomerSearch(value);
+    setCustomerComboboxOpen(false);
   }
 
   return (
@@ -148,20 +224,58 @@ function FinancasPage() {
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_0.9fr_0.9fr_auto_auto] lg:items-end">
           <div className="space-y-1">
             <Label htmlFor="finance-customer">Cliente</Label>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="finance-customer"
-                list="finance-customer-options"
-                className="pl-9"
-                value={customer}
-                onChange={(event) => setCustomer(event.target.value)}
-                placeholder="Todos os clientes"
-              />
-            </div>
-            <datalist id="finance-customer-options">
-              {customers.map((item) => <option key={item} value={item} />)}
-            </datalist>
+            <Popover open={customerComboboxOpen} onOpenChange={setCustomerComboboxOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  id="finance-customer"
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={customerComboboxOpen}
+                  className="h-11 w-full justify-between rounded-[10px] border-input bg-background px-3 text-left font-normal"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Search className="size-4 shrink-0 text-muted-foreground" />
+                    <span className={customer ? "truncate" : "truncate text-muted-foreground"}>{selectedCustomerLabel}</span>
+                  </span>
+                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    value={customerSearch}
+                    onValueChange={setCustomerSearch}
+                    placeholder="Buscar cliente..."
+                  />
+                  <CommandList>
+                    <CommandGroup>
+                      <CommandItem value="__all_customers__" onSelect={() => selectCustomer("")}>
+                        <Check className={customer ? "size-4 opacity-0" : "size-4 opacity-100"} />
+                        Todos os clientes
+                      </CommandItem>
+                    </CommandGroup>
+                    <CommandGroup>
+                      {customerSearchLoading ? (
+                        <div className="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground">
+                          <Loader2 className="size-4 animate-spin" />
+                          Buscando clientes...
+                        </div>
+                      ) : null}
+                      {!customerSearchLoading && customerSearchMessage ? (
+                        <div className="px-2 py-3 text-sm text-muted-foreground">{customerSearchMessage}</div>
+                      ) : null}
+                      {!customerSearchLoading ? customerOptions.map((option) => (
+                        <CommandItem key={`${option.id}-${option.nome}`} value={option.nome} onSelect={() => selectCustomer(option.nome)}>
+                          <Check className={customer === option.nome ? "size-4 opacity-100" : "size-4 opacity-0"} />
+                          <span className="truncate">{option.nome}</span>
+                        </CommandItem>
+                      )) : null}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <div className="space-y-1">

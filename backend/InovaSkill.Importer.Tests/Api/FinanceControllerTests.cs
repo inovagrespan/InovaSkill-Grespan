@@ -10,6 +10,56 @@ namespace InovaSkill.Importer.Tests.Api;
 public sealed class FinanceControllerTests
 {
     [Fact]
+    public async Task SearchCustomers_FiltersByPartialNameCaseInsensitiveAndOrdersByName()
+    {
+        await using var db = await CreateDbAsync();
+        db.CustomerSummariesDaily.AddRange(
+            CustomerSummary("C1", "2 IRMAOS PIRAJU", 1),
+            CustomerSummary("C2", "2 IRMAOS PIRAJU NOVO", 2),
+            CustomerSummary("C3", "2 IRMAOS MARILIA", 3));
+        await db.SaveChangesAsync();
+
+        var controller = new FinanceController(db);
+
+        var result = await controller.SearchCustomers(search: "piraju", limit: 20);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsAssignableFrom<IReadOnlyList<FinanceCustomerOptionDto>>(ok.Value);
+
+        Assert.Equal(
+            [
+                new FinanceCustomerOptionDto("C1", "2 IRMAOS PIRAJU"),
+                new FinanceCustomerOptionDto("C2", "2 IRMAOS PIRAJU NOVO")
+            ],
+            payload);
+    }
+
+    [Fact]
+    public async Task SearchCustomers_LimitsResultsAndFallsBackToTransactions()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.AddRange(
+            Transaction("NF-1", "C1", "Cliente A", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), 10m, 1m),
+            Transaction("NF-2", "C2", "Cliente B", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), 10m, 1m),
+            Transaction("NF-3", "C3", "Cliente C", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc), 10m, 1m));
+        await db.SaveChangesAsync();
+
+        var controller = new FinanceController(db);
+
+        var result = await controller.SearchCustomers(search: "cliente", limit: 2);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsAssignableFrom<IReadOnlyList<FinanceCustomerOptionDto>>(ok.Value);
+
+        Assert.Equal(
+            [
+                new FinanceCustomerOptionDto("C1", "Cliente A"),
+                new FinanceCustomerOptionDto("C2", "Cliente B")
+            ],
+            payload);
+    }
+
+    [Fact]
     public async Task GetDashboard_ReturnsCustomersSummaryTrendRankingAndItems()
     {
         await using var db = await CreateDbAsync();
@@ -275,75 +325,58 @@ public sealed class FinanceControllerTests
     private static void SeedTransactions(ImportDbContext db)
     {
         db.CommercialTransactions.AddRange(
-            new Domain.Entities.CommercialTransaction
-            {
-                DocumentNumber = "NF-1",
-                TransactionDate = new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc),
-                CustomerCode = "C1",
-                CustomerName = "Cliente A",
-                ProductCode = "P1",
-                ProductDescription = "Produto 1",
-                Quantity = 10m,
-                UnitPrice = 10m,
-                TotalAmount = 100m,
-                TransactionType = "Venda",
-                City = "Campinas",
-                ProductGroup = "Grupo A",
-                GrossWeightKg = 5m,
-                SourceFileJobId = 1
-            },
-            new Domain.Entities.CommercialTransaction
-            {
-                DocumentNumber = "NF-2",
-                TransactionDate = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc),
-                CustomerCode = "C1",
-                CustomerName = "Cliente A",
-                ProductCode = "P2",
-                ProductDescription = "Produto 2",
-                Quantity = 20m,
-                UnitPrice = 10m,
-                TotalAmount = 200m,
-                TransactionType = "Venda",
-                City = "Campinas",
-                ProductGroup = "Grupo A",
-                GrossWeightKg = 10m,
-                SourceFileJobId = 1
-            },
-            new Domain.Entities.CommercialTransaction
-            {
-                DocumentNumber = "NF-3",
-                TransactionDate = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc),
-                CustomerCode = "C2",
-                CustomerName = "Cliente B",
-                ProductCode = "P3",
-                ProductDescription = "Produto 3",
-                Quantity = 30m,
-                UnitPrice = 10m,
-                TotalAmount = 300m,
-                TransactionType = "Venda",
-                City = "Sorocaba",
-                ProductGroup = "Grupo B",
-                GrossWeightKg = 15m,
-                SourceFileJobId = 1
-            },
-            new Domain.Entities.CommercialTransaction
-            {
-                DocumentNumber = "NF-3",
-                TransactionDate = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc),
-                CustomerCode = "C2",
-                CustomerName = "Cliente B",
-                ProductCode = "P4",
-                ProductDescription = "Produto 4",
-                Quantity = 40m,
-                UnitPrice = 10m,
-                TotalAmount = 400m,
-                TransactionType = "Venda",
-                City = "Sorocaba",
-                ProductGroup = "Grupo B",
-                GrossWeightKg = 20m,
-                SourceFileJobId = 1
-            });
+            Transaction("NF-1", "C1", "Cliente A", new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc), 10m, 10m, "P1"),
+            Transaction("NF-2", "C1", "Cliente A", new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), 20m, 10m, "P2"),
+            Transaction("NF-3", "C2", "Cliente B", new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), 30m, 10m, "P3"),
+            Transaction("NF-3", "C2", "Cliente B", new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), 40m, 10m, "P4"));
 
         db.SaveChanges();
+    }
+
+    private static Domain.Entities.CustomerSummaryDaily CustomerSummary(string customerCode, string customerName, int day)
+    {
+        return new Domain.Entities.CustomerSummaryDaily
+        {
+            SourceFileJobId = 1,
+            ReferenceDate = new DateTime(2026, 2, day, 0, 0, 0, DateTimeKind.Utc),
+            CustomerCode = customerCode,
+            CustomerName = customerName,
+            City = "Campinas",
+            ProductGroup = "Grupo A",
+            TransactionType = "Venda",
+            Orders = 1,
+            Revenue = 10m,
+            Quantity = 1m,
+            Weight = 1m,
+            ProcessedAt = DateTime.UtcNow
+        };
+    }
+
+    private static Domain.Entities.CommercialTransaction Transaction(
+        string documentNumber,
+        string customerCode,
+        string customerName,
+        DateTime transactionDate,
+        decimal quantity,
+        decimal unitPrice,
+        string productCode = "P1")
+    {
+        return new Domain.Entities.CommercialTransaction
+        {
+            DocumentNumber = documentNumber,
+            TransactionDate = transactionDate,
+            CustomerCode = customerCode,
+            CustomerName = customerName,
+            ProductCode = productCode,
+            ProductDescription = $"Produto {productCode}",
+            Quantity = quantity,
+            UnitPrice = unitPrice,
+            TotalAmount = quantity * unitPrice,
+            TransactionType = "Venda",
+            City = "Campinas",
+            ProductGroup = "Grupo A",
+            GrossWeightKg = quantity,
+            SourceFileJobId = 1
+        };
     }
 }

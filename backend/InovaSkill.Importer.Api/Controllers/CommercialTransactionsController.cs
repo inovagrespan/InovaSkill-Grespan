@@ -12,6 +12,7 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
 {
     private const int MinPageSize = 10;
     private const int MaxPageSize = 100;
+    private const int QuarterMonthSpan = 3;
 
     [HttpGet]
     public async Task<ActionResult<PagedResult<CommercialTransactionDto>>> GetPaged(
@@ -108,6 +109,7 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
             .Select(x => new Domain.Entities.CommercialTransaction
             {
                 TransactionDate = x.TransactionDate,
+                DocumentNumber = x.DocumentNumber,
                 CustomerName = x.CustomerName,
                 Quantity = x.Quantity,
                 UnitPrice = x.UnitPrice,
@@ -141,6 +143,8 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
             summary.TotalCompanies,
             pagedItems.Select(x => new CommercialTransactionCompanySummaryDto(
                 x.CompanyName,
+                x.DocumentCount,
+                x.SingleDocumentNumber,
                 x.TotalAmount,
                 x.TotalQuantity,
                 x.TotalWeightKg,
@@ -154,6 +158,7 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
     [HttpGet("timeline")]
     public async Task<ActionResult<CommercialTransactionTimelineResponseDto>> GetTimeline(
         [FromQuery] string granularity = "monthly",
+        [FromQuery] string? groupBy = null,
         [FromQuery] string? documentNumber = null,
         [FromQuery] string? customerCode = null,
         [FromQuery] string? customerName = null,
@@ -165,9 +170,8 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
         [FromQuery] DateTime? dateTo = null,
         CancellationToken cancellationToken = default)
     {
-        var resolvedGranularity = ResolveTimelineGranularity(granularity);
-
-        var rows = await ApplyFilters(
+        var resolvedGranularity = ResolveTimelineGranularity(groupBy ?? granularity);
+        var query = ApplyFilters(
                 dbContext.CommercialTransactions.AsNoTracking(),
                 documentNumber,
                 customerCode,
@@ -177,28 +181,137 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
                 productGroup,
                 transactionType,
                 dateFrom,
-                dateTo)
-            .Select(x => new
+                dateTo);
+
+        var items = resolvedGranularity == TimelineGranularity.Weekly
+            ? await BuildWeeklyTimelineAsync(query, cancellationToken)
+            : await BuildTimelineAsync(query, resolvedGranularity, cancellationToken);
+
+        return Ok(new CommercialTransactionTimelineResponseDto(ToTimelineGranularityName(resolvedGranularity), items));
+    }
+
+    private static async Task<List<CommercialTransactionTimelinePointDto>> BuildTimelineAsync(
+        IQueryable<Domain.Entities.CommercialTransaction> query,
+        TimelineGranularity granularity,
+        CancellationToken cancellationToken)
+    {
+        var grouped = granularity switch
+        {
+            TimelineGranularity.Hour => await query
+                .GroupBy(x => new
+                {
+                    x.TransactionDate.Year,
+                    x.TransactionDate.Month,
+                    x.TransactionDate.Day,
+                    x.TransactionDate.Hour
+                })
+                .Select(group => new TimelineAggregateRow(
+                    group.Key.Year,
+                    group.Key.Month,
+                    group.Key.Day,
+                    group.Key.Hour,
+                    group.Sum(x => (double)x.Quantity * (double)x.UnitPrice),
+                    group.Sum(x => (double)x.Quantity),
+                    group.Sum(x => (double)x.GrossWeightKg),
+                    group.Count()))
+                .ToListAsync(cancellationToken),
+
+            TimelineGranularity.Day => await query
+                .GroupBy(x => new
+                {
+                    x.TransactionDate.Year,
+                    x.TransactionDate.Month,
+                    x.TransactionDate.Day
+                })
+                .Select(group => new TimelineAggregateRow(
+                    group.Key.Year,
+                    group.Key.Month,
+                    group.Key.Day,
+                    0,
+                    group.Sum(x => (double)x.Quantity * (double)x.UnitPrice),
+                    group.Sum(x => (double)x.Quantity),
+                    group.Sum(x => (double)x.GrossWeightKg),
+                    group.Count()))
+                .ToListAsync(cancellationToken),
+
+            TimelineGranularity.Quarter => await query
+                .GroupBy(x => new
+                {
+                    x.TransactionDate.Year,
+                    QuarterStartMonth = ((x.TransactionDate.Month - 1) / QuarterMonthSpan) * QuarterMonthSpan + 1
+                })
+                .Select(group => new TimelineAggregateRow(
+                    group.Key.Year,
+                    group.Key.QuarterStartMonth,
+                    1,
+                    0,
+                    group.Sum(x => (double)x.Quantity * (double)x.UnitPrice),
+                    group.Sum(x => (double)x.Quantity),
+                    group.Sum(x => (double)x.GrossWeightKg),
+                    group.Count()))
+                .ToListAsync(cancellationToken),
+
+            _ => await query
+                .GroupBy(x => new
+                {
+                    x.TransactionDate.Year,
+                    x.TransactionDate.Month
+                })
+                .Select(group => new TimelineAggregateRow(
+                    group.Key.Year,
+                    group.Key.Month,
+                    1,
+                    0,
+                    group.Sum(x => (double)x.Quantity * (double)x.UnitPrice),
+                    group.Sum(x => (double)x.Quantity),
+                    group.Sum(x => (double)x.GrossWeightKg),
+                    group.Count()))
+                .ToListAsync(cancellationToken)
+        };
+
+        return grouped
+            .Select(x => new CommercialTransactionTimelinePointDto(
+                new DateTime(x.Year, x.Month, x.Day, x.Hour, 0, 0, DateTimeKind.Utc),
+                (decimal)x.TotalAmount,
+                (decimal)x.TotalQuantity,
+                (decimal)x.TotalWeightKg,
+                x.RecordCount))
+            .OrderBy(x => x.PeriodStart)
+            .ToList();
+    }
+
+    private static async Task<List<CommercialTransactionTimelinePointDto>> BuildWeeklyTimelineAsync(
+        IQueryable<Domain.Entities.CommercialTransaction> query,
+        CancellationToken cancellationToken)
+    {
+        var dailyRows = await query
+            .GroupBy(x => new
             {
-                x.TransactionDate,
-                x.Quantity,
-                x.UnitPrice,
-                x.GrossWeightKg
+                x.TransactionDate.Year,
+                x.TransactionDate.Month,
+                x.TransactionDate.Day
             })
+            .Select(group => new TimelineAggregateRow(
+                group.Key.Year,
+                group.Key.Month,
+                group.Key.Day,
+                0,
+                group.Sum(x => (double)x.Quantity * (double)x.UnitPrice),
+                group.Sum(x => (double)x.Quantity),
+                group.Sum(x => (double)x.GrossWeightKg),
+                group.Count()))
             .ToListAsync(cancellationToken);
 
-        var items = rows
-            .GroupBy(x => GetTimelinePeriodStart(x.TransactionDate, resolvedGranularity))
+        return dailyRows
+            .GroupBy(x => GetWeekStart(new DateTime(x.Year, x.Month, x.Day, 0, 0, 0, DateTimeKind.Utc)))
             .OrderBy(x => x.Key)
             .Select(group => new CommercialTransactionTimelinePointDto(
                 group.Key,
-                group.Sum(x => x.Quantity * x.UnitPrice),
-                group.Sum(x => x.Quantity),
-                group.Sum(x => x.GrossWeightKg),
-                group.Count()))
+                (decimal)group.Sum(x => x.TotalAmount),
+                (decimal)group.Sum(x => x.TotalQuantity),
+                (decimal)group.Sum(x => x.TotalWeightKg),
+                group.Sum(x => x.RecordCount)))
             .ToList();
-
-        return Ok(new CommercialTransactionTimelineResponseDto(ToTimelineGranularityName(resolvedGranularity), items));
     }
 
     private static IQueryable<Domain.Entities.CommercialTransaction> ApplyFilters(
@@ -215,44 +328,44 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
     {
         if (!string.IsNullOrWhiteSpace(documentNumber))
         {
-            var normalized = documentNumber.Trim();
-            query = query.Where(x => x.DocumentNumber.Contains(normalized));
+            var normalized = documentNumber.Trim().ToUpper();
+            query = query.Where(x => x.DocumentNumber.ToUpper().Contains(normalized));
         }
 
         if (!string.IsNullOrWhiteSpace(customerCode))
         {
-            var normalized = customerCode.Trim();
-            query = query.Where(x => x.CustomerCode.Contains(normalized));
+            var normalized = customerCode.Trim().ToUpper();
+            query = query.Where(x => x.CustomerCode.ToUpper().Contains(normalized));
         }
 
         if (!string.IsNullOrWhiteSpace(customerName))
         {
-            var normalized = customerName.Trim();
-            query = query.Where(x => x.CustomerName.Contains(normalized));
+            var normalized = customerName.Trim().ToUpper();
+            query = query.Where(x => x.CustomerName.ToUpper().Contains(normalized));
         }
 
         if (!string.IsNullOrWhiteSpace(productCode))
         {
-            var normalized = productCode.Trim();
-            query = query.Where(x => x.ProductCode.Contains(normalized));
+            var normalized = productCode.Trim().ToUpper();
+            query = query.Where(x => x.ProductCode.ToUpper().Contains(normalized) || x.ProductDescription.ToUpper().Contains(normalized));
         }
 
         if (!string.IsNullOrWhiteSpace(city))
         {
-            var normalized = city.Trim();
-            query = query.Where(x => x.City.Contains(normalized));
+            var normalized = city.Trim().ToUpper();
+            query = query.Where(x => x.City.ToUpper().Contains(normalized));
         }
 
         if (!string.IsNullOrWhiteSpace(productGroup))
         {
-            var normalized = productGroup.Trim();
-            query = query.Where(x => x.ProductGroup.Contains(normalized));
+            var normalized = productGroup.Trim().ToUpper();
+            query = query.Where(x => x.ProductGroup.ToUpper().Contains(normalized));
         }
 
         if (!string.IsNullOrWhiteSpace(transactionType))
         {
-            var normalized = transactionType.Trim();
-            query = query.Where(x => x.TransactionType.Contains(normalized));
+            var normalized = transactionType.Trim().ToUpper();
+            query = query.Where(x => x.TransactionType.ToUpper().Contains(normalized));
         }
 
         if (dateFrom.HasValue)
@@ -275,7 +388,9 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
         return granularity.Trim().ToLowerInvariant() switch
         {
             "daily" => SalesSummaryGranularity.Daily,
+            "day" => SalesSummaryGranularity.Daily,
             "monthly" => SalesSummaryGranularity.Monthly,
+            "month" => SalesSummaryGranularity.Monthly,
             _ => SalesSummaryGranularity.Weekly
         };
     }
@@ -295,9 +410,11 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
     {
         return granularity.Trim().ToLowerInvariant() switch
         {
-            "daily" => TimelineGranularity.Daily,
-            "weekly" => TimelineGranularity.Weekly,
-            _ => TimelineGranularity.Monthly
+            "hour" or "hourly" => TimelineGranularity.Hour,
+            "daily" or "day" => TimelineGranularity.Day,
+            "weekly" or "week" => TimelineGranularity.Weekly,
+            "quarter" or "quarterly" => TimelineGranularity.Quarter,
+            _ => TimelineGranularity.Month
         };
     }
 
@@ -315,22 +432,17 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
     {
         return granularity switch
         {
-            TimelineGranularity.Daily => "daily",
-            TimelineGranularity.Weekly => "weekly",
-            _ => "monthly"
+            TimelineGranularity.Hour => "hour",
+            TimelineGranularity.Day => "day",
+            TimelineGranularity.Weekly => "week",
+            TimelineGranularity.Quarter => "quarter",
+            _ => "month"
         };
     }
 
-    private static DateTime GetTimelinePeriodStart(DateTime transactionDate, TimelineGranularity granularity)
+    private static DateTime GetWeekStart(DateTime normalized)
     {
-        var normalized = NormalizeToUtc(transactionDate).Date;
-
-        return granularity switch
-        {
-            TimelineGranularity.Daily => normalized,
-            TimelineGranularity.Weekly => normalized.AddDays(-((int)normalized.DayOfWeek + 6) % 7),
-            _ => new DateTime(normalized.Year, normalized.Month, 1, 0, 0, 0, DateTimeKind.Utc)
-        };
+        return normalized.Date.AddDays(-((int)normalized.DayOfWeek + 6) % 7);
     }
 
     private static DateTime NormalizeToUtc(DateTime value)
@@ -345,8 +457,20 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
 
     private enum TimelineGranularity
     {
-        Daily,
+        Hour,
+        Day,
         Weekly,
-        Monthly
+        Month,
+        Quarter
     }
+
+    private sealed record TimelineAggregateRow(
+        int Year,
+        int Month,
+        int Day,
+        int Hour,
+        double TotalAmount,
+        double TotalQuantity,
+        double TotalWeightKg,
+        int RecordCount);
 }

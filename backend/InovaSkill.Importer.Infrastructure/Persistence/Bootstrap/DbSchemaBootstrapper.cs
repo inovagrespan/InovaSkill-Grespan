@@ -2,6 +2,7 @@
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace InovaSkill.Importer.Infrastructure.Persistence.Bootstrap;
 
@@ -323,6 +324,14 @@ public static class DbSchemaBootstrapper
             """
             CREATE INDEX IF NOT EXISTS "IX_CommercialTransactions_ProductCode"
             ON "CommercialTransactions" ("ProductCode");
+            """,
+            cancellationToken);
+
+        await ExecuteCreateIndexIgnoringDuplicateAsync(
+            db,
+            """
+            CREATE INDEX IF NOT EXISTS "IX_CommercialTransactions_ProductDescription"
+            ON "CommercialTransactions" ("ProductDescription");
             """,
             cancellationToken);
 
@@ -1412,5 +1421,20 @@ public static class DbSchemaBootstrapper
             ConfigJson = configJson,
             SortOrder = sortOrder
         });
+    }
+
+    private static async Task ExecuteCreateIndexIgnoringDuplicateAsync(
+        ImportDbContext db,
+        string sql,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(sql, cancellationToken);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            // Two local processes can bootstrap together; the index exists after the concurrent winner commits.
+        }
     }
 }

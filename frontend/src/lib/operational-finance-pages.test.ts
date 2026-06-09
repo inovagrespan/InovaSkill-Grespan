@@ -13,7 +13,7 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("stockBreaks");
   });
 
-  it("cria aba de finanças com filtros, métricas e paginação vindas da API", () => {
+  it("mantem rota de finanças com filtros, métricas e paginação vindas da API", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/financas.tsx"), "utf8");
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve(process.cwd(), "src/styles.css"), "utf8");
@@ -24,6 +24,15 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("Peso / quantidade");
     expect(source).toContain("Tempo total");
     expect(source).toContain("fetchFinanceDashboard");
+    expect(source).toContain("fetchFinanceCustomers");
+    expect(source).toContain("useDebouncedValue(customerSearch, CUSTOMER_SEARCH_DEBOUNCE_MS)");
+    expect(source).toContain("CUSTOMER_SEARCH_DEBOUNCE_MS = 300");
+    expect(source).toContain("new AbortController()");
+    expect(source).toContain("customerSearchRequestId");
+    expect(source).toContain("Buscando clientes...");
+    expect(source).toContain("Nenhum cliente encontrado.");
+    expect(source).toContain("Todos os clientes");
+    expect(source).not.toContain("<datalist");
     expect(source).toContain("Evolução da Receita");
     expect(source).toContain("Ranking por empresa");
     expect(source).toContain("setPage(1)");
@@ -38,8 +47,46 @@ describe("operational, finance and reports pages", () => {
     expect(source).not.toContain("financeDemoTransactions");
     expect(styles).toContain(".finance-chart-card");
     expect(styles).toContain(".dark .finance-chart-card");
-    expect(sidebar).toContain('to: "/financas"');
-    expect(sidebar).toContain('label: "Finanças"');
+    expect(sidebar).not.toContain('to: "/financas"');
+    expect(sidebar).not.toContain('label: "Finanças"');
+  });
+
+  it("mescla clientes e finanças com métricas financeiras no topo e lista de clientes abaixo", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
+    const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
+
+    expect(source).toContain("fetchFinanceDashboard");
+    expect(source).toContain("financeMetrics.totalRevenue");
+    expect(source).toContain("Métrica financeira consolidada pelos filtros");
+    expect(source).toContain("Evolução da Receita");
+    expect(source).toContain("Ranking por empresa");
+    expect(source).toContain("financeRevenueTrendData");
+    expect(source).toContain("financeCustomerRankingData");
+    expect(source).toContain("RevenueAreaChart");
+    expect(source).toContain("<CardTitle>Clientes</CardTitle>");
+    expect(source).toContain("Clique em um cliente para abrir a tela de detalhes.");
+    expect(source).toContain("onClick={() => openDetails(item.customerCode)}");
+    expect(sidebar).toContain('to: "/clientes"');
+    expect(sidebar).toContain('label: "Clientes"');
+    expect(sidebar).not.toContain('to: "/financas"');
+  });
+
+  it("cria aba de produtos para consultar produtos cadastrados", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/produtos.tsx"), "utf8");
+    const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
+
+    expect(source).toContain('createFileRoute("/produtos")');
+    expect(source).toContain("Produtos cadastrados");
+    expect(source).toContain("SKU ou descrição do produto");
+    expect(source).toContain("fetchProducts");
+    expect(source).toContain("useDebouncedValue(search, PRODUCT_SEARCH_DEBOUNCE_MS)");
+    expect(source).toContain("PRODUCT_SEARCH_DEBOUNCE_MS = 300");
+    expect(source).toContain("new AbortController()");
+    expect(source).toContain("Nenhum produto encontrado.");
+    expect(source).toContain("Página {page} de {totalPages}");
+    expect(sidebar).toContain('to: "/produtos"');
+    expect(sidebar).toContain('label: "Produtos"');
+    expect(sidebar).toContain("PackageSearch");
   });
 
   it("exibe médias semanal e mensal na tela de vendas", () => {
@@ -77,16 +124,13 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("sortDemoCustomers");
   });
 
-  it("move gráficos de faturamento e ranking para clientes no modelo de área escuro", () => {
+  it("mantém clientes como lista operacional com detalhe em modal", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
 
-    expect(source).toContain("Faturamento no período");
-    expect(source).toContain("Ranking por empresa");
-    expect(source).toContain("RevenueAreaChart");
-    expect(source).toContain("AreaChart");
-    expect(source).toContain("fetchCommercialTransactionsSummary");
-    expect(source).toContain('dark:bg-[#070b14]');
-    expect(source).toContain("text-foreground dark:text-slate-100");
+    expect(source).toContain("<TableHead>Cliente</TableHead>");
+    expect(source).toContain("<TableHead>Faturamento</TableHead>");
+    expect(source).toContain("DialogTitle>Detalhes do Cliente");
+    expect(source).toContain("loadCustomerDetails");
   });
 
   it("remove a aba de RH da navegação e do dashboard", () => {

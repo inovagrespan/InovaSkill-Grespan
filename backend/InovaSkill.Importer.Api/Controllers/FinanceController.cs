@@ -13,7 +13,56 @@ public sealed class FinanceController(ImportDbContext dbContext) : ControllerBas
 {
     private const int DefaultPage = 1;
     private const int DefaultPageSize = 20;
+    private const int DefaultCustomerSearchLimit = 20;
     private const int MaxPageSize = 100;
+    private const int MaxCustomerSearchLimit = 50;
+
+    [HttpGet("customers")]
+    public async Task<ActionResult<IReadOnlyList<FinanceCustomerOptionDto>>> SearchCustomers(
+        [FromQuery] string search = "",
+        [FromQuery] int limit = DefaultCustomerSearchLimit,
+        CancellationToken cancellationToken = default)
+    {
+        limit = Math.Clamp(limit, 1, MaxCustomerSearchLimit);
+        var normalizedSearch = search.Trim().ToUpperInvariant();
+
+        var summaryCustomers = dbContext.CustomerSummariesDaily
+            .AsNoTracking()
+            .Select(x => new { Id = x.CustomerCode.Trim(), Nome = x.CustomerName.Trim() })
+            .Where(x => x.Nome != string.Empty);
+
+        var transactionCustomers = dbContext.CommercialTransactions
+            .AsNoTracking()
+            .Select(x => new { Id = x.CustomerCode.Trim(), Nome = x.CustomerName.Trim() })
+            .Where(x => x.Nome != string.Empty);
+
+        if (!string.IsNullOrWhiteSpace(normalizedSearch))
+        {
+            summaryCustomers = summaryCustomers.Where(x => x.Nome.ToUpper().Contains(normalizedSearch));
+            transactionCustomers = transactionCustomers.Where(x => x.Nome.ToUpper().Contains(normalizedSearch));
+        }
+
+        var summaryResults = await summaryCustomers
+            .OrderBy(x => x.Nome)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        var transactionResults = await transactionCustomers
+            .OrderBy(x => x.Nome)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        var customers = summaryResults
+            .Concat(transactionResults)
+            .GroupBy(x => x.Nome, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new FinanceCustomerOptionDto(
+                group.Select(x => x.Id).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? group.Key,
+                group.Key))
+            .OrderBy(x => x.Nome)
+            .Take(limit)
+            .ToList();
+
+        return Ok(customers);
+    }
 
     [HttpGet("dashboard")]
     public async Task<ActionResult<FinanceDashboardResponseDto>> GetDashboard(

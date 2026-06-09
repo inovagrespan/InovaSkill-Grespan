@@ -22,6 +22,10 @@ public sealed record FinanceCustomerRevenuePointDto(
     string Customer,
     decimal Revenue);
 
+public sealed record FinanceCustomerOptionDto(
+    string Id,
+    string Nome);
+
 public sealed record FinanceDashboardResponseDto(
     IReadOnlyList<string> Customers,
     FinanceDashboardSummaryDto Summary,

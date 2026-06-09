@@ -53,6 +53,8 @@ public sealed class CommercialTransactionsControllerTests
         Assert.Equal(40m, payload.TotalQuantity);
         Assert.Equal(17m, payload.TotalWeightKg);
         Assert.Equal(2, payload.Items.Count);
+        Assert.All(payload.Items, item => Assert.Equal(1, item.DocumentCount));
+        Assert.Contains(payload.Items, item => item.SingleDocumentNumber == "NF-1");
     }
 
     [Fact]
@@ -84,7 +86,7 @@ public sealed class CommercialTransactionsControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var payload = Assert.IsType<CommercialTransactionTimelineResponseDto>(ok.Value);
 
-        Assert.Equal("monthly", payload.Granularity);
+        Assert.Equal("month", payload.Granularity);
         Assert.Collection(
             payload.Items,
             may =>
@@ -120,7 +122,7 @@ public sealed class CommercialTransactionsControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var payload = Assert.IsType<CommercialTransactionTimelineResponseDto>(ok.Value);
 
-        Assert.Equal("weekly", payload.Granularity);
+        Assert.Equal("week", payload.Granularity);
         Assert.Collection(
             payload.Items,
             weekOne =>
@@ -153,7 +155,7 @@ public sealed class CommercialTransactionsControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var payload = Assert.IsType<CommercialTransactionTimelineResponseDto>(ok.Value);
 
-        Assert.Equal("daily", payload.Granularity);
+        Assert.Equal("day", payload.Granularity);
         Assert.Collection(
             payload.Items,
             first =>
@@ -234,6 +236,96 @@ public sealed class CommercialTransactionsControllerTests
         Assert.Equal(-37.5m, point.TotalAmount);
         Assert.Equal(-3m, point.TotalQuantity);
         Assert.Equal(-6m, point.TotalWeightKg);
+    }
+
+    [Fact]
+    public async Task GetPaged_SearchesDocumentAndProductPartiallyIgnoringCase()
+    {
+        await using var db = await CreateDbAsync();
+        SeedTransactions(db);
+        var controller = new CommercialTransactionsController(db);
+
+        var documentResult = await controller.GetPaged(documentNumber: "nf-3");
+        var documentOk = Assert.IsType<OkObjectResult>(documentResult.Result);
+        var documentPayload = Assert.IsType<PagedResult<CommercialTransactionDto>>(documentOk.Value);
+        var documentItem = Assert.Single(documentPayload.Items);
+        Assert.Equal("NF-3", documentItem.DocumentNumber);
+
+        var productResult = await controller.GetPaged(productCode: "produto 4");
+        var productOk = Assert.IsType<OkObjectResult>(productResult.Result);
+        var productPayload = Assert.IsType<PagedResult<CommercialTransactionDto>>(productOk.Value);
+        var productItem = Assert.Single(productPayload.Items);
+        Assert.Equal("P4", productItem.ProductCode);
+        Assert.Equal("Produto 4", productItem.ProductDescription);
+    }
+
+    [Fact]
+    public async Task GetSummary_ReturnsDocumentCountAndSingleDocumentForRankingTraceability()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.AddRange(
+            BuildTransaction("NF-10", "Empresa A", "P1", "Produto 1", new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), 2m, 10m),
+            BuildTransaction("NF-11", "Empresa A", "P2", "Produto 2", new DateTime(2026, 6, 2, 8, 0, 0, DateTimeKind.Utc), 3m, 10m),
+            BuildTransaction("NF-20", "Empresa B", "P3", "Produto 3", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 4m, 10m));
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetSummary(sortBy: "amount", referenceDate: new DateTime(2026, 6, 9));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CommercialTransactionSummaryResponseDto>(ok.Value);
+        Assert.Collection(
+            payload.Items,
+            first =>
+            {
+                Assert.Equal("Empresa A", first.CompanyName);
+                Assert.Equal(2, first.DocumentCount);
+                Assert.Null(first.SingleDocumentNumber);
+            },
+            second =>
+            {
+                Assert.Equal("Empresa B", second.CompanyName);
+                Assert.Equal(1, second.DocumentCount);
+                Assert.Equal("NF-20", second.SingleDocumentNumber);
+            });
+    }
+
+    [Fact]
+    public async Task GetTimeline_AcceptsGroupByHourAndQuarter()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.AddRange(
+            BuildTransaction("NF-H1", "Empresa A", "P1", "Produto 1", new DateTime(2026, 1, 5, 8, 15, 0, DateTimeKind.Utc), 2m, 10m),
+            BuildTransaction("NF-H2", "Empresa A", "P1", "Produto 1", new DateTime(2026, 1, 5, 8, 45, 0, DateTimeKind.Utc), 3m, 10m),
+            BuildTransaction("NF-Q2", "Empresa B", "P2", "Produto 2", new DateTime(2026, 4, 10, 9, 0, 0, DateTimeKind.Utc), 4m, 10m));
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var hourResult = await controller.GetTimeline(groupBy: "hour", dateFrom: new DateTime(2026, 1, 5), dateTo: new DateTime(2026, 1, 5));
+        var hourOk = Assert.IsType<OkObjectResult>(hourResult.Result);
+        var hourPayload = Assert.IsType<CommercialTransactionTimelineResponseDto>(hourOk.Value);
+        var hourPoint = Assert.Single(hourPayload.Items);
+        Assert.Equal("hour", hourPayload.Granularity);
+        Assert.Equal(new DateTime(2026, 1, 5, 8, 0, 0, DateTimeKind.Utc), hourPoint.PeriodStart);
+        Assert.Equal(50m, hourPoint.TotalAmount);
+        Assert.Equal(2, hourPoint.RecordCount);
+
+        var quarterResult = await controller.GetTimeline(groupBy: "quarter");
+        var quarterOk = Assert.IsType<OkObjectResult>(quarterResult.Result);
+        var quarterPayload = Assert.IsType<CommercialTransactionTimelineResponseDto>(quarterOk.Value);
+        Assert.Equal("quarter", quarterPayload.Granularity);
+        Assert.Collection(
+            quarterPayload.Items,
+            first =>
+            {
+                Assert.Equal(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), first.PeriodStart);
+                Assert.Equal(50m, first.TotalAmount);
+            },
+            second =>
+            {
+                Assert.Equal(new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc), second.PeriodStart);
+                Assert.Equal(40m, second.TotalAmount);
+            });
     }
 
     private static async Task<ImportDbContext> CreateDbAsync()
@@ -319,5 +411,33 @@ public sealed class CommercialTransactionsControllerTests
             });
 
         db.SaveChanges();
+    }
+
+    private static Domain.Entities.CommercialTransaction BuildTransaction(
+        string documentNumber,
+        string customerName,
+        string productCode,
+        string productDescription,
+        DateTime transactionDate,
+        decimal quantity,
+        decimal unitPrice)
+    {
+        return new Domain.Entities.CommercialTransaction
+        {
+            DocumentNumber = documentNumber,
+            TransactionDate = transactionDate,
+            CustomerCode = customerName.Replace(" ", "-", StringComparison.OrdinalIgnoreCase),
+            CustomerName = customerName,
+            ProductCode = productCode,
+            ProductDescription = productDescription,
+            Quantity = quantity,
+            UnitPrice = unitPrice,
+            TotalAmount = quantity * unitPrice,
+            TransactionType = "Venda",
+            City = "Campinas",
+            ProductGroup = "Grupo A",
+            GrossWeightKg = quantity,
+            SourceFileJobId = 1
+        };
     }
 }

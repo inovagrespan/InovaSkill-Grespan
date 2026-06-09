@@ -79,4 +79,23 @@ describe("finance dashboard api", () => {
     expect(result.totalItems).toBeGreaterThan(0);
     expect(result.totalPages).toBeGreaterThan(0);
   });
+  it("busca clientes financeiros com texto e limite na API", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify([
+      { Id: "C1", Nome: "2 IRMAOS PIRAJU" },
+      { Id: "C2", Nome: "2 IRMAOS PIRAJU NOVO" },
+    ]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { fetchFinanceCustomers } = await import("./importer-api");
+    const result = await fetchFinanceCustomers({ search: "piraju", limit: 20 });
+    const requestedUrl = String(fetchMock.mock.calls[0][0]);
+
+    expect(requestedUrl).toContain("/api/finance/customers?");
+    expect(requestedUrl).toContain("search=piraju");
+    expect(requestedUrl).toContain("limit=20");
+    expect(result).toEqual([
+      { id: "C1", nome: "2 IRMAOS PIRAJU" },
+      { id: "C2", nome: "2 IRMAOS PIRAJU NOVO" },
+    ]);
+  });
 });

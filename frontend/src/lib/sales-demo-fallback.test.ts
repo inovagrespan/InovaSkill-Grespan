@@ -44,6 +44,8 @@ describe("sales demo fallback", () => {
     expect(summary.items).toEqual([
       {
         companyName: "Atacado Primavera",
+        documentCount: 1,
+        singleDocumentNumber: "DEV-2026-001",
         totalAmount: -669.6,
         totalQuantity: -24,
         totalWeightKg: -120,
@@ -56,13 +58,13 @@ describe("sales demo fallback", () => {
 
   it("gera timeline diaria filtrada pela mesma data usada na tela", async () => {
     const timeline = await fetchCommercialTransactionsTimeline({
-      granularity: "daily",
+      granularity: "day",
       dateFrom: "2026-06-08",
       dateTo: "2026-06-08",
     });
 
     expect(timeline).toEqual({
-      granularity: "daily",
+      granularity: "day",
       items: [
         {
           periodStart: "2026-06-08",

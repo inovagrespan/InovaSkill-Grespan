@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { calculatePeriodAverages } from "@/lib/business-metrics";
 import {
   buildSalesRevenueComparisonText,
   buildSalesTrendData,
+  describeSalesTimelineGranularity,
 } from "@/lib/sales-dashboard";
 import {
   type CommercialTransaction,
@@ -26,6 +27,7 @@ import {
   type SummarySortBy,
 } from "@/lib/importer-api";
 import { resolveSalesTimelineGranularity } from "@/lib/sales-timeline";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import {
   CalendarDays,
@@ -44,11 +46,37 @@ export const Route = createFileRoute("/vendas")({
 
 type PeriodPreset = "today" | "week" | "month" | "quarter" | "year" | "custom";
 type ViewMode = "summary" | "items";
+type SalesCachedData = {
+  items: Awaited<ReturnType<typeof fetchCommercialTransactions>>;
+  summary: CommercialTransactionSummaryResponse;
+  timeline: CommercialTransactionTimelineResponse;
+  storedAt: number;
+};
+type PersistedSalesState = {
+  periodPreset: PeriodPreset;
+  dateFrom: string;
+  dateTo: string;
+  customerName: string;
+  productCodeInput: string;
+  documentNumberInput: string;
+  city: string;
+  companyName: string;
+  productGroup: string;
+  transactionType: string;
+  advancedOpen: boolean;
+  viewMode: ViewMode;
+  companySortBy: SummarySortBy;
+  summaryPage: number;
+  page: number;
+};
 
 const FILTER_DEBOUNCE_MS = 300;
+const SEARCH_MIN_LENGTH = 2;
 const DEFAULT_PAGE_SIZE = 20;
 const DEFAULT_SUMMARY_PAGE_SIZE = 20;
 const DEFAULT_SUMMARY_GRANULARITY: SummaryGranularity = "weekly";
+const SALES_STATE_STORAGE_KEY = "inovaskill:vendas:state:v2";
+const SALES_CACHE_TTL_MS = 60_000;
 const SALES_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]";
 const SALES_CHART_CARD_CLASS_NAME = "sales-chart-card overflow-hidden border-border/80 bg-card/95 shadow-sm hover:translate-y-0 hover:border-border/80 hover:shadow-sm";
 const SALES_CHART_SELECT_CLASS_NAME = "h-9 rounded-[var(--dashboard-control-radius)] border border-[var(--sales-chart-select-border)] bg-[var(--sales-chart-select-bg)] px-3 text-sm text-[var(--sales-chart-title)] shadow-xs outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-ring/40";
@@ -71,12 +99,6 @@ const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
   { value: "year", label: "Ano" },
   { value: "custom", label: "Personalizado" },
 ];
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value || "N/A";
-  return date.toLocaleDateString("pt-BR");
-}
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value ?? 0);
@@ -106,11 +128,6 @@ function formatRevenueAxisTick(value: number): string {
   }
 
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(numericValue);
-}
-
-function formatDelta(value: number | null): string {
-  if (value == null) return "N/A";
-  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
 function toInputDate(value: Date): string {
@@ -166,6 +183,55 @@ function makeEmptyTimeline(granularity: CommercialTransactionTimelineResponse["g
   };
 }
 
+export function normalizeSalesSearchFilter(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length >= SEARCH_MIN_LENGTH ? trimmed : "";
+}
+
+export function buildSalesDocumentLabel(documentCount: number, singleDocumentNumber?: string | null): string {
+  if (singleDocumentNumber?.trim()) return singleDocumentNumber.trim();
+  if (documentCount <= 0) return "-";
+  return `${documentCount} documento(s)`;
+}
+
+export function buildSalesTimelineSubtitle(granularity: CommercialTransactionTimelineResponse["granularity"]): string {
+  return `Faturamento acumulado por ${describeSalesTimelineGranularity(granularity)}.`;
+}
+
+function readPersistedSalesState(defaultPeriod: { dateFrom: string; dateTo: string }): PersistedSalesState {
+  if (typeof window === "undefined") {
+    return buildDefaultSalesState(defaultPeriod);
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(SALES_STATE_STORAGE_KEY);
+    if (!raw) return buildDefaultSalesState(defaultPeriod);
+    return { ...buildDefaultSalesState(defaultPeriod), ...(JSON.parse(raw) as Partial<PersistedSalesState>) };
+  } catch {
+    return buildDefaultSalesState(defaultPeriod);
+  }
+}
+
+function buildDefaultSalesState(defaultPeriod: { dateFrom: string; dateTo: string }): PersistedSalesState {
+  return {
+    periodPreset: "month",
+    dateFrom: defaultPeriod.dateFrom,
+    dateTo: defaultPeriod.dateTo,
+    customerName: "",
+    productCodeInput: "",
+    documentNumberInput: "",
+    city: "",
+    companyName: "",
+    productGroup: "",
+    transactionType: "",
+    advancedOpen: false,
+    viewMode: "summary",
+    companySortBy: "amount",
+    summaryPage: 1,
+    page: 1,
+  };
+}
+
 function buildFriendlyError(error: unknown): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -176,27 +242,35 @@ function buildFriendlyError(error: unknown): string {
 
 function VendasPage() {
   const defaultPeriod = resolvePeriod("month");
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("month");
-  const [dateFrom, setDateFrom] = useState(defaultPeriod.dateFrom);
-  const [dateTo, setDateTo] = useState(defaultPeriod.dateTo);
-  const [customerName, setCustomerName] = useState("");
-  const [productCode, setProductCode] = useState("");
-  const [documentNumber, setDocumentNumber] = useState("");
-  const [city, setCity] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [productGroup, setProductGroup] = useState("");
-  const [transactionType, setTransactionType] = useState("");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("summary");
-  const [companySortBy, setCompanySortBy] = useState<SummarySortBy>("amount");
-  const [summaryPage, setSummaryPage] = useState(1);
-  const [page, setPage] = useState(1);
+  const persistedState = useMemo(() => readPersistedSalesState(defaultPeriod), [defaultPeriod.dateFrom, defaultPeriod.dateTo]);
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(persistedState.periodPreset);
+  const [dateFrom, setDateFrom] = useState(persistedState.dateFrom);
+  const [dateTo, setDateTo] = useState(persistedState.dateTo);
+  const [customerName, setCustomerName] = useState(persistedState.customerName);
+  const [productCodeInput, setProductCodeInput] = useState(persistedState.productCodeInput);
+  const [documentNumberInput, setDocumentNumberInput] = useState(persistedState.documentNumberInput);
+  const [city, setCity] = useState(persistedState.city);
+  const [companyName, setCompanyName] = useState(persistedState.companyName);
+  const [productGroup, setProductGroup] = useState(persistedState.productGroup);
+  const [transactionType, setTransactionType] = useState(persistedState.transactionType);
+  const [advancedOpen, setAdvancedOpen] = useState(persistedState.advancedOpen);
+  const [viewMode, setViewMode] = useState<ViewMode>(persistedState.viewMode);
+  const [companySortBy, setCompanySortBy] = useState<SummarySortBy>(persistedState.companySortBy);
+  const [summaryPage, setSummaryPage] = useState(persistedState.summaryPage);
+  const [page, setPage] = useState(persistedState.page);
   const [items, setItems] = useState<CommercialTransaction[]>([]);
   const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<CommercialTransactionSummaryResponse | null>(null);
   const [timeline, setTimeline] = useState<CommercialTransactionTimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const requestIdRef = useRef(0);
+  const cacheRef = useRef(new Map<string, SalesCachedData>());
+
+  const debouncedDocumentNumber = useDebouncedValue(documentNumberInput, FILTER_DEBOUNCE_MS);
+  const debouncedProductCode = useDebouncedValue(productCodeInput, FILTER_DEBOUNCE_MS);
+  const documentNumber = normalizeSalesSearchFilter(debouncedDocumentNumber);
+  const productCode = normalizeSalesSearchFilter(debouncedProductCode);
 
   const pageSize = DEFAULT_PAGE_SIZE;
   const summaryPageSize = DEFAULT_SUMMARY_PAGE_SIZE;
@@ -214,14 +288,6 @@ function VendasPage() {
     [dateFrom, dateTo, periodPreset],
   );
 
-  const invoiceSuggestions = useMemo(
-    () => Array.from(new Set(items.map((item) => item.documentNumber).filter(Boolean))).slice(0, 12),
-    [items],
-  );
-  const productSuggestions = useMemo(
-    () => Array.from(new Set(items.map((item) => `${item.productCode} - ${item.productDescription}`).filter(Boolean))).slice(0, 12),
-    [items],
-  );
   const chartData = useMemo(
     () => (summary?.items ?? []).slice(0, 8).map((item) => ({
       companyName: item.companyName,
@@ -234,9 +300,38 @@ function VendasPage() {
   const trendData = useMemo(() => buildSalesTrendData(timeline), [timeline]);
   const revenueComparisonText = useMemo(() => buildSalesRevenueComparisonText(summary), [summary]);
 
-  async function loadData(targetPage = page, targetSummaryPage = summaryPage) {
+  async function loadData(targetPage = page, targetSummaryPage = summaryPage, signal?: AbortSignal) {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setMessage("");
+
+    const queryKey = JSON.stringify({
+      targetPage,
+      targetSummaryPage,
+      pageSize,
+      summaryPageSize,
+      documentNumber,
+      customerName: effectiveCustomerName,
+      productCode,
+      city,
+      productGroup,
+      transactionType,
+      dateFrom,
+      dateTo,
+      companySortBy,
+      timelineGranularity,
+    });
+    const cached = cacheRef.current.get(queryKey);
+    if (cached && Date.now() - cached.storedAt < SALES_CACHE_TTL_MS) {
+      setItems(cached.items.items);
+      setPage(cached.items.page);
+      setTotal(cached.items.total);
+      setSummary(cached.summary);
+      setSummaryPage(cached.summary.page);
+      setTimeline(cached.timeline);
+      setLoading(false);
+      return;
+    }
 
     try {
       const [itemsData, summaryData, timelineData] = await Promise.all([
@@ -251,6 +346,7 @@ function VendasPage() {
           transactionType,
           dateFrom,
           dateTo,
+          signal,
         }),
         fetchCommercialTransactionsSummary({
           granularity: DEFAULT_SUMMARY_GRANULARITY,
@@ -266,6 +362,7 @@ function VendasPage() {
           dateFrom,
           dateTo,
           referenceDate: dateTo,
+          signal,
         }),
         fetchCommercialTransactionsTimeline({
           granularity: timelineGranularity,
@@ -277,9 +374,20 @@ function VendasPage() {
           transactionType,
           dateFrom,
           dateTo,
+          signal,
         }),
       ]);
 
+      if (requestId !== requestIdRef.current || signal?.aborted) {
+        return;
+      }
+
+      cacheRef.current.set(queryKey, {
+        items: itemsData,
+        summary: summaryData,
+        timeline: timelineData,
+        storedAt: Date.now(),
+      });
       setItems(itemsData.items);
       setPage(itemsData.page);
       setTotal(itemsData.total);
@@ -287,6 +395,10 @@ function VendasPage() {
       setSummaryPage(summaryData.page);
       setTimeline(timelineData);
     } catch (error) {
+      if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted || requestId !== requestIdRef.current) {
+        return;
+      }
+
       setItems([]);
       setPage(targetPage);
       setTotal(0);
@@ -295,7 +407,9 @@ function VendasPage() {
       setTimeline(makeEmptyTimeline(timelineGranularity));
       setMessage(buildFriendlyError(error));
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current && !signal?.aborted) {
+        setLoading(false);
+      }
     }
   }
 
@@ -317,8 +431,8 @@ function VendasPage() {
     setDateFrom(next.dateFrom);
     setDateTo(next.dateTo);
     setCustomerName("");
-    setProductCode("");
-    setDocumentNumber("");
+    setProductCodeInput("");
+    setDocumentNumberInput("");
     setCity("");
     setCompanyName("");
     setProductGroup("");
@@ -333,15 +447,39 @@ function VendasPage() {
   }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, companySortBy]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadData(1, 1);
-    }, FILTER_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
+    const controller = new AbortController();
+    void loadData(1, 1, controller.signal);
+    return () => controller.abort();
   }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, companySortBy, timelineGranularity]);
 
   useEffect(() => {
-    void loadData(page, summaryPage);
+    const controller = new AbortController();
+    void loadData(page, summaryPage, controller.signal);
+    return () => controller.abort();
   }, [page, summaryPage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const state: PersistedSalesState = {
+      periodPreset,
+      dateFrom,
+      dateTo,
+      customerName,
+      productCodeInput,
+      documentNumberInput,
+      city,
+      companyName,
+      productGroup,
+      transactionType,
+      advancedOpen,
+      viewMode,
+      companySortBy,
+      summaryPage,
+      page,
+    };
+    window.sessionStorage.setItem(SALES_STATE_STORAGE_KEY, JSON.stringify(state));
+  }, [periodPreset, dateFrom, dateTo, customerName, productCodeInput, documentNumberInput, city, companyName, productGroup, transactionType, advancedOpen, viewMode, companySortBy, summaryPage, page]);
 
   return (
     <div className="page-shell space-y-8">
@@ -374,22 +512,26 @@ function VendasPage() {
               <Label htmlFor="sales-document">Nota fiscal</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="sales-document" list="sales-document-options" className="pl-9" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} placeholder="Buscar por nota fiscal" />
+                <Input id="sales-document" className="pl-9 pr-16" value={documentNumberInput} onChange={(event) => setDocumentNumberInput(event.target.value)} placeholder="Buscar por nota fiscal" />
+                {documentNumberInput && (
+                  <Button type="button" variant="ghost" size="sm" className="absolute right-1 top-1/2 h-8 -translate-y-1/2 px-2 text-xs" onClick={() => setDocumentNumberInput("")}>
+                    Limpar
+                  </Button>
+                )}
               </div>
-              <datalist id="sales-document-options">
-                {invoiceSuggestions.map((value) => <option key={value} value={value} />)}
-              </datalist>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="sales-product">Produto</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="sales-product" list="sales-product-options" className="pl-9" value={productCode} onChange={(event) => setProductCode(event.target.value.split(" - ")[0] ?? event.target.value)} placeholder="Buscar código ou descrição" />
+                <Input id="sales-product" className="pl-9 pr-16" value={productCodeInput} onChange={(event) => setProductCodeInput(event.target.value)} placeholder="Buscar código ou descrição" />
+                {productCodeInput && (
+                  <Button type="button" variant="ghost" size="sm" className="absolute right-1 top-1/2 h-8 -translate-y-1/2 px-2 text-xs" onClick={() => setProductCodeInput("")}>
+                    Limpar
+                  </Button>
+                )}
               </div>
-              <datalist id="sales-product-options">
-                {productSuggestions.map((value) => <option key={value} value={value} />)}
-              </datalist>
             </div>
 
             <Button type="button" variant="outline" className="h-10" onClick={() => setAdvancedOpen((value) => !value)}>
@@ -476,7 +618,7 @@ function VendasPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-base text-[var(--sales-chart-title)]">Evolução da receita</CardTitle>
-                <p className="mt-1 text-xs text-[var(--sales-chart-muted)]">Faturamento acumulado por período.</p>
+                <p className="mt-1 text-xs text-[var(--sales-chart-muted)]">{buildSalesTimelineSubtitle(timelineGranularity)}</p>
               </div>
             </div>
           </CardHeader>
@@ -760,10 +902,10 @@ function SummaryTable({
         <TableHeader>
           <TableRow>
             <TableHead>Empresa</TableHead>
+            <TableHead>Documento/Nota Fiscal</TableHead>
             <TableHead>Faturamento</TableHead>
             <TableHead>Quantidade</TableHead>
             <TableHead>Peso (kg)</TableHead>
-            <TableHead>Variação</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -777,23 +919,10 @@ function SummaryTable({
           {summary.items.map((row) => (
             <TableRow key={row.companyName}>
               <TableCell>{row.companyName}</TableCell>
+              <TableCell>{buildSalesDocumentLabel(row.documentCount, row.singleDocumentNumber)}</TableCell>
               <TableCell>{formatCurrency(row.totalAmount)}</TableCell>
               <TableCell>{formatDecimal(row.totalQuantity)}</TableCell>
               <TableCell>{formatDecimal(row.totalWeightKg)}</TableCell>
-              <TableCell>
-                <Badge
-                  variant={row.growthPercent == null ? "outline" : row.growthPercent >= 0 ? "secondary" : "destructive"}
-                  className={
-                    row.growthPercent == null
-                      ? "text-muted-foreground"
-                      : row.growthPercent >= 0
-                        ? "border-[color:var(--success)]/20 bg-[color:var(--success)]/10 text-[color:var(--success)]"
-                        : "border-[color:var(--danger)]/20 bg-[color:var(--danger)]/10 text-[color:var(--danger)]"
-                  }
-                >
-                  {formatDelta(row.growthPercent)}
-                </Badge>
-              </TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -804,41 +933,35 @@ function SummaryTable({
 }
 
 function ItemsTable({ loading, items, page, totalPages, onPrevious, onNext }: { loading: boolean; items: CommercialTransaction[]; page: number; totalPages: number; onPrevious: () => void; onNext: () => void }) {
-  if (loading) return <SkeletonTable rows={8} columns={8} />;
+  if (loading) return <SkeletonTable rows={8} columns={5} />;
 
   return (
     <>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Data</TableHead>
-            <TableHead>Cliente</TableHead>
+            <TableHead>Documento</TableHead>
             <TableHead>Produto</TableHead>
-            <TableHead>Qtd</TableHead>
-            <TableHead>Unitário</TableHead>
-            <TableHead>Total</TableHead>
-            <TableHead>Operação</TableHead>
-            <TableHead>Cidade</TableHead>
+            <TableHead>Quantidade</TableHead>
+            <TableHead>Peso (kg)</TableHead>
+            <TableHead>Faturamento</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+              <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                 Nenhuma venda encontrada.
               </TableCell>
             </TableRow>
           )}
           {items.map((item) => (
             <TableRow key={item.id} className="animate-soft-enter">
-              <TableCell>{formatDate(item.transactionDate)}</TableCell>
-              <TableCell>{item.customerName}</TableCell>
-              <TableCell>{item.productCode}</TableCell>
+              <TableCell>{item.documentNumber}</TableCell>
+              <TableCell>{item.productCode} - {item.productDescription}</TableCell>
               <TableCell>{formatDecimal(item.quantity)}</TableCell>
-              <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
+              <TableCell>{formatDecimal(item.grossWeightKg)}</TableCell>
               <TableCell>{formatCurrency(item.totalAmount)}</TableCell>
-              <TableCell>{item.transactionType || "-"}</TableCell>
-              <TableCell>{item.city || "-"}</TableCell>
             </TableRow>
           ))}
         </TableBody>

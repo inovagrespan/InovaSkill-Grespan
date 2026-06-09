@@ -2,6 +2,8 @@ namespace InovaSkill.Importer.Api.Contracts;
 
 public sealed record CommercialTransactionCompanySummaryDto(
     string CompanyName,
+    int DocumentCount,
+    string? SingleDocumentNumber,
     decimal TotalAmount,
     decimal TotalQuantity,
     decimal TotalWeightKg,

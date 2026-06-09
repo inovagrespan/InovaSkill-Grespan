@@ -20,7 +20,7 @@ export function buildSalesTrendData(
   return timeline.items.map((item) => ({
     label: formatSalesTimelineLabel(item.periodStart, timeline.granularity),
     value: item.totalAmount,
-    tooltipLabel: `${item.periodStart}T00:00:00Z`,
+    tooltipLabel: item.periodStart.includes("T") ? item.periodStart : `${item.periodStart}T00:00:00Z`,
   }));
 }
 
@@ -50,11 +50,15 @@ export function describeSalesTimelineGranularity(
   granularity: CommercialTransactionTimelineResponse["granularity"],
 ): string {
   switch (granularity) {
-    case "daily":
-      return "diária";
-    case "weekly":
-      return "semanal";
+    case "hour":
+      return "hora";
+    case "day":
+      return "dia";
+    case "week":
+      return "semana";
+    case "quarter":
+      return "trimestre";
     default:
-      return "mensal";
+      return "mês";
   }
 }
