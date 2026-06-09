@@ -98,7 +98,7 @@ public sealed class FinanceController(ImportDbContext dbContext) : ControllerBas
             .Select(x => new FinanceDashboardTransaction(
                 x.CustomerName,
                 x.TransactionDate,
-                x.Quantity * x.UnitPrice,
+                x.TotalAmount,
                 x.DocumentNumber,
                 x.Quantity))
             .ToListAsync(cancellationToken);
@@ -159,8 +159,8 @@ public sealed class FinanceController(ImportDbContext dbContext) : ControllerBas
             return query;
         }
 
-        var fromInclusive = dateFrom?.Date;
-        var toExclusive = dateTo?.Date.AddDays(1);
+        var fromInclusive = dateFrom.HasValue ? NormalizeToUtc(dateFrom.Value).Date : (DateTime?)null;
+        var toExclusive = dateTo.HasValue ? NormalizeToUtc(dateTo.Value).Date.AddDays(1) : (DateTime?)null;
 
         if (fromInclusive.HasValue)
         {
@@ -173,5 +173,15 @@ public sealed class FinanceController(ImportDbContext dbContext) : ControllerBas
         }
 
         return query;
+    }
+
+    private static DateTime NormalizeToUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
     }
 }

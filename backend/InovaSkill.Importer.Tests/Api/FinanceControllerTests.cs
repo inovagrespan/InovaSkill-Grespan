@@ -81,6 +81,43 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetDashboard_UsesPersistedTotalAmountForRawTransactions()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.Add(new Domain.Entities.CommercialTransaction
+        {
+            DocumentNumber = "NF-AJUSTE",
+            TransactionDate = new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc),
+            CustomerCode = "C1",
+            CustomerName = "Cliente Ajuste",
+            ProductCode = "P1",
+            ProductDescription = "Produto com ajuste",
+            Quantity = 3m,
+            UnitPrice = 10m,
+            TotalAmount = 25m,
+            TransactionType = "Venda",
+            City = "Campinas",
+            ProductGroup = "Grupo A",
+            GrossWeightKg = 2m,
+            SourceFileJobId = 1
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new FinanceController(db);
+
+        var result = await controller.GetDashboard(allTime: true, page: 1, pageSize: 20);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<FinanceDashboardResponseDto>(ok.Value);
+        var item = Assert.Single(payload.Items);
+
+        Assert.Equal(25m, item.Revenue);
+        Assert.Equal(25m, payload.Summary.TotalRevenue);
+        Assert.Equal(25m, payload.RevenueTrend.Single().Revenue);
+        Assert.Equal(25m, payload.CustomerRanking.Single().Revenue);
+    }
+
+    [Fact]
     public async Task GetDashboard_UsesDailySummariesWhenAvailable()
     {
         await using var db = await CreateDbAsync();
@@ -131,6 +168,62 @@ public sealed class FinanceControllerTests
         Assert.Equal(2, payload.Items.Count);
         Assert.Equal(2, payload.TotalItems);
         Assert.Equal(1, payload.TotalPages);
+    }
+
+    [Fact]
+    public async Task GetDashboard_FiltersDailySummariesWithUnspecifiedDateRange()
+    {
+        await using var db = await CreateDbAsync();
+        db.CustomerSummariesDaily.AddRange(
+            new Domain.Entities.CustomerSummaryDaily
+            {
+                SourceFileJobId = 1,
+                ReferenceDate = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+                CustomerCode = "C1",
+                CustomerName = "Cliente A",
+                City = "Campinas",
+                ProductGroup = "Grupo A",
+                TransactionType = "Venda",
+                Orders = 1,
+                Revenue = 100m,
+                Quantity = 10m,
+                Weight = 1m,
+                ProcessedAt = DateTime.UtcNow
+            },
+            new Domain.Entities.CustomerSummaryDaily
+            {
+                SourceFileJobId = 1,
+                ReferenceDate = new DateTime(2026, 2, 2, 0, 0, 0, DateTimeKind.Utc),
+                CustomerCode = "C1",
+                CustomerName = "Cliente A",
+                City = "Campinas",
+                ProductGroup = "Grupo A",
+                TransactionType = "Venda",
+                Orders = 1,
+                Revenue = 200m,
+                Quantity = 20m,
+                Weight = 2m,
+                ProcessedAt = DateTime.UtcNow
+            });
+        await db.SaveChangesAsync();
+
+        var controller = new FinanceController(db);
+
+        var result = await controller.GetDashboard(
+            dateFrom: new DateTime(2026, 2, 2),
+            dateTo: new DateTime(2026, 2, 2),
+            allTime: false,
+            page: 1,
+            pageSize: 20);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<FinanceDashboardResponseDto>(ok.Value);
+        var item = Assert.Single(payload.Items);
+
+        Assert.Equal(DateTimeKind.Unspecified, new DateTime(2026, 2, 2).Kind);
+        Assert.Equal(new DateTime(2026, 2, 2, 0, 0, 0, DateTimeKind.Utc), item.Date);
+        Assert.Equal(200m, payload.Summary.TotalRevenue);
+        Assert.Equal(1, payload.TotalItems);
     }
 
     [Fact]

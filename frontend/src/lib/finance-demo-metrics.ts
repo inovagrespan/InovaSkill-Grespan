@@ -59,6 +59,14 @@ function isInsideDateRange(itemDate: string, dateFrom: string, dateTo: string): 
   return true;
 }
 
+function normalizeFinanceSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toLowerCase();
+}
+
 export function listFinanceCustomers(items: FinanceDemoTransaction[] = financeDemoTransactions): string[] {
   return Array.from(new Set(items.map((item) => item.customer))).sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
@@ -67,9 +75,9 @@ export function calculateFinanceMetrics(
   filters: FinanceFilters,
   items: FinanceDemoTransaction[] = financeDemoTransactions,
 ): FinanceMetrics {
-  const normalizedCustomer = filters.customer.trim().toLowerCase();
+  const normalizedCustomer = normalizeFinanceSearchText(filters.customer);
   const filtered = items.filter((item) => {
-    const matchesCustomer = !normalizedCustomer || item.customer.toLowerCase() === normalizedCustomer;
+    const matchesCustomer = !normalizedCustomer || normalizeFinanceSearchText(item.customer).includes(normalizedCustomer);
     const matchesDate = filters.allTime || isInsideDateRange(item.date, filters.dateFrom, filters.dateTo);
     return matchesCustomer && matchesDate;
   });

@@ -27,6 +27,21 @@ describe("finance demo metrics", () => {
     expect(result.averageTicket).toBe(1_000);
   });
 
+  it("filtra cliente por trecho sem exigir acento exato no fallback", () => {
+    const result = calculateFinanceMetrics(
+      { customer: "sao", dateFrom: "2026-01-01", dateTo: "2026-12-31", allTime: false },
+      [
+        { customer: "Mercado São Bento", date: "2026-01-10", revenue: 1_000, orders: 1, quantity: 10 },
+        { customer: "Atacado Primavera", date: "2026-01-10", revenue: 2_000, orders: 1, quantity: 20 },
+      ],
+    );
+
+    expect(result.totalRevenue).toBe(1_000);
+    expect(result.items).toEqual([
+      { customer: "Mercado São Bento", date: "2026-01-10", revenue: 1_000, orders: 1, quantity: 10 },
+    ]);
+  });
+
   it("soma faturamento, ticket medio e quantidade do periodo filtrado", () => {
     const result = calculateFinanceMetrics(
       { customer: "", dateFrom: "2026-01-01", dateTo: "2026-02-28", allTime: false },
