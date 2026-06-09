@@ -27,6 +27,22 @@ describe("operational, finance and reports pages", () => {
     expect(sidebar).toContain('label: "Finanças"');
   });
 
+  it("cria aba de produtos para visualizar produtos cadastrados", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/produtos.tsx"), "utf8");
+    const api = fs.readFileSync(path.resolve(process.cwd(), "src/lib/importer-api.ts"), "utf8");
+    const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
+
+    expect(source).toContain('createFileRoute("/produtos")');
+    expect(source).toContain("Produtos cadastrados");
+    expect(source).toContain("Buscar por SKU ou nome");
+    expect(source).toContain("fetchProducts");
+    expect(api).toContain("/api/products");
+    expect(api).toContain("demoProducts");
+    expect(api).toContain("filterDemoProducts");
+    expect(sidebar).toContain('to: "/produtos"');
+    expect(sidebar).toContain('label: "Produtos"');
+  });
+
   it("exibe médias semanal e mensal na tela de vendas", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/vendas.tsx"), "utf8");
 

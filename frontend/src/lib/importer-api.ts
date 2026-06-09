@@ -78,6 +78,15 @@ export type CommercialTransaction = {
   sourceFileJobId: number;
 };
 
+export type Product = {
+  id: number;
+  sku: string;
+  name: string;
+  price: number;
+  createdAt: string;
+  sourceFileJobId: number;
+};
+
 export type SummaryGranularity = "daily" | "weekly" | "monthly";
 export type SummarySortBy = "growth" | "amount" | "weight" | "quantity";
 export type CommercialTransactionCompanySummary = {
@@ -548,6 +557,39 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       sourceFileJobId: 503,
     },
   ];
+}
+
+function demoProducts(): Product[] {
+  return [
+    { id: 1, sku: "PRD-104", name: "Arroz Tipo 1 5kg", price: 27.9, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: 900 },
+    { id: 2, sku: "PRD-221", name: "Feijão Carioca 1kg", price: 8.7, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: 900 },
+    { id: 3, sku: "PRD-318", name: "Óleo de Soja 900ml", price: 6.4, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 901 },
+    { id: 4, sku: "PRD-411", name: "Café Tradicional 500g", price: 18.5, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 902 },
+    { id: 5, sku: "PRD-512", name: "Macarrão Espaguete 500g", price: 4.9, createdAt: "2026-06-04T00:00:00Z", sourceFileJobId: 903 },
+    { id: 6, sku: "PRD-608", name: "Açúcar Cristal 5kg", price: 21.3, createdAt: "2026-06-04T00:00:00Z", sourceFileJobId: 903 },
+  ];
+}
+
+function normalizeDecimalQuery(value?: string): string {
+  return value?.trim().replace(",", ".") ?? "";
+}
+
+function filterDemoProducts(input: {
+  search?: string;
+  priceMin?: string;
+  priceMax?: string;
+}): Product[] {
+  const normalizedSearch = input.search?.trim().toLowerCase() ?? "";
+  const min = Number(normalizeDecimalQuery(input.priceMin) || Number.NEGATIVE_INFINITY);
+  const max = Number(normalizeDecimalQuery(input.priceMax) || Number.POSITIVE_INFINITY);
+
+  return demoProducts().filter((item) => (
+    (!normalizedSearch ||
+      item.sku.toLowerCase().includes(normalizedSearch) ||
+      item.name.toLowerCase().includes(normalizedSearch)) &&
+    item.price >= min &&
+    item.price <= max
+  ));
 }
 
 function demoCommercialSummary(input: {
@@ -1416,6 +1458,66 @@ export async function fetchCommercialTransactions(input: {
     page: (raw as PagedResult<CommercialTransaction>).page ?? (raw as { Page?: number }).Page ?? 1,
     pageSize: (raw as PagedResult<CommercialTransaction>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? 20,
     total: (raw as PagedResult<CommercialTransaction>).total ?? (raw as { Total?: number }).Total ?? 0,
+    items,
+  };
+}
+
+export async function fetchProducts(input: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sku?: string;
+  name?: string;
+  priceMin?: string;
+  priceMax?: string;
+}): Promise<PagedResult<Product>> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+
+  if (input.search?.trim()) query.set("search", input.search.trim());
+  if (input.sku?.trim()) query.set("sku", input.sku.trim());
+  if (input.name?.trim()) query.set("name", input.name.trim());
+  const normalizedPriceMin = normalizeDecimalQuery(input.priceMin);
+  const normalizedPriceMax = normalizeDecimalQuery(input.priceMax);
+  if (normalizedPriceMin) query.set("priceMin", normalizedPriceMin);
+  if (normalizedPriceMax) query.set("priceMax", normalizedPriceMax);
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/products?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) {
+      const items = filterDemoProducts(input);
+      return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_PAGE_SIZE, total: items.length, items };
+    }
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos."));
+
+  const raw = (await response.json()) as
+    | PagedResult<Product>
+    | { Page?: number; PageSize?: number; Total?: number; Items?: Product[] };
+  const items = (raw as PagedResult<Product>).items ?? (raw as { Items?: Product[] }).Items ?? [];
+
+  const page = (raw as PagedResult<Product>).page ?? (raw as { Page?: number }).Page ?? 1;
+  const pageSize = (raw as PagedResult<Product>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? 20;
+  const total = (raw as PagedResult<Product>).total ?? (raw as { Total?: number }).Total ?? 0;
+
+  if (total === 0 && items.length === 0) {
+    const demoItems = filterDemoProducts(input);
+    return {
+      page,
+      pageSize,
+      total: demoItems.length,
+      items: demoItems,
+    };
+  }
+
+  return {
+    page,
+    pageSize,
+    total,
     items,
   };
 }
