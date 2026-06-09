@@ -348,6 +348,32 @@
   --finance-chart-select-border: #1d2a44;
 }
 
+.sales-chart-card {
+  --sales-chart-title: #020617;
+  --sales-chart-muted: #64748b;
+  --sales-chart-axis: #667085;
+  --sales-chart-grid: rgba(100, 116, 139, 0.14);
+  --sales-chart-line: #ff3f5f;
+  --sales-chart-fill: rgba(255, 63, 95, 0.34);
+  --sales-chart-fill-end: rgba(255, 63, 95, 0.02);
+  --sales-chart-cursor: rgba(255, 63, 95, 0.22);
+  --sales-chart-select-bg: #ffffff;
+  --sales-chart-select-border: #d7dde8;
+}
+
+.dark .sales-chart-card {
+  --sales-chart-title: #f8fafc;
+  --sales-chart-muted: #98a4b8;
+  --sales-chart-axis: #98a4b8;
+  --sales-chart-grid: rgba(148, 163, 184, 0.11);
+  --sales-chart-line: #ff3158;
+  --sales-chart-fill: rgba(255, 49, 88, 0.34);
+  --sales-chart-fill-end: rgba(255, 49, 88, 0.03);
+  --sales-chart-cursor: rgba(255, 49, 88, 0.24);
+  --sales-chart-select-bg: #0b1020;
+  --sales-chart-select-border: #1d2a44;
+}
+
 .dark .app-background {
   background:
     radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47, 0.16), transparent 36%),
