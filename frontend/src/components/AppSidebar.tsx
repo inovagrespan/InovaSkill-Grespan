@@ -3,7 +3,7 @@ import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { logout } from "@/lib/auth";
+import { isCurrentUserAdmin, logout } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 type AppSidebarProps = {
@@ -21,7 +21,7 @@ const items = [
     label: "Clientes",
     icon: Users,
   },
-  { to: "/processamentos", label: "Processamentos", icon: ServerCog },
+  { to: "/processamentos", label: "Processamentos", icon: ServerCog, adminOnly: true },
   { to: "/financas", label: "Finanças", icon: ReceiptText },
   { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/logistica", label: "Logística", icon: Truck },
@@ -32,6 +32,7 @@ const items = [
 export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme }: AppSidebarProps) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const visibleItems = items.filter((item) => !item.adminOnly || isCurrentUserAdmin());
 
   function isItemActive(to: string): boolean {
     if (to === "/importacoes") return pathname === "/importacoes" || pathname.startsWith("/importacoes/");
@@ -41,7 +42,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
   function renderNav(showCollapsed: boolean, onNavigate?: () => void) {
     return (
       <nav className="custom-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-3 pb-2">
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const active = isItemActive(item.to);
           const Icon = item.icon;
           const topLevelLink = (

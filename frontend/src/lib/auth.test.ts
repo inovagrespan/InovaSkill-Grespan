@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { authFetch, clearAuthToken, getAuthToken, isAuthenticated, isTokenValid, saveAuthToken } from "./auth";
+import { authFetch, clearAuthToken, getAuthToken, getCurrentUserRole, isAuthenticated, isTokenValid, saveAuthToken } from "./auth";
 
-function createToken(exp: number): string {
-  const payload = btoa(JSON.stringify({ sub: "1", exp })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+function createToken(exp: number, role = "gestor"): string {
+  const payload = btoa(JSON.stringify({ sub: "1", exp, role })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   return `header.${payload}.signature`;
 }
 
@@ -72,6 +72,12 @@ describe("auth", () => {
 
     const [, init] = fetchMock.mock.calls[0];
     expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${token}`);
+  });
+
+  it("expõe a role do usuário autenticado", () => {
+    saveAuthToken(createToken(Math.floor(Date.now() / 1000) + 60, "admin"));
+
+    expect(getCurrentUserRole()).toBe("admin");
   });
 
   it("bloqueia requisições sem sessão de login", async () => {

@@ -5,6 +5,7 @@ using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.Persistence.Bootstrap;
+using InovaSkill.Importer.Infrastructure.Processing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Features;
@@ -16,7 +17,8 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSignalR();
 builder.Services.AddImportInfrastructure(builder.Configuration);
-builder.Services.AddScoped<IFileJobProgressNotifier, SignalRFileJobProgressNotifier>();
+builder.Services.AddScoped<IFileJobProgressNotifier, RedisFileJobProgressNotifier>();
+builder.Services.AddHostedService<RedisFileJobProgressBroadcastService>();
 builder.Services.Configure<JwtAuthOptions>(builder.Configuration.GetSection(JwtAuthOptions.SectionName));
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<PasswordHasher<AppUser>>();
@@ -43,7 +45,7 @@ using (var scope = app.Services.CreateScope())
     await db.Database.EnsureCreatedAsync();
     await db.Database.MigrateAsync();
     await DbSchemaBootstrapper.EnsureProgressColumnsAsync(db);
-    await EnsureDefaultAdminUserAsync(
+    await EnsureDefaultUsersAsync(
         db,
         scope.ServiceProvider.GetRequiredService<PasswordHasher<AppUser>>());
 }
@@ -70,34 +72,47 @@ app.MapGet("/api/_debug/routes", (IEnumerable<EndpointDataSource> endpointSource
 
 app.Run();
 
-static async Task EnsureDefaultAdminUserAsync(ImportDbContext db, PasswordHasher<AppUser> passwordHasher)
+static async Task EnsureDefaultUsersAsync(ImportDbContext db, PasswordHasher<AppUser> passwordHasher)
 {
-    const string adminUserName = "admin";
-    const string adminEmail = "admin@local.test";
-    const string adminPassword = "admin";
-
-    var existingAdmin = await db.AppUsers.FirstOrDefaultAsync(
-        x => x.Email == adminEmail || x.Name.ToLower() == adminUserName);
-    if (existingAdmin is not null)
+    var defaults = new[]
     {
-        var verification = passwordHasher.VerifyHashedPassword(existingAdmin, existingAdmin.PasswordHash, adminPassword);
-        if (verification == PasswordVerificationResult.Failed)
+        new SeedUser("admin", "admin@local.test", "admin123*#", AppUserRoles.Admin),
+        new SeedUser("grespan", "grespan@local.test", "inova2026", AppUserRoles.Gestor)
+    };
+
+    foreach (var seed in defaults)
+    {
+        var normalizedName = seed.Name.ToLowerInvariant();
+        var normalizedEmail = seed.Email.ToLowerInvariant();
+        var existingUser = await db.AppUsers.FirstOrDefaultAsync(
+            x => x.Email == normalizedEmail || x.Name.ToLower() == normalizedName);
+
+        if (existingUser is null)
         {
-            existingAdmin.PasswordHash = passwordHasher.HashPassword(existingAdmin, adminPassword);
-            await db.SaveChangesAsync();
+            var createdUser = new AppUser
+            {
+                Name = seed.Name,
+                Email = normalizedEmail,
+                Role = seed.Role,
+                CreatedAt = DateTime.UtcNow
+            };
+            createdUser.PasswordHash = passwordHasher.HashPassword(createdUser, seed.Password);
+            db.AppUsers.Add(createdUser);
+            continue;
         }
 
-        return;
+        existingUser.Name = seed.Name;
+        existingUser.Email = normalizedEmail;
+        existingUser.Role = seed.Role;
+
+        var verification = passwordHasher.VerifyHashedPassword(existingUser, existingUser.PasswordHash, seed.Password);
+        if (verification == PasswordVerificationResult.Failed)
+        {
+            existingUser.PasswordHash = passwordHasher.HashPassword(existingUser, seed.Password);
+        }
     }
 
-    var admin = new AppUser
-    {
-        Name = adminUserName,
-        Email = adminEmail,
-        CreatedAt = DateTime.UtcNow
-    };
-    admin.PasswordHash = passwordHasher.HashPassword(admin, adminPassword);
-
-    db.AppUsers.Add(admin);
     await db.SaveChangesAsync();
 }
+
+internal sealed record SeedUser(string Name, string Email, string Password, string Role);

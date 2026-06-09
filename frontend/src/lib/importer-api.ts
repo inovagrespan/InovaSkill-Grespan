@@ -1,4 +1,11 @@
 ﻿import { authFetch } from "@/lib/auth";
+import {
+  buildFinanceCustomerRevenueRanking,
+  buildFinanceRevenueTrend,
+  calculateFinanceMetrics,
+  financeDemoTransactions,
+  listFinanceCustomers,
+} from "@/lib/finance-demo-metrics";
 import { buildFallbackStages, type FileJobStageProgress } from "@/lib/importer-progress";
 
 export type FileType = "Unknown" | "Customers" | "Orders" | "Products" | "CommercialTransaction";
@@ -143,6 +150,7 @@ export type ProcessingJobQueueItem = {
   processedRows: number;
   totalRows: number;
   errorCount: number;
+  canRunManualActions: boolean;
 };
 
 export type ProcessingDailyPoint = {
@@ -442,6 +450,46 @@ export type CustomerCommercialHealthAlert = {
   severity: "critical" | "warning" | "info" | string;
   title: string;
   detail: string;
+};
+
+export type FinanceRevenueGranularity = "weekly" | "monthly" | "yearly";
+
+export type FinanceDashboardSummary = {
+  totalRevenue: number;
+  totalOrders: number;
+  totalQuantity: number;
+  averageTicket: number;
+};
+
+export type FinanceDashboardItem = {
+  customer: string;
+  date: string;
+  revenue: number;
+  orders: number;
+  quantity: number;
+};
+
+export type FinanceRevenueTrendPoint = {
+  period: string;
+  label: string;
+  revenue: number;
+};
+
+export type FinanceCustomerRevenuePoint = {
+  customer: string;
+  revenue: number;
+};
+
+export type FinanceDashboardResponse = {
+  customers: string[];
+  summary: FinanceDashboardSummary;
+  revenueTrend: FinanceRevenueTrendPoint[];
+  customerRanking: FinanceCustomerRevenuePoint[];
+  items: FinanceDashboardItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
@@ -781,6 +829,7 @@ function demoProcessingDashboard(): ProcessingMonitoringDashboard {
         processedRows: 8_160,
         totalRows: 12_000,
         errorCount: 3,
+        canRunManualActions: false,
       },
       {
         id: 501,
@@ -798,6 +847,7 @@ function demoProcessingDashboard(): ProcessingMonitoringDashboard {
         processedRows: 12_480,
         totalRows: 12_480,
         errorCount: 0,
+        canRunManualActions: true,
       },
     ],
     daily: [
@@ -1280,6 +1330,24 @@ export async function cancelProcessingJob(jobId: number): Promise<void> {
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao cancelar job."));
 }
 
+export async function runProcessingManualAction(input: {
+  action: "sales-summary" | "customer-summary";
+  jobIds: number[];
+}): Promise<void> {
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/processing-monitoring/jobs/manual-actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    if (shouldUseDemoData(error)) return;
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao executar ação manual."));
+}
+
 function normalizeProcessingDashboard(raw: any): ProcessingMonitoringDashboard {
   return {
     summary: normalizeProcessingSummary(raw.summary ?? raw.Summary ?? {}),
@@ -1340,6 +1408,7 @@ function normalizeProcessingJobItem(raw: any): ProcessingJobQueueItem {
     processedRows: raw.processedRows ?? raw.ProcessedRows ?? 0,
     totalRows: raw.totalRows ?? raw.TotalRows ?? 0,
     errorCount: raw.errorCount ?? raw.ErrorCount ?? 0,
+    canRunManualActions: raw.canRunManualActions ?? raw.CanRunManualActions ?? false,
   };
 }
 
@@ -1409,6 +1478,105 @@ function normalizeProcessingLog(raw: any): ProcessingLog {
     level: raw.level ?? raw.Level ?? "",
     message: raw.message ?? raw.Message ?? "",
   };
+}
+
+function demoFinanceDashboard(input: {
+  customer?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  allTime?: boolean;
+  revenueGranularity?: FinanceRevenueGranularity;
+}): FinanceDashboardResponse {
+  const metrics = calculateFinanceMetrics(
+    {
+      customer: input.customer ?? "",
+      dateFrom: input.dateFrom ?? "",
+      dateTo: input.dateTo ?? "",
+      allTime: input.allTime ?? true,
+    },
+    financeDemoTransactions,
+  );
+
+  return {
+    customers: listFinanceCustomers(financeDemoTransactions),
+    summary: {
+      totalRevenue: metrics.totalRevenue,
+      totalOrders: metrics.totalOrders,
+      totalQuantity: metrics.totalQuantity,
+      averageTicket: metrics.averageTicket,
+    },
+    revenueTrend: buildFinanceRevenueTrend(metrics.items, input.revenueGranularity ?? "monthly"),
+    customerRanking: buildFinanceCustomerRevenueRanking(metrics.items),
+    items: metrics.items.slice(((input.page ?? 1) - 1) * (input.pageSize ?? 20), ((input.page ?? 1) - 1) * (input.pageSize ?? 20) + (input.pageSize ?? 20)),
+    page: input.page ?? 1,
+    pageSize: input.pageSize ?? 20,
+    totalItems: metrics.items.length,
+    totalPages: Math.max(1, Math.ceil(metrics.items.length / (input.pageSize ?? 20))),
+  };
+}
+
+function normalizeFinanceDashboard(raw: any): FinanceDashboardResponse {
+  return {
+    customers: raw.customers ?? raw.Customers ?? [],
+    summary: {
+      totalRevenue: raw.summary?.totalRevenue ?? raw.Summary?.TotalRevenue ?? 0,
+      totalOrders: raw.summary?.totalOrders ?? raw.Summary?.TotalOrders ?? 0,
+      totalQuantity: raw.summary?.totalQuantity ?? raw.Summary?.TotalQuantity ?? 0,
+      averageTicket: raw.summary?.averageTicket ?? raw.Summary?.AverageTicket ?? 0,
+    },
+    revenueTrend: (raw.revenueTrend ?? raw.RevenueTrend ?? []).map((item: any) => ({
+      period: item.period ?? item.Period ?? "",
+      label: item.label ?? item.Label ?? "",
+      revenue: item.revenue ?? item.Revenue ?? 0,
+    })),
+    customerRanking: (raw.customerRanking ?? raw.CustomerRanking ?? []).map((item: any) => ({
+      customer: item.customer ?? item.Customer ?? "",
+      revenue: item.revenue ?? item.Revenue ?? 0,
+    })),
+    items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
+      customer: item.customer ?? item.Customer ?? "",
+      date: String(item.date ?? item.Date ?? "").split("T")[0] ?? "",
+      revenue: item.revenue ?? item.Revenue ?? 0,
+      orders: item.orders ?? item.Orders ?? 0,
+      quantity: item.quantity ?? item.Quantity ?? 0,
+    })),
+    page: raw.page ?? raw.Page ?? 1,
+    pageSize: raw.pageSize ?? raw.PageSize ?? 20,
+    totalItems: raw.totalItems ?? raw.TotalItems ?? (raw.items ?? raw.Items ?? []).length ?? 0,
+    totalPages: raw.totalPages ?? raw.TotalPages ?? 1,
+  };
+}
+
+export async function fetchFinanceDashboard(input: {
+  customer?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  allTime?: boolean;
+  revenueGranularity?: FinanceRevenueGranularity;
+  page?: number;
+  pageSize?: number;
+}): Promise<FinanceDashboardResponse> {
+  const query = new URLSearchParams();
+  if (input.customer?.trim()) query.set("customer", input.customer.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+  query.set("allTime", String(input.allTime ?? true));
+  query.set("revenueGranularity", input.revenueGranularity ?? "monthly");
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/finance/dashboard?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) {
+      return demoFinanceDashboard(input);
+    }
+    throw error;
+  }
+
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar painel de finanças."));
+  return normalizeFinanceDashboard(await response.json());
 }
 
 export async function fetchCommercialTransactions(input: {

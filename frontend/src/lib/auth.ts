@@ -6,6 +6,7 @@ export type AuthTokenPayload = {
   sub?: string;
   name?: string;
   email?: string;
+  role?: string;
   exp?: number;
 };
 
@@ -82,6 +83,19 @@ export function getAuthToken(): string | null {
   }
 
   return token;
+}
+
+export function getCurrentUser(): AuthTokenPayload | null {
+  const token = getAuthToken();
+  return token ? parseJwtPayload(token) : null;
+}
+
+export function getCurrentUserRole(): string | null {
+  return getCurrentUser()?.role?.trim().toLowerCase() ?? null;
+}
+
+export function isCurrentUserAdmin(): boolean {
+  return getCurrentUserRole() === "admin";
 }
 
 export function saveAuthToken(token: string): void {
@@ -194,7 +208,7 @@ export async function authFetch(
   headers.set("Authorization", `Bearer ${token}`);
 
   const response = await getFetch()(input, { ...init, headers });
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
     redirectToLogin();
   }
 

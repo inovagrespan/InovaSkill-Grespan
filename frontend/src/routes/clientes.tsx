@@ -42,10 +42,12 @@ import {
   formatNullableCurrencyTooltip,
   formatPurchaseFrequency,
   formatVariationPercent,
+  resolveRankingTrend,
   resolveCustomerStatusVariant,
 } from "@/lib/customer-details";
 import { buildCustomerCommercialIntelligence, type CommercialIntelligenceCard, type CommercialIntelligenceTone, type CustomerCommercialIntelligence } from "@/lib/customer-commercial-intelligence";
 import { computeNewCustomersInsights } from "@/lib/customer-new-customers";
+import { buildCustomerPeriodTrend } from "@/lib/customer-period-insights";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
 export const Route = createFileRoute("/clientes")({
@@ -85,6 +87,18 @@ function formatDecimal(value: number): string {
 function formatTimelineMetricValue(value: number, metric: CustomerTimelineResponse["metric"]): string {
   if (metric === "revenue") return formatKpiCompactCurrency(value);
   return formatKpiCompactNumber(value);
+}
+
+function describeTimelineGranularity(granularity: CustomerTimelineResponse["granularity"]): string {
+  if (granularity === "daily") return "dia";
+  if (granularity === "weekly") return "semana";
+  return "mês";
+}
+
+function describeTimelineGranularityPlural(granularity: CustomerTimelineResponse["granularity"]): string {
+  if (granularity === "daily") return "dias";
+  if (granularity === "weekly") return "semanas";
+  return "meses";
 }
 
 const intelligenceToneStyles: Record<CommercialIntelligenceTone, {
@@ -418,6 +432,10 @@ function ClientesPage() {
     [timeline, timelineMetric, insights?.predictedRevenue],
   );
   const comparablePeriods = useMemo(() => comparison.filter(canComparePeriod), [comparison]);
+  const periodTrendSummary = useMemo(
+    () => buildCustomerPeriodTrend(timeline?.points ?? []),
+    [timeline],
+  );
   const commercialIntelligence = useMemo(
     () => buildCustomerCommercialIntelligence({ details, insights, comparison, topProducts }),
     [details, insights, comparison, topProducts],
@@ -740,11 +758,11 @@ function ClientesPage() {
           </div>
 
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm font-medium">Ranking de clientes (clique na linha para abrir detalhes)</p>
+            <p className="text-sm font-medium">Ranking de clientes (a lista resume a tendência; o detalhe mostra a evolução do período)</p>
             <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}>
               <option value="revenue">Maior faturamento</option>
-              <option value="growth">Maior crescimento</option>
-              <option value="drop">Maior queda</option>
+              <option value="growth">Melhor tendência</option>
+              <option value="drop">Pior tendência</option>
               <option value="quantity">Maior volume</option>
               <option value="ticket">Maior ticket médio</option>
             </select>
@@ -762,7 +780,7 @@ function ClientesPage() {
                 <TableHead>Peso</TableHead>
                 <TableHead>Pedidos</TableHead>
                 <TableHead>Ticket médio</TableHead>
-                <TableHead>Variação</TableHead>
+                <TableHead>Leitura do período</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -779,7 +797,19 @@ function ClientesPage() {
                   <TableCell>{formatDecimal(item.weight)}</TableCell>
                   <TableCell>{item.orders}</TableCell>
                   <TableCell>{formatCurrency(item.averageTicket)}</TableCell>
-                  <TableCell className={item.variationPercent == null ? "text-muted-foreground" : item.variationPercent >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}>{formatVariationPercent(item.variationPercent)}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const trend = resolveRankingTrend(item.variationPercent);
+                      return (
+                        <div className="space-y-1">
+                          <Badge variant={trend.badgeVariant} className="w-fit">{trend.label}</Badge>
+                          <p className={`text-xs ${trend.textClassName}`}>
+                            {item.variationPercent == null ? "Sem comparação anterior" : `${formatVariationPercent(item.variationPercent)} vs. período anterior`}
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -947,6 +977,74 @@ function ClientesPage() {
                 <CardContent className="pb-5">
                   {!timeline && <p className="text-sm text-muted-foreground">Dados insuficientes para evolução temporal neste período.</p>}
                   {timeline && timeline.points.length === 0 && <p className="text-sm text-muted-foreground">Sem pontos para o período selecionado.</p>}
+                  {timeline && timeline.points.length > 0 && (
+                    <div className="mb-4 space-y-3">
+                      <div className="metric-row">
+                        <KpiCard
+                          className="border-border/80 bg-gradient-to-b from-surface to-muted/25"
+                          title={`Média por ${describeTimelineGranularity(timeline.granularity)}`}
+                          value={
+                            periodTrendSummary.averageValue == null
+                              ? "Sem base"
+                              : formatTimelineMetricValue(periodTrendSummary.averageValue, timeline.metric)
+                          }
+                          valueTooltip={
+                            periodTrendSummary.averageValue == null
+                              ? "Dados insuficientes no período filtrado"
+                              : formatTimelineMetricValue(periodTrendSummary.averageValue, timeline.metric)
+                          }
+                          showPercentageChange={false}
+                          icon={CalendarClock}
+                          periodLabel={`Média dos pontos exibidos no gráfico para este ${describeTimelineGranularity(timeline.granularity)}.`}
+                        />
+                        <KpiCard
+                          className="border-border/80 bg-gradient-to-b from-surface to-muted/25"
+                          title="Tendência do período"
+                          value={periodTrendSummary.trendLabel}
+                          valueTooltip={periodTrendSummary.trendLabel}
+                          showPercentageChange={false}
+                          icon={TrendingUp}
+                          periodLabel={
+                            periodTrendSummary.comparableIntervals > 0
+                              ? `${periodTrendSummary.comparableIntervals} comparações entre ${describeTimelineGranularityPlural(timeline.granularity)} do gráfico.`
+                              : "Ainda não há base comparável suficiente entre os pontos do gráfico."
+                          }
+                          allowWrapValue
+                        />
+                        <KpiCard
+                          className="border-border/80 bg-gradient-to-b from-surface to-muted/25"
+                          title={`Variação média por ${describeTimelineGranularity(timeline.granularity)}`}
+                          value={formatVariationPercent(periodTrendSummary.averageChangePercent)}
+                          valueTooltip={
+                            periodTrendSummary.averageChangePercent == null
+                              ? "Dados insuficientes para comparar pontos consecutivos"
+                              : formatVariationPercent(periodTrendSummary.averageChangePercent)
+                          }
+                          showPercentageChange={false}
+                          icon={ArrowUpRight}
+                          periodLabel={`Média das oscilações entre um ${describeTimelineGranularity(timeline.granularity)} e o seguinte.`}
+                        />
+                        <KpiCard
+                          className="border-border/80 bg-gradient-to-b from-surface to-muted/25"
+                          title="Primeiro vs último ponto"
+                          value={formatVariationPercent(periodTrendSummary.totalChangePercent)}
+                          valueTooltip={
+                            periodTrendSummary.totalChangePercent == null
+                              ? "Sem base para comparar início e fim do período"
+                              : formatVariationPercent(periodTrendSummary.totalChangePercent)
+                          }
+                          showPercentageChange={false}
+                          icon={ArrowDownRight}
+                          periodLabel="Leitura direta da mudança entre o começo e o fim do período exibido."
+                        />
+                      </div>
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+                        {periodTrendSummary.trendLabel === "Sem base"
+                          ? "Use um período com mais pontos no gráfico para entender se o cliente está subindo, caindo ou estável ao longo do tempo."
+                          : `Neste período, o cliente ficou ${periodTrendSummary.trendLabel.toLowerCase()}, com média de ${periodTrendSummary.averageChangePercent == null ? "sem comparação mês a mês suficiente" : `${formatVariationPercent(periodTrendSummary.averageChangePercent)} por ${describeTimelineGranularity(timeline.granularity)}`}.`}
+                      </div>
+                    </div>
+                  )}
                   <ChartContainer config={{ value: { label: "Histórico", color: "var(--primary)" }, forecast: { label: "Previsão", color: "hsl(var(--chart-4))" } }} className="h-[320px] min-h-[320px] w-full pb-1 sm:h-[340px] sm:min-h-[340px]">
                     <LineChart data={timelineChartData} margin={{ left: 8, right: 12, top: 10, bottom: 20 }}>
                       <CartesianGrid vertical={false} />

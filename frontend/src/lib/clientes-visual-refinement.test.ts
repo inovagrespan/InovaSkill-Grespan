@@ -47,6 +47,17 @@ describe("clientes - refinamento visual do modal de detalhes", () => {
     expect(source).not.toContain("<TableHead>Valor atual</TableHead>");
   });
 
+  it("simplifica a lista com leitura de tendência e resume o gráfico por período", () => {
+    const source = readClientesRoute();
+
+    expect(source).toContain("<TableHead>Leitura do período</TableHead>");
+    expect(source).toContain("resolveRankingTrend(item.variationPercent)");
+    expect(source).toContain("Média por");
+    expect(source).toContain("Tendência do período");
+    expect(source).toContain("Variação média por");
+    expect(source).toContain("Primeiro vs último ponto");
+  });
+
   it("transforma insights em inteligencia comercial acionavel", () => {
     const source = readClientesRoute();
 

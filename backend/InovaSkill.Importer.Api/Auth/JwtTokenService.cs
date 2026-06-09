@@ -26,6 +26,7 @@ public sealed class JwtTokenService(IOptions<JwtAuthOptions> options)
             ["sub"] = user.Id.ToString(),
             ["name"] = user.Name,
             ["email"] = user.Email,
+            ["role"] = user.Role,
             ["iss"] = options.Issuer,
             ["aud"] = options.Audience,
             ["iat"] = now.ToUnixTimeSeconds(),
@@ -78,6 +79,12 @@ public sealed class JwtTokenService(IOptions<JwtAuthOptions> options)
             .Where(item => item.Value.ValueKind == JsonValueKind.String)
             .Select(item => new Claim(item.Key, item.Value.GetString() ?? string.Empty))
             .ToList();
+
+        var role = claims.FirstOrDefault(x => x.Type == "role")?.Value;
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
 
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "Bearer"));
     }

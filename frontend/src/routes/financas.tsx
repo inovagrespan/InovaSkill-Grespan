@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { CalendarDays, DollarSign, ReceiptText, Scale, Search } from "lucide-react";
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, DollarSign, ReceiptText, Scale, Search } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -9,13 +10,13 @@ import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Label } from "@/components/ui/label";
 import {
-  buildFinanceCustomerRevenueRanking,
-  buildFinanceRevenueTrend,
-  calculateFinanceMetrics,
-  financeDemoTransactions,
-  listFinanceCustomers,
+  fetchFinanceDashboard,
+  type FinanceCustomerRevenuePoint,
+  type FinanceDashboardItem,
+  type FinanceDashboardResponse,
   type FinanceRevenueGranularity,
-} from "@/lib/finance-demo-metrics";
+  type FinanceRevenueTrendPoint,
+} from "@/lib/importer-api";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
 export const Route = createFileRoute("/financas")({
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/financas")({
 
 const DEFAULT_DATE_FROM = "2026-01-01";
 const DEFAULT_DATE_TO = "2026-06-30";
+const DEFAULT_PAGE_SIZE = 20;
 const FINANCE_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]";
 const FINANCE_CHART_CARD_CLASS_NAME = "finance-chart-card overflow-hidden rounded-xl border bg-surface text-foreground shadow-sm dark:bg-[#111821] dark:text-slate-100 dark:shadow-lg";
 const FINANCE_CHART_SELECT_CLASS_NAME = "h-8 rounded-[10px] border border-[var(--finance-chart-select-border)] bg-[var(--finance-chart-select-bg)] px-3 text-xs font-medium text-[var(--finance-chart-title)] outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/20";
@@ -56,23 +58,73 @@ function FinancasPage() {
   const [customer, setCustomer] = useState("");
   const [dateFrom, setDateFrom] = useState(DEFAULT_DATE_FROM);
   const [dateTo, setDateTo] = useState(DEFAULT_DATE_TO);
-  const [allTime, setAllTime] = useState(true);
+  const [allTime, setAllTime] = useState(false);
   const [revenueGranularity, setRevenueGranularity] = useState<FinanceRevenueGranularity>("monthly");
+  const [page, setPage] = useState(1);
+  const [dashboard, setDashboard] = useState<FinanceDashboardResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
 
-  const customers = useMemo(() => listFinanceCustomers(financeDemoTransactions), []);
+  useEffect(() => {
+    setPage(1);
+  }, [customer, dateFrom, dateTo, allTime, revenueGranularity]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFinanceDashboard() {
+      setLoading(true);
+      try {
+        const result = await fetchFinanceDashboard({
+          customer,
+          dateFrom,
+          dateTo,
+          allTime,
+          revenueGranularity,
+          page,
+          pageSize: DEFAULT_PAGE_SIZE,
+        });
+        if (cancelled) return;
+        setDashboard(result);
+        setMessage("");
+      } catch (error) {
+        if (cancelled) return;
+        setDashboard(null);
+        setMessage((error as Error).message);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadFinanceDashboard();
+    return () => {
+      cancelled = true;
+    };
+  }, [allTime, customer, dateFrom, dateTo, page, revenueGranularity]);
+
+  const customers = useMemo(() => dashboard?.customers ?? [], [dashboard?.customers]);
   const metrics = useMemo(
-    () => calculateFinanceMetrics({ customer, dateFrom, dateTo, allTime }, financeDemoTransactions),
-    [customer, dateFrom, dateTo, allTime],
+    () => dashboard?.summary ?? { totalRevenue: 0, totalOrders: 0, totalQuantity: 0, averageTicket: 0 },
+    [dashboard],
   );
-  const revenueTrend = useMemo(() => buildFinanceRevenueTrend(metrics.items, revenueGranularity), [metrics.items, revenueGranularity]);
-  const customerRanking = useMemo(() => buildFinanceCustomerRevenueRanking(metrics.items), [metrics.items]);
+  const revenueTrend = useMemo<FinanceRevenueTrendPoint[]>(() => dashboard?.revenueTrend ?? [], [dashboard]);
+  const customerRanking = useMemo<FinanceCustomerRevenuePoint[]>(() => dashboard?.customerRanking ?? [], [dashboard]);
+  const financeItems = useMemo<FinanceDashboardItem[]>(() => dashboard?.items ?? [], [dashboard]);
+  const totalItems = dashboard?.totalItems ?? 0;
+  const totalPages = dashboard?.totalPages ?? 1;
+  const currentPage = dashboard?.page ?? page;
+  const pageSize = dashboard?.pageSize ?? DEFAULT_PAGE_SIZE;
+  const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const pageEnd = totalItems === 0 ? 0 : Math.min(currentPage * pageSize, totalItems);
   const periodLabel = allTime ? "Tempo total" : `${formatDate(dateFrom)} até ${formatDate(dateTo)}`;
 
   function clearFilters() {
     setCustomer("");
     setDateFrom(DEFAULT_DATE_FROM);
     setDateTo(DEFAULT_DATE_TO);
-    setAllTime(true);
+    setAllTime(false);
   }
 
   return (
@@ -81,9 +133,16 @@ function FinancasPage() {
         <span className="page-header-kicker">Smart Core / Finanças</span>
         <h1 className="mt-2 text-4xl font-display tracking-tight">Finanças</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Painel financeiro com dados fictícios para validar filtros de cliente, período e métricas de reunião.
+          Painel financeiro com filtros de cliente, período e métricas consolidadas a partir da base importada.
         </p>
       </header>
+
+      {message && (
+        <Alert variant="destructive">
+          <AlertTriangle className="size-4" />
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      )}
 
       <section className="rounded-lg border border-border bg-surface p-4">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_0.9fr_0.9fr_auto_auto] lg:items-end">
@@ -134,6 +193,7 @@ function FinancasPage() {
           showPercentageChange={false}
           periodLabel={periodLabel}
           icon={DollarSign}
+          loading={loading}
         />
         <KpiCard
           title="Ticket médio"
@@ -142,6 +202,7 @@ function FinancasPage() {
           showPercentageChange={false}
           periodLabel="Faturamento dividido pelos pedidos"
           icon={ReceiptText}
+          loading={loading}
         />
         <KpiCard
           title="Peso / quantidade"
@@ -150,6 +211,7 @@ function FinancasPage() {
           showPercentageChange={false}
           periodLabel="Quantidade comprada pelo cliente"
           icon={Scale}
+          loading={loading}
         />
       </section>
 
@@ -174,6 +236,11 @@ function FinancasPage() {
             </div>
           </CardHeader>
           <CardContent className="pt-0">
+            {loading ? (
+              <div className={`${FINANCE_CHART_HEIGHT_CLASS_NAME} flex items-center justify-center text-sm text-muted-foreground`}>
+                Carregando receita...
+              </div>
+            ) : (
               <ChartContainer
                 config={{ revenue: { label: "Faturamento", color: FINANCE_REVENUE_COLOR } }}
                 className={`${FINANCE_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--finance-chart-axis)]`}
@@ -212,6 +279,7 @@ function FinancasPage() {
                   />
                 </AreaChart>
               </ChartContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -220,58 +288,84 @@ function FinancasPage() {
             <CardTitle className="text-base text-[var(--finance-chart-title)]">Ranking por empresa</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <ChartContainer config={{ revenue: { label: "Faturamento", color: FINANCE_REVENUE_COLOR } }} className={`${FINANCE_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--finance-chart-axis)]`}>
-              <AreaChart data={customerRanking} margin={{ left: 0, right: 8, top: 12, bottom: 4 }}>
-                <defs>
-                  <linearGradient id="finance-ranking-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={FINANCE_REVENUE_FILL} stopOpacity={1} />
-                    <stop offset="100%" stopColor={FINANCE_REVENUE_FILL_END} stopOpacity={1} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} stroke={FINANCE_CHART_GRID_STROKE} />
-                <XAxis
-                  dataKey="customer"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={10}
-                  interval={0}
-                  minTickGap={10}
-                  tickFormatter={(value) => String(value).split(" ")[0] ?? String(value)}
-                  stroke={FINANCE_AXIS_COLOR}
-                />
-                <YAxis
-                  width={64}
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) => formatKpiCompactCurrency(Number(value))}
-                  stroke={FINANCE_AXIS_COLOR}
-                />
-                <ChartTooltip
-                  cursor={{ stroke: FINANCE_CURSOR_STROKE, strokeWidth: 2 }}
-                  content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  name="Faturamento"
-                  stroke={FINANCE_REVENUE_COLOR}
-                  strokeWidth={2.8}
-                  fill="url(#finance-ranking-fill)"
-                  dot={{ r: 3, fill: FINANCE_REVENUE_COLOR, strokeWidth: 0 }}
-                  activeDot={{ r: 5, fill: FINANCE_REVENUE_COLOR }}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ChartContainer>
+            {loading ? (
+              <div className={`${FINANCE_CHART_HEIGHT_CLASS_NAME} flex items-center justify-center text-sm text-muted-foreground`}>
+                Carregando ranking...
+              </div>
+            ) : (
+              <ChartContainer
+                config={{ revenue: { label: "Faturamento", color: FINANCE_REVENUE_COLOR } }}
+                className={`${FINANCE_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--finance-chart-axis)]`}
+              >
+                <AreaChart data={customerRanking} margin={{ left: 0, right: 8, top: 12, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id="finance-ranking-fill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={FINANCE_REVENUE_FILL} stopOpacity={1} />
+                      <stop offset="100%" stopColor={FINANCE_REVENUE_FILL_END} stopOpacity={1} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid vertical={false} stroke={FINANCE_CHART_GRID_STROKE} />
+                  <XAxis
+                    dataKey="customer"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={10}
+                    interval={0}
+                    minTickGap={10}
+                    tickFormatter={(value) => String(value).split(" ")[0] ?? String(value)}
+                    stroke={FINANCE_AXIS_COLOR}
+                  />
+                  <YAxis
+                    width={64}
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => formatKpiCompactCurrency(Number(value))}
+                    stroke={FINANCE_AXIS_COLOR}
+                  />
+                  <ChartTooltip
+                    cursor={{ stroke: FINANCE_CURSOR_STROKE, strokeWidth: 2 }}
+                    content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    name="Faturamento"
+                    stroke={FINANCE_REVENUE_COLOR}
+                    strokeWidth={2.8}
+                    fill="url(#finance-ranking-fill)"
+                    dot={{ r: 3, fill: FINANCE_REVENUE_COLOR, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: FINANCE_REVENUE_COLOR }}
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ChartContainer>
+            )}
           </CardContent>
         </Card>
       </section>
 
       <section className="rounded-xl border border-border bg-surface p-5">
-        <div className="mb-4">
-          <h2 className="font-display text-xl">Base fictícia filtrada</h2>
-          <p className="text-sm text-muted-foreground">{metrics.items.length} lançamento(s) financeiro(s) encontrados.</p>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-xl">Base financeira filtrada</h2>
+            <p className="text-sm text-muted-foreground">
+              {totalItems === 0
+                ? "Nenhum lançamento financeiro encontrado."
+                : `Exibindo ${pageStart}-${pageEnd} de ${totalItems} lançamento(s) financeiro(s).`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Página {currentPage} de {totalPages}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={loading || currentPage <= 1}>
+              <ChevronLeft className="size-4" />
+              Anterior
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={loading || currentPage >= totalPages}>
+              Próxima
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
@@ -285,7 +379,7 @@ function FinancasPage() {
               </tr>
             </thead>
             <tbody>
-              {metrics.items.map((item) => (
+              {financeItems.map((item) => (
                 <tr key={`${item.customer}-${item.date}-${item.revenue}`} className="border-b border-border/70 last:border-0">
                   <td className="py-3 pr-4 font-medium">{item.customer}</td>
                   <td className="py-3 pr-4">{formatDate(item.date)}</td>
@@ -294,7 +388,7 @@ function FinancasPage() {
                   <td className="py-3">{formatNumber(item.quantity)}</td>
                 </tr>
               ))}
-              {metrics.items.length === 0 ? (
+              {!loading && financeItems.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-muted-foreground">Nenhuma métrica encontrada para os filtros atuais.</td>
                 </tr>

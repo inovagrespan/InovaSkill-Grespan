@@ -80,6 +80,7 @@ describe("processing monitoring", () => {
     expect(dashboard.summary.runningJobs).toBe(2);
     expect(dashboard.summary.processedRowsToday).toBe(2340000);
     expect(dashboard.jobs[0]).toEqual(expect.objectContaining({ id: 10, progressPercent: 66, errorCount: 3 }));
+    expect(dashboard.jobs[0].canRunManualActions).toBe(false);
     expect(dashboard.stageDurations[0]).toEqual(expect.objectContaining({ stage: "IMPORT", sharePercent: 55 }));
     expect(dashboard.workers[0]).toEqual(expect.objectContaining({ workerId: "worker-1", status: "Online" }));
   });
@@ -94,6 +95,7 @@ describe("processing monitoring", () => {
 
     expect(dashboard.summary.runningJobs).toBeGreaterThan(0);
     expect(dashboard.jobs[0]).toEqual(expect.objectContaining({ fileName: "clientes-base-demo.xlsx" }));
+    expect(dashboard.jobs[1].canRunManualActions).toBe(true);
     expect(dashboard.workers[0]).toEqual(expect.objectContaining({ status: "Online" }));
   });
 
@@ -148,10 +150,16 @@ describe("processing monitoring", () => {
     const sidebarSource = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
 
     expect(routeSource).toContain('createFileRoute("/processamentos")');
+    expect(routeSource).toContain("beforeLoad");
+    expect(routeSource).toContain("isCurrentUserAdmin");
     expect(routeSource).toContain("processing-page-shell");
     expect(routeSource).toContain("Central de Processamentos");
+    expect(routeSource).toContain("Resumo de vendas");
+    expect(routeSource).toContain("Resumo de clientes");
+    expect(routeSource).toContain("runProcessingManualAction");
     expect(sidebarSource).toContain('to: "/processamentos"');
-    expect(sidebarSource).toContain('label: "Processamentos"');
+    expect(sidebarSource).toContain("adminOnly: true");
+    expect(sidebarSource).toContain("isCurrentUserAdmin()");
   });
 
   it("usa skeletons nos principais fluxos assincronos", () => {
@@ -169,5 +177,13 @@ describe("processing monitoring", () => {
     expect(clientes).toContain("SkeletonModalContent");
     expect(clientes).toContain("!loading && items.length === 0");
     expect(importacoes).toContain("jobsLoading && jobs.length === 0");
+  });
+
+  it("assina atualizacoes em tempo real na central de processamentos", () => {
+    const processamentos = fs.readFileSync(path.resolve(process.cwd(), "src/routes/processamentos.tsx"), "utf8");
+
+    expect(processamentos).toContain("subscribeToFileJobUpdates");
+    expect(processamentos).toContain("const interval = setInterval(() => void loadDashboard(), 15000);");
+    expect(processamentos).toContain("void loadJobDetails(jobId);");
   });
 });

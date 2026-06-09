@@ -25,7 +25,9 @@ public sealed class AuthControllerTests
         var result = await controller.Login(new LoginRequest("admin", "admin"), CancellationToken.None);
 
         var response = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.IsType<LoginResponse>(response.Value);
+        var payload = Assert.IsType<LoginResponse>(response.Value);
+        var token = CreateTokenService().Validate(payload.Token);
+        Assert.Equal(AppUserRoles.Admin, token?.FindFirst("role")?.Value);
     }
 
     [Fact]
@@ -57,6 +59,7 @@ public sealed class AuthControllerTests
         {
             Name = "admin",
             Email = "admin@local.test",
+            Role = AppUserRoles.Admin,
             CreatedAt = DateTime.UtcNow
         };
         user.PasswordHash = passwordHasher.HashPassword(user, "admin");
@@ -65,12 +68,17 @@ public sealed class AuthControllerTests
 
     private static AuthController CreateController(ImportDbContext db, PasswordHasher<AppUser> passwordHasher)
     {
-        return new AuthController(db, passwordHasher, new JwtTokenService(Options.Create(new JwtAuthOptions
+        return new AuthController(db, passwordHasher, CreateTokenService());
+    }
+
+    private static JwtTokenService CreateTokenService()
+    {
+        return new JwtTokenService(Options.Create(new JwtAuthOptions
         {
             Issuer = "Tests",
             Audience = "Frontend",
             Secret = "tests-secret-with-more-than-32-characters",
             ExpirationMinutes = 30
-        })));
+        }));
     }
 }

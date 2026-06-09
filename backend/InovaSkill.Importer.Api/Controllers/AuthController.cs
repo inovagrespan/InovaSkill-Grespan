@@ -52,6 +52,7 @@ public sealed class AuthController(
         {
             Name = userName,
             Email = email,
+            Role = AppUserRoles.Gestor,
             CreatedAt = DateTime.UtcNow
         };
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);

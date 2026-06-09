@@ -450,6 +450,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(256).IsRequired();
             e.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Role).HasMaxLength(64).IsRequired();
             e.Property(x => x.PasswordHash).HasMaxLength(1024).IsRequired();
             e.Property(x => x.CreatedAt).IsRequired();
             e.HasIndex(x => x.Email).IsUnique();

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Activity, AlertTriangle, CheckCircle2, Clock, Database, Download, ListChecks, PauseCircle, PlayCircle, RefreshCw, Server } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -10,18 +10,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { SkeletonCard, SkeletonChart, SkeletonMetricCard, SkeletonModalContent, SkeletonTable } from "@/components/ui/skeleton";
+import { subscribeToFileJobUpdates } from "@/lib/file-job-progress-realtime";
 import {
   cancelProcessingJob,
   fetchProcessingJobDetails,
   fetchProcessingMonitoringDashboard,
   retryProcessingJob,
+  runProcessingManualAction,
   type ProcessingJobDetails,
   type ProcessingJobQueueItem,
   type ProcessingMonitoringDashboard,
 } from "@/lib/importer-api";
 import { clampProgressPercent, stageStatusLabel } from "@/lib/importer-progress";
+import { isCurrentUserAdmin } from "@/lib/auth";
 
 export const Route = createFileRoute("/processamentos")({
+  beforeLoad: () => {
+    if (!isCurrentUserAdmin()) {
+      throw redirect({ to: "/" });
+    }
+  },
   component: ProcessamentosPage,
 });
 
@@ -30,9 +38,13 @@ const chartColors = ["#b4232f", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#08
 function ProcessamentosPage() {
   const [dashboard, setDashboard] = useState<ProcessingMonitoringDashboard | null>(null);
   const [selectedJob, setSelectedJob] = useState<ProcessingJobDetails | null>(null);
+  const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const realtimeRefreshTimerRef = useRef<number | null>(null);
+  const selectedJobIdRef = useRef<number | null>(null);
+  const detailsOpenRef = useRef(false);
 
   async function loadDashboard() {
     try {
@@ -46,14 +58,18 @@ function ProcessamentosPage() {
     }
   }
 
-  async function openJob(jobId: number) {
+  async function loadJobDetails(jobId: number) {
     try {
       const details = await fetchProcessingJobDetails(jobId);
       setSelectedJob(details);
-      setDetailsOpen(true);
     } catch (error) {
       setMessage((error as Error).message);
     }
+  }
+
+  async function openJob(jobId: number) {
+    await loadJobDetails(jobId);
+    setDetailsOpen(true);
   }
 
   async function runAction(action: () => Promise<void>) {
@@ -61,8 +77,26 @@ function ProcessamentosPage() {
       await action();
       await loadDashboard();
       if (selectedJob) {
-        setSelectedJob(await fetchProcessingJobDetails(selectedJob.job.id));
+        await loadJobDetails(selectedJob.job.id);
       }
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  }
+
+  async function runManualBatch(action: "sales-summary" | "customer-summary") {
+    if (selectedJobIds.length === 0) {
+      setMessage("Selecione ao menos um job concluído para executar a ação manual.");
+      return;
+    }
+
+    try {
+      await runProcessingManualAction({ action, jobIds: selectedJobIds });
+      setMessage(action === "sales-summary"
+        ? "Resumo de vendas enfileirado para os jobs selecionados."
+        : "Resumo de clientes enfileirado para os jobs selecionados.");
+      setSelectedJobIds([]);
+      await loadDashboard();
     } catch (error) {
       setMessage((error as Error).message);
     }
@@ -70,8 +104,48 @@ function ProcessamentosPage() {
 
   useEffect(() => {
     void loadDashboard();
-    const interval = setInterval(() => void loadDashboard(), 1000);
+    const interval = setInterval(() => void loadDashboard(), 15000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    let cancelled = false;
+
+    const scheduleRefresh = (jobId: number) => {
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+      }
+
+      realtimeRefreshTimerRef.current = window.setTimeout(() => {
+        void loadDashboard();
+        if (detailsOpenRef.current && selectedJobIdRef.current === jobId) {
+          void loadJobDetails(jobId);
+        }
+      }, 150);
+    };
+
+    void subscribeToFileJobUpdates(({ jobId }) => {
+      if (!cancelled) {
+        scheduleRefresh(jobId);
+      }
+    }).then((unsubscribe) => {
+      if (cancelled) {
+        unsubscribe();
+        return;
+      }
+
+      dispose = unsubscribe;
+    });
+
+    return () => {
+      cancelled = true;
+      dispose?.();
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -81,7 +155,7 @@ function ProcessamentosPage() {
 
     const interval = setInterval(async () => {
       try {
-        setSelectedJob(await fetchProcessingJobDetails(selectedJob.job.id));
+        await loadJobDetails(selectedJob.job.id);
       } catch {
         // dashboard refresh already surfaces failures
       }
@@ -89,6 +163,14 @@ function ProcessamentosPage() {
 
     return () => clearInterval(interval);
   }, [detailsOpen, selectedJob]);
+
+  useEffect(() => {
+    selectedJobIdRef.current = selectedJob?.job.id ?? null;
+  }, [selectedJob]);
+
+  useEffect(() => {
+    detailsOpenRef.current = detailsOpen;
+  }, [detailsOpen]);
 
   const summaryCards = useMemo(() => {
     const summary = dashboard?.summary;
@@ -101,6 +183,24 @@ function ProcessamentosPage() {
       { title: "Linhas hoje", value: formatInteger(summary?.processedRowsToday ?? 0), icon: Database },
     ];
   }, [dashboard]);
+
+  const eligibleJobIds = useMemo(
+    () => (dashboard?.jobs ?? []).filter((job) => job.canRunManualActions).map((job) => job.id),
+    [dashboard?.jobs],
+  );
+  const allEligibleSelected = eligibleJobIds.length > 0 && eligibleJobIds.every((jobId) => selectedJobIds.includes(jobId));
+
+  useEffect(() => {
+    setSelectedJobIds((current) => current.filter((jobId) => eligibleJobIds.includes(jobId)));
+  }, [eligibleJobIds]);
+
+  function toggleJobSelection(jobId: number, checked: boolean) {
+    setSelectedJobIds((current) => checked ? Array.from(new Set([...current, jobId])) : current.filter((id) => id !== jobId));
+  }
+
+  function toggleAllEligibleSelection(checked: boolean) {
+    setSelectedJobIds(checked ? eligibleJobIds : []);
+  }
 
   return (
     <div className="page-shell processing-page-shell">
@@ -151,13 +251,41 @@ function ProcessamentosPage() {
             <CardTitle>Fila de Processamento</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-medium">Execução manual de pós-processamento</p>
+                <p className="text-xs text-muted-foreground">
+                  Selecione jobs concluídos para rodar novamente os resumos sem depender de novo upload.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => toggleAllEligibleSelection(!allEligibleSelected)} disabled={!eligibleJobIds.length || loading}>
+                  {allEligibleSelected ? "Limpar seleção" : "Selecionar elegíveis"}
+                </Button>
+                <Button size="sm" onClick={() => void runManualBatch("sales-summary")} disabled={!selectedJobIds.length || loading}>
+                  Resumo de vendas
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => void runManualBatch("customer-summary")} disabled={!selectedJobIds.length || loading}>
+                  Resumo de clientes
+                </Button>
+              </div>
+            </div>
             {loading && !dashboard ? (
-              <SkeletonTable rows={8} columns={9} />
+              <SkeletonTable rows={8} columns={10} />
             ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[960px] text-sm">
                 <thead className="text-xs text-muted-foreground">
                   <tr className="border-b border-border">
+                    <th className="py-2 pr-3 text-left font-medium">
+                      <input
+                        type="checkbox"
+                        aria-label="Selecionar jobs elegíveis"
+                        checked={allEligibleSelected}
+                        disabled={!eligibleJobIds.length}
+                        onChange={(event) => toggleAllEligibleSelection(event.target.checked)}
+                      />
+                    </th>
                     <th className="py-2 pr-3 text-left font-medium">Id Job</th>
                     <th className="py-2 pr-3 text-left font-medium">Empresa</th>
                     <th className="py-2 pr-3 text-left font-medium">Arquivo</th>
@@ -172,6 +300,15 @@ function ProcessamentosPage() {
                 <tbody>
                   {(dashboard?.jobs ?? []).map((job) => (
                     <tr key={job.id} className="cursor-pointer border-b border-border/60 hover:bg-muted/40" onClick={() => void openJob(job.id)}>
+                      <td className="py-3 pr-3" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Selecionar job ${job.id}`}
+                          checked={selectedJobIds.includes(job.id)}
+                          disabled={!job.canRunManualActions}
+                          onChange={(event) => toggleJobSelection(job.id, event.target.checked)}
+                        />
+                      </td>
                       <td className="py-3 pr-3 font-mono text-xs">#{job.id}</td>
                       <td className="py-3 pr-3">{job.company}</td>
                       <td className="max-w-[220px] truncate py-3 pr-3">{job.fileName}</td>

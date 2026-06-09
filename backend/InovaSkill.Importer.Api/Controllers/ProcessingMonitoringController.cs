@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using InovaSkill.Importer.Api.Contracts;
 using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Application.Jobs;
@@ -17,7 +18,8 @@ namespace InovaSkill.Importer.Api.Controllers;
 public sealed class ProcessingMonitoringController(
     ImportDbContext dbContext,
     IProcessingQueueMonitor queueMonitor,
-    IJobService jobService) : ControllerBase
+    IJobService jobService,
+    IPostImportJobQueue postImportJobQueue) : ControllerBase
 {
     private static readonly TimeSpan StaleJobTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan WorkerOfflineTimeout = TimeSpan.FromSeconds(30);
@@ -25,6 +27,12 @@ public sealed class ProcessingMonitoringController(
     [HttpGet("dashboard")]
     public async Task<ActionResult<ProcessingMonitoringDashboardDto>> GetDashboard(CancellationToken cancellationToken = default)
     {
+        var accessDenied = EnsureAdminAccess();
+        if (accessDenied is not null)
+        {
+            return accessDenied;
+        }
+
         var now = DateTime.UtcNow;
         var today = now.Date;
         var historyStart = today.AddDays(-29);
@@ -67,6 +75,12 @@ public sealed class ProcessingMonitoringController(
     [HttpGet("jobs/{jobId:long}")]
     public async Task<ActionResult<ProcessingJobDetailsDto>> GetJobDetails(long jobId, CancellationToken cancellationToken = default)
     {
+        var accessDenied = EnsureAdminAccess();
+        if (accessDenied is not null)
+        {
+            return accessDenied;
+        }
+
         var now = DateTime.UtcNow;
         var job = await dbContext.FileJobs.AsNoTracking().FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (job is null)
@@ -102,6 +116,12 @@ public sealed class ProcessingMonitoringController(
     [HttpPost("jobs/{jobId:long}/retry")]
     public async Task<ActionResult> Retry(long jobId, CancellationToken cancellationToken = default)
     {
+        var accessDenied = EnsureAdminAccess();
+        if (accessDenied is not null)
+        {
+            return accessDenied;
+        }
+
         var job = await dbContext.FileJobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (job is null)
         {
@@ -133,6 +153,12 @@ public sealed class ProcessingMonitoringController(
     [HttpPost("jobs/{jobId:long}/cancel")]
     public async Task<ActionResult> Cancel(long jobId, CancellationToken cancellationToken = default)
     {
+        var accessDenied = EnsureAdminAccess();
+        if (accessDenied is not null)
+        {
+            return accessDenied;
+        }
+
         var job = await dbContext.FileJobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (job is null)
         {
@@ -156,9 +182,83 @@ public sealed class ProcessingMonitoringController(
         return Ok();
     }
 
+    [HttpPost("jobs/manual-actions")]
+    public async Task<ActionResult<ProcessingManualActionResponseDto>> RunManualAction(
+        [FromBody] ProcessingManualActionRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var accessDenied = EnsureAdminAccess();
+        if (accessDenied is not null)
+        {
+            return accessDenied;
+        }
+
+        var action = request.Action?.Trim().ToLowerInvariant();
+        var jobIds = request.JobIds?
+            .Where(x => x > 0)
+            .Distinct()
+            .ToArray() ?? [];
+
+        if (string.IsNullOrWhiteSpace(action))
+        {
+            return BadRequest("Ação manual obrigatória.");
+        }
+
+        if (jobIds.Length == 0)
+        {
+            return BadRequest("Informe ao menos um job para execução manual.");
+        }
+
+        if (!TryResolveManualAction(action, out var jobType))
+        {
+            return BadRequest("Ação manual não suportada.");
+        }
+
+        var jobs = await dbContext.FileJobs
+            .Where(x => jobIds.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+
+        if (jobs.Count != jobIds.Length)
+        {
+            return NotFound("Um ou mais jobs informados não foram encontrados.");
+        }
+
+        var invalidJobs = jobs
+            .Where(x => x.Status != FileJobStatus.Completed)
+            .Select(x => x.Id)
+            .ToArray();
+
+        if (invalidJobs.Length > 0)
+        {
+            return Conflict($"Somente jobs concluídos podem executar ações manuais. Jobs inválidos: {string.Join(", ", invalidJobs)}");
+        }
+
+        foreach (var job in jobs)
+        {
+            await postImportJobQueue.EnqueueAsync(new PostImportJobItem(job.Id, jobType), cancellationToken);
+            dbContext.ProcessingJobLogs.Add(new ProcessingJobLog
+            {
+                FileJobId = job.Id,
+                Stage = "OPERATIONS",
+                Level = "Information",
+                Message = $"Ação manual '{action}' enfileirada pela central de processamentos."
+            });
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new ProcessingManualActionResponseDto(action, jobs.Count));
+    }
+
     [HttpGet("jobs/{jobId:long}/logs/download")]
     public async Task<ActionResult> DownloadLogs(long jobId, CancellationToken cancellationToken = default)
     {
+        var accessDenied = EnsureAdminAccess();
+        if (accessDenied is not null)
+        {
+            return accessDenied;
+        }
+
         var exists = await dbContext.FileJobs.AsNoTracking().AnyAsync(x => x.Id == jobId, cancellationToken);
         if (!exists)
         {
@@ -326,7 +426,8 @@ public sealed class ProcessingMonitoringController(
             GetElapsedSeconds(job, now),
             job.ProcessedRows,
             job.TotalRows,
-            errors);
+            errors,
+            job.Status == FileJobStatus.Completed);
     }
 
     private static WorkerHealthDto BuildWorkerHealth(WorkerHeartbeat worker, DateTime now)
@@ -448,5 +549,37 @@ public sealed class ProcessingMonitoringController(
     private static string NormalizeStageCode(string? stage)
     {
         return string.IsNullOrWhiteSpace(stage) ? ImportProcessingStages.Validation : stage.Trim().ToUpperInvariant();
+    }
+
+    private static bool TryResolveManualAction(string action, out PostImportJobType jobType)
+    {
+        switch (action)
+        {
+            case "sales-summary":
+                jobType = PostImportJobType.SalesSummary;
+                return true;
+            case "customer-summary":
+                jobType = PostImportJobType.CustomerSummary;
+                return true;
+            default:
+                jobType = default;
+                return false;
+        }
+    }
+
+    private ActionResult? EnsureAdminAccess()
+    {
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? User.FindFirstValue("role");
+        if (string.Equals(role, AppUserRoles.Admin, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+        {
+            Title = "Acesso negado",
+            Detail = "A central de processamentos está disponível apenas para administradores.",
+            Status = StatusCodes.Status403Forbidden
+        });
     }
 }

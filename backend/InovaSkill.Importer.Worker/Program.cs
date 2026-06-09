@@ -1,10 +1,13 @@
+using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.Persistence.Bootstrap;
+using InovaSkill.Importer.Infrastructure.Processing;
 using InovaSkill.Importer.Worker;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddImportInfrastructure(builder.Configuration);
+builder.Services.AddScoped<IFileJobProgressNotifier, RedisFileJobProgressNotifier>();
 builder.Services.AddHostedService<RedisQueueWorkerService>();
 builder.Services.AddHostedService<QueuedJobWorkerService>();
 
