@@ -36,7 +36,7 @@ import {
   Weight,
   type LucideIcon,
 } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 export const Route = createFileRoute("/vendas")({
   component: VendasPage,
@@ -48,24 +48,20 @@ type ViewMode = "summary" | "items";
 const FILTER_DEBOUNCE_MS = 300;
 const DEFAULT_PAGE_SIZE = 20;
 const DEFAULT_SUMMARY_PAGE_SIZE = 20;
+const DEFAULT_SUMMARY_GRANULARITY: SummaryGranularity = "weekly";
 const SALES_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]";
-const SALES_CHART_CARD_CLASS_NAME = "overflow-hidden border-border/80 bg-card/95 shadow-sm hover:translate-y-0 hover:border-border/80 hover:shadow-sm";
-const SALES_CHART_SELECT_CLASS_NAME = "h-9 rounded-[var(--dashboard-control-radius)] border border-input bg-surface px-3 text-sm text-foreground shadow-xs outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-ring/40";
+const SALES_CHART_CARD_CLASS_NAME = "sales-chart-card overflow-hidden border-border/80 bg-card/95 shadow-sm hover:translate-y-0 hover:border-border/80 hover:shadow-sm";
+const SALES_CHART_SELECT_CLASS_NAME = "h-9 rounded-[var(--dashboard-control-radius)] border border-[var(--sales-chart-select-border)] bg-[var(--sales-chart-select-bg)] px-3 text-sm text-[var(--sales-chart-title)] shadow-xs outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-ring/40";
 const SALES_ANALYTICS_PANEL_CLASS_NAME = "rounded-[var(--dashboard-panel-radius)] border border-border/70 bg-[var(--surface-soft)]/70 p-4";
 const SALES_CHART_EMPTY_STATE_CLASS_NAME = "flex h-[var(--dashboard-chart-height)] items-center justify-center rounded-[var(--dashboard-panel-radius)] border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground";
-const SALES_GRID_STROKE = "rgba(107,114,128,0.18)";
-const SALES_AXIS_COLOR = "var(--text-muted)";
-const SALES_CURSOR_STROKE = "rgba(180,35,47,0.22)";
-const SALES_REVENUE_COLOR = "var(--primary-red)";
-const SALES_REVENUE_COLOR_SOFT = "rgba(180,35,47,0.10)";
+const SALES_GRID_STROKE = "var(--sales-chart-grid)";
+const SALES_AXIS_COLOR = "var(--sales-chart-axis)";
+const SALES_CURSOR_STROKE = "var(--sales-chart-cursor)";
+const SALES_REVENUE_COLOR = "var(--sales-chart-line)";
+const SALES_REVENUE_FILL = "var(--sales-chart-fill)";
+const SALES_REVENUE_FILL_END = "var(--sales-chart-fill-end)";
 const SALES_RANKING_COLOR = "rgba(180,35,47,0.82)";
 const SALES_RANKING_COLOR_SOFT = "rgba(180,35,47,0.58)";
-
-const revenueModeOptions = [
-  { value: "daily", label: "Diário" },
-  { value: "weekly", label: "Semanal" },
-  { value: "monthly", label: "Mensal" },
-] as const;
 
 const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
   { value: "today", label: "Hoje" },
@@ -193,7 +189,6 @@ function VendasPage() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("summary");
   const [companySortBy, setCompanySortBy] = useState<SummarySortBy>("amount");
-  const [summaryGranularity, setSummaryGranularity] = useState<SummaryGranularity>("weekly");
   const [summaryPage, setSummaryPage] = useState(1);
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<CommercialTransaction[]>([]);
@@ -258,7 +253,7 @@ function VendasPage() {
           dateTo,
         }),
         fetchCommercialTransactionsSummary({
-          granularity: summaryGranularity,
+          granularity: DEFAULT_SUMMARY_GRANULARITY,
           sortBy: companySortBy,
           page: targetSummaryPage,
           pageSize: summaryPageSize,
@@ -335,14 +330,14 @@ function VendasPage() {
   useEffect(() => {
     setSummaryPage(1);
     setPage(1);
-  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, summaryGranularity, companySortBy]);
+  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, companySortBy]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadData(1, 1);
     }, FILTER_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, summaryGranularity, companySortBy, timelineGranularity]);
+  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, companySortBy, timelineGranularity]);
 
   useEffect(() => {
     void loadData(page, summaryPage);
@@ -480,21 +475,9 @@ function VendasPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <CardTitle className="text-base text-foreground">Evolução da receita</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">Faturamento acumulado por período.</p>
+                <CardTitle className="text-base text-[var(--sales-chart-title)]">Evolução da receita</CardTitle>
+                <p className="mt-1 text-xs text-[var(--sales-chart-muted)]">Faturamento acumulado por período.</p>
               </div>
-              <select
-                className={SALES_CHART_SELECT_CLASS_NAME}
-                value={timelineGranularity}
-                onChange={() => undefined}
-                aria-label="Modo do gráfico de receita"
-              >
-                {revenueModeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
@@ -506,17 +489,16 @@ function VendasPage() {
               <div className={SALES_ANALYTICS_PANEL_CLASS_NAME}>
                 <ChartContainer
                   config={{ value: { label: "Faturamento", color: SALES_REVENUE_COLOR } }}
-                  className={`${SALES_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--text-muted)]`}
+                  className={`${SALES_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--sales-chart-axis)]`}
                 >
                   <AreaChart data={trendData} margin={{ left: 0, right: 8, top: 12, bottom: 4 }}>
                     <defs>
                       <linearGradient id="sales-revenue-fill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={SALES_REVENUE_COLOR} stopOpacity={0.22} />
-                        <stop offset="60%" stopColor={SALES_REVENUE_COLOR_SOFT} stopOpacity={0.10} />
-                        <stop offset="100%" stopColor={SALES_REVENUE_COLOR_SOFT} stopOpacity={0.02} />
+                        <stop offset="0%" stopColor={SALES_REVENUE_FILL} stopOpacity={1} />
+                        <stop offset="100%" stopColor={SALES_REVENUE_FILL_END} stopOpacity={1} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke={SALES_GRID_STROKE} strokeDasharray="3 6" />
+                    <CartesianGrid vertical={false} stroke={SALES_GRID_STROKE} />
                     <XAxis
                       dataKey="label"
                       tickLine={false}
@@ -534,24 +516,18 @@ function VendasPage() {
                       tickFormatter={formatRevenueAxisTick}
                     />
                     <ChartTooltip
-                      cursor={{ stroke: SALES_CURSOR_STROKE, strokeWidth: 1 }}
+                      cursor={{ stroke: SALES_CURSOR_STROKE, strokeWidth: 2 }}
                       content={<SalesRevenueTooltip />}
                     />
                     <Area
                       dataKey="value"
+                      name="Faturamento"
                       type="monotone"
                       fill="url(#sales-revenue-fill)"
-                      stroke="none"
-                      strokeWidth={0}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      dataKey="value"
-                      type="monotone"
                       stroke={SALES_REVENUE_COLOR}
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4, fill: SALES_REVENUE_COLOR, stroke: "#ffffff", strokeWidth: 2 }}
+                      strokeWidth={2.8}
+                      dot={{ r: 3, fill: SALES_REVENUE_COLOR, strokeWidth: 0 }}
+                      activeDot={{ r: 5, fill: SALES_REVENUE_COLOR }}
                       isAnimationActive={false}
                     />
                   </AreaChart>
@@ -569,11 +545,6 @@ function VendasPage() {
                 <p className="mt-1 text-xs text-muted-foreground">Comparação das empresas com maior impacto nos filtros.</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <select className={SALES_CHART_SELECT_CLASS_NAME} value={summaryGranularity} onChange={(event) => setSummaryGranularity(event.target.value as SummaryGranularity)}>
-                  <option value="daily">Diário</option>
-                  <option value="weekly">Semanal</option>
-                  <option value="monthly">Mensal</option>
-                </select>
                 <select className={SALES_CHART_SELECT_CLASS_NAME} value={companySortBy} onChange={(event) => setCompanySortBy(event.target.value as SummarySortBy)}>
                   <option value="amount">Maior faturamento</option>
                   <option value="growth">Maior crescimento</option>
