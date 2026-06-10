@@ -11,6 +11,8 @@ namespace InovaSkill.Importer.Api.Controllers;
 public sealed class CustomersController(ImportDbContext dbContext) : ControllerBase
 {
     private const int TopProductsLimit = 50;
+    private const int HistoricalAnalysisMonths = 12;
+    private const int WeeklyGranularityThresholdDays = 90;
 
     [HttpGet("{customerId}/commercial-health")]
     public async Task<ActionResult<CustomerCommercialHealthReport>> GetCommercialHealth(
@@ -201,9 +203,122 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
             x.Revenue,
             x.Quantity,
             x.Weight,
-            x.Orders)).ToList();
+            x.Orders,
+            ResolveAverageTicket(x.Revenue, x.Orders))).ToList();
 
         return Ok(new CustomerTimelineResponseDto(normalizedGranularity, normalizedMetric, points));
+    }
+
+    [HttpGet("{customerId}/individual-analysis")]
+    public async Task<ActionResult<CustomerIndividualAnalysisResponseDto>> GetIndividualAnalysis(
+        [FromRoute] string customerId,
+        [FromQuery] string scope = "historical",
+        [FromQuery] string metric = "revenue",
+        [FromQuery] DateTime? dateFrom = null,
+        [FromQuery] DateTime? dateTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedId = customerId.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedId))
+        {
+            return BadRequest("CustomerId inválido.");
+        }
+
+        var resolvedCustomerCode = await ResolveCustomerCodeAsync(normalizedId, cancellationToken);
+        if (resolvedCustomerCode is null)
+        {
+            return NotFound("Cliente não encontrado para o identificador informado.");
+        }
+
+        var normalizedScope = string.Equals(scope?.Trim(), "current", StringComparison.OrdinalIgnoreCase)
+            ? "current"
+            : "historical";
+        var analysisPeriod = ResolveIndividualAnalysisPeriod(normalizedScope, dateFrom, dateTo, DateTime.UtcNow);
+        var normalizedMetric = NormalizeTimelineMetric(metric);
+        var granularity = ResolveAnalysisGranularity(analysisPeriod.PeriodStart, analysisPeriod.PeriodEnd);
+
+        var rows = await dbContext.CommercialTransactions
+            .AsNoTracking()
+            .Where(x =>
+                x.CustomerCode == resolvedCustomerCode &&
+                x.TransactionDate >= analysisPeriod.PeriodStart &&
+                x.TransactionDate < analysisPeriod.PeriodEndExclusive)
+            .Select(x => new CustomerAnalysisTransactionRow(
+                x.TransactionDate,
+                x.CustomerName,
+                x.City,
+                x.DocumentNumber,
+                x.TotalAmount,
+                x.Quantity,
+                x.GrossWeightKg))
+            .ToListAsync(cancellationToken);
+
+        var allCustomerRows = await LoadCustomerMetricTransactions(resolvedCustomerCode, cancellationToken);
+        if (allCustomerRows.Count == 0)
+        {
+            return NotFound("Cliente não possui transações para análise.");
+        }
+
+        var customer = await dbContext.Customers
+            .AsNoTracking()
+            .Where(x => x.CustomerCode == resolvedCustomerCode)
+            .Select(x => new { x.Name })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var latestPeriodPoint = BuildFilledTimeline(rows, granularity, analysisPeriod.PeriodStart, analysisPeriod.PeriodEndExclusive);
+        var referenceDate = analysisPeriod.PeriodEnd;
+        var latestWeekStart = CustomerCalculators.StartOfWeekUtc(referenceDate);
+        var currentWeekRevenue = rows
+            .Where(x => CustomerCalculators.StartOfWeekUtc(CustomerCalculators.NormalizeToUtc(x.TransactionDate).Date) == latestWeekStart)
+            .Sum(x => x.TotalAmount);
+        var previousWeekRevenue = rows
+            .Where(x => CustomerCalculators.StartOfWeekUtc(CustomerCalculators.NormalizeToUtc(x.TransactionDate).Date) == latestWeekStart.AddDays(-7))
+            .Sum(x => x.TotalAmount);
+
+        var metrics = CustomerCalculators.BuildCustomerSummary(
+            allCustomerRows,
+            analysisPeriod.PeriodStart,
+            analysisPeriod.PeriodEndExclusive,
+            currentWeekRevenue,
+            previousWeekRevenue,
+            referenceDate);
+
+        var baseRow = allCustomerRows[^1];
+        var summary = new CustomerSummaryResponseDto(
+            resolvedCustomerCode,
+            rows.LastOrDefault()?.CustomerName ?? baseRow.CustomerName,
+            rows.LastOrDefault()?.City ?? baseRow.City,
+            customer?.Name ?? baseRow.CustomerName,
+            metrics.LastPurchaseDate,
+            metrics.Status,
+            metrics.TotalRevenue,
+            metrics.AverageTicket,
+            metrics.AverageRevenueMonthly,
+            metrics.AverageRevenueWeekly,
+            metrics.TotalQuantity,
+            metrics.TotalWeight,
+            metrics.TotalOrders,
+            metrics.AverageDaysBetweenPurchases);
+
+        var points = latestPeriodPoint
+            .Select(point => new CustomerTimelinePointDto(
+                point.PeriodStart,
+                ResolveMetricValue(point, normalizedMetric),
+                point.Revenue,
+                point.Quantity,
+                point.Weight,
+                point.Orders,
+                ResolveAverageTicket(point.Revenue, point.Orders)))
+            .ToList();
+
+        return Ok(new CustomerIndividualAnalysisResponseDto(
+            normalizedScope,
+            analysisPeriod.PeriodStart,
+            analysisPeriod.PeriodEnd,
+            granularity,
+            normalizedMetric,
+            summary,
+            points));
     }
 
     [HttpGet("{customerId}/top-products")]
@@ -559,8 +674,106 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
             "quantity" => point.Quantity,
             "weight" => point.Weight,
             "orders" => point.Orders,
+            "averageTicket" => ResolveAverageTicket(point.Revenue, point.Orders),
             _ => point.Revenue
         };
+    }
+
+    private static decimal ResolveAverageTicket(decimal revenue, int orders)
+    {
+        return orders <= 0 ? 0m : revenue / orders;
+    }
+
+    private static string NormalizeTimelineMetric(string? metric)
+    {
+        return string.Equals(metric?.Trim(), "averageTicket", StringComparison.OrdinalIgnoreCase)
+            ? "averageTicket"
+            : metric?.Trim().ToLowerInvariant() switch
+            {
+                "quantity" => "quantity",
+                "weight" => "weight",
+                "orders" => "orders",
+                _ => "revenue"
+            };
+    }
+
+    private static string ResolveAnalysisGranularity(DateTime periodStart, DateTime periodEndInclusive)
+    {
+        var totalDays = Math.Max(1, (periodEndInclusive.Date - periodStart.Date).TotalDays + 1);
+        return totalDays <= WeeklyGranularityThresholdDays ? "weekly" : "monthly";
+    }
+
+    private static CustomerIndividualAnalysisPeriod ResolveIndividualAnalysisPeriod(
+        string scope,
+        DateTime? dateFrom,
+        DateTime? dateTo,
+        DateTime utcNow)
+    {
+        if (scope == "current")
+        {
+            var period = CustomerCalculators.ResolvePeriods(dateFrom, dateTo, defaultDays: 365);
+            return new CustomerIndividualAnalysisPeriod(period.CurrentFrom.Date, period.CurrentTo.AddTicks(-1).Date, period.CurrentTo);
+        }
+
+        var today = CustomerCalculators.NormalizeToUtc(utcNow).Date;
+        var currentMonthStart = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var periodStart = currentMonthStart.AddMonths(-(HistoricalAnalysisMonths - 1));
+        var periodEndExclusive = today.AddDays(1);
+        return new CustomerIndividualAnalysisPeriod(periodStart, today, periodEndExclusive);
+    }
+
+    private static List<CustomerEvolutionPointDto> BuildFilledTimeline(
+        IReadOnlyList<CustomerAnalysisTransactionRow> rows,
+        string granularity,
+        DateTime periodStart,
+        DateTime periodEndExclusive)
+    {
+        static DateTime StartOfMonth(DateTime value) => new(value.Year, value.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        DateTime ResolveBucket(DateTime transactionDate)
+        {
+            var utcDate = CustomerCalculators.NormalizeToUtc(transactionDate).Date;
+            return granularity == "weekly"
+                ? CustomerCalculators.StartOfWeekUtc(utcDate)
+                : StartOfMonth(utcDate);
+        }
+
+        DateTime Increment(DateTime bucketStart)
+        {
+            return granularity == "weekly" ? bucketStart.AddDays(7) : bucketStart.AddMonths(1);
+        }
+
+        var bucketStart = granularity == "weekly"
+            ? CustomerCalculators.StartOfWeekUtc(periodStart)
+            : StartOfMonth(periodStart);
+
+        var buckets = rows
+            .GroupBy(x => ResolveBucket(x.TransactionDate))
+            .ToDictionary(
+                group => group.Key,
+                group => new CustomerEvolutionPointDto(
+                    group.Key,
+                    group.Sum(x => x.TotalAmount),
+                    group.Sum(x => x.Quantity),
+                    group.Sum(x => x.Weight),
+                    group.Select(x => x.DocumentNumber).Distinct(StringComparer.OrdinalIgnoreCase).Count()));
+
+        var points = new List<CustomerEvolutionPointDto>();
+        while (bucketStart < periodEndExclusive)
+        {
+            if (buckets.TryGetValue(bucketStart, out var point))
+            {
+                points.Add(point);
+            }
+            else
+            {
+                points.Add(new CustomerEvolutionPointDto(bucketStart, 0m, 0m, 0m, 0));
+            }
+
+            bucketStart = Increment(bucketStart);
+        }
+
+        return points;
     }
 
     private async Task<string?> ResolveCustomerCodeAsync(string customerIdentifier, CancellationToken cancellationToken)
@@ -594,4 +807,18 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
 
         return string.IsNullOrWhiteSpace(resolvedFromCustomers) ? null : resolvedFromCustomers.Trim();
     }
+
+    private sealed record CustomerAnalysisTransactionRow(
+        DateTime TransactionDate,
+        string CustomerName,
+        string City,
+        string DocumentNumber,
+        decimal TotalAmount,
+        decimal Quantity,
+        decimal Weight);
+
+    private sealed record CustomerIndividualAnalysisPeriod(
+        DateTime PeriodStart,
+        DateTime PeriodEnd,
+        DateTime PeriodEndExclusive);
 }

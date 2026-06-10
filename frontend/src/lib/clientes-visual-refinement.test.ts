@@ -38,16 +38,16 @@ describe("clientes - refinamento visual do modal de detalhes", () => {
     expect(source).toContain("bottom: 20");
   });
 
-  it("troca tabela do comparativo por paineis visuais com estado de dados insuficientes", () => {
+  it("adiciona controle de escopo para alternar entre historico e filtros atuais", () => {
     const source = readClientesRoute();
 
-    expect(source).toContain("Dados insuficientes para comparação");
-    expect(source).toContain("comparablePeriods.length === 0");
-    expect(source).toContain("formatVariationPercent(item.variationPercent)");
-    expect(source).not.toContain("<TableHead>Valor atual</TableHead>");
+    expect(source).toContain("Escopo da análise");
+    expect(source).toContain("Histórico do cliente");
+    expect(source).toContain("Respeitar filtros atuais");
+    expect(source).toContain("fetchCustomerIndividualAnalysis");
   });
 
-  it("simplifica a lista com leitura de tendência e resume o gráfico por período", () => {
+  it("simplifica a lista com leitura de tendencia e resume o grafico por periodo", () => {
     const source = readClientesRoute();
 
     expect(source).toContain("<TableHead>Leitura do período</TableHead>");
@@ -56,6 +56,7 @@ describe("clientes - refinamento visual do modal de detalhes", () => {
     expect(source).toContain("Tendência do período");
     expect(source).toContain("Variação média por");
     expect(source).toContain("Primeiro vs último ponto");
+    expect(source).toContain("Ticket médio");
   });
 
   it("remove inteligencia comercial e produtos mais comprados do modal", () => {
@@ -67,5 +68,12 @@ describe("clientes - refinamento visual do modal de detalhes", () => {
     expect(source).not.toContain("Produtos Mais Relevantes");
     expect(source).not.toContain("<CardTitle>Produtos mais comprados</CardTitle>");
     expect(source).not.toContain("fetchCustomerTopProducts");
+  });
+
+  it("remove o comparativo separado para priorizar a leitura historica", () => {
+    const source = readClientesRoute();
+
+    expect(source).not.toContain("<CardTitle>Comparativo de períodos</CardTitle>");
+    expect(source).not.toContain("Dados insuficientes para comparação");
   });
 });

@@ -42,17 +42,15 @@ export function buildCustomerPeriodTrend(points: CustomerTimelinePoint[]): Custo
     changes.push(((current - previous) / previous) * PERCENT_MULTIPLIER);
   }
 
-  const averageChangePercent =
-    changes.length === 0 ? null : changes.reduce((sum, value) => sum + value, 0) / changes.length;
-
-  const firstValue = Number(ordered[0]?.value);
-  const lastValue = Number(ordered.at(-1)?.value);
+  const averageChangePercent = changes.length === 0 ? null : changes.reduce((sum, value) => sum + value, 0) / changes.length;
+  const firstComparable = values.find((value) => value !== 0) ?? values[0] ?? null;
+  const lastComparable = [...values].reverse().find((value) => value !== 0) ?? values.at(-1) ?? null;
   const totalChangePercent =
-    !Number.isFinite(firstValue) || !Number.isFinite(lastValue) || firstValue === 0
+    firstComparable == null || lastComparable == null || firstComparable === 0
       ? null
-      : ((lastValue - firstValue) / firstValue) * PERCENT_MULTIPLIER;
+      : ((lastComparable - firstComparable) / firstComparable) * PERCENT_MULTIPLIER;
 
-  const trendLabel = resolveTrendLabel(averageChangePercent, totalChangePercent, ordered.length);
+  const trendLabel = resolveTrendLabel(ordered, averageChangePercent, totalChangePercent);
   return {
     averageValue,
     averageChangePercent,
@@ -65,15 +63,26 @@ export function buildCustomerPeriodTrend(points: CustomerTimelinePoint[]): Custo
 }
 
 function resolveTrendLabel(
+  ordered: CustomerTimelinePoint[],
   averageChangePercent: number | null,
   totalChangePercent: number | null,
-  pointsCount: number,
 ): CustomerPeriodTrend["trendLabel"] {
-  if (pointsCount < 2 && totalChangePercent == null) {
+  if (ordered.length < 2) {
     return "Sem base";
   }
 
-  const signal = averageChangePercent ?? totalChangePercent;
+  const halfIndex = Math.floor(ordered.length / 2);
+  const firstHalf = ordered.slice(0, halfIndex).map((point) => Number(point.value));
+  const lastHalf = ordered.slice(ordered.length - halfIndex).map((point) => Number(point.value));
+  const firstAverage = average(firstHalf);
+  const lastAverage = average(lastHalf);
+
+  let halfVariationPercent: number | null = null;
+  if (firstAverage != null && lastAverage != null && firstAverage !== 0) {
+    halfVariationPercent = ((lastAverage - firstAverage) / firstAverage) * PERCENT_MULTIPLIER;
+  }
+
+  const signal = halfVariationPercent ?? averageChangePercent ?? totalChangePercent;
   if (signal == null || Number.isNaN(signal)) {
     return "Sem base";
   }
@@ -81,4 +90,10 @@ function resolveTrendLabel(
   if (signal >= GROWTH_THRESHOLD_PERCENT) return "Crescendo";
   if (signal <= DROP_THRESHOLD_PERCENT) return "Caindo";
   return "Estável";
+}
+
+function average(values: number[]): number | null {
+  const valid = values.filter((value) => Number.isFinite(value));
+  if (valid.length === 0) return null;
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }

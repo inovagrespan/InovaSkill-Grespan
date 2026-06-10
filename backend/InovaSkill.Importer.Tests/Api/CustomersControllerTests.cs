@@ -377,6 +377,57 @@ public sealed class CustomersControllerTests
         Assert.NotNull(payload.LastPurchaseDate);
     }
 
+    [Fact]
+    public async Task GetIndividualAnalysis_DefaultsToHistoricalScopeWithTwelveMonthlyPointsAndZeroFill()
+    {
+        await using var db = await CreateDbAsync();
+        SeedRollingHistoricalData(db, DateTime.UtcNow.Date);
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetIndividualAnalysis("C-HIST");
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerIndividualAnalysisResponseDto>(ok.Value);
+
+        Assert.Equal("historical", payload.Scope);
+        Assert.Equal("monthly", payload.Granularity);
+        Assert.Equal(12, payload.Points.Count);
+        Assert.Contains(payload.Points, point => point.Revenue == 0m && point.Quantity == 0m && point.Orders == 0);
+        Assert.True(payload.PeriodEnd.Date <= DateTime.UtcNow.Date);
+    }
+
+    [Fact]
+    public async Task GetIndividualAnalysis_UsesWeeklyGranularityForShortCurrentScope()
+    {
+        await using var db = await CreateDbAsync();
+        SeedRollingHistoricalData(db, DateTime.UtcNow.Date);
+        var controller = new CustomersController(db);
+        var dateTo = DateTime.UtcNow.Date;
+        var dateFrom = dateTo.AddDays(-30);
+
+        var result = await controller.GetIndividualAnalysis("C-HIST", "current", "revenue", dateFrom, dateTo);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerIndividualAnalysisResponseDto>(ok.Value);
+
+        Assert.Equal("current", payload.Scope);
+        Assert.Equal("weekly", payload.Granularity);
+        Assert.NotEmpty(payload.Points);
+    }
+
+    [Fact]
+    public async Task GetIndividualAnalysis_ReturnsAverageTicketMetric()
+    {
+        await using var db = await CreateDbAsync();
+        SeedRollingHistoricalData(db, DateTime.UtcNow.Date);
+        var controller = new CustomersController(db);
+
+        var result = await controller.GetIndividualAnalysis("C-HIST", "historical", "averageTicket");
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CustomerIndividualAnalysisResponseDto>(ok.Value);
+
+        Assert.Equal("averageTicket", payload.Metric);
+        Assert.Contains(payload.Points, point => point.Orders > 0 && point.Value == point.AverageTicket);
+    }
+
     private static async Task<ImportDbContext> CreateDbAsync()
     {
         var connection = new SqliteConnection("DataSource=:memory:");
@@ -545,6 +596,71 @@ public sealed class CustomersControllerTests
                 ProcessedAt = DateTime.UtcNow
             });
 
+        db.SaveChanges();
+    }
+
+    private static void SeedRollingHistoricalData(ImportDbContext db, DateTime todayUtc)
+    {
+        db.Customers.Add(new Domain.Entities.Customer
+        {
+            CustomerCode = "C-HIST",
+            Name = "Empresa Histórica",
+            Email = "historico@empresa.com",
+            CreatedAt = todayUtc.AddYears(-2),
+            SourceFileJobId = 2
+        });
+
+        var monthStarts = Enumerable.Range(0, 12)
+            .Select(offset => new DateTime(todayUtc.Year, todayUtc.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-(11 - offset)))
+            .ToArray();
+
+        var transactions = new List<Domain.Entities.CommercialTransaction>();
+        for (var index = 0; index < monthStarts.Length; index++)
+        {
+            if (index is 1 or 7)
+            {
+                continue;
+            }
+
+            var monthStart = monthStarts[index];
+            var amount = 100m + (index * 25m);
+            transactions.Add(new Domain.Entities.CommercialTransaction
+            {
+                DocumentNumber = $"NF-H-{index:00}",
+                TransactionDate = monthStart.AddDays(4),
+                CustomerCode = "C-HIST",
+                CustomerName = "Cliente Histórico",
+                ProductCode = "P-H1",
+                ProductDescription = "Produto Histórico",
+                Quantity = 10m + index,
+                UnitPrice = amount / 2m,
+                TotalAmount = amount,
+                TransactionType = "Venda",
+                City = "Campinas",
+                ProductGroup = "Grupo Histórico",
+                GrossWeightKg = 3m + index,
+                SourceFileJobId = 2
+            });
+            transactions.Add(new Domain.Entities.CommercialTransaction
+            {
+                DocumentNumber = $"NF-H-{index:00}-B",
+                TransactionDate = monthStart.AddDays(11),
+                CustomerCode = "C-HIST",
+                CustomerName = "Cliente Histórico",
+                ProductCode = "P-H2",
+                ProductDescription = "Produto Histórico 2",
+                Quantity = 5m,
+                UnitPrice = amount / 5m,
+                TotalAmount = amount,
+                TransactionType = "Venda",
+                City = "Campinas",
+                ProductGroup = "Grupo Histórico",
+                GrossWeightKg = 2m,
+                SourceFileJobId = 2
+            });
+        }
+
+        db.CommercialTransactions.AddRange(transactions);
         db.SaveChanges();
     }
 }
