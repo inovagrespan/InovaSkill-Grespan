@@ -11,7 +11,7 @@ describe("login route", () => {
     const source = readLoginRoute();
 
     expect(source).toContain('placeholder="admin ou admin@local.test"');
-    expect(source).toContain('placeholder="admin123*#"');
-    expect(source).not.toContain('placeholder="admin"');
+    expect(source).toContain('placeholder="admin"');
+    expect(source).not.toContain('placeholder="admin123*#"');
   });
 });
