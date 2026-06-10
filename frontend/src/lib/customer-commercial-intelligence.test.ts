@@ -8,10 +8,10 @@ import type {
 import { buildCustomerCommercialIntelligence } from "./customer-commercial-intelligence";
 
 const baseDetails: CustomerDetailSummary = {
-  customerCode: "C1",
-  customerName: "Cliente Teste",
+  customerCode: "CLI-001",
+  customerName: "Padaria São Bento",
   city: "São Paulo",
-  linkedCompany: "Empresa",
+  linkedCompany: "Grespan Distribuição",
   lastPurchaseDate: "2026-05-10T00:00:00Z",
   status: "Ativo",
   totalRevenue: 10000,
@@ -52,15 +52,15 @@ const growingComparison: CustomerComparisonItem[] = [
 
 const topProducts: CustomerTopProductItem[] = [
   {
-    productCode: "P1",
-    productDescription: "Produto líder",
+    productCode: "PAN-104",
+    productDescription: "Pão Francês Congelado 60g",
     quantity: 80,
     revenue: 7000,
     sharePercent: 55,
   },
   {
-    productCode: "P2",
-    productDescription: "Produto complementar",
+    productCode: "PAN-318",
+    productDescription: "Croissant Congelado 80g",
     quantity: 20,
     revenue: 2000,
     sharePercent: 20,
@@ -80,7 +80,7 @@ describe("buildCustomerCommercialIntelligence", () => {
     expect(result.trend.status).toBe("Crescimento");
     expect(result.potential.metricValue).toBe(6200);
     expect(result.recommendation.status).toBe("Expandir relacionamento");
-    expect(result.productsSummary).toContain("Produto líder concentra");
+    expect(result.productsSummary).toContain("Pão Francês Congelado 60g concentra");
   });
 
   it("prioriza retenção quando cliente está crítico", () => {
@@ -107,7 +107,7 @@ describe("buildCustomerCommercialIntelligence", () => {
     expect(result.trend.status).toBe("Queda");
     expect(result.stability.status).toBe("Instável");
     expect(result.recommendation.status).toBe("Ação de retenção");
-    expect(result.recommendation.summary).toContain("Produto líder");
+    expect(result.recommendation.summary).toContain("Pão Francês Congelado 60g");
   });
 
   it("trata bordas com histórico insuficiente sem mostrar decisão falsa", () => {

@@ -111,10 +111,10 @@ const DEMO_CUSTOMER_SUMMARY: CustomerAnalyticsSummary = {
 };
 
 const DEMO_CUSTOMER_RANKING: CustomerRankingItem[] = [
-  { customerCode: "CLI-001", customerName: "Mercado São Bento", revenue: 64_850, quantity: 2_420, weight: 12_800, orders: 28, averageTicket: 2_316.07, variationPercent: 12.6 },
-  { customerCode: "CLI-002", customerName: "Atacado Primavera", revenue: 52_300, quantity: 3_180, weight: 9_750, orders: 21, averageTicket: 2_490.48, variationPercent: -6.4 },
-  { customerCode: "CLI-003", customerName: "Super Lopes", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
-  { customerCode: "CLI-004", customerName: "Distribuidora Central", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
+  { customerCode: "CLI-001", customerName: "Padaria São Bento", revenue: 64_850, quantity: 2_420, weight: 12_800, orders: 28, averageTicket: 2_316.07, variationPercent: 12.6 },
+  { customerCode: "CLI-002", customerName: "Supermercado Primavera", revenue: 52_300, quantity: 3_180, weight: 9_750, orders: 21, averageTicket: 2_490.48, variationPercent: -6.4 },
+  { customerCode: "CLI-003", customerName: "Cafeteria Grão & Massa", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
+  { customerCode: "CLI-004", customerName: "Rede Conveniência Rota 12", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
 ];
 
 function makeDemoFinanceDashboard(): FinanceDashboardResponse {
@@ -128,12 +128,25 @@ function makeDemoFinanceDashboard(): FinanceDashboardResponse {
       totalQuantity: DEMO_CUSTOMER_RANKING.reduce((total, item) => total + item.quantity, 0),
       averageTicket: DEMO_CUSTOMER_SUMMARY.averageTicket,
     },
-    revenueTrend: [],
     customerRanking: DEMO_CUSTOMER_RANKING.map((item) => ({
       customer: item.customerName,
       revenue: item.revenue,
     })),
-    items: [],
+    revenueTrend: [
+      { period: "2026-01", label: "jan", revenue: 38_200 },
+      { period: "2026-02", label: "fev", revenue: 42_700 },
+      { period: "2026-03", label: "mar", revenue: 39_900 },
+      { period: "2026-04", label: "abr", revenue: 51_600 },
+      { period: "2026-05", label: "mai", revenue: 58_300 },
+      { period: "2026-06", label: "jun", revenue: totalAmount },
+    ],
+    items: DEMO_CUSTOMER_RANKING.map((item, index) => ({
+      customer: item.customerName,
+      date: `2026-06-0${Math.min(index + 3, 7)}`,
+      revenue: item.revenue,
+      orders: item.orders,
+      quantity: item.quantity,
+    })),
     page: 1,
     pageSize: FINANCE_PAGE_SIZE,
     totalItems: DEMO_CUSTOMER_RANKING.length,

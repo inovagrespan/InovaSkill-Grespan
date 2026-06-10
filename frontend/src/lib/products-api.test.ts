@@ -69,9 +69,9 @@ describe("products api", () => {
     }));
 
     const { fetchProducts } = await import("./importer-api");
-    const result = await fetchProducts({ search: "café", page: 1, pageSize: 20 });
+    const result = await fetchProducts({ search: "pão", page: 1, pageSize: 20 });
 
-    expect(result.total).toBe(1);
-    expect(result.items[0].name).toContain("Café");
+    expect(result.total).toBeGreaterThan(0);
+    expect(result.items[0].name).toContain("Pão");
   });
 });

@@ -23,7 +23,7 @@ describe("sales demo fallback", () => {
     expect(response.items[0]).toMatchObject({
       documentNumber: "DEV-2026-001",
       transactionDate: "2026-06-08",
-      customerName: "Atacado Primavera",
+      customerName: "Supermercado Primavera",
       transactionType: "Devolução",
     });
   });
@@ -43,7 +43,7 @@ describe("sales demo fallback", () => {
     expect(summary.totalCompanies).toBe(1);
     expect(summary.items).toEqual([
       {
-        companyName: "Atacado Primavera",
+        companyName: "Supermercado Primavera",
         documentCount: 1,
         singleDocumentNumber: "DEV-2026-001",
         totalAmount: -669.6,

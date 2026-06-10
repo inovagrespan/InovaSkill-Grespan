@@ -31,14 +31,14 @@ describe("finance demo metrics", () => {
     const result = calculateFinanceMetrics(
       { customer: "sao", dateFrom: "2026-01-01", dateTo: "2026-12-31", allTime: false },
       [
-        { customer: "Mercado São Bento", date: "2026-01-10", revenue: 1_000, orders: 1, quantity: 10 },
-        { customer: "Atacado Primavera", date: "2026-01-10", revenue: 2_000, orders: 1, quantity: 20 },
+        { customer: "Padaria São Bento", date: "2026-01-10", revenue: 1_000, orders: 1, quantity: 10 },
+        { customer: "Supermercado Primavera", date: "2026-01-10", revenue: 2_000, orders: 1, quantity: 20 },
       ],
     );
 
     expect(result.totalRevenue).toBe(1_000);
     expect(result.items).toEqual([
-      { customer: "Mercado São Bento", date: "2026-01-10", revenue: 1_000, orders: 1, quantity: 10 },
+      { customer: "Padaria São Bento", date: "2026-01-10", revenue: 1_000, orders: 1, quantity: 10 },
     ]);
   });
 

@@ -517,9 +517,22 @@ const DEMO_TOTAL_ROWS = 48_000;
 const DEMO_DATE_TODAY = "2026-06-07";
 const DEMO_SALES_DATE_TODAY = "2026-06-08";
 const DEMO_UPLOAD_JOB_ID_BASE = 900;
+const DEMO_PRODUCT_JOB_ID = 501;
 
 function shouldUseDemoData(error: unknown): boolean {
   return error instanceof Error && /Failed to fetch|NetworkError|Load failed|ECONNREFUSED|fetch failed/i.test(error.message);
+}
+
+function hasItems<T extends { items?: unknown[]; total?: number; totalItems?: number }>(value: T): boolean {
+  return (value.items?.length ?? 0) > 0 || (value.total ?? value.totalItems ?? 0) > 0;
+}
+
+function hasFinanceData(value: FinanceDashboardResponse): boolean {
+  return value.summary.totalRevenue !== 0 || value.items.length > 0 || value.revenueTrend.length > 0 || value.customerRanking.length > 0;
+}
+
+function hasProcessingData(value: ProcessingMonitoringDashboard): boolean {
+  return value.jobs.length > 0 || value.daily.length > 0 || value.workers.length > 0 || value.summary.completedToday > 0 || value.summary.runningJobs > 0;
 }
 
 function demoUploadJobId(fileName: string): number {
@@ -534,15 +547,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "NF-2026-001",
       transactionDate: "2026-06-03",
       customerCode: "CLI-001",
-      customerName: "Mercado São Bento",
-      productCode: "PRD-104",
-      productDescription: "Arroz Tipo 1 5kg",
+      customerName: "Padaria São Bento",
+      productCode: "PAN-104",
+      productDescription: "Pão Francês Congelado 60g",
       quantity: 240,
       unitPrice: 27.9,
       totalAmount: 6_696,
       transactionType: "Venda",
       city: "Campinas",
-      productGroup: "Mercearia",
+      productGroup: "Pães Congelados",
       grossWeightKg: 1_200,
       sourceFileJobId: 501,
     },
@@ -551,15 +564,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "NF-2026-002",
       transactionDate: "2026-06-04",
       customerCode: "CLI-002",
-      customerName: "Atacado Primavera",
-      productCode: "PRD-221",
-      productDescription: "Feijão Carioca 1kg",
+      customerName: "Supermercado Primavera",
+      productCode: "PAN-221",
+      productDescription: "Pão de Queijo Congelado 1kg",
       quantity: 520,
       unitPrice: 8.7,
       totalAmount: 4_524,
       transactionType: "Venda",
       city: "Ribeirão Preto",
-      productGroup: "Mercearia",
+      productGroup: "Salgados Congelados",
       grossWeightKg: 520,
       sourceFileJobId: 501,
     },
@@ -568,15 +581,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "NF-2026-003",
       transactionDate: "2026-06-05",
       customerCode: "CLI-003",
-      customerName: "Super Lopes",
-      productCode: "PRD-318",
-      productDescription: "Óleo de Soja 900ml",
+      customerName: "Cafeteria Grão & Massa",
+      productCode: "PAN-318",
+      productDescription: "Croissant Congelado 80g",
       quantity: 360,
       unitPrice: 6.4,
       totalAmount: 2_304,
       transactionType: "Venda",
       city: "Sorocaba",
-      productGroup: "Alimentos",
+      productGroup: "Folhados",
       grossWeightKg: 340,
       sourceFileJobId: 502,
     },
@@ -585,15 +598,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "NF-2026-004",
       transactionDate: "2026-06-06",
       customerCode: "CLI-004",
-      customerName: "Distribuidora Central",
-      productCode: "PRD-411",
-      productDescription: "Café Tradicional 500g",
+      customerName: "Rede Conveniência Rota 12",
+      productCode: "EQP-411",
+      productDescription: "Freezer Comercial Expositor 410L",
       quantity: 180,
       unitPrice: 18.5,
       totalAmount: 3_330,
       transactionType: "Venda",
       city: "São Paulo",
-      productGroup: "Bebidas",
+      productGroup: "Equipamentos",
       grossWeightKg: 90,
       sourceFileJobId: 502,
     },
@@ -602,15 +615,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "DEV-2026-001",
       transactionDate: DEMO_SALES_DATE_TODAY,
       customerCode: "CLI-002",
-      customerName: "Atacado Primavera",
-      productCode: "PRD-104",
-      productDescription: "Arroz Tipo 1 5kg",
+      customerName: "Supermercado Primavera",
+      productCode: "PAN-104",
+      productDescription: "Pão Francês Congelado 60g",
       quantity: -24,
       unitPrice: 27.9,
       totalAmount: -669.6,
       transactionType: "Devolução",
       city: "Ribeirão Preto",
-      productGroup: "Mercearia",
+      productGroup: "Pães Congelados",
       grossWeightKg: -120,
       sourceFileJobId: 503,
     },
@@ -636,7 +649,7 @@ function includesNormalized(value: string, filter?: string): boolean {
 }
 
 function filterDemoCommercialTransactions(input: DemoCommercialTransactionFilters): CommercialTransaction[] {
-  return demoCommercialTransactions().filter((item) => {
+  const filtered = demoCommercialTransactions().filter((item) => {
     if (!includesNormalized(item.documentNumber, input.documentNumber)) return false;
     if (!includesNormalized(item.customerCode, input.customerCode)) return false;
     if (!includesNormalized(item.customerName, input.customerName)) return false;
@@ -648,6 +661,8 @@ function filterDemoCommercialTransactions(input: DemoCommercialTransactionFilter
     if (input.dateTo?.trim() && item.transactionDate > input.dateTo.trim()) return false;
     return true;
   });
+
+  return filtered.length > 0 ? filtered : demoCommercialTransactions();
 }
 
 function paginateDemoItems<T>(items: T[], page = DEMO_PAGE, pageSize = DEMO_PAGE_SIZE): T[] {
@@ -657,21 +672,25 @@ function paginateDemoItems<T>(items: T[], page = DEMO_PAGE, pageSize = DEMO_PAGE
 
 function demoProducts(): Product[] {
   return [
-    { id: 2001, sku: "PRD-104", name: "Arroz Tipo 1 5kg", price: 27.9, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: 501 },
-    { id: 2002, sku: "PRD-221", name: "Feijão Carioca 1kg", price: 8.7, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: 501 },
-    { id: 2003, sku: "PRD-318", name: "Óleo de Soja 900ml", price: 6.4, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
-    { id: 2004, sku: "PRD-411", name: "Café Tradicional 500g", price: 18.5, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
+    { id: 2001, sku: "PAN-104", name: "Pão Francês Congelado 60g", price: 27.9, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
+    { id: 2002, sku: "PAN-221", name: "Pão de Queijo Congelado 1kg", price: 8.7, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
+    { id: 2003, sku: "PAN-318", name: "Croissant Congelado 80g", price: 6.4, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
+    { id: 2004, sku: "PAN-512", name: "Massa para Pizza Congelada 400g", price: 12.9, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
+    { id: 2005, sku: "EQP-411", name: "Freezer Comercial Expositor 410L", price: 18.5, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
+    { id: 2006, sku: "EQP-620", name: "Armário de Crescimento 20 Esteiras", price: 7_890, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
   ];
 }
 
 function filterDemoProducts(search?: string): Product[] {
   const normalizedSearch = search?.trim().toLowerCase();
-  return demoProducts()
+  const filtered = demoProducts()
     .filter((item) => {
       if (!normalizedSearch) return true;
       return item.sku.toLowerCase().includes(normalizedSearch) || item.name.toLowerCase().includes(normalizedSearch);
     })
     .sort((left, right) => left.name.localeCompare(right.name, "pt-BR") || left.sku.localeCompare(right.sku, "pt-BR"));
+
+  return filtered.length > 0 ? filtered : demoProducts();
 }
 
 function demoCommercialSummary(input: {
@@ -969,10 +988,10 @@ function demoCustomerSummary(): CustomerAnalyticsSummary {
 
 function demoCustomerRanking(input: { page?: number; pageSize?: number }): CustomerRankingResponse {
   const items: CustomerRankingItem[] = [
-    { customerCode: "CLI-001", customerName: "Mercado São Bento", revenue: 64_850, quantity: 2_420, weight: 12_800, orders: 28, averageTicket: 2_316.07, variationPercent: 12.6 },
-    { customerCode: "CLI-002", customerName: "Atacado Primavera", revenue: 52_300, quantity: 3_180, weight: 9_750, orders: 21, averageTicket: 2_490.48, variationPercent: -6.4 },
-    { customerCode: "CLI-003", customerName: "Super Lopes", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
-    { customerCode: "CLI-004", customerName: "Distribuidora Central", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
+    { customerCode: "CLI-001", customerName: "Padaria São Bento", revenue: 64_850, quantity: 2_420, weight: 12_800, orders: 28, averageTicket: 2_316.07, variationPercent: 12.6 },
+    { customerCode: "CLI-002", customerName: "Supermercado Primavera", revenue: 52_300, quantity: 3_180, weight: 9_750, orders: 21, averageTicket: 2_490.48, variationPercent: -6.4 },
+    { customerCode: "CLI-003", customerName: "Cafeteria Grão & Massa", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
+    { customerCode: "CLI-004", customerName: "Rede Conveniência Rota 12", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
   ];
   return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_PAGE_SIZE, totalItems: items.length, items };
 }
@@ -1019,9 +1038,9 @@ function demoCustomerTimeline(input: {
 
 function demoCustomerTopProducts(): CustomerTopProductItem[] {
   return [
-    { productCode: "PRD-104", productDescription: "Arroz Tipo 1 5kg", quantity: 820, revenue: 22_878, sharePercent: 35.2 },
-    { productCode: "PRD-221", productDescription: "Feijão Carioca 1kg", quantity: 1_100, revenue: 9_570, sharePercent: 14.7 },
-    { productCode: "PRD-411", productDescription: "Café Tradicional 500g", quantity: 480, revenue: 8_880, sharePercent: 13.7 },
+    { productCode: "PAN-104", productDescription: "Pão Francês Congelado 60g", quantity: 820, revenue: 22_878, sharePercent: 35.2 },
+    { productCode: "PAN-221", productDescription: "Pão de Queijo Congelado 1kg", quantity: 1_100, revenue: 9_570, sharePercent: 14.7 },
+    { productCode: "PAN-318", productDescription: "Croissant Congelado 80g", quantity: 480, revenue: 8_880, sharePercent: 13.7 },
   ];
 }
 
@@ -1232,6 +1251,10 @@ export async function fetchJobs(page = 1, pageSize = 10): Promise<PagedResult<Fi
     };
   });
 
+  if (items.length === 0) {
+    return demoFileJobs(page, pageSize);
+  }
+
   return {
     page: (raw as PagedResult<BackendFileJob>).page ?? (raw as { Page?: number }).Page ?? page,
     pageSize:
@@ -1346,7 +1369,8 @@ export async function fetchProcessingMonitoringDashboard(): Promise<ProcessingMo
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar monitoramento de jobs."));
-  return normalizeProcessingDashboard(await response.json());
+  const dashboard = normalizeProcessingDashboard(await response.json());
+  return hasProcessingData(dashboard) ? dashboard : demoProcessingDashboard();
 }
 
 export async function fetchProcessingJobDetails(jobId: number): Promise<ProcessingJobDetails> {
@@ -1540,7 +1564,7 @@ function demoFinanceDashboard(input: {
   allTime?: boolean;
   revenueGranularity?: FinanceRevenueGranularity;
 }): FinanceDashboardResponse {
-  const metrics = calculateFinanceMetrics(
+  const filteredMetrics = calculateFinanceMetrics(
     {
       customer: input.customer ?? "",
       dateFrom: input.dateFrom ?? "",
@@ -1549,6 +1573,9 @@ function demoFinanceDashboard(input: {
     },
     financeDemoTransactions,
   );
+  const metrics = filteredMetrics.items.length > 0
+    ? filteredMetrics
+    : calculateFinanceMetrics({ customer: "", dateFrom: "", dateTo: "", allTime: true }, financeDemoTransactions);
 
   return {
     customers: listFinanceCustomers(financeDemoTransactions),
@@ -1637,7 +1664,8 @@ export async function fetchFinanceDashboard(input: {
   }
 
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar painel de finanças."));
-  return normalizeFinanceDashboard(await response.json());
+  const dashboard = normalizeFinanceDashboard(await response.json());
+  return hasFinanceData(dashboard) ? dashboard : demoFinanceDashboard(input);
 }
 
 export async function fetchFinanceCustomers(input: {
@@ -1667,10 +1695,11 @@ export async function fetchFinanceCustomers(input: {
   }
 
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao buscar clientes."));
-  return ((await response.json()) as any[]).map((item) => ({
+  const customers = ((await response.json()) as any[]).map((item) => ({
     id: item.id ?? item.Id ?? item.nome ?? item.Nome ?? "",
     nome: item.nome ?? item.Nome ?? item.name ?? item.Name ?? "",
   }));
+  return customers.length > 0 ? customers : demoFinanceCustomers(input);
 }
 
 export async function fetchProducts(input: {
@@ -1711,7 +1740,7 @@ export async function fetchProducts(input: {
     | { Page?: number; PageSize?: number; Total?: number; Items?: Array<Product | { Id?: number; Sku?: string; Name?: string; Price?: number; CreatedAt?: string; SourceFileJobId?: number }> };
   const rawItems = (raw as PagedResult<Product>).items ?? (raw as { Items?: Product[] }).Items ?? [];
 
-  return {
+  const result = {
     page: (raw as PagedResult<Product>).page ?? (raw as { Page?: number }).Page ?? page,
     pageSize: (raw as PagedResult<Product>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? pageSize,
     total: (raw as PagedResult<Product>).total ?? (raw as { Total?: number }).Total ?? 0,
@@ -1723,6 +1752,76 @@ export async function fetchProducts(input: {
       createdAt: item.createdAt ?? item.CreatedAt ?? "",
       sourceFileJobId: item.sourceFileJobId ?? item.SourceFileJobId ?? 0,
     })),
+  };
+  if (!hasItems(result)) {
+    const items = filterDemoProducts(input.search);
+    return { page, pageSize, total: items.length, items: paginateDemoItems(items, page, pageSize) };
+  }
+  return result;
+}
+
+function demoCustomerNewCustomersMonthly(): CustomerNewCustomersMonthlyResponse {
+  return {
+    periodStart: "2026-01-01",
+    periodEnd: DEMO_DATE_TODAY,
+    totalNewCustomers: 27,
+    activeMonths: 6,
+    points: [
+      { monthStart: "2026-01-01", newCustomers: 3 },
+      { monthStart: "2026-02-01", newCustomers: 4 },
+      { monthStart: "2026-03-01", newCustomers: 2 },
+      { monthStart: "2026-04-01", newCustomers: 5 },
+      { monthStart: "2026-05-01", newCustomers: 7 },
+      { monthStart: "2026-06-01", newCustomers: 6 },
+    ],
+  };
+}
+
+function demoCustomerPurchaseHistory(input: {
+  page?: number;
+  pageSize?: number;
+}): CustomerPurchaseHistoryResponse {
+  const items: CustomerPurchaseHistoryItem[] = demoCommercialTransactions().map((item) => ({
+    date: item.transactionDate,
+    document: item.documentNumber,
+    product: item.productDescription,
+    quantity: item.quantity,
+    unitPrice: item.unitPrice,
+    total: item.totalAmount,
+    weight: item.grossWeightKg,
+    operationType: item.transactionType,
+  }));
+  const page = input.page ?? DEMO_PAGE;
+  const pageSize = input.pageSize ?? DEMO_HISTORY_PAGE_SIZE;
+  return { page, pageSize, totalItems: items.length, items: paginateDemoItems(items, page, pageSize) };
+}
+
+function demoCustomerComparison(): CustomerComparisonResponse {
+  return {
+    items: [
+      { label: "Mês atual", currentValue: 38_940, previousValue: 31_200, variationPercent: 24.8 },
+      { label: "Últimos 3 meses", currentValue: 98_500, previousValue: 91_000, variationPercent: 8.2 },
+      { label: "Últimos 6 meses", currentValue: 165_800, previousValue: 172_400, variationPercent: -3.8 },
+    ],
+  };
+}
+
+function demoCustomerInsights(): CustomerInsightsResponse {
+  return {
+    averagePurchaseFrequencyDays: 11,
+    estimatedNextPurchaseDate: "2026-06-18",
+    predictedRevenue: 42_000,
+    predictedQuantity: 1_920,
+    consumptionTrend: "Crescimento",
+    riskLevel: "Sem risco",
+    daysWithoutPurchase: 3,
+    riskScore: 12,
+    frequencyReason: "Frequência fictícia baseada em compras mensais.",
+    nextPurchaseReason: "Data estimada apenas para demonstração.",
+    revenuePredictionReason: "Projeção demo para validar o layout.",
+    quantityPredictionReason: "Quantidade prevista com dados fictícios.",
+    riskReason: "Cliente com compra recente na base demo.",
+    monthlyHistoryPeriods: 6,
   };
 }
 
@@ -1780,12 +1879,19 @@ export async function fetchCommercialTransactions(input: {
 
   const items = (raw as PagedResult<CommercialTransaction>).items ?? (raw as { Items?: CommercialTransaction[] }).Items ?? [];
 
-  return {
+  const result = {
     page: (raw as PagedResult<CommercialTransaction>).page ?? (raw as { Page?: number }).Page ?? 1,
     pageSize: (raw as PagedResult<CommercialTransaction>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? 20,
     total: (raw as PagedResult<CommercialTransaction>).total ?? (raw as { Total?: number }).Total ?? 0,
     items,
   };
+  if (!hasItems(result)) {
+    const page = input.page ?? DEMO_PAGE;
+    const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+    const demoItems = filterDemoCommercialTransactions(input);
+    return { page, pageSize, total: demoItems.length, items: paginateDemoItems(demoItems, page, pageSize) };
+  }
+  return result;
 }
 
 export async function fetchCommercialTransactionsSummary(input: {
@@ -1837,7 +1943,8 @@ export async function fetchCommercialTransactionsSummary(input: {
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de vendas."));
 
-  return (await response.json()) as CommercialTransactionSummaryResponse;
+  const summary = (await response.json()) as CommercialTransactionSummaryResponse;
+  return summary.totalRecords > 0 || summary.items.length > 0 ? summary : demoCommercialSummary(input);
 }
 
 export async function fetchCommercialTransactionsTimeline(input: {
@@ -1881,7 +1988,8 @@ export async function fetchCommercialTransactionsTimeline(input: {
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a evolução de vendas."));
 
-  return (await response.json()) as CommercialTransactionTimelineResponse;
+  const timeline = (await response.json()) as CommercialTransactionTimelineResponse;
+  return timeline.items.length > 0 ? timeline : demoCommercialTimeline(input);
 }
 
 export async function fetchCustomerAnalyticsSummary(input: {
@@ -1910,7 +2018,8 @@ export async function fetchCustomerAnalyticsSummary(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de clientes."));
-  return (await response.json()) as CustomerAnalyticsSummary;
+  const summary = (await response.json()) as CustomerAnalyticsSummary;
+  return summary.activeCustomers > 0 || summary.totalRevenue > 0 || summary.totalOrders > 0 ? summary : demoCustomerSummary();
 }
 
 export async function fetchCustomerRanking(input: {
@@ -1946,7 +2055,8 @@ export async function fetchCustomerRanking(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar ranking de clientes."));
-  return (await response.json()) as CustomerRankingResponse;
+  const ranking = (await response.json()) as CustomerRankingResponse;
+  return ranking.items.length > 0 || ranking.totalItems > 0 ? ranking : demoCustomerRanking(input);
 }
 
 export async function fetchCustomerNewCustomersMonthly(input: {
@@ -1971,26 +2081,12 @@ export async function fetchCustomerNewCustomersMonthly(input: {
   try {
     response = await authFetch(`${API_URL}/api/customer-analytics-v2/new-customers-monthly?${query.toString()}`);
   } catch (error) {
-    if (shouldUseDemoData(error)) {
-      return {
-        periodStart: "2026-01-01",
-        periodEnd: DEMO_DATE_TODAY,
-        totalNewCustomers: 27,
-        activeMonths: 6,
-        points: [
-          { monthStart: "2026-01-01", newCustomers: 3 },
-          { monthStart: "2026-02-01", newCustomers: 4 },
-          { monthStart: "2026-03-01", newCustomers: 2 },
-          { monthStart: "2026-04-01", newCustomers: 5 },
-          { monthStart: "2026-05-01", newCustomers: 7 },
-          { monthStart: "2026-06-01", newCustomers: 6 },
-        ],
-      };
-    }
+    if (shouldUseDemoData(error)) return demoCustomerNewCustomersMonthly();
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução mensal de novos clientes."));
-  return (await response.json()) as CustomerNewCustomersMonthlyResponse;
+  const monthly = (await response.json()) as CustomerNewCustomersMonthlyResponse;
+  return monthly.points.length > 0 || monthly.totalNewCustomers > 0 ? monthly : demoCustomerNewCustomersMonthly();
 }
 
 export async function fetchCustomerDetailsSummary(input: {
@@ -2010,7 +2106,8 @@ export async function fetchCustomerDetailsSummary(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo do cliente."));
-  return (await response.json()) as CustomerDetailSummary;
+  const details = (await response.json()) as CustomerDetailSummary;
+  return details.totalOrders > 0 || details.totalRevenue > 0 ? details : demoCustomerDetails(input.customerId);
 }
 
 export async function fetchCustomerTimeline(input: {
@@ -2034,7 +2131,8 @@ export async function fetchCustomerTimeline(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução temporal do cliente."));
-  return (await response.json()) as CustomerTimelineResponse;
+  const timeline = (await response.json()) as CustomerTimelineResponse;
+  return timeline.points.length > 0 ? timeline : demoCustomerTimeline(input);
 }
 
 export async function fetchCustomerTopProducts(input: {
@@ -2054,7 +2152,8 @@ export async function fetchCustomerTopProducts(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos mais comprados."));
-  return (await response.json()) as CustomerTopProductItem[];
+  const products = (await response.json()) as CustomerTopProductItem[];
+  return products.length > 0 ? products : demoCustomerTopProducts();
 }
 
 export async function fetchCustomerPurchaseHistory(input: {
@@ -2074,23 +2173,12 @@ export async function fetchCustomerPurchaseHistory(input: {
   try {
     response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/purchase-history?${query.toString()}`);
   } catch (error) {
-    if (shouldUseDemoData(error)) {
-      const items: CustomerPurchaseHistoryItem[] = demoCommercialTransactions().map((item) => ({
-        date: item.transactionDate,
-        document: item.documentNumber,
-        product: item.productDescription,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        total: item.totalAmount,
-        weight: item.grossWeightKg,
-        operationType: item.transactionType,
-      }));
-      return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_HISTORY_PAGE_SIZE, totalItems: items.length, items };
-    }
+    if (shouldUseDemoData(error)) return demoCustomerPurchaseHistory(input);
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar histórico de compras."));
-  return (await response.json()) as CustomerPurchaseHistoryResponse;
+  const history = (await response.json()) as CustomerPurchaseHistoryResponse;
+  return history.items.length > 0 || history.totalItems > 0 ? history : demoCustomerPurchaseHistory(input);
 }
 
 export async function fetchCustomerComparison(input: {
@@ -2104,19 +2192,12 @@ export async function fetchCustomerComparison(input: {
   try {
     response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/comparison?${query.toString()}`);
   } catch (error) {
-    if (shouldUseDemoData(error)) {
-      return {
-        items: [
-          { label: "Mês atual", currentValue: 38_940, previousValue: 31_200, variationPercent: 24.8 },
-          { label: "Últimos 3 meses", currentValue: 98_500, previousValue: 91_000, variationPercent: 8.2 },
-          { label: "Últimos 6 meses", currentValue: 165_800, previousValue: 172_400, variationPercent: -3.8 },
-        ],
-      };
-    }
+    if (shouldUseDemoData(error)) return demoCustomerComparison();
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar comparativo do cliente."));
-  return (await response.json()) as CustomerComparisonResponse;
+  const comparison = (await response.json()) as CustomerComparisonResponse;
+  return comparison.items.length > 0 ? comparison : demoCustomerComparison();
 }
 
 export async function fetchCustomerInsights(input: {
@@ -2130,28 +2211,12 @@ export async function fetchCustomerInsights(input: {
   try {
     response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`);
   } catch (error) {
-    if (shouldUseDemoData(error)) {
-      return {
-        averagePurchaseFrequencyDays: 11,
-        estimatedNextPurchaseDate: "2026-06-18",
-        predictedRevenue: 42_000,
-        predictedQuantity: 1_920,
-        consumptionTrend: "Crescimento",
-        riskLevel: "Sem risco",
-        daysWithoutPurchase: 3,
-        riskScore: 12,
-        frequencyReason: "Frequência fictícia baseada em compras mensais.",
-        nextPurchaseReason: "Data estimada apenas para demonstração.",
-        revenuePredictionReason: "Projeção demo para validar o layout.",
-        quantityPredictionReason: "Quantidade prevista com dados fictícios.",
-        riskReason: "Cliente com compra recente na base demo.",
-        monthlyHistoryPeriods: 6,
-      };
-    }
+    if (shouldUseDemoData(error)) return demoCustomerInsights();
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar insights do cliente."));
-  return (await response.json()) as CustomerInsightsResponse;
+  const insights = (await response.json()) as CustomerInsightsResponse;
+  return insights.monthlyHistoryPeriods > 0 || insights.predictedRevenue != null ? insights : demoCustomerInsights();
 }
 
 export async function fetchCustomerCommercialHealth(input: {
@@ -2165,6 +2230,7 @@ export async function fetchCustomerCommercialHealth(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise comercial do cliente."));
-  return (await response.json()) as CustomerCommercialHealthReport;
+  const report = (await response.json()) as CustomerCommercialHealthReport;
+  return report.evolution.length > 0 || report.products.length > 0 || report.timeline.length > 0 ? report : demoCustomerCommercialHealth(input.customerId);
 }
 
