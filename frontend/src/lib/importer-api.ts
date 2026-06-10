@@ -7,6 +7,7 @@ import {
   listFinanceCustomers,
 } from "@/lib/finance-demo-metrics";
 import { buildFallbackStages, type FileJobStageProgress } from "@/lib/importer-progress";
+import { getApiServiceBaseUrl } from "@/lib/api-url";
 
 export type FileType = "Unknown" | "Customers" | "Orders" | "Products" | "CommercialTransaction";
 
@@ -584,7 +585,7 @@ export type FinanceDashboardResponse = {
   totalPages: number;
 };
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
+const API_URL = getApiServiceBaseUrl();
 export const MAX_UPLOAD_SIZE_BYTES = 524_288_000;
 const DEMO_PAGE = 1;
 const DEMO_PAGE_SIZE = 20;

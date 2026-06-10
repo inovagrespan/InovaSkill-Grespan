@@ -1,8 +1,8 @@
 import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel } from "@microsoft/signalr";
 import { getAuthToken } from "@/lib/auth";
+import { buildServiceUrl } from "@/lib/api-url";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
-const HUB_URL = `${API_URL}/hubs/file-jobs`;
+const HUB_URL = buildServiceUrl("hubs/file-jobs");
 
 type JobUpdatedPayload = {
   jobId: number;
