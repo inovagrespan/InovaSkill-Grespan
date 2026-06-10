@@ -38,6 +38,200 @@ public sealed class CommercialTransactionsControllerTests
     }
 
     [Fact]
+    public async Task GetInvoices_GroupsRowsByInvoiceAndReturnsCustomerTotalsAndWeight()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.AddRange(
+            BuildTransaction("NF-100", "Cliente A", "P1", "Produto 1", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 2m, 10m, totalAmount: 18m, grossWeightKg: 5m),
+            BuildTransaction("NF-100", "Cliente A", "P2", "Produto 2", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 3m, 10m, totalAmount: 31m, grossWeightKg: 7m),
+            BuildTransaction("NF-200", "Cliente B", "P3", "Produto 3", new DateTime(2026, 6, 4, 8, 0, 0, DateTimeKind.Utc), 1m, 12m, totalAmount: 12m, grossWeightKg: 2m));
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetInvoices(page: 1, pageSize: 20);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CommercialInvoiceSummaryResponseDto>(ok.Value);
+        Assert.Equal(2, payload.TotalItems);
+        Assert.Equal(61m, payload.TotalAmount);
+        Assert.Equal(6m, payload.TotalQuantity);
+        Assert.Equal(14m, payload.TotalWeightKg);
+        Assert.Collection(
+            payload.Items,
+            first =>
+            {
+                Assert.Equal("NF-200", first.DocumentNumber);
+                Assert.Equal("Cliente B", first.CustomerName);
+                Assert.Equal(12m, first.TotalAmount);
+                Assert.Equal(1, first.TotalItems);
+            },
+            second =>
+            {
+                Assert.Equal("NF-100", second.DocumentNumber);
+                Assert.Equal("Cliente A", second.CustomerName);
+                Assert.Equal(49m, second.TotalAmount);
+                Assert.Equal(5m, second.TotalQuantity);
+                Assert.Equal(12m, second.TotalWeightKg);
+                Assert.Equal(2, second.TotalItems);
+            });
+    }
+
+    [Fact]
+    public async Task GetInvoiceDetails_ReturnsOnlyExactInvoiceItemsAndAggregatedTotals()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.AddRange(
+            BuildTransaction("NF-10", "Cliente A", "P1", "Produto 1", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 2m, 10m, totalAmount: 25m, grossWeightKg: 5m),
+            BuildTransaction("NF-10", "Cliente A", "P2", "Produto 2", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 1m, 10m, totalAmount: 9m, grossWeightKg: 2m),
+            BuildTransaction("NF-100", "Cliente B", "P3", "Produto 3", new DateTime(2026, 6, 4, 8, 0, 0, DateTimeKind.Utc), 9m, 10m, totalAmount: 90m, grossWeightKg: 11m));
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetInvoiceDetails("NF-10");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CommercialInvoiceDetailsDto>(ok.Value);
+        Assert.Equal("NF-10", payload.DocumentNumber);
+        Assert.Equal("Cliente A", payload.CustomerName);
+        Assert.Equal(34m, payload.TotalAmount);
+        Assert.Equal(3m, payload.TotalQuantity);
+        Assert.Equal(7m, payload.TotalWeightKg);
+        Assert.Equal(2, payload.TotalItems);
+        Assert.All(payload.Items, item => Assert.Equal("NF-10", item.DocumentNumber));
+    }
+
+    [Fact]
+    public async Task GetInvoiceAnalytics_ReturnsInvoiceCountTrendByRequestedPeriod()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.AddRange(
+            BuildTransaction("NF-10", "Cliente A", "P1", "Produto 1", new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), 2m, 10m),
+            BuildTransaction("NF-10", "Cliente A", "P2", "Produto 2", new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), 1m, 10m),
+            BuildTransaction("NF-20", "Cliente B", "P3", "Produto 3", new DateTime(2026, 6, 2, 8, 0, 0, DateTimeKind.Utc), 3m, 10m),
+            BuildTransaction("NF-30", "Cliente B", "P4", "Produto 4", new DateTime(2026, 6, 8, 8, 0, 0, DateTimeKind.Utc), 4m, 10m));
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetInvoiceAnalytics(
+            granularity: "week",
+            dateFrom: new DateTime(2026, 6, 1),
+            dateTo: new DateTime(2026, 6, 8));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CommercialInvoiceAnalyticsResponseDto>(ok.Value);
+        Assert.Equal("week", payload.Granularity);
+        Assert.Equal(3, payload.Summary.TotalInvoices);
+        Assert.Equal(2, payload.Trend.Count);
+        Assert.Collection(
+            payload.Trend,
+            first =>
+            {
+                Assert.Equal(new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc), first.PeriodStart);
+                Assert.Equal(2, first.InvoiceCount);
+            },
+            second =>
+            {
+                Assert.Equal(new DateTime(2026, 6, 8, 0, 0, 0, DateTimeKind.Utc), second.PeriodStart);
+                Assert.Equal(1, second.InvoiceCount);
+            });
+    }
+
+    [Fact]
+    public async Task GetInvoiceAnalytics_RespectsFiltersAcrossSummaryTrendAndRanking()
+    {
+        await using var db = await CreateDbAsync();
+        SeedTransactions(db);
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetInvoiceAnalytics(
+            granularity: "day",
+            productGroup: "Grupo A",
+            transactionType: "Venda");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CommercialInvoiceAnalyticsResponseDto>(ok.Value);
+        Assert.Equal(2, payload.Summary.TotalInvoices);
+        Assert.Equal(2, payload.Summary.TotalCustomers);
+        Assert.Equal(2, payload.Ranking.Count);
+        Assert.All(payload.Ranking, item => Assert.Contains(item.CustomerName, new[] { "Empresa A", "Empresa C" }));
+        Assert.All(payload.Trend, point => Assert.True(point.InvoiceCount == 1));
+    }
+
+    [Fact]
+    public async Task GetInvoiceAnalytics_SumsAmountsByPeriodUsingPersistedInvoiceTotals()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.AddRange(
+            BuildTransaction("NF-100", "Cliente A", "P1", "Produto 1", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 2m, 10m, totalAmount: 18m),
+            BuildTransaction("NF-100", "Cliente A", "P2", "Produto 2", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 1m, 10m, totalAmount: 9m),
+            BuildTransaction("NF-200", "Cliente B", "P3", "Produto 3", new DateTime(2026, 6, 4, 8, 0, 0, DateTimeKind.Utc), 1m, 12m, totalAmount: 12m));
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetInvoiceAnalytics(granularity: "day");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CommercialInvoiceAnalyticsResponseDto>(ok.Value);
+        Assert.Equal(39m, payload.Summary.TotalAmount);
+        Assert.Collection(
+            payload.Trend,
+            first => Assert.Equal(27m, first.TotalAmount),
+            second => Assert.Equal(12m, second.TotalAmount));
+    }
+
+    [Fact]
+    public async Task GetInvoiceAnalytics_SumsWeightByPeriod()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.AddRange(
+            BuildTransaction("NF-100", "Cliente A", "P1", "Produto 1", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 2m, 10m, grossWeightKg: 5m),
+            BuildTransaction("NF-100", "Cliente A", "P2", "Produto 2", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 1m, 10m, grossWeightKg: 2m),
+            BuildTransaction("NF-200", "Cliente B", "P3", "Produto 3", new DateTime(2026, 6, 4, 8, 0, 0, DateTimeKind.Utc), 1m, 12m, grossWeightKg: 4m));
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetInvoiceAnalytics(granularity: "day");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CommercialInvoiceAnalyticsResponseDto>(ok.Value);
+        Assert.Equal(11m, payload.Summary.TotalWeightKg);
+        Assert.Collection(
+            payload.Trend,
+            first => Assert.Equal(7m, first.TotalWeightKg),
+            second => Assert.Equal(4m, second.TotalWeightKg));
+    }
+
+    [Fact]
+    public async Task GetInvoiceAnalytics_ReturnsRankingMetricsPerCustomer()
+    {
+        await using var db = await CreateDbAsync();
+        db.CommercialTransactions.AddRange(
+            BuildTransaction("NF-10", "Cliente A", "P1", "Produto 1", new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), 2m, 10m, totalAmount: 20m, grossWeightKg: 3m),
+            BuildTransaction("NF-10", "Cliente A", "P2", "Produto 2", new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), 1m, 10m, totalAmount: 15m, grossWeightKg: 2m),
+            BuildTransaction("NF-11", "Cliente A", "P3", "Produto 3", new DateTime(2026, 6, 2, 8, 0, 0, DateTimeKind.Utc), 1m, 10m, totalAmount: 10m, grossWeightKg: 1m),
+            BuildTransaction("NF-20", "Cliente B", "P4", "Produto 4", new DateTime(2026, 6, 3, 8, 0, 0, DateTimeKind.Utc), 5m, 10m, totalAmount: 80m, grossWeightKg: 9m));
+        await db.SaveChangesAsync();
+        var controller = new CommercialTransactionsController(db);
+
+        var result = await controller.GetInvoiceAnalytics(granularity: "month");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<CommercialInvoiceAnalyticsResponseDto>(ok.Value);
+        var customerA = Assert.Single(payload.Ranking, x => x.CustomerName == "Cliente A");
+        var customerB = Assert.Single(payload.Ranking, x => x.CustomerName == "Cliente B");
+
+        Assert.Equal(45m, customerA.TotalAmount);
+        Assert.Equal(2, customerA.InvoiceCount);
+        Assert.Equal(3, customerA.TotalItems);
+        Assert.Equal(6m, customerA.TotalWeightKg);
+
+        Assert.Equal(80m, customerB.TotalAmount);
+        Assert.Equal(1, customerB.InvoiceCount);
+        Assert.Equal(1, customerB.TotalItems);
+        Assert.Equal(9m, customerB.TotalWeightKg);
+    }
+
+    [Fact]
     public async Task GetSummary_AppliesProductGroupAndTransactionTypeFilters()
     {
         await using var db = await CreateDbAsync();
@@ -420,7 +614,9 @@ public sealed class CommercialTransactionsControllerTests
         string productDescription,
         DateTime transactionDate,
         decimal quantity,
-        decimal unitPrice)
+        decimal unitPrice,
+        decimal? totalAmount = null,
+        decimal? grossWeightKg = null)
     {
         return new Domain.Entities.CommercialTransaction
         {
@@ -432,11 +628,11 @@ public sealed class CommercialTransactionsControllerTests
             ProductDescription = productDescription,
             Quantity = quantity,
             UnitPrice = unitPrice,
-            TotalAmount = quantity * unitPrice,
+            TotalAmount = totalAmount ?? quantity * unitPrice,
             TransactionType = "Venda",
             City = "Campinas",
             ProductGroup = "Grupo A",
-            GrossWeightKg = quantity,
+            GrossWeightKg = grossWeightKg ?? quantity,
             SourceFileJobId = 1
         };
     }

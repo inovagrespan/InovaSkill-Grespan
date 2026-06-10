@@ -111,6 +111,69 @@ export type CommercialTransactionSummaryResponse = {
   totalCompanies: number;
   items: CommercialTransactionCompanySummary[];
 };
+export type CommercialInvoiceSummary = {
+  documentNumber: string;
+  transactionDate: string;
+  customerCode: string;
+  customerName: string;
+  city: string;
+  transactionType: string;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  totalItems: number;
+};
+export type CommercialInvoiceSummaryResponse = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  items: CommercialInvoiceSummary[];
+};
+export type CommercialInvoiceDetails = {
+  documentNumber: string;
+  transactionDate: string;
+  customerCode: string;
+  customerName: string;
+  city: string;
+  transactionType: string;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  totalItems: number;
+  items: CommercialTransaction[];
+};
+export type CommercialInvoiceAnalyticsGranularity = "day" | "week" | "month";
+export type CommercialInvoiceAnalyticsTrendPoint = {
+  periodStart: string;
+  invoiceCount: number;
+  totalAmount: number;
+  totalWeightKg: number;
+};
+export type CommercialInvoiceAnalyticsRankingItem = {
+  customerCode: string;
+  customerName: string;
+  totalAmount: number;
+  invoiceCount: number;
+  totalItems: number;
+  totalWeightKg: number;
+};
+export type CommercialInvoiceAnalyticsSummary = {
+  totalInvoices: number;
+  totalAmount: number;
+  totalWeightKg: number;
+  totalCustomers: number;
+  totalItems: number;
+  totalQuantity: number;
+};
+export type CommercialInvoiceAnalyticsResponse = {
+  granularity: CommercialInvoiceAnalyticsGranularity;
+  summary: CommercialInvoiceAnalyticsSummary;
+  trend: CommercialInvoiceAnalyticsTrendPoint[];
+  ranking: CommercialInvoiceAnalyticsRankingItem[];
+};
 export type CommercialTransactionTimelineGranularity = "hour" | "day" | "week" | "month" | "quarter";
 export type CommercialTransactionTimelinePoint = {
   periodStart: string;
@@ -297,11 +360,24 @@ export type CustomerTimelinePoint = {
   quantity: number;
   weight: number;
   orders: number;
+  averageTicket: number;
 };
 
 export type CustomerTimelineResponse = {
   granularity: "daily" | "weekly" | "monthly";
-  metric: "revenue" | "quantity" | "weight" | "orders";
+  metric: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
+  points: CustomerTimelinePoint[];
+};
+
+export type CustomerIndividualAnalysisScope = "historical" | "current";
+
+export type CustomerIndividualAnalysisResponse = {
+  scope: CustomerIndividualAnalysisScope;
+  periodStart: string;
+  periodEnd: string;
+  granularity: "weekly" | "monthly";
+  metric: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
+  summary: CustomerDetailSummary;
   points: CustomerTimelinePoint[];
 };
 
@@ -760,6 +836,122 @@ function demoCommercialSummary(input: {
   };
 }
 
+function demoCommercialInvoices(input: {
+  page?: number;
+  pageSize?: number;
+} & DemoCommercialTransactionFilters): CommercialInvoiceSummaryResponse {
+  const filteredItems = filterDemoCommercialTransactions(input);
+  const groups = new Map<string, CommercialInvoiceSummary>();
+
+  for (const item of filteredItems) {
+    const current = groups.get(item.documentNumber) ?? {
+      documentNumber: item.documentNumber,
+      transactionDate: item.transactionDate,
+      customerCode: item.customerCode,
+      customerName: item.customerName,
+      city: item.city,
+      transactionType: item.transactionType,
+      totalAmount: 0,
+      totalQuantity: 0,
+      totalWeightKg: 0,
+      totalItems: 0,
+    };
+
+    current.totalAmount += item.totalAmount;
+    current.totalQuantity += item.quantity;
+    current.totalWeightKg += item.grossWeightKg;
+    current.totalItems += 1;
+    groups.set(item.documentNumber, current);
+  }
+
+  const items = Array.from(groups.values()).sort((left, right) =>
+    right.transactionDate.localeCompare(left.transactionDate, "pt-BR") ||
+    right.documentNumber.localeCompare(left.documentNumber, "pt-BR"),
+  );
+  const page = input.page ?? DEMO_PAGE;
+  const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+
+  return {
+    page,
+    pageSize,
+    totalItems: items.length,
+    totalAmount: items.reduce((total, item) => total + item.totalAmount, 0),
+    totalQuantity: items.reduce((total, item) => total + item.totalQuantity, 0),
+    totalWeightKg: items.reduce((total, item) => total + item.totalWeightKg, 0),
+    items: paginateDemoItems(items, page, pageSize),
+  };
+}
+
+function demoCommercialInvoiceDetails(documentNumber: string): CommercialInvoiceDetails {
+  const items = filterDemoCommercialTransactions({ documentNumber }).filter((item) => item.documentNumber === documentNumber);
+  const firstItem = items[0];
+
+  return {
+    documentNumber,
+    transactionDate: firstItem?.transactionDate ?? "",
+    customerCode: firstItem?.customerCode ?? "",
+    customerName: firstItem?.customerName ?? "",
+    city: firstItem?.city ?? "",
+    transactionType: firstItem?.transactionType ?? "",
+    totalAmount: items.reduce((total, item) => total + item.totalAmount, 0),
+    totalQuantity: items.reduce((total, item) => total + item.quantity, 0),
+    totalWeightKg: items.reduce((total, item) => total + item.grossWeightKg, 0),
+    totalItems: items.length,
+    items,
+  };
+}
+
+function demoCommercialInvoiceAnalytics(input: {
+  granularity?: CommercialInvoiceAnalyticsGranularity;
+} & DemoCommercialTransactionFilters): CommercialInvoiceAnalyticsResponse {
+  const invoices = demoCommercialInvoices(input).items;
+  const granularity = input.granularity ?? "month";
+  const trendGroups = new Map<string, CommercialInvoiceAnalyticsTrendPoint>();
+  const rankingGroups = new Map<string, CommercialInvoiceAnalyticsRankingItem>();
+
+  for (const invoice of invoices) {
+    const periodStart = resolveDemoTimelinePeriodStart(invoice.transactionDate, granularity);
+    const trendPoint = trendGroups.get(periodStart) ?? {
+      periodStart,
+      invoiceCount: 0,
+      totalAmount: 0,
+      totalWeightKg: 0,
+    };
+    trendPoint.invoiceCount += 1;
+    trendPoint.totalAmount += invoice.totalAmount;
+    trendPoint.totalWeightKg += invoice.totalWeightKg;
+    trendGroups.set(periodStart, trendPoint);
+
+    const rankingPoint = rankingGroups.get(invoice.customerCode) ?? {
+      customerCode: invoice.customerCode,
+      customerName: invoice.customerName,
+      totalAmount: 0,
+      invoiceCount: 0,
+      totalItems: 0,
+      totalWeightKg: 0,
+    };
+    rankingPoint.totalAmount += invoice.totalAmount;
+    rankingPoint.invoiceCount += 1;
+    rankingPoint.totalItems += invoice.totalItems;
+    rankingPoint.totalWeightKg += invoice.totalWeightKg;
+    rankingGroups.set(invoice.customerCode, rankingPoint);
+  }
+
+  return {
+    granularity,
+    summary: {
+      totalInvoices: invoices.length,
+      totalAmount: invoices.reduce((total, item) => total + item.totalAmount, 0),
+      totalWeightKg: invoices.reduce((total, item) => total + item.totalWeightKg, 0),
+      totalCustomers: new Set(invoices.map((item) => item.customerCode)).size,
+      totalItems: invoices.reduce((total, item) => total + item.totalItems, 0),
+      totalQuantity: invoices.reduce((total, item) => total + item.totalQuantity, 0),
+    },
+    trend: Array.from(trendGroups.values()).sort((left, right) => left.periodStart.localeCompare(right.periodStart, "pt-BR")),
+    ranking: Array.from(rankingGroups.values()).sort((left, right) => right.totalAmount - left.totalAmount || left.customerName.localeCompare(right.customerName, "pt-BR")),
+  };
+}
+
 function demoCommercialTimeline(input: {
   granularity?: CommercialTransactionTimelineGranularity;
 } & DemoCommercialTransactionFilters): CommercialTransactionTimelineResponse {
@@ -1019,20 +1211,45 @@ function demoCustomerDetails(customerId: string): CustomerDetailSummary {
 
 function demoCustomerTimeline(input: {
   granularity?: "daily" | "weekly" | "monthly";
-  metric?: "revenue" | "quantity" | "weight" | "orders";
+  metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
 }): CustomerTimelineResponse {
   const points: CustomerTimelinePoint[] = [
-    { periodStart: "2026-01-01", value: 21_400, revenue: 21_400, quantity: 880, weight: 3_200, orders: 9 },
-    { periodStart: "2026-02-01", value: 24_900, revenue: 24_900, quantity: 940, weight: 3_520, orders: 10 },
-    { periodStart: "2026-03-01", value: 19_700, revenue: 19_700, quantity: 790, weight: 2_980, orders: 8 },
-    { periodStart: "2026-04-01", value: 28_600, revenue: 28_600, quantity: 1_120, weight: 4_100, orders: 12 },
-    { periodStart: "2026-05-01", value: 31_200, revenue: 31_200, quantity: 1_280, weight: 4_450, orders: 13 },
-    { periodStart: "2026-06-01", value: 38_940, revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18 },
+    { periodStart: "2025-07-01", value: 18_500, revenue: 18_500, quantity: 760, weight: 2_940, orders: 8, averageTicket: 2_312.5 },
+    { periodStart: "2025-08-01", value: 0, revenue: 0, quantity: 0, weight: 0, orders: 0, averageTicket: 0 },
+    { periodStart: "2025-09-01", value: 20_200, revenue: 20_200, quantity: 810, weight: 3_040, orders: 9, averageTicket: 2_244.44 },
+    { periodStart: "2025-10-01", value: 21_400, revenue: 21_400, quantity: 880, weight: 3_200, orders: 9, averageTicket: 2_377.78 },
+    { periodStart: "2025-11-01", value: 24_900, revenue: 24_900, quantity: 940, weight: 3_520, orders: 10, averageTicket: 2_490 },
+    { periodStart: "2025-12-01", value: 19_700, revenue: 19_700, quantity: 790, weight: 2_980, orders: 8, averageTicket: 2_462.5 },
+    { periodStart: "2026-01-01", value: 28_600, revenue: 28_600, quantity: 1_120, weight: 4_100, orders: 12, averageTicket: 2_383.33 },
+    { periodStart: "2026-02-01", value: 0, revenue: 0, quantity: 0, weight: 0, orders: 0, averageTicket: 0 },
+    { periodStart: "2026-03-01", value: 31_200, revenue: 31_200, quantity: 1_280, weight: 4_450, orders: 13, averageTicket: 2_400 },
+    { periodStart: "2026-04-01", value: 29_400, revenue: 29_400, quantity: 1_140, weight: 4_280, orders: 12, averageTicket: 2_450 },
+    { periodStart: "2026-05-01", value: 33_800, revenue: 33_800, quantity: 1_430, weight: 4_780, orders: 15, averageTicket: 2_253.33 },
+    { periodStart: "2026-06-01", value: 38_940, revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33 },
   ];
+  const metric = input.metric ?? "revenue";
   return {
     granularity: input.granularity ?? "monthly",
-    metric: input.metric ?? "revenue",
-    points: points.map((point) => ({ ...point, value: point[input.metric ?? "revenue"] })),
+    metric,
+    points: points.map((point) => ({ ...point, value: point[metric] })),
+  };
+}
+
+function demoCustomerIndividualAnalysis(input: {
+  customerId: string;
+  scope?: CustomerIndividualAnalysisScope;
+  metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
+}): CustomerIndividualAnalysisResponse {
+  const summary = demoCustomerDetails(input.customerId);
+  const timeline = demoCustomerTimeline({ granularity: "monthly", metric: input.metric ?? "revenue" });
+  return {
+    scope: input.scope ?? "historical",
+    periodStart: "2025-07-01",
+    periodEnd: DEMO_DATE_TODAY,
+    granularity: "monthly",
+    metric: timeline.metric,
+    summary,
+    points: timeline.points,
   };
 }
 
@@ -1894,6 +2111,198 @@ export async function fetchCommercialTransactions(input: {
   return result;
 }
 
+function normalizeCommercialInvoiceSummary(raw: any): CommercialInvoiceSummaryResponse {
+  return {
+    page: raw.page ?? raw.Page ?? 1,
+    pageSize: raw.pageSize ?? raw.PageSize ?? 20,
+    totalItems: raw.totalItems ?? raw.TotalItems ?? 0,
+    totalAmount: raw.totalAmount ?? raw.TotalAmount ?? 0,
+    totalQuantity: raw.totalQuantity ?? raw.TotalQuantity ?? 0,
+    totalWeightKg: raw.totalWeightKg ?? raw.TotalWeightKg ?? 0,
+    items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
+      documentNumber: item.documentNumber ?? item.DocumentNumber ?? "",
+      transactionDate: String(item.transactionDate ?? item.TransactionDate ?? "").split("T")[0] ?? "",
+      customerCode: item.customerCode ?? item.CustomerCode ?? "",
+      customerName: item.customerName ?? item.CustomerName ?? "",
+      city: item.city ?? item.City ?? "",
+      transactionType: item.transactionType ?? item.TransactionType ?? "",
+      totalAmount: item.totalAmount ?? item.TotalAmount ?? 0,
+      totalQuantity: item.totalQuantity ?? item.TotalQuantity ?? 0,
+      totalWeightKg: item.totalWeightKg ?? item.TotalWeightKg ?? 0,
+      totalItems: item.totalItems ?? item.TotalItems ?? 0,
+    })),
+  };
+}
+
+function normalizeCommercialInvoiceDetails(raw: any): CommercialInvoiceDetails {
+  return {
+    documentNumber: raw.documentNumber ?? raw.DocumentNumber ?? "",
+    transactionDate: String(raw.transactionDate ?? raw.TransactionDate ?? "").split("T")[0] ?? "",
+    customerCode: raw.customerCode ?? raw.CustomerCode ?? "",
+    customerName: raw.customerName ?? raw.CustomerName ?? "",
+    city: raw.city ?? raw.City ?? "",
+    transactionType: raw.transactionType ?? raw.TransactionType ?? "",
+    totalAmount: raw.totalAmount ?? raw.TotalAmount ?? 0,
+    totalQuantity: raw.totalQuantity ?? raw.TotalQuantity ?? 0,
+    totalWeightKg: raw.totalWeightKg ?? raw.TotalWeightKg ?? 0,
+    totalItems: raw.totalItems ?? raw.TotalItems ?? 0,
+    items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
+      id: item.id ?? item.Id ?? 0,
+      documentNumber: item.documentNumber ?? item.DocumentNumber ?? "",
+      transactionDate: String(item.transactionDate ?? item.TransactionDate ?? "").split("T")[0] ?? "",
+      customerCode: item.customerCode ?? item.CustomerCode ?? "",
+      customerName: item.customerName ?? item.CustomerName ?? "",
+      productCode: item.productCode ?? item.ProductCode ?? "",
+      productDescription: item.productDescription ?? item.ProductDescription ?? "",
+      quantity: item.quantity ?? item.Quantity ?? 0,
+      unitPrice: item.unitPrice ?? item.UnitPrice ?? 0,
+      totalAmount: item.totalAmount ?? item.TotalAmount ?? 0,
+      transactionType: item.transactionType ?? item.TransactionType ?? "",
+      city: item.city ?? item.City ?? "",
+      productGroup: item.productGroup ?? item.ProductGroup ?? "",
+      grossWeightKg: item.grossWeightKg ?? item.GrossWeightKg ?? 0,
+      sourceFileJobId: item.sourceFileJobId ?? item.SourceFileJobId ?? 0,
+    })),
+  };
+}
+
+function normalizeCommercialInvoiceAnalytics(raw: any): CommercialInvoiceAnalyticsResponse {
+  return {
+    granularity: raw.granularity ?? raw.Granularity ?? "month",
+    summary: {
+      totalInvoices: raw.summary?.totalInvoices ?? raw.Summary?.TotalInvoices ?? 0,
+      totalAmount: raw.summary?.totalAmount ?? raw.Summary?.TotalAmount ?? 0,
+      totalWeightKg: raw.summary?.totalWeightKg ?? raw.Summary?.TotalWeightKg ?? 0,
+      totalCustomers: raw.summary?.totalCustomers ?? raw.Summary?.TotalCustomers ?? 0,
+      totalItems: raw.summary?.totalItems ?? raw.Summary?.TotalItems ?? 0,
+      totalQuantity: raw.summary?.totalQuantity ?? raw.Summary?.TotalQuantity ?? 0,
+    },
+    trend: (raw.trend ?? raw.Trend ?? []).map((item: any) => ({
+      periodStart: String(item.periodStart ?? item.PeriodStart ?? "").split("T")[0] ?? "",
+      invoiceCount: item.invoiceCount ?? item.InvoiceCount ?? 0,
+      totalAmount: item.totalAmount ?? item.TotalAmount ?? 0,
+      totalWeightKg: item.totalWeightKg ?? item.TotalWeightKg ?? 0,
+    })),
+    ranking: (raw.ranking ?? raw.Ranking ?? []).map((item: any) => ({
+      customerCode: item.customerCode ?? item.CustomerCode ?? "",
+      customerName: item.customerName ?? item.CustomerName ?? "",
+      totalAmount: item.totalAmount ?? item.TotalAmount ?? 0,
+      invoiceCount: item.invoiceCount ?? item.InvoiceCount ?? 0,
+      totalItems: item.totalItems ?? item.TotalItems ?? 0,
+      totalWeightKg: item.totalWeightKg ?? item.TotalWeightKg ?? 0,
+    })),
+  };
+}
+
+export async function fetchCommercialInvoiceAnalytics(input: {
+  granularity?: CommercialInvoiceAnalyticsGranularity;
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  productGroup?: string;
+  transactionType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  signal?: AbortSignal;
+}): Promise<CommercialInvoiceAnalyticsResponse> {
+  const query = new URLSearchParams();
+  query.set("granularity", input.granularity ?? "month");
+
+  if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
+  if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
+  if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions/invoice-analytics?${query.toString()}`, {
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) return demoCommercialInvoiceAnalytics(input);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise de notas fiscais."));
+
+  return normalizeCommercialInvoiceAnalytics(await response.json());
+}
+
+export async function fetchCommercialInvoices(input: {
+  page?: number;
+  pageSize?: number;
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  productGroup?: string;
+  transactionType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  signal?: AbortSignal;
+}): Promise<CommercialInvoiceSummaryResponse> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+
+  if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
+  if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
+  if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions/invoices?${query.toString()}`, {
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) return demoCommercialInvoices(input);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar notas fiscais."));
+
+  return normalizeCommercialInvoiceSummary(await response.json());
+}
+
+export async function fetchCommercialInvoiceDetails(documentNumber: string, signal?: AbortSignal): Promise<CommercialInvoiceDetails> {
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions/invoices/${encodeURIComponent(documentNumber)}`, {
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) return demoCommercialInvoiceDetails(documentNumber);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes da nota fiscal."));
+
+  return normalizeCommercialInvoiceDetails(await response.json());
+}
+
 export async function fetchCommercialTransactionsSummary(input: {
   page?: number;
   pageSize?: number;
@@ -2110,10 +2519,67 @@ export async function fetchCustomerDetailsSummary(input: {
   return details.totalOrders > 0 || details.totalRevenue > 0 ? details : demoCustomerDetails(input.customerId);
 }
 
+export async function fetchCustomerIndividualAnalysis(input: {
+  customerId: string;
+  scope?: CustomerIndividualAnalysisScope;
+  metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<CustomerIndividualAnalysisResponse> {
+  const query = new URLSearchParams();
+  query.set("scope", input.scope ?? "historical");
+  query.set("metric", input.metric ?? "revenue");
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/individual-analysis?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCustomerIndividualAnalysis(input);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise individual do cliente."));
+
+  const raw = await response.json() as any;
+  return {
+    scope: (raw.scope ?? raw.Scope ?? "historical") as CustomerIndividualAnalysisScope,
+    periodStart: String(raw.periodStart ?? raw.PeriodStart ?? ""),
+    periodEnd: String(raw.periodEnd ?? raw.PeriodEnd ?? ""),
+    granularity: (raw.granularity ?? raw.Granularity ?? "monthly") as "weekly" | "monthly",
+    metric: (raw.metric ?? raw.Metric ?? "revenue") as CustomerIndividualAnalysisResponse["metric"],
+    summary: {
+      customerCode: String(raw.summary?.customerCode ?? raw.Summary?.CustomerCode ?? ""),
+      customerName: String(raw.summary?.customerName ?? raw.Summary?.CustomerName ?? ""),
+      city: String(raw.summary?.city ?? raw.Summary?.City ?? ""),
+      linkedCompany: String(raw.summary?.linkedCompany ?? raw.Summary?.LinkedCompany ?? ""),
+      lastPurchaseDate: raw.summary?.lastPurchaseDate ?? raw.Summary?.LastPurchaseDate ?? null,
+      status: String(raw.summary?.status ?? raw.Summary?.Status ?? "Ativo") as CustomerDetailSummary["status"],
+      totalRevenue: Number(raw.summary?.totalRevenue ?? raw.Summary?.TotalRevenue ?? 0),
+      averageTicket: raw.summary?.averageTicket == null && raw.Summary?.AverageTicket == null ? null : Number(raw.summary?.averageTicket ?? raw.Summary?.AverageTicket ?? 0),
+      averageRevenueMonthly: raw.summary?.averageRevenueMonthly == null && raw.Summary?.AverageRevenueMonthly == null ? null : Number(raw.summary?.averageRevenueMonthly ?? raw.Summary?.AverageRevenueMonthly ?? 0),
+      averageRevenueWeekly: raw.summary?.averageRevenueWeekly == null && raw.Summary?.AverageRevenueWeekly == null ? null : Number(raw.summary?.averageRevenueWeekly ?? raw.Summary?.AverageRevenueWeekly ?? 0),
+      totalQuantity: Number(raw.summary?.totalQuantity ?? raw.Summary?.TotalQuantity ?? 0),
+      totalWeight: Number(raw.summary?.totalWeight ?? raw.Summary?.TotalWeight ?? 0),
+      totalOrders: Number(raw.summary?.totalOrders ?? raw.Summary?.TotalOrders ?? 0),
+      averageDaysBetweenPurchases: raw.summary?.averageDaysBetweenPurchases == null && raw.Summary?.AverageDaysBetweenPurchases == null ? null : Number(raw.summary?.averageDaysBetweenPurchases ?? raw.Summary?.AverageDaysBetweenPurchases ?? 0),
+    },
+    points: (raw.points ?? raw.Points ?? []).map((point: any) => ({
+      periodStart: String(point.periodStart ?? point.PeriodStart ?? ""),
+      value: Number(point.value ?? point.Value ?? 0),
+      revenue: Number(point.revenue ?? point.Revenue ?? 0),
+      quantity: Number(point.quantity ?? point.Quantity ?? 0),
+      weight: Number(point.weight ?? point.Weight ?? 0),
+      orders: Number(point.orders ?? point.Orders ?? 0),
+      averageTicket: Number(point.averageTicket ?? point.AverageTicket ?? 0),
+    })),
+  };
+}
+
 export async function fetchCustomerTimeline(input: {
   customerId: string;
   granularity?: "daily" | "weekly" | "monthly";
-  metric?: "revenue" | "quantity" | "weight" | "orders";
+  metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
   dateFrom?: string;
   dateTo?: string;
 }): Promise<CustomerTimelineResponse> {

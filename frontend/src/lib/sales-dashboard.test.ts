@@ -1,108 +1,94 @@
 import { describe, expect, it } from "vitest";
-import type {
-  CommercialTransactionSummaryResponse,
-  CommercialTransactionTimelineResponse,
-} from "@/lib/importer-api";
+import type { CommercialInvoiceAnalyticsResponse } from "@/lib/importer-api";
 import {
-  buildSalesRevenueComparisonText,
+  buildSalesRankingData,
   buildSalesTrendData,
+  describeSalesRankingMetric,
   describeSalesTimelineGranularity,
+  describeSalesTrendMetric,
 } from "./sales-dashboard";
 
-function createSummary(
-  overrides: Partial<CommercialTransactionSummaryResponse> = {},
-): CommercialTransactionSummaryResponse {
-  return {
-    page: 1,
-    pageSize: 20,
-    totalItems: 0,
-    granularity: "weekly",
-    currentPeriodStart: "2026-06-01",
-    previousPeriodStart: "2026-05-01",
-    currentPeriodTotalAmount: 0,
-    previousPeriodTotalAmount: 0,
-    totalGrowthPercent: null,
-    totalRecords: 0,
-    totalAmount: 0,
-    totalQuantity: 0,
-    totalWeightKg: 0,
-    totalCompanies: 0,
-    items: [],
-    ...overrides,
-  };
-}
-
-function createTimeline(
-  overrides: Partial<CommercialTransactionTimelineResponse> = {},
-): CommercialTransactionTimelineResponse {
+function createAnalytics(
+  overrides: Partial<CommercialInvoiceAnalyticsResponse> = {},
+): CommercialInvoiceAnalyticsResponse {
   return {
     granularity: "month",
-    items: [],
+    summary: {
+      totalInvoices: 4,
+      totalAmount: 6200,
+      totalWeightKg: 140,
+      totalCustomers: 3,
+      totalItems: 11,
+      totalQuantity: 28,
+    },
+    trend: [
+      { periodStart: "2026-04-01", invoiceCount: 2, totalAmount: 1200, totalWeightKg: 25 },
+      { periodStart: "2026-05-01", invoiceCount: 1, totalAmount: 3200, totalWeightKg: 45 },
+      { periodStart: "2026-06-01", invoiceCount: 1, totalAmount: 1800, totalWeightKg: 70 },
+    ],
+    ranking: [
+      { customerCode: "C2", customerName: "Cliente B", totalAmount: 2800, invoiceCount: 1, totalItems: 2, totalWeightKg: 18 },
+      { customerCode: "C1", customerName: "Cliente A", totalAmount: 2200, invoiceCount: 3, totalItems: 7, totalWeightKg: 42 },
+      { customerCode: "C3", customerName: "Cliente C", totalAmount: 900, invoiceCount: 2, totalItems: 9, totalWeightKg: 65 },
+    ],
     ...overrides,
   };
 }
 
 describe("sales dashboard helpers", () => {
-  it("monta o grafico com uma serie temporal real, sem colapsar para anterior x atual", () => {
-    const timeline = createTimeline({
-      granularity: "month",
-      items: [
-        { periodStart: "2026-04-01", totalAmount: 1200, totalQuantity: 10, totalWeightKg: 25, recordCount: 2 },
-        { periodStart: "2026-05-01", totalAmount: 3200, totalQuantity: 20, totalWeightKg: 45, recordCount: 3 },
-        { periodStart: "2026-06-01", totalAmount: 2800, totalQuantity: 18, totalWeightKg: 41, recordCount: 4 },
-      ],
-    });
+  it("monta a evolução de notas pela métrica selecionada", () => {
+    const analytics = createAnalytics();
 
-    expect(buildSalesTrendData(timeline)).toEqual([
-      { label: "Abr", value: 1200, tooltipLabel: "2026-04-01T00:00:00Z" },
-      { label: "Mai", value: 3200, tooltipLabel: "2026-05-01T00:00:00Z" },
-      { label: "Jun", value: 2800, tooltipLabel: "2026-06-01T00:00:00Z" },
+    expect(buildSalesTrendData(analytics, "invoiceCount")).toEqual([
+      { label: "Abr", value: 2, tooltipLabel: "2026-04-01T00:00:00Z" },
+      { label: "Mai", value: 1, tooltipLabel: "2026-05-01T00:00:00Z" },
+      { label: "Jun", value: 1, tooltipLabel: "2026-06-01T00:00:00Z" },
+    ]);
+
+    expect(buildSalesTrendData(analytics, "totalAmount")[1]?.value).toBe(3200);
+    expect(buildSalesTrendData(analytics, "totalWeightKg")[2]?.value).toBe(70);
+  });
+
+  it("retorna série vazia quando ainda não há análise", () => {
+    expect(buildSalesTrendData(null, "invoiceCount")).toEqual([]);
+    expect(buildSalesRankingData(null, "amount")).toEqual([]);
+  });
+
+  it("ordena o ranking por valor, notas, itens e peso", () => {
+    const analytics = createAnalytics();
+
+    expect(buildSalesRankingData(analytics, "amount").map((item) => item.companyName)).toEqual([
+      "Cliente B",
+      "Cliente A",
+      "Cliente C",
+    ]);
+    expect(buildSalesRankingData(analytics, "invoiceCount").map((item) => item.companyName)).toEqual([
+      "Cliente A",
+      "Cliente C",
+      "Cliente B",
+    ]);
+    expect(buildSalesRankingData(analytics, "items").map((item) => item.companyName)).toEqual([
+      "Cliente C",
+      "Cliente A",
+      "Cliente B",
+    ]);
+    expect(buildSalesRankingData(analytics, "weight").map((item) => item.companyName)).toEqual([
+      "Cliente C",
+      "Cliente A",
+      "Cliente B",
     ]);
   });
 
-  it("respeita granularidades de hora, dia e semana na montagem dos rotulos", () => {
-    const hourTimeline = createTimeline({
-      granularity: "hour",
-      items: [{ periodStart: "2026-06-08T08:00:00Z", totalAmount: 150, totalQuantity: 2, totalWeightKg: 8, recordCount: 1 }],
-    });
-    const dailyTimeline = createTimeline({
-      granularity: "day",
-      items: [{ periodStart: "2026-06-08", totalAmount: 150, totalQuantity: 2, totalWeightKg: 8, recordCount: 1 }],
-    });
-    const weeklyTimeline = createTimeline({
-      granularity: "week",
-      items: [{ periodStart: "2026-06-08", totalAmount: 700, totalQuantity: 12, totalWeightKg: 28, recordCount: 4 }],
-    });
-
-    expect(buildSalesTrendData(hourTimeline)).toEqual([
-      { label: "08h", value: 150, tooltipLabel: "2026-06-08T08:00:00Z" },
-    ]);
-    expect(buildSalesTrendData(dailyTimeline)).toEqual([
-      { label: "08 de jun", value: 150, tooltipLabel: "2026-06-08T00:00:00Z" },
-    ]);
-    expect(buildSalesTrendData(weeklyTimeline)).toEqual([
-      { label: "08 de jun - 14 de jun", value: 700, tooltipLabel: "2026-06-08T00:00:00Z" },
-    ]);
-  });
-
-  it("retorna serie vazia quando ainda nao ha timeline", () => {
-    expect(buildSalesTrendData(null)).toEqual([]);
-    expect(buildSalesTrendData(createTimeline())).toEqual([]);
-  });
-
-  it("gera o texto de comparacao correto para cenarios positivos, negativos e sem base", () => {
-    expect(buildSalesRevenueComparisonText(createSummary())).toBe("Sem resultado para o período e filtros atuais.");
-    expect(buildSalesRevenueComparisonText(createSummary({ totalRecords: 4, totalGrowthPercent: null }))).toBe("Sem base comparativa para o período anterior.");
-    expect(buildSalesRevenueComparisonText(createSummary({ totalRecords: 4, totalGrowthPercent: 12.5 }))).toBe("Faturamento acima do período anterior.");
-    expect(buildSalesRevenueComparisonText(createSummary({ totalRecords: 4, totalGrowthPercent: -3.2 }))).toBe("Faturamento abaixo do período anterior.");
-    expect(buildSalesRevenueComparisonText(createSummary({ totalRecords: 4, totalGrowthPercent: 0 }))).toBe("Faturamento igual ao período anterior.");
-  });
-
-  it("descreve a granularidade da timeline para a UI", () => {
-    expect(describeSalesTimelineGranularity("hour")).toBe("hora");
+  it("descreve granularidade e rótulos das métricas para a UI", () => {
     expect(describeSalesTimelineGranularity("day")).toBe("dia");
     expect(describeSalesTimelineGranularity("week")).toBe("semana");
     expect(describeSalesTimelineGranularity("month")).toBe("mês");
-    expect(describeSalesTimelineGranularity("quarter")).toBe("trimestre");
+    expect(describeSalesTrendMetric("invoiceCount")).toBe("Quantidade de notas emitidas");
+    expect(describeSalesTrendMetric("totalAmount")).toBe("Valor total das notas");
+    expect(describeSalesTrendMetric("totalWeightKg")).toBe("Peso total movimentado");
+    expect(describeSalesRankingMetric("amount")).toBe("Valor total das notas por cliente");
+    expect(describeSalesRankingMetric("invoiceCount")).toBe("Quantidade de notas por cliente");
+    expect(describeSalesRankingMetric("items")).toBe("Quantidade de itens por cliente");
+    expect(describeSalesRankingMetric("weight")).toBe("Peso total movimentado por cliente");
   });
 });

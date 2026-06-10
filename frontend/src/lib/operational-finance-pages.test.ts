@@ -1,4 +1,4 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -92,31 +92,44 @@ describe("operational, finance and reports pages", () => {
     expect(sidebar).toContain("PackageSearch");
   });
 
-  it("exibe médias semanal e mensal na tela de vendas", () => {
+  it("exibe kpis operacionais de nota fiscal na tela de vendas", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/vendas.tsx"), "utf8");
     const dashboardHelper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/sales-dashboard.ts"), "utf8");
 
-    expect(source).toContain("Média mensal");
-    expect(source).toContain("Média semanal");
-    expect(source).toContain("calculatePeriodAverages");
-    expect(source).toContain("fetchCommercialTransactionsTimeline");
+    expect(source).toContain("Notas fiscais");
+    expect(source).toContain("Valor das notas");
+    expect(source).toContain("Peso movimentado");
+    expect(source).toContain("Clientes impactados");
     expect(source).toContain("resolveSalesTimelineGranularity");
+    expect(source).toContain("fetchCommercialInvoiceAnalytics");
     expect(source).toContain("AreaChart");
     expect(source).toContain("linearGradient");
     expect(source).toContain("SALES_CHART_CARD_CLASS_NAME");
     expect(dashboardHelper).toContain("formatSalesTimelineLabel");
     expect(dashboardHelper).toContain("buildSalesTrendData");
+    expect(dashboardHelper).toContain("buildSalesRankingData");
   });
 
-  it("mantém vendas focada em busca por nota fiscal sem gráficos agregados", () => {
+  it("mantém vendas focada em notas fiscais com seletores analíticos", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/vendas.tsx"), "utf8");
 
     expect(source).toContain('Label htmlFor="sales-document"');
     expect(source).toContain("Buscar por nota fiscal");
-    expect(source).not.toContain('title="Registros"');
-    expect(source).not.toContain('title="Quantidade"');
-    expect(source).not.toContain("<CardTitle>Faturamento no período</CardTitle>");
-    expect(source).not.toContain("<CardTitle>Ranking por empresa</CardTitle>");
+    expect(source).toContain("Notas fiscais");
+    expect(source).toContain("Total da nota");
+    expect(source).toContain("DialogTitle>Detalhes da Nota Fiscal");
+    expect(source).toContain("Itens da nota");
+    expect(source).toContain("Carregando detalhes da nota fiscal...");
+    expect(source).toContain("fetchCommercialInvoices");
+    expect(source).toContain("fetchCommercialInvoiceDetails");
+    expect(source).toContain("Evolução das notas fiscais");
+    expect(source).toContain("Quantidade de notas");
+    expect(source).toContain("Valor total das notas");
+    expect(source).toContain("Peso total movimentado");
+    expect(source).toContain("Maior quantidade de notas");
+    expect(source).toContain("Maior quantidade de itens");
+    expect(source).toContain("Maior peso movimentado");
+    expect(source).toContain("<CardTitle className=\"text-base text-foreground\">Ranking por empresa</CardTitle>");
   });
 
   it("exibe dados fictícios na tela de clientes quando não há base real", () => {
@@ -156,3 +169,4 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("window.print");
   });
 });
+

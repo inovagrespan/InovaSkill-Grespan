@@ -72,6 +72,199 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
         return Ok(new PagedResult<CommercialTransactionDto>(page, pageSize, total, items));
     }
 
+    [HttpGet("invoices")]
+    public async Task<ActionResult<CommercialInvoiceSummaryResponseDto>> GetInvoices(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? documentNumber = null,
+        [FromQuery] string? customerCode = null,
+        [FromQuery] string? customerName = null,
+        [FromQuery] string? productCode = null,
+        [FromQuery] string? city = null,
+        [FromQuery] string? productGroup = null,
+        [FromQuery] string? transactionType = null,
+        [FromQuery] DateTime? dateFrom = null,
+        [FromQuery] DateTime? dateTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, MinPageSize, MaxPageSize);
+
+        var query = ApplyFilters(
+            dbContext.CommercialTransactions.AsNoTracking(),
+            documentNumber,
+            customerCode,
+            customerName,
+            productCode,
+            city,
+            productGroup,
+            transactionType,
+            dateFrom,
+            dateTo);
+
+        var invoiceRows = (await BuildInvoiceAggregateRowsAsync(query, cancellationToken))
+            .OrderByDescending(x => x.Date)
+            .ThenByDescending(x => x.DocumentNumber)
+            .ToList();
+
+        var invoices = invoiceRows
+            .Select(x => new CommercialInvoiceSummaryDto(
+                x.DocumentNumber,
+                x.Date,
+                x.CustomerCode,
+                x.CustomerName,
+                x.City,
+                x.TransactionType,
+                (decimal)x.TotalAmount,
+                (decimal)x.TotalQuantity,
+                (decimal)x.TotalWeightKg,
+                x.TotalItems))
+            .ToList();
+
+        var totalItems = invoices.Count;
+        var pagedItems = invoices
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return Ok(new CommercialInvoiceSummaryResponseDto(
+            page,
+            pageSize,
+            totalItems,
+            invoices.Sum(x => x.TotalAmount),
+            invoices.Sum(x => x.TotalQuantity),
+            invoices.Sum(x => x.TotalWeightKg),
+            pagedItems));
+    }
+
+    [HttpGet("invoice-analytics")]
+    public async Task<ActionResult<CommercialInvoiceAnalyticsResponseDto>> GetInvoiceAnalytics(
+        [FromQuery] string granularity = "month",
+        [FromQuery] string? documentNumber = null,
+        [FromQuery] string? customerCode = null,
+        [FromQuery] string? customerName = null,
+        [FromQuery] string? productCode = null,
+        [FromQuery] string? city = null,
+        [FromQuery] string? productGroup = null,
+        [FromQuery] string? transactionType = null,
+        [FromQuery] DateTime? dateFrom = null,
+        [FromQuery] DateTime? dateTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        var resolvedGranularity = ResolveInvoiceAnalyticsGranularity(granularity);
+        var query = ApplyFilters(
+            dbContext.CommercialTransactions.AsNoTracking(),
+            documentNumber,
+            customerCode,
+            customerName,
+            productCode,
+            city,
+            productGroup,
+            transactionType,
+            dateFrom,
+            dateTo);
+
+        var invoiceRows = (await BuildInvoiceAggregateRowsAsync(query, cancellationToken))
+            .OrderBy(x => x.Date)
+            .ThenBy(x => x.DocumentNumber)
+            .ToList();
+
+        var summary = new CommercialInvoiceAnalyticsSummaryDto(
+            invoiceRows.Count,
+            invoiceRows.Sum(x => (decimal)x.TotalAmount),
+            invoiceRows.Sum(x => (decimal)x.TotalWeightKg),
+            invoiceRows
+                .Select(x => ((x.CustomerCode ?? string.Empty).Trim(), (x.CustomerName ?? string.Empty).Trim()))
+                .Where(x => x.Item2 != string.Empty || x.Item1 != string.Empty)
+                .Distinct()
+                .Count(),
+            invoiceRows.Sum(x => x.TotalItems),
+            invoiceRows.Sum(x => (decimal)x.TotalQuantity));
+
+        var trend = BuildInvoiceAnalyticsTrend(invoiceRows, resolvedGranularity)
+            .Select(x => new CommercialInvoiceAnalyticsTrendPointDto(
+                x.PeriodStart,
+                x.InvoiceCount,
+                x.TotalAmount,
+                x.TotalWeightKg))
+            .ToList();
+
+        var ranking = invoiceRows
+            .GroupBy(x => new { x.CustomerCode, x.CustomerName })
+            .Select(group => new CommercialInvoiceAnalyticsRankingItemDto(
+                group.Key.CustomerCode,
+                group.Key.CustomerName,
+                group.Sum(x => (decimal)x.TotalAmount),
+                group.Count(),
+                group.Sum(x => x.TotalItems),
+                group.Sum(x => (decimal)x.TotalWeightKg)))
+            .OrderByDescending(x => x.TotalAmount)
+            .ThenBy(x => x.CustomerName)
+            .ToList();
+
+        return Ok(new CommercialInvoiceAnalyticsResponseDto(
+            ToInvoiceAnalyticsGranularityName(resolvedGranularity),
+            summary,
+            trend,
+            ranking));
+    }
+
+    [HttpGet("invoices/{documentNumber}")]
+    public async Task<ActionResult<CommercialInvoiceDetailsDto>> GetInvoiceDetails(
+        [FromRoute] string documentNumber,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedDocumentNumber = documentNumber.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedDocumentNumber))
+        {
+            return BadRequest("Documento inválido.");
+        }
+
+        var items = await dbContext.CommercialTransactions
+            .AsNoTracking()
+            .Where(x => x.DocumentNumber.ToUpper() == normalizedDocumentNumber.ToUpper())
+            .OrderBy(x => x.TransactionDate)
+            .ThenBy(x => x.ProductCode)
+            .ThenBy(x => x.Id)
+            .Select(x => new CommercialTransactionDto(
+                x.Id,
+                x.DocumentNumber,
+                x.TransactionDate,
+                x.CustomerCode,
+                x.CustomerName,
+                x.ProductCode,
+                x.ProductDescription,
+                x.Quantity,
+                x.UnitPrice,
+                x.TotalAmount,
+                x.TransactionType,
+                x.City,
+                x.ProductGroup,
+                x.GrossWeightKg,
+                x.SourceFileJobId))
+            .ToListAsync(cancellationToken);
+
+        if (items.Count == 0)
+        {
+            return NotFound();
+        }
+
+        var firstItem = items[0];
+
+        return Ok(new CommercialInvoiceDetailsDto(
+            firstItem.DocumentNumber,
+            firstItem.TransactionDate.Date,
+            firstItem.CustomerCode,
+            firstItem.CustomerName,
+            firstItem.City,
+            firstItem.TransactionType,
+            items.Sum(x => x.TotalAmount),
+            items.Sum(x => x.Quantity),
+            items.Sum(x => x.GrossWeightKg),
+            items.Count,
+            items));
+    }
+
     [HttpGet("summary")]
     public async Task<ActionResult<CommercialTransactionSummaryResponseDto>> GetSummary(
         [FromQuery] int page = 1,
@@ -383,6 +576,76 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
         return query;
     }
 
+    private static async Task<List<InvoiceAggregateRow>> BuildInvoiceAggregateRowsAsync(
+        IQueryable<Domain.Entities.CommercialTransaction> query,
+        CancellationToken cancellationToken)
+    {
+        var rows = await query
+            .GroupBy(x => new
+            {
+                x.DocumentNumber,
+                Date = x.TransactionDate.Date,
+                x.CustomerCode,
+                x.CustomerName,
+                x.City,
+                x.TransactionType
+            })
+            .Select(group => new
+            {
+                group.Key.DocumentNumber,
+                group.Key.Date,
+                group.Key.CustomerCode,
+                group.Key.CustomerName,
+                group.Key.City,
+                group.Key.TransactionType,
+                TotalAmount = group.Sum(x => (double)x.TotalAmount),
+                TotalQuantity = group.Sum(x => (double)x.Quantity),
+                TotalWeightKg = group.Sum(x => (double)x.GrossWeightKg),
+                TotalItems = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(row => new InvoiceAggregateRow(
+                row.DocumentNumber,
+                row.Date,
+                row.CustomerCode,
+                row.CustomerName,
+                row.City,
+                row.TransactionType,
+                row.TotalAmount,
+                row.TotalQuantity,
+                row.TotalWeightKg,
+                row.TotalItems))
+            .ToList();
+    }
+
+    private static IReadOnlyList<InvoiceAnalyticsTrendRow> BuildInvoiceAnalyticsTrend(
+        IReadOnlyList<InvoiceAggregateRow> invoiceRows,
+        InvoiceAnalyticsGranularity granularity)
+    {
+        return invoiceRows
+            .GroupBy(x => ResolveInvoiceAnalyticsPeriodStart(x.Date, granularity))
+            .OrderBy(x => x.Key)
+            .Select(group => new InvoiceAnalyticsTrendRow(
+                group.Key,
+                group.Count(),
+                group.Sum(x => (decimal)x.TotalAmount),
+                group.Sum(x => (decimal)x.TotalWeightKg)))
+            .ToList();
+    }
+
+    private static DateTime ResolveInvoiceAnalyticsPeriodStart(DateTime date, InvoiceAnalyticsGranularity granularity)
+    {
+        var normalizedDate = NormalizeToUtc(date).Date;
+        return granularity switch
+        {
+            InvoiceAnalyticsGranularity.Day => normalizedDate,
+            InvoiceAnalyticsGranularity.Week => GetWeekStart(normalizedDate),
+            _ => new DateTime(normalizedDate.Year, normalizedDate.Month, 1, 0, 0, 0, DateTimeKind.Utc)
+        };
+    }
+
     private static SalesSummaryGranularity ResolveSummaryGranularity(string granularity)
     {
         return granularity.Trim().ToLowerInvariant() switch
@@ -440,6 +703,26 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
         };
     }
 
+    private static InvoiceAnalyticsGranularity ResolveInvoiceAnalyticsGranularity(string granularity)
+    {
+        return granularity.Trim().ToLowerInvariant() switch
+        {
+            "daily" or "day" => InvoiceAnalyticsGranularity.Day,
+            "weekly" or "week" => InvoiceAnalyticsGranularity.Week,
+            _ => InvoiceAnalyticsGranularity.Month
+        };
+    }
+
+    private static string ToInvoiceAnalyticsGranularityName(InvoiceAnalyticsGranularity granularity)
+    {
+        return granularity switch
+        {
+            InvoiceAnalyticsGranularity.Day => "day",
+            InvoiceAnalyticsGranularity.Week => "week",
+            _ => "month"
+        };
+    }
+
     private static DateTime GetWeekStart(DateTime normalized)
     {
         return normalized.Date.AddDays(-((int)normalized.DayOfWeek + 6) % 7);
@@ -463,6 +746,31 @@ public sealed class CommercialTransactionsController(ImportDbContext dbContext) 
         Month,
         Quarter
     }
+
+    private enum InvoiceAnalyticsGranularity
+    {
+        Day,
+        Week,
+        Month
+    }
+
+    private sealed record InvoiceAggregateRow(
+        string DocumentNumber,
+        DateTime Date,
+        string CustomerCode,
+        string CustomerName,
+        string City,
+        string TransactionType,
+        double TotalAmount,
+        double TotalQuantity,
+        double TotalWeightKg,
+        int TotalItems);
+
+    private sealed record InvoiceAnalyticsTrendRow(
+        DateTime PeriodStart,
+        int InvoiceCount,
+        decimal TotalAmount,
+        decimal TotalWeightKg);
 
     private sealed record TimelineAggregateRow(
         int Year,
