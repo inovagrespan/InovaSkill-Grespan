@@ -19,7 +19,7 @@ const items = [
   { to: "/produtos", label: "Produtos", icon: PackageSearch },
   {
     to: "/clientes",
-    label: "Clientes",
+    label: "Finanças",
     icon: Users,
   },
   { to: "/processamentos", label: "Processamentos", icon: ServerCog, adminOnly: true },

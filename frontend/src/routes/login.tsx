@@ -225,7 +225,7 @@ function LoginPage() {
                     value={loginPassword}
                     onChange={(event) => setLoginPassword(event.target.value)}
                     autoComplete="current-password"
-                    placeholder="admin"
+                    placeholder="admin123*#"
                     className="h-11 rounded-xl border-border/50 bg-white px-4 shadow-none transition-colors placeholder:text-muted-foreground/75 hover:border-border/70 focus-visible:border-primary/35 focus-visible:ring-2 focus-visible:ring-primary/8 dark:border-white/10 dark:bg-white/4 dark:hover:border-white/20 dark:placeholder:text-slate-400"
                     required
                   />

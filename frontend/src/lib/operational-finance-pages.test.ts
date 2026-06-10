@@ -48,7 +48,7 @@ describe("operational, finance and reports pages", () => {
     expect(styles).toContain(".finance-chart-card");
     expect(styles).toContain(".dark .finance-chart-card");
     expect(sidebar).not.toContain('to: "/financas"');
-    expect(sidebar).not.toContain('label: "Finanças"');
+    expect(sidebar).toContain('label: "Finanças"');
   });
 
   it("mescla clientes e finanças com métricas financeiras no topo e lista de clientes abaixo", () => {
@@ -56,6 +56,8 @@ describe("operational, finance and reports pages", () => {
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
 
     expect(source).toContain("fetchFinanceDashboard");
+    expect(source).toContain("Análise Financeira de Clientes");
+    expect(source).not.toContain("Análise de Clientes");
     expect(source).toContain("financeMetrics.totalRevenue");
     expect(source).toContain("Métrica financeira consolidada pelos filtros");
     expect(source).toContain("Evolução da Receita");
@@ -67,7 +69,8 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("Clique em um cliente para abrir a tela de detalhes.");
     expect(source).toContain("onClick={() => openDetails(item.customerCode)}");
     expect(sidebar).toContain('to: "/clientes"');
-    expect(sidebar).toContain('label: "Clientes"');
+    expect(sidebar).toContain('label: "Finanças"');
+    expect(sidebar).not.toContain('label: "Clientes"');
     expect(sidebar).not.toContain('to: "/financas"');
   });
 

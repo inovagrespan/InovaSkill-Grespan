@@ -95,7 +95,7 @@ describe("customer commercial health", () => {
     expect(clientsSource).not.toContain("Ver análise completa");
     expect(clientsSource).not.toContain("Inteligência Comercial");
     expect(sidebarSource).toContain('to: "/clientes"');
-    expect(sidebarSource).toContain('label: "Clientes"');
+    expect(sidebarSource).toContain('label: "Finanças"');
     expect(sidebarSource).not.toContain('to: "/clientes/analise-comercial"');
   });
 });
