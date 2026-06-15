@@ -1,6 +1,8 @@
 using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Application.Events;
+using InovaSkill.Importer.Application.Jobs;
 using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.Processing;
 using Microsoft.EntityFrameworkCore;
@@ -139,6 +141,125 @@ public sealed class ProcessingEventDispatcherTests
         Assert.Null(job.LockedAt);
     }
 
+    [Fact]
+    public async Task DispatchAsync_GenericJobCallsMatchingJobHandlerAndMarksCompleted()
+    {
+        await using var db = CreateDb();
+        db.Jobs.Add(new Job
+        {
+            Id = 100,
+            Type = JobTypeCodes.SpreadsheetImport,
+            Status = JobStatus.Queued,
+            PayloadJson = "{}"
+        });
+        await db.SaveChangesAsync();
+        var jobHandler = new RecordingJobHandler(JobTypeCodes.SpreadsheetImport);
+        var eventHandler = new JobRequestedEventHandler(db, [jobHandler]);
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([eventHandler], queue, queue, db);
+
+        await dispatcher.DispatchAsync(ProcessingEventEnvelope.Create(ProcessingEventTypes.JobRequested, 100), CancellationToken.None);
+
+        Assert.Single(jobHandler.Handled);
+        var job = await db.Jobs.SingleAsync(x => x.Id == 100);
+        Assert.Equal(JobStatus.Completed, job.Status);
+        Assert.Equal(100, job.ProgressPercent);
+        Assert.True(string.IsNullOrEmpty(job.LockedBy));
+        Assert.Null(job.LockedAt);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("processed", log.Status);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_GenericJobRequeuesTransientFailureAndStoresRetryState()
+    {
+        await using var db = CreateDb();
+        db.Jobs.Add(new Job
+        {
+            Id = 110,
+            Type = JobTypeCodes.SpreadsheetImport,
+            Status = JobStatus.Queued,
+            PayloadJson = "{}"
+        });
+        await db.SaveChangesAsync();
+        var eventHandler = new JobRequestedEventHandler(
+            db,
+            [new FailingJobHandler(JobTypeCodes.SpreadsheetImport, new TimeoutException("temporary"))]);
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([eventHandler], queue, queue, db);
+
+        await dispatcher.DispatchAsync(ProcessingEventEnvelope.Create(ProcessingEventTypes.JobRequested, 110), CancellationToken.None);
+
+        var retry = Assert.Single(queue.Published);
+        Assert.Equal(1, retry.RetryCount);
+        var job = await db.Jobs.SingleAsync(x => x.Id == 110);
+        Assert.Equal(JobStatus.Queued, job.Status);
+        Assert.Equal(1, job.RetryCount);
+        Assert.Equal("temporary", job.Error);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("retry_scheduled", log.Status);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_GenericJobSendsToDeadLetterAfterRetryLimitAndMarksFailed()
+    {
+        await using var db = CreateDb();
+        db.Jobs.Add(new Job
+        {
+            Id = 120,
+            Type = JobTypeCodes.SpreadsheetImport,
+            Status = JobStatus.Queued,
+            RetryCount = 2,
+            PayloadJson = "{}"
+        });
+        await db.SaveChangesAsync();
+        var eventHandler = new JobRequestedEventHandler(
+            db,
+            [new FailingJobHandler(JobTypeCodes.SpreadsheetImport, new TimeoutException("temporary"))]);
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([eventHandler], queue, queue, db);
+        var envelope = ProcessingEventEnvelope.Create(ProcessingEventTypes.JobRequested, 120) with { RetryCount = 2 };
+
+        await dispatcher.DispatchAsync(envelope, CancellationToken.None);
+
+        Assert.Empty(queue.Published);
+        Assert.Single(queue.DeadLetters);
+        var job = await db.Jobs.SingleAsync(x => x.Id == 120);
+        Assert.Equal(JobStatus.Failed, job.Status);
+        Assert.Equal("temporary", job.Error);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("dead_letter", log.Status);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_GenericJobSkipsLockedJobWithoutCallingHandler()
+    {
+        await using var db = CreateDb();
+        db.Jobs.Add(new Job
+        {
+            Id = 130,
+            Type = JobTypeCodes.SpreadsheetImport,
+            Status = JobStatus.Queued,
+            PayloadJson = "{}",
+            LockedBy = "other-worker",
+            LockedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var jobHandler = new RecordingJobHandler(JobTypeCodes.SpreadsheetImport);
+        var eventHandler = new JobRequestedEventHandler(db, [jobHandler]);
+        var queue = new RecordingEventQueue();
+        var dispatcher = new ProcessingEventDispatcher([eventHandler], queue, queue, db);
+
+        await dispatcher.DispatchAsync(ProcessingEventEnvelope.Create(ProcessingEventTypes.JobRequested, 130), CancellationToken.None);
+
+        Assert.Empty(jobHandler.Handled);
+        var job = await db.Jobs.SingleAsync(x => x.Id == 130);
+        Assert.Equal(JobStatus.Queued, job.Status);
+        Assert.Equal("other-worker", job.LockedBy);
+        var log = await db.ProcessingJobEventLogs.SingleAsync();
+        Assert.Equal("skipped", log.Status);
+    }
+
     private static ImportDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<ImportDbContext>()
@@ -165,6 +286,29 @@ public sealed class ProcessingEventDispatcherTests
         public string EventType { get; } = eventType;
 
         public Task HandleAsync(ProcessingEventEnvelope envelope, CancellationToken cancellationToken)
+        {
+            return Task.FromException(exception);
+        }
+    }
+
+    private sealed class RecordingJobHandler(string jobType) : IJobHandler
+    {
+        public string JobType { get; } = jobType;
+        public List<Job> Handled { get; } = [];
+
+        public Task HandleAsync(Job job, CancellationToken cancellationToken)
+        {
+            Handled.Add(job);
+            job.UpdateProgress("Executando job", 50);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FailingJobHandler(string jobType, Exception exception) : IJobHandler
+    {
+        public string JobType { get; } = jobType;
+
+        public Task HandleAsync(Job job, CancellationToken cancellationToken)
         {
             return Task.FromException(exception);
         }

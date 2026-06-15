@@ -11,14 +11,14 @@ public sealed class FileSchemaProvider : IFileSchemaProvider
         var code = importFileTypeCode?.Trim()?.ToUpperInvariant() ?? string.Empty;
         return code switch
         {
-            var x when x == ImportFileTypeCodes.CustomerList => new FileSchema(ImportFileTypeCodes.CustomerList,
+            var x when x == ImportFileTypeCodes.Customers => new FileSchema(ImportFileTypeCodes.Customers,
             [
                 new ColumnSchema("customercode", true, ColumnDataType.String),
                 new ColumnSchema("name", true, ColumnDataType.String),
                 new ColumnSchema("email", false, ColumnDataType.Email),
                 new ColumnSchema("createdat", false, ColumnDataType.DateTime)
             ]),
-            var x when x == ImportFileTypeCodes.ProductList => new FileSchema(ImportFileTypeCodes.ProductList,
+            var x when x == ImportFileTypeCodes.Products => new FileSchema(ImportFileTypeCodes.Products,
             [
                 new ColumnSchema("sku", true, ColumnDataType.String),
                 new ColumnSchema("name", true, ColumnDataType.String),

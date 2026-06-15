@@ -1,7 +1,6 @@
 using InovaSkill.Importer.Api.Contracts;
 using InovaSkill.Importer.Api.Controllers;
 using InovaSkill.Importer.Application.Abstractions;
-using InovaSkill.Importer.Application.Events;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Domain.ValueObjects;
@@ -39,7 +38,7 @@ public sealed class ProcessingMonitoringControllerTests
                 Id = 2,
                 FilePath = "clientes.csv",
                 OriginalFileName = "clientes.csv",
-                ImportFileTypeCode = ImportFileTypeCodes.CustomerList,
+                ImportFileTypeCode = ImportFileTypeCodes.Customers,
                 Status = FileJobStatus.Completed,
                 CurrentStep = "Processamento concluido",
                 ProgressPercent = 100,
@@ -77,7 +76,7 @@ public sealed class ProcessingMonitoringControllerTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(2, 1), new StubProcessingEventPublisher());
+        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(2, 1), new StubJobService());
 
         var result = await controller.GetDashboard();
 
@@ -141,7 +140,7 @@ public sealed class ProcessingMonitoringControllerTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubProcessingEventPublisher());
+        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubJobService());
 
         var result = await controller.GetJobDetails(5);
 
@@ -166,7 +165,7 @@ public sealed class ProcessingMonitoringControllerTests
             CurrentStep = "Aguardando processamento"
         });
         await db.SaveChangesAsync();
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubProcessingEventPublisher());
+        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubJobService());
 
         var result = await controller.Cancel(9);
 
@@ -205,7 +204,7 @@ public sealed class ProcessingMonitoringControllerTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubProcessingEventPublisher());
+        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubJobService());
 
         var result = await controller.GetDashboard();
 
@@ -230,7 +229,7 @@ public sealed class ProcessingMonitoringControllerTests
             FinishedAt = DateTime.UtcNow
         });
         await db.SaveChangesAsync();
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubProcessingEventPublisher());
+        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubJobService());
 
         var result = await controller.Cancel(12);
 
@@ -256,8 +255,11 @@ public sealed class ProcessingMonitoringControllerTests
         }
     }
 
-    private sealed class StubProcessingEventPublisher : IProcessingEventPublisher
+    private sealed class StubJobService : IJobService
     {
-        public Task PublishAsync(ProcessingEventEnvelope envelope, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<long> EnqueueAsync(string type, object payload, string? userId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(1L);
+        }
     }
 }

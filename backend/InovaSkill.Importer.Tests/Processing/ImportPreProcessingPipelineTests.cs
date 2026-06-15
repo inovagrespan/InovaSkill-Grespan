@@ -1,9 +1,12 @@
 using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.ValueObjects;
+using InovaSkill.Importer.Infrastructure.DependencyInjection;
 using InovaSkill.Importer.Infrastructure.Mappings;
 using InovaSkill.Importer.Infrastructure.Processing;
 using InovaSkill.Importer.Infrastructure.Processing.TransformRules;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System.Globalization;
 
 namespace InovaSkill.Importer.Tests.Processing;
@@ -89,7 +92,7 @@ public class ImportPreProcessingPipelineTests
         var pipeline = BuildPipeline(template: null);
 
         var result = await CollectAsync(pipeline.ProcessRowsAsync(
-            new ImportPreProcessingRequest("clientes.csv", ImportFileTypeCodes.CustomerList, Rows(
+            new ImportPreProcessingRequest("clientes.csv", ImportFileTypeCodes.Customers, Rows(
                 new TableRow(2, new Dictionary<string, string>
                 {
                     ["cliente"] = "C-001",
@@ -103,6 +106,105 @@ public class ImportPreProcessingPipelineTests
         Assert.Equal("C-001", result[0].Row.Get("customercode"));
         Assert.Equal("Ana Silva", result[0].Row.Get("name"));
         Assert.Equal("ana@corp.com", result[0].Row.Get("email"));
+    }
+
+    [Fact]
+    public async Task ProcessRowsAsync_MapsRecognizedPatternAliasesWithoutDynamicTemplateConfiguration()
+    {
+        var services = new ServiceCollection();
+        services.AddImportInfrastructure(new ConfigurationBuilder().AddInMemoryCollection().Build());
+        using var provider = services.BuildServiceProvider();
+
+        var pipeline = new ImportPreProcessingPipeline(
+            provider.GetRequiredService<IPreProcessorTemplateResolver>(),
+            new ImportMappingEngine(new TransformRuleRegistry([new TrimRule(), new BrazilianCurrencyRule(), new BrazilianDateRule()])),
+            provider.GetRequiredService<IFileTypeDetector>());
+
+        var result = await CollectAsync(pipeline.ProcessRowsAsync(
+            new ImportPreProcessingRequest("ITEM DE VENDA.xlsx", null, Rows(
+                new TableRow(2, new Dictionary<string, string>
+                {
+                    ["documento"] = " NF-001 ",
+                    ["data"] = "20260530",
+                    ["cliente"] = "C-10",
+                    ["nome"] = "Cliente Exemplo",
+                    ["produto"] = "P-200",
+                    ["descricao"] = "Produto Teste",
+                    ["quantidade"] = "2,500",
+                    ["vlr. unit."] = "12,40",
+                    ["total"] = "31,00",
+                    ["cidade"] = "Campinas",
+                    ["grupo descricao"] = "Bebidas",
+                    ["peso bruto(kg)"] = "1,250"
+                }))),
+            CancellationToken.None));
+
+        Assert.Single(result);
+        Assert.Empty(result[0].Errors);
+        Assert.Equal(ImportFileTypeCodes.SalesInvoice, result[0].DetectedFileTypeCode);
+        Assert.Equal("NF-001", result[0].Row.Get("documentnumber"));
+        Assert.Equal("2026-05-30", result[0].Row.Get("transactiondate"));
+        Assert.Equal("31.00", result[0].Row.Get("totalamount"));
+    }
+
+    [Fact]
+    public async Task ProcessRowsAsync_MapsTotvsCustomerHeadersToCanonicalFields()
+    {
+        var services = new ServiceCollection();
+        services.AddImportInfrastructure(new ConfigurationBuilder().AddInMemoryCollection().Build());
+        using var provider = services.BuildServiceProvider();
+
+        var pipeline = new ImportPreProcessingPipeline(
+            provider.GetRequiredService<IPreProcessorTemplateResolver>(),
+            new ImportMappingEngine(new TransformRuleRegistry([new TrimRule(), new BrazilianCurrencyRule(), new BrazilianDateRule()])),
+            provider.GetRequiredService<IFileTypeDetector>());
+
+        var result = await CollectAsync(pipeline.ProcessRowsAsync(
+            new ImportPreProcessingRequest("cod clientes.xlsx", null, Rows(
+                new TableRow(2, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["cod totvs"] = "1",
+                    ["cliente (consumo bruto (vendas+bonif)"] = "NSA AREALVA"
+                }))),
+            CancellationToken.None));
+
+        Assert.Single(result);
+        Assert.Empty(result[0].Errors);
+        Assert.False(result[0].ShouldStopProcessing);
+        Assert.Equal(ImportFileTypeCodes.Customers, result[0].DetectedFileTypeCode);
+        Assert.Equal("1", result[0].Row.Get("customercode"));
+        Assert.Equal("NSA AREALVA", result[0].Row.Get("name"));
+    }
+
+    [Fact]
+    public async Task ProcessRowsAsync_MapsBrowseProductHeadersToCanonicalFields()
+    {
+        var services = new ServiceCollection();
+        services.AddImportInfrastructure(new ConfigurationBuilder().AddInMemoryCollection().Build());
+        using var provider = services.BuildServiceProvider();
+
+        var pipeline = new ImportPreProcessingPipeline(
+            provider.GetRequiredService<IPreProcessorTemplateResolver>(),
+            new ImportMappingEngine(new TransformRuleRegistry([new TrimRule(), new BrazilianCurrencyRule(), new BrazilianDateRule()])),
+            provider.GetRequiredService<IFileTypeDetector>());
+
+        var result = await CollectAsync(pipeline.ProcessRowsAsync(
+            new ImportPreProcessingRequest("Cadastro de produtos.xlsx", null, Rows(
+                new TableRow(3, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["codigo"] = "10000001",
+                    ["descricao"] = "AMOSTRA BAGUETE GRANDE PCT COM 2 UND COM 660G",
+                    ["ult. preco"] = "0"
+                }))),
+            CancellationToken.None));
+
+        Assert.Single(result);
+        Assert.Empty(result[0].Errors);
+        Assert.False(result[0].ShouldStopProcessing);
+        Assert.Equal(ImportFileTypeCodes.Products, result[0].DetectedFileTypeCode);
+        Assert.Equal("10000001", result[0].Row.Get("sku"));
+        Assert.Equal("AMOSTRA BAGUETE GRANDE PCT COM 2 UND COM 660G", result[0].Row.Get("name"));
+        Assert.Equal("0", result[0].Row.Get("price"));
     }
 
     [Fact]
@@ -139,7 +241,7 @@ public class ImportPreProcessingPipelineTests
         return new ImportPreProcessingPipeline(
             new StubTemplateResolver(template),
             new ImportMappingEngine(new TransformRuleRegistry(rules)),
-            new FileTypeDetector());
+            new StubFileTypeDetector());
     }
 
     private static ImportColumnMapping BuildMapping(string sourceColumnName, string targetFieldName)
@@ -195,6 +297,26 @@ public class ImportPreProcessingPipelineTests
         public Task<ImportTemplate?> ResolveAsync(string fileName, IReadOnlyCollection<string> headers, CancellationToken cancellationToken)
         {
             return Task.FromResult(template);
+        }
+    }
+
+    private sealed class StubFileTypeDetector : IFileTypeDetector
+    {
+        public string? DetectCode(IReadOnlyDictionary<string, string> row)
+        {
+            if (row.ContainsKey("documentnumber") || row.ContainsKey("documento"))
+            {
+                return ImportFileTypeCodes.SalesInvoice;
+            }
+
+            if (row.ContainsKey("customercode") || row.ContainsKey("cliente"))
+            {
+                return ImportFileTypeCodes.Customers;
+            }
+
+            return row.ContainsKey("sku") || row.ContainsKey("codigo")
+                ? ImportFileTypeCodes.Products
+                : null;
         }
     }
 }

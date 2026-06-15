@@ -3,10 +3,6 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { saveAuthToken } from "./auth";
 
-vi.mock("@/features/import-template-builder/utils/extract-headers-in-worker", () => ({
-  extractHeadersInWorker: vi.fn(),
-}));
-
 vi.mock("@/lib/importer-progress", () => ({
   buildFallbackStages: vi.fn(() => []),
 }));

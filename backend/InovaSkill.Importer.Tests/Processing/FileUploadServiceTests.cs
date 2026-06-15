@@ -1,5 +1,6 @@
 using InovaSkill.Importer.Application.Abstractions;
-using InovaSkill.Importer.Application.Events;
+using InovaSkill.Importer.Application.Jobs;
+using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.Processing;
 using Microsoft.Extensions.Configuration;
 
@@ -8,27 +9,28 @@ namespace InovaSkill.Importer.Tests.Processing;
 public sealed class FileUploadServiceTests
 {
     [Fact]
-    public async Task UploadAndCreateJobAsync_CreatesJobAndPublishesFileUploadedEvent()
+    public async Task UploadAndCreateJobAsync_CreatesFileJobAndEnqueuesGenericImportJob()
     {
         var uploadsPath = Path.Combine(Path.GetTempPath(), $"upload-events-{Guid.NewGuid():N}");
         var jobService = new StubFileJobService();
-        var publisher = new RecordingPublisher();
+        var genericJobService = new RecordingJobService();
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Storage:UploadsPath"] = uploadsPath })
             .Build();
-        var service = new FileUploadService(jobService, publisher, configuration);
+        var service = new FileUploadService(jobService, genericJobService, configuration);
 
         try
         {
             await using var stream = new MemoryStream("a,b\n1,2"u8.ToArray());
 
-            var jobId = await service.UploadAndCreateJobAsync(stream, "clientes.csv", "CUSTOMER_LIST", CancellationToken.None);
+            var jobId = await service.UploadAndCreateJobAsync(stream, "clientes.csv", ImportFileTypeCodes.Customers, CancellationToken.None);
 
             Assert.Equal(77, jobId);
             Assert.Single(jobService.CreatedJobs);
-            var published = Assert.Single(publisher.Published);
-            Assert.Equal(ProcessingEventTypes.FileUploaded, published.EventType);
-            Assert.Equal(77, published.JobId);
+            var enqueued = Assert.Single(genericJobService.Enqueued);
+            Assert.Equal(JobTypeCodes.SpreadsheetImport, enqueued.Type);
+            var payload = Assert.IsType<SpreadsheetImportJobPayload>(enqueued.Payload);
+            Assert.Equal(77, payload.FileJobId);
             Assert.True(File.Exists(jobService.CreatedJobs[0].FilePath));
         }
         finally
@@ -51,14 +53,14 @@ public sealed class FileUploadServiceTests
         }
     }
 
-    private sealed class RecordingPublisher : IProcessingEventPublisher
+    private sealed class RecordingJobService : IJobService
     {
-        public List<ProcessingEventEnvelope> Published { get; } = [];
+        public List<(string Type, object Payload, string? UserId)> Enqueued { get; } = [];
 
-        public Task PublishAsync(ProcessingEventEnvelope envelope, CancellationToken cancellationToken)
+        public Task<long> EnqueueAsync(string type, object payload, string? userId, CancellationToken cancellationToken)
         {
-            Published.Add(envelope);
-            return Task.CompletedTask;
+            Enqueued.Add((type, payload, userId));
+            return Task.FromResult(500L);
         }
     }
 }

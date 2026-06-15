@@ -1,50 +1,54 @@
-﻿using InovaSkill.Importer.Domain.Entities;
-using InovaSkill.Importer.Infrastructure.Processing;
+using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Infrastructure.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace InovaSkill.Importer.Tests.Processing;
 
 public class FileTypeDetectorTests
 {
-    private readonly FileTypeDetector _sut = new();
+    private readonly IFileTypeDetector _sut;
+
+    public FileTypeDetectorTests()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection().Build();
+        var services = new ServiceCollection();
+        services.AddImportInfrastructure(configuration);
+        _sut = services.BuildServiceProvider().GetRequiredService<IFileTypeDetector>();
+    }
 
     [Fact]
-    public void Detect_ReturnsCustomers_WhenHeaderMatches()
+    public void Detect_ReturnsCustomers_WhenRequiredAliasesMatch()
     {
         var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["name"] = "Alice",
-            ["email"] = "alice@corp.com"
+            ["cliente"] = "C-01",
+            ["nome"] = "Alice"
         };
 
         var result = _sut.DetectCode(row);
 
-        Assert.Equal(ImportFileTypeCodes.CustomerList, result);
+        Assert.Equal(ImportFileTypeCodes.Customers, result);
     }
 
     [Fact]
-    public void Detect_ReturnsCommercialTransaction_WhenHeaderMatches()
-    {
-        var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["documentnumber"] = "NF-123",
-            ["transactiondate"] = "2026-05-28",
-            ["totalamount"] = "100.50"
-        };
-
-        var result = _sut.DetectCode(row);
-
-        Assert.Equal(ImportFileTypeCodes.SalesInvoice, result);
-    }
-
-    [Fact]
-    public void Detect_ReturnsCommercialTransaction_WhenPortugueseHeaderMatches()
+    public void Detect_ReturnsCommercialTransaction_WhenPortugueseAliasesMatch()
     {
         var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["documento"] = "000001",
+            ["data"] = "20260530",
             ["cliente"] = "001091",
+            ["nome"] = "Mercado XPTO",
             ["produto"] = "10000164",
-            ["total"] = "83.00"
+            ["descricao"] = "Produto A",
+            ["quantidade"] = "2,5",
+            ["vlr. unit."] = "10,00",
+            ["total"] = "25,00",
+            ["cidade"] = "Campinas",
+            ["grupo descricao"] = "Bebidas",
+            ["peso bruto(kg)"] = "15,40"
         };
 
         var result = _sut.DetectCode(row);
@@ -53,15 +57,45 @@ public class FileTypeDetectorTests
     }
 
     [Fact]
-    public void Detect_ReturnsUnknown_WhenHeaderDoesNotMatch()
+    public void Detect_ReturnsNull_WhenRequiredColumnsAreMissing()
     {
         var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["foo"] = "bar"
+            ["nome"] = "Cliente sem codigo",
+            ["email"] = "cliente@corp.com"
         };
 
         var result = _sut.DetectCode(row);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public void Detect_ReturnsCustomers_WhenTotvsCustomerSpreadsheetHeadersMatch()
+    {
+        var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["cod totvs"] = "1",
+            ["cliente (consumo bruto (vendas+bonif)"] = "NSA AREALVA"
+        };
+
+        var result = _sut.DetectCode(row);
+
+        Assert.Equal(ImportFileTypeCodes.Customers, result);
+    }
+
+    [Fact]
+    public void Detect_ReturnsProducts_WhenBrowseProductHeadersMatch()
+    {
+        var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["codigo"] = "10000001",
+            ["descricao"] = "AMOSTRA BAGUETE GRANDE",
+            ["ult. preco"] = "0"
+        };
+
+        var result = _sut.DetectCode(row);
+
+        Assert.Equal(ImportFileTypeCodes.Products, result);
     }
 }

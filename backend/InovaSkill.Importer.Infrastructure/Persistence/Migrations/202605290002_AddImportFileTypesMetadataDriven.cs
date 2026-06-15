@@ -7,8 +7,8 @@ namespace InovaSkill.Importer.Infrastructure.Persistence.Migrations;
 public partial class AddImportFileTypesMetadataDriven : Migration
 {
     private static readonly Guid SalesInvoiceId = new("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid CustomerListId = new("22222222-2222-2222-2222-222222222222");
-    private static readonly Guid ProductListId = new("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid CustomersId = new("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid ProductsId = new("33333333-3333-3333-3333-333333333333");
     private static readonly Guid FinancialEntryId = new("44444444-4444-4444-4444-444444444444");
 
     protected override void Up(MigrationBuilder migrationBuilder)
@@ -61,8 +61,8 @@ public partial class AddImportFileTypesMetadataDriven : Migration
             values: new object[,]
             {
                 { SalesInvoiceId, "SALES_INVOICE", "Nota Fiscal de Venda", "Importacao de notas fiscais de venda", ".csv,.xlsx", true, DateTime.UtcNow, DateTime.UtcNow },
-                { CustomerListId, "CUSTOMER_LIST", "Lista de Clientes", "Importacao de cadastros de clientes", ".csv,.xlsx", true, DateTime.UtcNow, DateTime.UtcNow },
-                { ProductListId, "PRODUCT_LIST", "Lista de Produtos", "Importacao de catalogo de produtos", ".csv,.xlsx", true, DateTime.UtcNow, DateTime.UtcNow },
+                { CustomersId, "CUSTOMER_LIST", "Clientes", "Importacao da tabela de clientes", ".csv,.xlsx", true, DateTime.UtcNow, DateTime.UtcNow },
+                { ProductsId, "PRODUCT_LIST", "Produtos", "Importacao da tabela de produtos", ".csv,.xlsx", true, DateTime.UtcNow, DateTime.UtcNow },
                 { FinancialEntryId, "FINANCIAL_ENTRY", "Lancamento Financeiro", "Importacao de pedidos/lancamentos", ".csv,.xlsx", true, DateTime.UtcNow, DateTime.UtcNow }
             });
 

@@ -1,5 +1,5 @@
 ﻿import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, Package, ReceiptText, ServerCog, SlidersHorizontal, Sun, TrendingUp, Truck, Users } from "lucide-react";
+import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, Package, ReceiptText, ServerCog, Sun, TrendingUp, Truck, Users } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -21,23 +21,12 @@ const items = [
     to: "/clientes",
     label: "Clientes",
     icon: Users,
-    children: [
-      { to: "/clientes/analise-comercial", label: "Análise Comercial", icon: Activity },
-    ],
   },
   { to: "/processamentos", label: "Processamentos", icon: ServerCog },
   { to: "/financas", label: "Finanças", icon: ReceiptText },
   { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/logistica", label: "Logística", icon: Truck },
-  {
-    to: "/importacoes",
-    label: "Importações",
-    icon: FileUp,
-    children: [
-      { to: "/importacoes/files", label: "Files", icon: FileUp },
-      { to: "/importacoes/templates", label: "Templates", icon: SlidersHorizontal },
-    ],
-  },
+  { to: "/importacoes", label: "Importações", icon: FileUp },
   { to: "/simulacao", label: "Simulação", icon: Activity },
 ];
 
@@ -86,7 +75,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
           );
 
           return (
-            <div key={item.to} className="space-y-1">
+            <div key={item.to}>
               {showCollapsed ? (
                 <Tooltip>
                   <TooltipTrigger asChild>{topLevelLink}</TooltipTrigger>
@@ -95,29 +84,6 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
               ) : (
                 topLevelLink
               )}
-
-              {!showCollapsed && item.children?.map((child) => {
-                const childActive = pathname === child.to;
-                const ChildIcon = child.icon;
-                return (
-                  <Link
-                    key={child.to}
-                    to={child.to}
-                    aria-label={child.label}
-                    onClick={onNavigate}
-                    className={cn(
-                      "ml-6 flex items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors",
-                      "outline-none ring-primary/40 focus-visible:ring-2",
-                      childActive
-                        ? "border border-primary/20 bg-primary/10 text-foreground"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                    )}
-                  >
-                    <ChildIcon className="size-3.5 shrink-0" />
-                    <span className="font-medium">{child.label}</span>
-                  </Link>
-                );
-              })}
             </div>
           );
         })}
@@ -236,3 +202,4 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
     </TooltipProvider>
   );
 }
+

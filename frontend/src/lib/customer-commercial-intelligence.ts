@@ -78,12 +78,13 @@ function buildHealthCard(
   insights: CustomerInsightsResponse | null,
 ): CommercialIntelligenceCard {
   const riskLevel = insights?.riskLevel;
+  const daysWithoutPurchase = insights?.daysWithoutPurchase ?? 0;
 
   if (riskLevel === "Crítico") {
     return {
       status: "Crítico",
       summary: "Cliente exige ação imediata de retenção.",
-      detail: `${insights.daysWithoutPurchase} dias sem comprar; investigar preço, ruptura, atendimento ou troca de fornecedor.`,
+      detail: `${daysWithoutPurchase} dias sem comprar; investigar preço, ruptura, atendimento ou troca de fornecedor.`,
       tone: "danger",
     };
   }
@@ -92,7 +93,7 @@ function buildHealthCard(
     return {
       status: "Em risco",
       summary: "Ciclo de recompra já passou do padrão histórico.",
-      detail: `${insights.daysWithoutPurchase} dias sem comprar; priorizar contato comercial antes de perder recorrência.`,
+      detail: `${daysWithoutPurchase} dias sem comprar; priorizar contato comercial antes de perder recorrência.`,
       tone: "danger",
     };
   }

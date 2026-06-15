@@ -27,6 +27,8 @@ public sealed class CustomersControllerTests
         Assert.Equal(150m, payload.AverageTicket);
         Assert.Equal(300m, payload.AverageRevenueMonthly);
         Assert.Equal(150m, payload.AverageRevenueWeekly);
+        Assert.Equal(30m, payload.TotalQuantity);
+        Assert.Equal(14m, payload.TotalWeight);
         Assert.Equal("Em queda", payload.Status);
     }
 
@@ -66,6 +68,8 @@ public sealed class CustomersControllerTests
         Assert.Equal(100m, payload.AverageRevenueMonthly);
         Assert.Equal(100m, payload.AverageRevenueWeekly);
         Assert.Equal(100m, payload.AverageTicket);
+        Assert.Equal(10m, payload.TotalQuantity);
+        Assert.Equal(5m, payload.TotalWeight);
         Assert.Null(payload.AverageDaysBetweenPurchases);
     }
 

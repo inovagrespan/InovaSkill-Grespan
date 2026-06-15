@@ -1,10 +1,7 @@
-import { extractHeadersInWorker } from "@/features/import-template-builder/utils/extract-headers-in-worker";
-import { authFetch } from "@/lib/auth";
+﻿import { authFetch } from "@/lib/auth";
 import { buildFallbackStages, type FileJobStageProgress } from "@/lib/importer-progress";
 
 export type FileType = "Unknown" | "Customers" | "Orders" | "Products" | "CommercialTransaction";
-export type UploadDestinationMode = "auto" | "manual";
-export type UploadDestinationCode = "SALES_INVOICE" | "CUSTOMER_LIST" | "PRODUCT_LIST" | "FINANCIAL_ENTRY";
 
 export type JobStatus =
   | "WaitingProcessing"
@@ -48,16 +45,6 @@ export type PagedResult<T> = {
   pageSize: number;
   total: number;
   items: T[];
-};
-
-export type TemplateAlias = { from: string; to: string };
-export type TemplateConfig = {
-  id: number;
-  fileType: FileType;
-  name: string;
-  isActive: boolean;
-  requiredHeadersCsv: string;
-  aliases: TemplateAlias[];
 };
 
 export type CommercialTransaction = {
@@ -115,6 +102,18 @@ export type CommercialTransactionSummaryResponse = {
   totalCompanies: number;
   items: CommercialTransactionCompanySummary[];
 };
+export type CommercialTransactionTimelineGranularity = "daily" | "weekly" | "monthly";
+export type CommercialTransactionTimelinePoint = {
+  periodStart: string;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  recordCount: number;
+};
+export type CommercialTransactionTimelineResponse = {
+  granularity: CommercialTransactionTimelineGranularity;
+  items: CommercialTransactionTimelinePoint[];
+};
 
 export type ProcessingMonitoringDashboard = {
   summary: ProcessingMonitoringSummary;
@@ -143,6 +142,9 @@ export type ProcessingJobQueueItem = {
   statusLabel: string;
   currentStep: string;
   progressPercent: number;
+  currentStageCode: string | null;
+  currentStageName: string | null;
+  stages: FileJobStageProgress[];
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -458,6 +460,7 @@ const DEMO_PAGE_SIZE = 20;
 const DEMO_HISTORY_PAGE_SIZE = 10;
 const DEMO_TOTAL_ROWS = 48_000;
 const DEMO_DATE_TODAY = "2026-06-07";
+const DEMO_SALES_DATE_TODAY = "2026-06-08";
 const DEMO_UPLOAD_JOB_ID_BASE = 900;
 
 function shouldUseDemoData(error: unknown): boolean {
@@ -542,7 +545,7 @@ function demoCommercialTransactions(): CommercialTransaction[] {
     {
       id: 1005,
       documentNumber: "DEV-2026-001",
-      transactionDate: DEMO_DATE_TODAY,
+      transactionDate: DEMO_SALES_DATE_TODAY,
       customerCode: "CLI-002",
       customerName: "Atacado Primavera",
       productCode: "PRD-104",
@@ -592,68 +595,152 @@ function filterDemoProducts(input: {
   ));
 }
 
+type DemoCommercialTransactionFilters = {
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  productGroup?: string;
+  transactionType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+function includesNormalized(value: string, filter?: string): boolean {
+  const normalizedFilter = filter?.trim().toLowerCase();
+  if (!normalizedFilter) return true;
+  return value.toLowerCase().includes(normalizedFilter);
+}
+
+function filterDemoCommercialTransactions(input: DemoCommercialTransactionFilters): CommercialTransaction[] {
+  return demoCommercialTransactions().filter((item) => {
+    if (!includesNormalized(item.documentNumber, input.documentNumber)) return false;
+    if (!includesNormalized(item.customerCode, input.customerCode)) return false;
+    if (!includesNormalized(item.customerName, input.customerName)) return false;
+    if (!includesNormalized(`${item.productCode} ${item.productDescription}`, input.productCode)) return false;
+    if (!includesNormalized(item.city, input.city)) return false;
+    if (!includesNormalized(item.productGroup, input.productGroup)) return false;
+    if (!includesNormalized(item.transactionType, input.transactionType)) return false;
+    if (input.dateFrom?.trim() && item.transactionDate < input.dateFrom.trim()) return false;
+    if (input.dateTo?.trim() && item.transactionDate > input.dateTo.trim()) return false;
+    return true;
+  });
+}
+
+function paginateDemoItems<T>(items: T[], page = DEMO_PAGE, pageSize = DEMO_PAGE_SIZE): T[] {
+  const start = Math.max(0, page - 1) * pageSize;
+  return items.slice(start, start + pageSize);
+}
+
 function demoCommercialSummary(input: {
   page?: number;
   pageSize?: number;
   granularity?: SummaryGranularity;
   sortBy?: SummarySortBy;
-}): CommercialTransactionSummaryResponse {
-  const items: CommercialTransactionCompanySummary[] = [
-    {
-      companyName: "Mercado São Bento",
-      totalAmount: 64_850,
-      totalQuantity: 2_420,
-      totalWeightKg: 12_800,
-      currentPeriodAmount: 64_850,
-      previousPeriodAmount: 57_600,
-      growthPercent: 12.6,
-    },
-    {
-      companyName: "Atacado Primavera",
-      totalAmount: 52_300,
-      totalQuantity: 3_180,
-      totalWeightKg: 9_750,
-      currentPeriodAmount: 52_300,
-      previousPeriodAmount: 55_900,
-      growthPercent: -6.4,
-    },
-    {
-      companyName: "Super Lopes",
-      totalAmount: 38_940,
-      totalQuantity: 1_760,
-      totalWeightKg: 4_980,
-      currentPeriodAmount: 38_940,
-      previousPeriodAmount: 31_200,
-      growthPercent: 24.8,
-    },
-    {
-      companyName: "Distribuidora Central",
-      totalAmount: 31_500,
-      totalQuantity: 980,
-      totalWeightKg: 2_400,
-      currentPeriodAmount: 31_500,
-      previousPeriodAmount: 29_800,
-      growthPercent: 5.7,
-    },
-  ];
+} & DemoCommercialTransactionFilters): CommercialTransactionSummaryResponse {
+  const filteredItems = filterDemoCommercialTransactions(input);
+  const groups = new Map<string, CommercialTransactionCompanySummary>();
+
+  for (const item of filteredItems) {
+    const current = groups.get(item.customerName) ?? {
+      companyName: item.customerName,
+      totalAmount: 0,
+      totalQuantity: 0,
+      totalWeightKg: 0,
+      currentPeriodAmount: 0,
+      previousPeriodAmount: 0,
+      growthPercent: null,
+    };
+
+    current.totalAmount += item.totalAmount;
+    current.totalQuantity += item.quantity;
+    current.totalWeightKg += item.grossWeightKg;
+    current.currentPeriodAmount += item.totalAmount;
+    groups.set(item.customerName, current);
+  }
+
+  const sortBy = input.sortBy ?? "amount";
+  const sortedItems = Array.from(groups.values()).sort((left, right) => {
+    if (sortBy === "quantity") return right.totalQuantity - left.totalQuantity;
+    if (sortBy === "weight") return right.totalWeightKg - left.totalWeightKg;
+    if (sortBy === "growth") return (right.growthPercent ?? Number.NEGATIVE_INFINITY) - (left.growthPercent ?? Number.NEGATIVE_INFINITY);
+    return right.totalAmount - left.totalAmount;
+  });
+  const page = input.page ?? DEMO_PAGE;
+  const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+  const totalAmount = filteredItems.reduce((total, item) => total + item.totalAmount, 0);
+  const totalQuantity = filteredItems.reduce((total, item) => total + item.quantity, 0);
+  const totalWeightKg = filteredItems.reduce((total, item) => total + item.grossWeightKg, 0);
 
   return {
-    page: input.page ?? DEMO_PAGE,
-    pageSize: input.pageSize ?? DEMO_PAGE_SIZE,
-    totalItems: items.length,
+    page,
+    pageSize,
+    totalItems: sortedItems.length,
     granularity: input.granularity ?? "weekly",
-    currentPeriodStart: "2026-06-01",
-    previousPeriodStart: "2026-05-01",
-    currentPeriodTotalAmount: 187_590,
-    previousPeriodTotalAmount: 174_100,
-    totalGrowthPercent: 7.7,
-    totalRecords: 128,
-    totalAmount: 187_590,
-    totalQuantity: 8_340,
-    totalWeightKg: 29_930,
-    totalCompanies: items.length,
-    items,
+    currentPeriodStart: input.dateFrom ?? "2026-06-01",
+    previousPeriodStart: "",
+    currentPeriodTotalAmount: totalAmount,
+    previousPeriodTotalAmount: 0,
+    totalGrowthPercent: null,
+    totalRecords: filteredItems.length,
+    totalAmount,
+    totalQuantity,
+    totalWeightKg,
+    totalCompanies: sortedItems.length,
+    items: paginateDemoItems(sortedItems, page, pageSize),
   };
+}
+
+function demoCommercialTimeline(input: {
+  granularity?: CommercialTransactionTimelineGranularity;
+} & DemoCommercialTransactionFilters): CommercialTransactionTimelineResponse {
+  const filteredItems = filterDemoCommercialTransactions(input);
+
+  const granularity = input.granularity ?? "monthly";
+  const grouped = new Map<string, CommercialTransactionTimelinePoint>();
+
+  for (const item of filteredItems) {
+    const periodStart = resolveDemoTimelinePeriodStart(item.transactionDate, granularity);
+    const current = grouped.get(periodStart) ?? {
+      periodStart,
+      totalAmount: 0,
+      totalQuantity: 0,
+      totalWeightKg: 0,
+      recordCount: 0,
+    };
+
+    current.totalAmount += item.totalAmount;
+    current.totalQuantity += item.quantity;
+    current.totalWeightKg += item.grossWeightKg;
+    current.recordCount += 1;
+    grouped.set(periodStart, current);
+  }
+
+  return {
+    granularity,
+    items: Array.from(grouped.values()).sort((left, right) => left.periodStart.localeCompare(right.periodStart)),
+  };
+}
+
+function resolveDemoTimelinePeriodStart(
+  transactionDate: string,
+  granularity: CommercialTransactionTimelineGranularity,
+): string {
+  const date = new Date(`${transactionDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return transactionDate;
+
+  if (granularity === "daily") {
+    return transactionDate;
+  }
+
+  if (granularity === "weekly") {
+    const dayOffset = (date.getUTCDay() + 6) % 7;
+    date.setUTCDate(date.getUTCDate() - dayOffset);
+    return date.toISOString().slice(0, 10);
+  }
+
+  return `${transactionDate.slice(0, 7)}-01`;
 }
 
 function demoFileJobs(page = DEMO_PAGE, pageSize = 10): PagedResult<FileJob> {
@@ -1014,12 +1101,9 @@ function normalizeStatus(value: number | string): JobStatus {
   return (value as JobStatus) ?? "Failed";
 }
 
-export async function uploadFile(file: File, importFileTypeCode?: UploadDestinationCode): Promise<number> {
+export async function uploadFile(file: File): Promise<number> {
   const form = new FormData();
   form.append("file", file);
-  if (importFileTypeCode) {
-    form.append("importFileTypeCode", importFileTypeCode);
-  }
 
   try {
     const response = await authFetch(`${API_URL}/api/files/upload`, {
@@ -1271,6 +1355,14 @@ function normalizeProcessingSummary(raw: any): ProcessingMonitoringSummary {
 }
 
 function normalizeProcessingJobItem(raw: any): ProcessingJobQueueItem {
+  const stages = normalizeStages(
+    raw.stages ?? raw.Stages,
+    normalizeStatus(raw.status ?? raw.Status ?? "Failed"),
+    raw.progressPercent ?? raw.ProgressPercent ?? 0,
+    raw.errorCount ?? raw.ErrorCount ?? 0,
+  );
+  const runningStage = stages.find((stage) => stage.status === "running");
+
   return {
     id: raw.id ?? raw.Id ?? 0,
     company: raw.company ?? raw.Company ?? "-",
@@ -1280,6 +1372,9 @@ function normalizeProcessingJobItem(raw: any): ProcessingJobQueueItem {
     statusLabel: raw.statusLabel ?? raw.StatusLabel ?? "",
     currentStep: raw.currentStep ?? raw.CurrentStep ?? "",
     progressPercent: raw.progressPercent ?? raw.ProgressPercent ?? 0,
+    currentStageCode: raw.currentStageCode ?? raw.CurrentStageCode ?? runningStage?.code ?? null,
+    currentStageName: raw.currentStageName ?? raw.CurrentStageName ?? runningStage?.name ?? null,
+    stages,
     createdAt: raw.createdAt ?? raw.CreatedAt ?? "",
     startedAt: raw.startedAt ?? raw.StartedAt ?? null,
     finishedAt: raw.finishedAt ?? raw.FinishedAt ?? null,
@@ -1358,57 +1453,6 @@ function normalizeProcessingLog(raw: any): ProcessingLog {
   };
 }
 
-export async function fetchTemplateConfigs(): Promise<TemplateConfig[]> {
-  let response: Response;
-  try {
-    response = await authFetch(`${API_URL}/api/template-configs`);
-  } catch (error) {
-    if (shouldUseDemoData(error)) {
-      return [
-        {
-          id: 1,
-          fileType: "CommercialTransaction",
-          name: "Template demo de vendas",
-          isActive: true,
-          requiredHeadersCsv: "Documento,Data,Cliente,Produto,Quantidade,Valor Total",
-          aliases: [
-            { from: "NF", to: "Documento" },
-            { from: "Vlr Total", to: "Valor Total" },
-          ],
-        },
-      ];
-    }
-    throw error;
-  }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar configurações de template."));
-  const data = (await response.json()) as Array<{
-    id?: number;
-    fileType?: number | string;
-    name?: string;
-    isActive?: boolean;
-    requiredHeadersCsv?: string;
-    aliases?: TemplateAlias[];
-  }>;
-  return (data ?? []).map((item) => ({
-    id: item.id ?? 0,
-    fileType: normalizeFileType(item.fileType ?? "Unknown"),
-    name: item.name ?? "",
-    isActive: item.isActive ?? true,
-    requiredHeadersCsv: item.requiredHeadersCsv ?? "",
-    aliases: item.aliases ?? [],
-  }));
-}
-
-export async function saveTemplateConfig(input: Omit<TemplateConfig, "id"> & { id?: number }): Promise<TemplateConfig> {
-  const response = await authFetch(`${API_URL}/api/template-configs`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao salvar configuração de template."));
-  return (await response.json()) as TemplateConfig;
-}
-
 export async function fetchCommercialTransactions(input: {
   page?: number;
   pageSize?: number;
@@ -1441,8 +1485,10 @@ export async function fetchCommercialTransactions(input: {
     response = await authFetch(`${API_URL}/api/commercial-transactions?${query.toString()}`);
   } catch (error) {
     if (shouldUseDemoData(error)) {
-      const items = demoCommercialTransactions();
-      return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_PAGE_SIZE, total: items.length, items };
+      const page = input.page ?? DEMO_PAGE;
+      const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+      const items = filterDemoCommercialTransactions(input);
+      return { page, pageSize, total: items.length, items: paginateDemoItems(items, page, pageSize) };
     }
     throw error;
   }
@@ -1623,6 +1669,43 @@ export async function fetchCommercialTransactionsSummary(input: {
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de vendas."));
 
   return (await response.json()) as CommercialTransactionSummaryResponse;
+}
+
+export async function fetchCommercialTransactionsTimeline(input: {
+  granularity?: CommercialTransactionTimelineGranularity;
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  productGroup?: string;
+  transactionType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<CommercialTransactionTimelineResponse> {
+  const query = new URLSearchParams();
+  query.set("granularity", input.granularity ?? "monthly");
+
+  if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
+  if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
+  if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions/timeline?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCommercialTimeline(input);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a evolução de vendas."));
+
+  return (await response.json()) as CommercialTransactionTimelineResponse;
 }
 
 export async function fetchCustomerAnalyticsSummary(input: {
@@ -1908,168 +1991,4 @@ export async function fetchCustomerCommercialHealth(input: {
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise comercial do cliente."));
   return (await response.json()) as CustomerCommercialHealthReport;
 }
-
-function normalizeTargetFieldType(value: unknown): ApiTargetField["dataType"] {
-  const normalized = String(value ?? "text").toLowerCase();
-  if (normalized === "number" || normalized === "date" || normalized === "currency") {
-    return normalized;
-  }
-
-  return "text";
-}
-
-export async function fetchImportTemplateTargetFields(importFileTypeId: string): Promise<ApiTargetField[]> {
-  try {
-    const response = await authFetch(`${API_URL}/api/import-templates/file-types/${importFileTypeId}/fields`);
-    if (response.ok) {
-      const data = (await response.json()) as Array<Record<string, unknown>>;
-      return (data ?? []).map((item) => ({
-        name: String(item.name ?? item.Name ?? ""),
-        displayName: String(item.displayName ?? item.DisplayName ?? item.name ?? item.Name ?? ""),
-        required: Boolean(item.required ?? item.Required ?? false),
-        dataType: normalizeTargetFieldType(item.dataType ?? item.DataType),
-        description: String(item.description ?? item.Description ?? ""),
-      }));
-    }
-  } catch {
-    // fallback
-  }
-
-  const fallbackFields: Record<string, ApiTargetField[]> = {
-    Customers: [
-      { name: "customercode", displayName: "Codigo do Cliente", required: true },
-      { name: "name", displayName: "Nome", required: true },
-      { name: "email", displayName: "E-mail", required: false },
-    ],
-    Products: [
-      { name: "sku", displayName: "SKU", required: true },
-      { name: "name", displayName: "Nome", required: true },
-      { name: "price", displayName: "Preço", required: false },
-    ],
-    Orders: [
-      { name: "ordernumber", displayName: "Número do Pedido", required: true },
-      { name: "customeremail", displayName: "E-mail do Cliente", required: true },
-      { name: "productsku", displayName: "SKU do Produto", required: true },
-      { name: "quantity", displayName: "Quantidade", required: true },
-      { name: "orderdate", displayName: "Data do Pedido", required: false },
-    ],
-    CommercialTransaction: [
-      { name: "documentnumber", displayName: "Documento", required: true },
-      { name: "transactiondate", displayName: "Data", required: true },
-      { name: "customercode", displayName: "Código Cliente", required: true },
-      { name: "customername", displayName: "Nome Cliente", required: true },
-      { name: "productcode", displayName: "Código Produto", required: true },
-      { name: "productdescription", displayName: "Descrição Produto", required: false },
-      { name: "quantity", displayName: "Quantidade", required: true },
-      { name: "unitprice", displayName: "Valor Unitário", required: false },
-      { name: "totalamount", displayName: "Valor Total", required: false },
-      { name: "transactiontype", displayName: "Tipo", required: false },
-      { name: "city", displayName: "Cidade", required: false },
-      { name: "productgroup", displayName: "Grupo Produto", required: false },
-      { name: "grossweightkg", displayName: "Peso Bruto (Kg)", required: false },
-    ],
-  };
-
-  return fallbackFields[importFileTypeId] ?? [];
-}
-
-export async function extractSpreadsheetSample(file: File, importFileTypeId?: string): Promise<ApiSpreadsheetSample> {
-  const formData = new FormData();
-  formData.append("file", file);
-  if (importFileTypeId) formData.append("importFileTypeId", importFileTypeId);
-
-  try {
-    const response = await authFetch(`${API_URL}/api/import-templates/extract-headers`, { method: "POST", body: formData });
-    if (response.ok) {
-      const payload = (await response.json()) as
-        | { headers?: string[]; Headers?: string[]; previewRows?: Array<Record<string, string>>; PreviewRows?: Array<Record<string, string>> }
-        | string[];
-      const apiHeaders = Array.isArray(payload) ? payload : payload.headers ?? payload.Headers ?? [];
-      if (apiHeaders.length > 0) {
-        return {
-          headers: apiHeaders,
-          previewRows: Array.isArray(payload) ? [] : payload.previewRows ?? payload.PreviewRows ?? [],
-        };
-      }
-    }
-  } catch {
-    // fallback
-  }
-
-  return { headers: await extractHeadersInWorker(file), previewRows: [] };
-}
-
-export async function extractSpreadsheetHeaders(file: File, importFileTypeId?: string): Promise<string[]> {
-  return (await extractSpreadsheetSample(file, importFileTypeId)).headers;
-}
-
-export async function fetchTransformRules(): Promise<ApiTransformRule[]> {
-  try {
-    const response = await authFetch(`${API_URL}/api/import-templates/transform-rules`);
-    if (response.ok) {
-      const data = (await response.json()) as Array<Record<string, unknown>>;
-      return (data ?? []).map((item) => ({
-        id: String(item.id ?? item.Id ?? ""),
-        name: String(item.name ?? item.Name ?? item.code ?? item.Code ?? ""),
-        code: String(item.code ?? item.Code ?? ""),
-        description: String(item.description ?? item.Description ?? ""),
-        requiresParameters: Boolean(item.requiresParameters ?? item.RequiresParameters ?? false),
-      }));
-    }
-  } catch {
-    // fallback
-  }
-
-  return [
-    { id: "trim", name: "Trim", code: "Trim", requiresParameters: false },
-    { id: "onlydigits", name: "OnlyDigits", code: "OnlyDigits", requiresParameters: false },
-    { id: "brcurrency", name: "BrazilianCurrency", code: "BrazilianCurrency", requiresParameters: true },
-    { id: "brdate", name: "BrazilianDate", code: "BrazilianDate", requiresParameters: true },
-    { id: "uppercase", name: "UpperCase", code: "UpperCase", requiresParameters: false },
-    { id: "lowercase", name: "LowerCase", code: "LowerCase", requiresParameters: false },
-  ];
-}
-export async function fetchImportTemplateById(templateId: string): Promise<ApiImportTemplate> {
-  const response = await authFetch(`${API_URL}/api/import-templates/${templateId}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar template."));
-  const item = (await response.json()) as Record<string, any>;
-  return {
-    id: String(item.id ?? item.Id ?? ""),
-    name: String(item.name ?? item.Name ?? ""),
-    description: String(item.description ?? item.Description ?? ""),
-    importFileTypeId: String(item.importFileTypeId ?? item.ImportFileTypeId ?? ""),
-    columnMappings: (item.columnMappings ?? item.ColumnMappings ?? []).map((mapping: any) => ({
-      sourceColumnName: String(mapping.sourceColumnName ?? mapping.SourceColumnName ?? ""),
-      targetFieldName: String(mapping.targetFieldName ?? mapping.TargetFieldName ?? ""),
-      isRequired: Boolean(mapping.isRequired ?? mapping.IsRequired ?? false),
-      defaultValue: mapping.defaultValue ?? mapping.DefaultValue ?? null,
-      transformRules: (mapping.transformRules ?? mapping.TransformRules ?? []).map((rule: any) => ({
-        transformRuleId: String(rule.transformRuleId ?? rule.TransformRuleId ?? ""),
-        order: Number(rule.order ?? rule.Order ?? 0),
-        parametersJson: rule.parametersJson ?? rule.ParametersJson ?? null,
-      })),
-    })),
-  };
-}
-
-export async function createImportTemplate(input: ApiImportTemplate): Promise<ApiImportTemplate> {
-  const response = await authFetch(`${API_URL}/api/import-templates`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao criar template."));
-  return (await response.json()) as ApiImportTemplate;
-}
-
-export async function updateImportTemplate(templateId: string, input: ApiImportTemplate): Promise<ApiImportTemplate> {
-  const response = await authFetch(`${API_URL}/api/import-templates/${templateId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao atualizar template."));
-  return (await response.json()) as ApiImportTemplate;
-}
-
 

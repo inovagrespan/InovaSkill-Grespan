@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { FileUp, AlertTriangle, FolderUp, FileText, ChevronRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { Label } from "@/components/ui/label";
 import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
+import { subscribeToFileJobUpdates } from "@/lib/file-job-progress-realtime";
 import {
   MAX_UPLOAD_SIZE_BYTES,
   fetchJobErrors,
@@ -16,12 +16,9 @@ import {
   type FileJob,
   type ImportError,
   type PagedResult,
-  type UploadDestinationCode,
-  type UploadDestinationMode,
   uploadFile,
 } from "@/lib/importer-api";
 import { clampProgressPercent, stageStatusLabel, type JobStageStatus } from "@/lib/importer-progress";
-import { destinationLabel, detectUploadDestination } from "@/lib/upload-destination-detector";
 
 export const Route = createFileRoute("/importacoes/files")({
   component: ImportacoesPage,
@@ -61,8 +58,6 @@ function formatDate(value: string): string {
 
 function ImportacoesPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [destinationMode, setDestinationMode] = useState<UploadDestinationMode>("auto");
-  const [manualDestination, setManualDestination] = useState<UploadDestinationCode>("SALES_INVOICE");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -81,6 +76,10 @@ function ImportacoesPage() {
   const [errorPage, setErrorPage] = useState(1);
   const [errorTotal, setErrorTotal] = useState(0);
   const errorPageSize = 50;
+  const realtimeRefreshTimerRef = useRef<number | null>(null);
+  const selectedJobIdRef = useRef<number | null>(null);
+  const detailsOpenRef = useRef(false);
+  const errorPageRef = useRef(1);
 
   async function loadJobs(page: number = jobPageRef.current) {
     const requestId = ++jobsRequestIdRef.current;
@@ -114,8 +113,46 @@ function ImportacoesPage() {
 
   useEffect(() => {
     void loadJobs(1);
-    const interval = setInterval(() => void loadJobs(jobPageRef.current), 1000);
-    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    let cancelled = false;
+
+    const scheduleRefresh = (jobId: number) => {
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+      }
+
+      realtimeRefreshTimerRef.current = window.setTimeout(() => {
+        void loadJobs(jobPageRef.current);
+        if (detailsOpenRef.current && selectedJobIdRef.current === jobId) {
+          void loadErrors(jobId, errorPageRef.current);
+        }
+      }, 150);
+    };
+
+    void subscribeToFileJobUpdates(({ jobId }) => {
+      if (!cancelled) {
+        scheduleRefresh(jobId);
+      }
+    }).then((unsubscribe) => {
+      if (cancelled) {
+        unsubscribe();
+        return;
+      }
+
+      dispose = unsubscribe;
+    });
+
+    return () => {
+      cancelled = true;
+      dispose?.();
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -124,14 +161,17 @@ function ImportacoesPage() {
     }
   }, [selectedJobId, detailsOpen]);
 
-  const destinationSuggestions = useMemo(
-    () =>
-      selectedFiles.map((file) => ({
-        file,
-        suggestion: detectUploadDestination(file.name),
-      })),
-    [selectedFiles],
-  );
+  useEffect(() => {
+    selectedJobIdRef.current = selectedJobId;
+  }, [selectedJobId]);
+
+  useEffect(() => {
+    detailsOpenRef.current = detailsOpen;
+  }, [detailsOpen]);
+
+  useEffect(() => {
+    errorPageRef.current = errorPage;
+  }, [errorPage]);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -144,20 +184,15 @@ function ImportacoesPage() {
     setMessage("");
     try {
       const results: string[] = [];
-      for (const item of destinationSuggestions) {
-        const file = item.file;
+      for (const file of selectedFiles) {
         if (file.size > MAX_UPLOAD_SIZE_BYTES) {
           throw new Error(`Arquivo '${file.name}' excede o limite de 500 MB.`);
         }
-        const selectedDestination =
-          destinationMode === "manual"
-            ? manualDestination
-            : item.suggestion.confidence === "low"
-              ? manualDestination
-              : item.suggestion.code;
-        const jobId = await uploadFile(file, selectedDestination);
+
+        const jobId = await uploadFile(file);
         results.push(`${file.name} -> Job #${jobId}`);
       }
+
       setMessage(`Upload concluído: ${results.join(" | ")}`);
       setSelectedFiles([]);
       await loadJobs(1);
@@ -174,15 +209,11 @@ function ImportacoesPage() {
     <div className="page-shell">
       <header className="animate-soft-enter">
         <span className="page-header-kicker">Smart Core / Importações</span>
-        <h1 className="text-4xl font-display tracking-tight mt-2">Importação de Arquivos</h1>
-        <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
-          Envie arquivos, acompanhe o processamento em tempo real e revise erros com contexto.
+        <h1 className="mt-2 text-4xl font-display tracking-tight">Importação de Arquivos</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Envie arquivos, acompanhe o processamento em tempo real e revise erros com contexto. O backend identifica o
+          layout automaticamente antes de validar e importar.
         </p>
-        <div className="mt-4">
-          <Link to="/importacoes/templates" className="text-sm text-primary hover:underline underline-offset-4">
-            Abrir configuração de templates
-          </Link>
-        </div>
       </header>
 
       {message && (
@@ -191,7 +222,7 @@ function ImportacoesPage() {
         </Alert>
       )}
 
-      <Card className="bg-surface border-primary/40 ring-2 ring-primary/10 animate-soft-enter">
+      <Card className="animate-soft-enter border-primary/40 bg-surface ring-2 ring-primary/10">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FolderUp className="size-5 text-primary" />
@@ -200,14 +231,14 @@ function ImportacoesPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleUpload} className="space-y-4">
-            <label className="block cursor-pointer rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-all duration-200 p-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <label className="block cursor-pointer rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 p-6 transition-all duration-200 hover:bg-primary/10">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Clique para selecionar um ou mais arquivos</p>
                   <p className="text-xs text-muted-foreground">Formatos aceitos: .csv e .xlsx</p>
                 </div>
-                <div className="inline-flex items-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold shadow-sm shadow-primary/20">
-                  <FileUp className="size-4 mr-2" />
+                <div className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/20">
+                  <FileUp className="mr-2 size-4" />
                   Escolher arquivos
                 </div>
               </div>
@@ -221,46 +252,15 @@ function ImportacoesPage() {
             </label>
 
             <div className="rounded-lg border border-border bg-background/50 p-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                <div className="space-y-1">
-                  <Label>Modo de destino</Label>
-                  <select
-                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-                    value={destinationMode}
-                    onChange={(e) => setDestinationMode(e.target.value as UploadDestinationMode)}
-                  >
-                    <option value="auto">Automático (detectar)</option>
-                    <option value="manual">Manual (escolher destino)</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Destino manual</Label>
-                  <select
-                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-                    value={manualDestination}
-                    onChange={(e) => setManualDestination(e.target.value as UploadDestinationCode)}
-                    disabled={destinationMode === "auto"}
-                  >
-                    <option value="SALES_INVOICE">{destinationLabel("SALES_INVOICE")}</option>
-                    <option value="CUSTOMER_LIST">{destinationLabel("CUSTOMER_LIST")}</option>
-                    <option value="PRODUCT_LIST">{destinationLabel("PRODUCT_LIST")}</option>
-                    <option value="FINANCIAL_ENTRY">{destinationLabel("FINANCIAL_ENTRY")}</option>
-                  </select>
-                </div>
-              </div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Arquivos selecionados</p>
+              <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Arquivos selecionados</p>
               {selectedFiles.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nenhum arquivo selecionado.</p>
               ) : (
                 <div className="space-y-1">
-                  {destinationSuggestions.map(({ file, suggestion }) => (
-                    <p key={`${file.name}-${file.lastModified}`} className="text-sm flex items-center gap-2">
+                  {selectedFiles.map((file) => (
+                    <p key={`${file.name}-${file.lastModified}`} className="flex items-center gap-2 text-sm">
                       <FileText className="size-4 text-muted-foreground" />
                       {file.name}
-                      <span className="text-xs text-muted-foreground">
-                        - sugerido: {suggestion.label}
-                        {destinationMode === "auto" && suggestion.confidence === "low" ? ` (baixa confiança; usando manual: ${destinationLabel(manualDestination)})` : ""}
-                      </span>
                     </p>
                   ))}
                 </div>
@@ -276,7 +276,7 @@ function ImportacoesPage() {
         </CardContent>
       </Card>
 
-      <Card className="bg-surface border-border animate-soft-enter">
+      <Card className="animate-soft-enter border-border bg-surface">
         <CardHeader>
           <CardTitle>Arquivos</CardTitle>
         </CardHeader>
@@ -293,19 +293,19 @@ function ImportacoesPage() {
                 setDetailsOpen(true);
                 void loadErrors(job.id, 1);
               }}
-              className="w-full text-left rounded-lg border border-border/80 p-3 transition-all duration-200 hover:bg-white/[0.03] hover:border-border"
+              className="w-full rounded-lg border border-border/80 p-3 text-left transition-all duration-200 hover:border-border hover:bg-white/[0.03]"
             >
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium truncate">{job.filePath.split(/[/\\]/).pop() ?? `Job #${job.id}`}</p>
-                <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+                <p className="truncate text-sm font-medium">{job.filePath.split(/[/\\]/).pop() ?? `Job #${job.id}`}</p>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
               </div>
               <div className="mt-2 flex items-center justify-between gap-2">
                 <Badge variant={statusBadgeVariant(job.status)}>{statusLabel[job.status] ?? job.status}</Badge>
-                <span className="text-xs text-muted-foreground font-mono">#{job.id}</span>
+                <span className="font-mono text-xs text-muted-foreground">#{job.id}</span>
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <Progress value={clampProgressPercent(job.progressPercent)} className="h-1.5" />
-                <span className="text-xs font-mono text-muted-foreground w-9 text-right">
+                <span className="w-9 text-right font-mono text-xs text-muted-foreground">
                   {clampProgressPercent(job.progressPercent)}%
                 </span>
               </div>
@@ -350,7 +350,7 @@ function ImportacoesPage() {
       </Card>
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-4xl bg-surface border-border">
+        <DialogContent className="max-w-4xl border-border bg-surface">
           <DialogHeader>
             <DialogTitle>Detalhes do Arquivo</DialogTitle>
             <DialogDescription>Acompanhamento do processamento e validações.</DialogDescription>
@@ -364,10 +364,10 @@ function ImportacoesPage() {
 
           {selectedJob && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">Arquivo</p>
-                  <p className="font-medium break-all">{selectedJob.filePath}</p>
+                  <p className="break-all font-medium">{selectedJob.filePath}</p>
                 </div>
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">Criado em</p>
@@ -376,7 +376,7 @@ function ImportacoesPage() {
               </div>
 
               <div className="rounded-lg border border-border p-3">
-                <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="mb-2 flex items-center justify-between gap-3">
                   <Badge variant={statusBadgeVariant(selectedJob.status)}>{statusLabel[selectedJob.status] ?? selectedJob.status}</Badge>
                   <span className="text-xs text-muted-foreground">
                     Etapa atual: {(selectedJob.currentStageName ?? selectedJob.currentStep) || "-"}
@@ -384,13 +384,13 @@ function ImportacoesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Progress value={clampProgressPercent(selectedJob.progressPercent)} className="h-2" />
-                  <span className="text-xs font-mono w-9 text-right">{clampProgressPercent(selectedJob.progressPercent)}%</span>
+                  <span className="w-9 text-right font-mono text-xs">{clampProgressPercent(selectedJob.progressPercent)}%</span>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">{selectedJob.currentStep || "Aguardando processamento."}</p>
               </div>
 
               <div className="rounded-lg border border-border p-3">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">Etapas do processamento</p>
+                <p className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">Etapas do processamento</p>
                 <div className="space-y-3">
                   {selectedJob.stages.map((stage) => (
                     <div key={stage.code} className="space-y-1.5">
@@ -399,12 +399,10 @@ function ImportacoesPage() {
                           <span className="text-sm font-medium">{stage.name}</span>
                           <Badge variant={stageBadgeVariant(stage.status)}>{stageStatusLabel(stage.status)}</Badge>
                         </div>
-                        <span className="text-xs font-mono text-muted-foreground">{clampProgressPercent(stage.progressPercent)}%</span>
+                        <span className="font-mono text-xs text-muted-foreground">{clampProgressPercent(stage.progressPercent)}%</span>
                       </div>
                       <Progress value={clampProgressPercent(stage.progressPercent)} className="h-1.5" />
-                      {stage.errorCount > 0 && (
-                        <p className="text-xs text-destructive">{stage.errorCount} erro(s) nessa etapa.</p>
-                      )}
+                      {stage.errorCount > 0 && <p className="text-xs text-destructive">{stage.errorCount} erro(s) nessa etapa.</p>}
                     </div>
                   ))}
                 </div>
@@ -420,12 +418,10 @@ function ImportacoesPage() {
               </Alert>
 
               {errorsLoading && <SkeletonModalContent />}
-              {!errorsLoading && errors.length === 0 && (
-                <p className="text-sm text-muted-foreground">Sem erros para esse arquivo.</p>
-              )}
+              {!errorsLoading && errors.length === 0 && <p className="text-sm text-muted-foreground">Sem erros para esse arquivo.</p>}
 
               {errors.length > 0 && (
-                <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
+                <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
                   {errors.map((err) => (
                     <div key={err.id} className="rounded-lg border border-border p-3">
                       <p className="text-sm font-medium">
@@ -466,5 +462,3 @@ function ImportacoesPage() {
     </div>
   );
 }
-
-

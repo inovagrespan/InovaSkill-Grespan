@@ -19,7 +19,7 @@ public sealed class CommercialTransactionBuffer : IFileTypeBuffer
         var quantity = decimal.Parse(row.Get("quantity"), CultureInfo.InvariantCulture);
         var unitPrice = decimal.Parse(row.Get("unitprice"), CultureInfo.InvariantCulture);
         var grossWeightKg = decimal.Parse(row.Get("grossweightkg"), CultureInfo.InvariantCulture);
-        var totalAmount = Math.Abs(quantity * unitPrice);
+        var totalAmount = quantity * unitPrice;
 
         var item = new CommercialTransaction
         {

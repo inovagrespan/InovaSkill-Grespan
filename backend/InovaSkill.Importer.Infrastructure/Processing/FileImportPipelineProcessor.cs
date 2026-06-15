@@ -18,7 +18,9 @@ namespace InovaSkill.Importer.Infrastructure.Processing;
 public sealed class FileImportPipelineProcessor(
     ImportDbContext dbContext,
     IProcessingEventPublisher eventPublisher,
+    IFileJobProgressNotifier fileJobProgressNotifier,
     IFileParserFactory fileParserFactory,
+    IRoutePlanningWorkbookParser routePlanningWorkbookParser,
     IImportPreProcessingPipeline importPreProcessingPipeline,
     IFileSchemaProvider fileSchemaProvider,
     IRowValidator rowValidator,
@@ -46,7 +48,7 @@ public sealed class FileImportPipelineProcessor(
         }
 
         var nextStatus = job.StartNextStage();
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         try
         {
@@ -69,7 +71,7 @@ public sealed class FileImportPipelineProcessor(
         {
             job.MarkFailed(BuildFailureReason(ex));
             AddJobLog(job.Id, CurrentStageFromStatus(job.Status), "Error", job.CurrentStep);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
             logger.LogError(ex, "Failed processing job {JobId}. File: {FilePath}", job.Id, job.FilePath);
         }
     }
@@ -81,7 +83,7 @@ public sealed class FileImportPipelineProcessor(
         if (!string.Equals(resolvedSourcePath, job.FilePath, StringComparison.Ordinal))
         {
             job.FilePath = resolvedSourcePath;
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
         }
 
         var existingErrors = await dbContext.ImportErrors
@@ -91,7 +93,12 @@ public sealed class FileImportPipelineProcessor(
         if (existingErrors.Count > 0)
         {
             dbContext.ImportErrors.RemoveRange(existingErrors);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
+        }
+
+        if (await TryHandleRoutePlanningPreProcessingAsync(job, preProcessingStep, cancellationToken))
+        {
+            return;
         }
 
         job.NormalizedFilePath = BuildNormalizedFilePath(job);
@@ -99,7 +106,7 @@ public sealed class FileImportPipelineProcessor(
 
         var parser = fileParserFactory.Create(job.FilePath);
         job.UpdateProgress("Lendo estrutura do arquivo", ImportStageProgress.CalculatePreProcessingCountingPercent(1), 0);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         var totalRows = await CountRowsAsync(job, parser, job.FilePath, cancellationToken);
         job.TotalRows = totalRows;
@@ -109,7 +116,7 @@ public sealed class FileImportPipelineProcessor(
             job.UpdateProgress("Normalizando linhas do arquivo", ImportStageProgress.PreProcessingCountingMaxPercent, 0);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         var errors = new List<ImportError>();
         var processedRows = 0;
@@ -161,12 +168,63 @@ public sealed class FileImportPipelineProcessor(
         job.UpdateProgress("Pre-processamento concluido", ImportStageProgress.CompletePercent, processedRows);
         FinishStep(preProcessingStep, "completed", processedRows, errors.Count);
         AddJobLog(job.Id, ImportProcessingStages.PreProcessing, "Information", "Pre-processamento concluido.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         job.MarkValidating();
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         await ValidateNormalizedFileAsync(job, errors, cancellationToken);
+    }
+
+    private async Task<bool> TryHandleRoutePlanningPreProcessingAsync(
+        FileJob job,
+        ProcessingStepExecution preProcessingStep,
+        CancellationToken cancellationToken)
+    {
+        if (!ShouldProbeRoutePlanning(job))
+        {
+            return false;
+        }
+
+        if (!string.Equals(Path.GetExtension(job.FilePath), ".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            if (IsRoutePlanningJob(job))
+            {
+                throw new InvalidOperationException("O planejamento de rotas deve ser enviado em arquivo XLSX.");
+            }
+
+            return false;
+        }
+
+        job.UpdateProgress("Identificando rotas e cidades da planilha", ImportStageProgress.CalculatePreProcessingCountingPercent(1), 0);
+        await SaveJobStateAsync(job.Id, cancellationToken);
+
+        var parsedWorkbook = routePlanningWorkbookParser.Parse(job.FilePath);
+        if (!IsRecognizedRoutePlanningWorkbook(parsedWorkbook))
+        {
+            if (IsRoutePlanningJob(job))
+            {
+                throw new InvalidOperationException("O layout da planilha de rotas por cidade nao foi reconhecido.");
+            }
+
+            return false;
+        }
+
+        var totalItems = CalculateRoutePlanningWorkItemCount(parsedWorkbook.Routes);
+        job.ImportFileTypeCode = ImportFileTypeCodes.RoutePlanning;
+        job.NormalizedFilePath = string.Empty;
+        job.TotalRows = totalItems;
+        job.ProcessedRows = totalItems;
+        job.UpdateProgress("Pre-processamento concluido", ImportStageProgress.CompletePercent, totalItems);
+        FinishStep(preProcessingStep, "completed", totalItems, 0);
+        AddJobLog(job.Id, ImportProcessingStages.PreProcessing, "Information", "Estrutura de rotas identificada.");
+        await SaveJobStateAsync(job.Id, cancellationToken);
+
+        job.MarkValidating();
+        await SaveJobStateAsync(job.Id, cancellationToken);
+
+        await ValidateRoutePlanningWorkbookAsync(job, parsedWorkbook, cancellationToken);
+        return true;
     }
 
     private async Task ValidateNormalizedFileAsync(FileJob job, List<ImportError> errors, CancellationToken cancellationToken)
@@ -226,7 +284,72 @@ public sealed class FileImportPipelineProcessor(
         }
 
         job.ProcessedRows = job.TotalRows;
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
+    }
+
+    private async Task ValidateRoutePlanningWorkbookAsync(
+        FileJob job,
+        RoutePlanningWorkbookParseResult parsedWorkbook,
+        CancellationToken cancellationToken)
+    {
+        var validationStep = await StartStepAsync(job.Id, ImportProcessingStages.Validation, "Validacao iniciada.", cancellationToken);
+        var errors = new List<ImportError>();
+        var processedItems = 0;
+
+        if (parsedWorkbook.Routes.Count == 0)
+        {
+            errors.Add(new ImportError
+            {
+                FileJobId = job.Id,
+                RowNumber = 0,
+                Stage = ImportProcessingStages.Validation,
+                Column = "Workbook",
+                Message = "Nenhuma rota reconhecida foi encontrada na planilha.",
+                RecordIdentifier = Path.GetFileName(job.FilePath)
+            });
+        }
+
+        foreach (var route in parsedWorkbook.Routes)
+        {
+            processedItems += CalculateRoutePlanningWorkItemCount([route]);
+
+            foreach (var validationError in ValidateRoutePlanningRoute(route))
+            {
+                errors.Add(new ImportError
+                {
+                    FileJobId = job.Id,
+                    RowNumber = route.RouteOrder,
+                    Stage = ImportProcessingStages.Validation,
+                    Column = validationError.Column,
+                    Message = validationError.Message,
+                    RecordIdentifier = string.IsNullOrWhiteSpace(route.RouteName)
+                        ? $"{route.WeekdayLabel} / rota sem nome"
+                        : $"{route.WeekdayLabel} / {route.RouteName}"
+                });
+            }
+
+            if (ShouldUpdateProgress(job, processedItems, job.TotalRows))
+            {
+                await UpdateProgressAsync(job, "Validando rotas planejadas", processedItems, job.TotalRows, cancellationToken);
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            await dbContext.BulkInsertAsync(errors, cancellationToken: cancellationToken);
+            job.MarkValidationFailed();
+            FinishStep(validationStep, "failed", processedItems, errors.Count);
+            AddJobLog(job.Id, ImportProcessingStages.Validation, "Warning", $"Validacao concluida com {errors.Count} erro(s).");
+        }
+        else
+        {
+            job.MarkReadyToImport();
+            FinishStep(validationStep, "completed", processedItems, 0);
+            AddJobLog(job.Id, ImportProcessingStages.Validation, "Information", "Validacao concluida sem erros.");
+        }
+
+        job.ProcessedRows = job.TotalRows;
+        await SaveJobStateAsync(job.Id, cancellationToken);
     }
 
     private async Task ImportValidatedFileAsync(FileJob job, CancellationToken cancellationToken)
@@ -237,7 +360,13 @@ public sealed class FileImportPipelineProcessor(
             job.MarkFailed("Tipo de arquivo nao identificado para importacao.");
             FinishStep(importStep, "failed", job.ProcessedRows, 1);
             AddJobLog(job.Id, ImportProcessingStages.Import, "Error", job.CurrentStep);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
+            return;
+        }
+
+        if (IsRoutePlanningJob(job))
+        {
+            await ImportRoutePlanningWorkbookAsync(job, importStep, cancellationToken);
             return;
         }
 
@@ -246,7 +375,7 @@ public sealed class FileImportPipelineProcessor(
             job.MarkFailed("Arquivo normalizado nao encontrado para importacao.");
             FinishStep(importStep, "failed", job.ProcessedRows, 1);
             AddJobLog(job.Id, ImportProcessingStages.Import, "Error", job.CurrentStep);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
             logger.LogError("Normalized file not found for job {JobId}: {Path}", job.Id, job.NormalizedFilePath);
             return;
         }
@@ -258,7 +387,7 @@ public sealed class FileImportPipelineProcessor(
             job.MarkValidationFailed();
             FinishStep(importStep, "failed", 0, importValidationErrors.Count);
             AddJobLog(job.Id, ImportProcessingStages.Import, "Warning", $"Importacao bloqueada por {importValidationErrors.Count} erro(s) de validacao.");
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await SaveJobStateAsync(job.Id, cancellationToken);
             return;
         }
 
@@ -289,7 +418,7 @@ public sealed class FileImportPipelineProcessor(
         job.MarkCompleted(job.TotalRows > 0 ? job.TotalRows : processedRows);
         FinishStep(importStep, "completed", processedRows, 0);
         AddJobLog(job.Id, ImportProcessingStages.Import, "Information", "Importacao concluida.");
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
 
         if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.SalesInvoice, StringComparison.OrdinalIgnoreCase))
         {
@@ -311,6 +440,100 @@ public sealed class FileImportPipelineProcessor(
         // TryDeleteNormalizedFile(job.NormalizedFilePath);
     }
 
+    private async Task ImportRoutePlanningWorkbookAsync(
+        FileJob job,
+        ProcessingStepExecution importStep,
+        CancellationToken cancellationToken)
+    {
+        var parsedWorkbook = routePlanningWorkbookParser.Parse(job.FilePath);
+        if (!IsRecognizedRoutePlanningWorkbook(parsedWorkbook))
+        {
+            job.MarkFailed("O layout da planilha de rotas por cidade nao foi reconhecido.");
+            FinishStep(importStep, "failed", 0, 1);
+            AddJobLog(job.Id, ImportProcessingStages.Import, "Error", job.CurrentStep);
+            await SaveJobStateAsync(job.Id, cancellationToken);
+            return;
+        }
+
+        var totalItems = job.TotalRows > 0 ? job.TotalRows : CalculateRoutePlanningWorkItemCount(parsedWorkbook.Routes);
+        job.TotalRows = totalItems;
+        job.ProcessedRows = 0;
+        await SaveJobStateAsync(job.Id, cancellationToken);
+
+        var existingImports = await dbContext.RoutePlanningImports
+            .Where(x => x.SourceFileJobId == job.Id)
+            .ToListAsync(cancellationToken);
+
+        if (existingImports.Count > 0)
+        {
+            dbContext.RoutePlanningImports.RemoveRange(existingImports);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var routeImport = new RoutePlanningImport
+        {
+            SourceFileJobId = job.Id,
+            SourceFileName = job.OriginalFileName,
+            ImportedAt = DateTime.UtcNow
+        };
+
+        foreach (var capacityProfile in parsedWorkbook.TruckCapacities)
+        {
+            routeImport.TruckCapacities.Add(new TruckCapacityProfile
+            {
+                VehicleType = capacityProfile.VehicleType,
+                CapacityKg = capacityProfile.CapacityKg
+            });
+        }
+
+        var processedItems = 0;
+        foreach (var parsedRoute in parsedWorkbook.Routes)
+        {
+            var route = new RoutePlan
+            {
+                SheetName = parsedRoute.SheetName,
+                WeekdayLabel = parsedRoute.WeekdayLabel,
+                WeekdayOrder = parsedRoute.WeekdayOrder,
+                RouteOrder = parsedRoute.RouteOrder,
+                RouteName = parsedRoute.RouteName,
+                VehicleType = parsedRoute.VehicleType,
+                VehicleCapacityKg = parsedRoute.VehicleCapacityKg,
+                TotalDeliveries = parsedRoute.TotalDeliveries,
+                TotalAverageLoadKg = parsedRoute.TotalAverageLoadKg,
+                OccupancyPercent = parsedRoute.OccupancyPercent
+            };
+
+            foreach (var parsedStop in parsedRoute.Stops)
+            {
+                route.Stops.Add(new RouteStop
+                {
+                    StopOrder = parsedStop.StopOrder,
+                    DestinationName = parsedStop.DestinationName,
+                    DeliveriesRaw = parsedStop.DeliveriesRaw,
+                    DeliveriesCount = parsedStop.DeliveriesCount,
+                    AverageLoadKg = parsedStop.AverageLoadKg,
+                    Note = parsedStop.Note
+                });
+            }
+
+            routeImport.Routes.Add(route);
+            processedItems += CalculateRoutePlanningWorkItemCount([parsedRoute]);
+
+            if (ShouldUpdateProgress(job, processedItems, totalItems))
+            {
+                await UpdateProgressAsync(job, "Registrando rotas no banco", processedItems, totalItems, cancellationToken);
+            }
+        }
+
+        dbContext.RoutePlanningImports.Add(routeImport);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        job.MarkCompleted(totalItems);
+        FinishStep(importStep, "completed", processedItems, 0);
+        AddJobLog(job.Id, ImportProcessingStages.Import, "Information", "Importacao de rotas concluida.");
+        await SaveJobStateAsync(job.Id, cancellationToken);
+    }
+
     private async Task UpdateProgressAsync(
         FileJob job,
         string step,
@@ -321,7 +544,7 @@ public sealed class FileImportPipelineProcessor(
         var progressPercent = ImportStageProgress.CalculatePercent(processedRows, totalRows);
 
         job.UpdateProgress(step, progressPercent, processedRows);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
     }
 
     private async Task<ProcessingStepExecution> StartStepAsync(long fileJobId, string step, string message, CancellationToken cancellationToken)
@@ -370,7 +593,7 @@ public sealed class FileImportPipelineProcessor(
         var progressPercent = ImportStageProgress.CalculatePreProcessingNormalizationPercent(processedRows, totalRows);
 
         job.UpdateProgress(step, progressPercent, processedRows);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveJobStateAsync(job.Id, cancellationToken);
     }
 
     internal async Task<List<ImportError>> ValidateRowsBeforeImportAsync(FileJob job, CancellationToken cancellationToken)
@@ -435,7 +658,7 @@ public sealed class FileImportPipelineProcessor(
             {
                 job.TotalRows = total;
                 job.UpdateProgress("Contando linhas do arquivo", currentPercent, total);
-                await dbContext.SaveChangesAsync(cancellationToken);
+                await SaveJobStateAsync(job.Id, cancellationToken);
             }
         }
 
@@ -475,17 +698,27 @@ public sealed class FileImportPipelineProcessor(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        foreach (var job in staleJobs)
+        {
+            await fileJobProgressNotifier.NotifyAsync(job.Id, cancellationToken);
+        }
+    }
+
+    private async Task SaveJobStateAsync(long jobId, CancellationToken cancellationToken)
+    {
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await fileJobProgressNotifier.NotifyAsync(jobId, cancellationToken);
     }
 
     private async Task CleanupImportedDataByJobAsync(FileJob job, CancellationToken cancellationToken)
     {
-        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.CustomerList, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.Customers, StringComparison.OrdinalIgnoreCase))
         {
             await dbContext.Customers.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             return;
         }
 
-        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.ProductList, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.Products, StringComparison.OrdinalIgnoreCase))
         {
             await dbContext.Products.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
             return;
@@ -500,6 +733,20 @@ public sealed class FileImportPipelineProcessor(
         if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.SalesInvoice, StringComparison.OrdinalIgnoreCase))
         {
             await dbContext.CommercialTransactions.Where(x => x.SourceFileJobId == job.Id).ExecuteDeleteAsync(cancellationToken);
+            return;
+        }
+
+        if (string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.RoutePlanning, StringComparison.OrdinalIgnoreCase))
+        {
+            var existingImports = await dbContext.RoutePlanningImports
+                .Where(x => x.SourceFileJobId == job.Id)
+                .ToListAsync(cancellationToken);
+
+            if (existingImports.Count > 0)
+            {
+                dbContext.RoutePlanningImports.RemoveRange(existingImports);
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
         }
     }
 
@@ -507,8 +754,8 @@ public sealed class FileImportPipelineProcessor(
     {
         return importFileTypeCode?.ToUpperInvariant() switch
         {
-            ImportFileTypeCodes.CustomerList => TryValue(values, "email"),
-            ImportFileTypeCodes.ProductList => TryValue(values, "sku"),
+            ImportFileTypeCodes.Customers => TryValue(values, "email"),
+            ImportFileTypeCodes.Products => TryValue(values, "sku"),
             ImportFileTypeCodes.FinancialEntry => TryValue(values, "ordernumber"),
             ImportFileTypeCodes.SalesInvoice => TryValue(values, "documentnumber"),
             _ => string.Empty
@@ -524,8 +771,8 @@ public sealed class FileImportPipelineProcessor(
     {
         return importFileTypeCode?.ToUpperInvariant() switch
         {
-            ImportFileTypeCodes.CustomerList => new CustomerBuffer(),
-            ImportFileTypeCodes.ProductList => new ProductBuffer(),
+            ImportFileTypeCodes.Customers => new CustomerBuffer(),
+            ImportFileTypeCodes.Products => new ProductBuffer(),
             ImportFileTypeCodes.FinancialEntry => new OrderBuffer(),
             ImportFileTypeCodes.SalesInvoice => new CommercialTransactionBuffer(),
             _ => throw new InvalidOperationException($"Unsupported file type code: {importFileTypeCode}")
@@ -747,6 +994,87 @@ public sealed class FileImportPipelineProcessor(
         var normalized = path.Replace('\\', '/');
         var idx = normalized.LastIndexOf('/');
         return idx >= 0 ? normalized[(idx + 1)..] : normalized;
+    }
+
+    private static bool ShouldProbeRoutePlanning(FileJob job)
+    {
+        return IsRoutePlanningJob(job) ||
+            string.Equals(Path.GetExtension(job.FilePath), ".xlsx", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRoutePlanningJob(FileJob job)
+    {
+        return string.Equals(job.ImportFileTypeCode, ImportFileTypeCodes.RoutePlanning, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRecognizedRoutePlanningWorkbook(RoutePlanningWorkbookParseResult parsedWorkbook)
+    {
+        return parsedWorkbook.Routes.Any(route =>
+            !string.IsNullOrWhiteSpace(route.RouteName) &&
+            route.WeekdayOrder > 0 &&
+            route.Stops.Count > 0);
+    }
+
+    private static int CalculateRoutePlanningWorkItemCount(IEnumerable<RoutePlan> routes)
+    {
+        return routes.Sum(route => Math.Max(1, route.Stops.Count));
+    }
+
+    private static IReadOnlyList<ValidationError> ValidateRoutePlanningRoute(RoutePlan route)
+    {
+        var errors = new List<ValidationError>();
+
+        if (string.IsNullOrWhiteSpace(route.WeekdayLabel))
+        {
+            errors.Add(new ValidationError("weekday", "A aba da rota nao informa o dia da semana."));
+        }
+
+        if (route.WeekdayOrder <= 0)
+        {
+            errors.Add(new ValidationError("weekday", "Nao foi possivel identificar a ordem do dia da semana para a rota."));
+        }
+
+        if (string.IsNullOrWhiteSpace(route.RouteName))
+        {
+            errors.Add(new ValidationError("routename", "A rota nao possui nome."));
+        }
+
+        if (route.Stops.Count == 0)
+        {
+            errors.Add(new ValidationError("destinationname", "A rota nao possui cidades associadas."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(route.VehicleType) && route.VehicleCapacityKg is null)
+        {
+            errors.Add(new ValidationError("vehiclecapacitykg", $"Capacidade nao encontrada para o veiculo '{route.VehicleType}'."));
+        }
+
+        if (route.TotalAverageLoadKg is < 0m)
+        {
+            errors.Add(new ValidationError("totalaverageloadkg", "A carga media total da rota nao pode ser negativa."));
+        }
+
+        if (route.TotalDeliveries is < 0)
+        {
+            errors.Add(new ValidationError("totaldeliveries", "A quantidade total de entregas nao pode ser negativa."));
+        }
+
+        foreach (var stop in route.Stops.Where(stop => string.IsNullOrWhiteSpace(stop.DestinationName)))
+        {
+            errors.Add(new ValidationError("destinationname", $"Existe uma parada sem cidade identificada na rota '{route.RouteName}'."));
+        }
+
+        foreach (var stop in route.Stops.Where(stop => stop.AverageLoadKg is < 0m))
+        {
+            errors.Add(new ValidationError("averageloadkg", $"A cidade '{stop.DestinationName}' possui carga media negativa."));
+        }
+
+        foreach (var stop in route.Stops.Where(stop => stop.DeliveriesCount is < 0))
+        {
+            errors.Add(new ValidationError("deliveriescount", $"A cidade '{stop.DestinationName}' possui quantidade de entregas negativa."));
+        }
+
+        return errors;
     }
 
 }

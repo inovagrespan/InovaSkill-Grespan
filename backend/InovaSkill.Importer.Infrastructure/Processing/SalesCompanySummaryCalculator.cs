@@ -42,8 +42,6 @@ public sealed record SalesCompanySummaryResult(
 
 public static class SalesCompanySummaryCalculator
 {
-    private const decimal AmountMismatchTolerance = 0.05m;
-
     public static SalesCompanySummaryResult Build(
         IReadOnlyList<CommercialTransaction> rows,
         SalesSummaryGranularity granularity,
@@ -57,7 +55,7 @@ public static class SalesCompanySummaryCalculator
             SalesSummaryGranularity.Weekly => current.AddDays(-7),
             _ => current.AddMonths(-1)
         };
-        var totalAmount = Round3(rows.Sum(ResolveAmount));
+        var totalAmount = Round3(rows.Sum(CalculateTransactionAmount));
         var totalQuantity = Round3(rows.Sum(x => x.Quantity));
         var totalWeight = Round3(rows.Sum(x => x.GrossWeightKg));
 
@@ -68,10 +66,10 @@ public static class SalesCompanySummaryCalculator
 
         var currentPeriodTotalAmount = rows
             .Where(x => GetPeriodKey(x.TransactionDate, granularity) == current)
-            .Sum(ResolveAmount);
+            .Sum(CalculateTransactionAmount);
         var previousPeriodTotalAmount = rows
             .Where(x => GetPeriodKey(x.TransactionDate, granularity) == previous)
-            .Sum(ResolveAmount);
+            .Sum(CalculateTransactionAmount);
         decimal? totalGrowthPercent = null;
         if (previousPeriodTotalAmount != 0)
         {
@@ -84,10 +82,10 @@ public static class SalesCompanySummaryCalculator
             {
                 var currentAmount = g
                     .Where(x => GetPeriodKey(x.TransactionDate, granularity) == current)
-                    .Sum(ResolveAmount);
+                    .Sum(CalculateTransactionAmount);
                 var previousAmount = g
                     .Where(x => GetPeriodKey(x.TransactionDate, granularity) == previous)
-                    .Sum(ResolveAmount);
+                    .Sum(CalculateTransactionAmount);
 
                 decimal? growth = null;
                 if (previousAmount != 0)
@@ -97,7 +95,7 @@ public static class SalesCompanySummaryCalculator
 
                 return new SalesCompanySummaryItem(
                     g.Key,
-                    Round3(g.Sum(ResolveAmount)),
+                    Round3(g.Sum(CalculateTransactionAmount)),
                     Round3(g.Sum(x => x.Quantity)),
                     Round3(g.Sum(x => x.GrossWeightKg)),
                     Round3(currentAmount),
@@ -151,21 +149,8 @@ public static class SalesCompanySummaryCalculator
         return Math.Round(value, 3, MidpointRounding.AwayFromZero);
     }
 
-    private static decimal ResolveAmount(CommercialTransaction row)
+    public static decimal CalculateTransactionAmount(CommercialTransaction row)
     {
-        if (row.Quantity == 0 || row.UnitPrice == 0)
-        {
-            return row.TotalAmount;
-        }
-
-        var expected = row.Quantity * row.UnitPrice;
-        var denominator = Math.Max(1m, Math.Abs(expected));
-        var relativeDiff = Math.Abs(row.TotalAmount - expected) / denominator;
-        if (relativeDiff > AmountMismatchTolerance)
-        {
-            return expected;
-        }
-
-        return row.TotalAmount;
+        return row.Quantity * row.UnitPrice;
     }
 }

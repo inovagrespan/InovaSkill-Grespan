@@ -1,44 +1,15 @@
-﻿using InovaSkill.Importer.Application.Abstractions;
-using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Application.Abstractions;
+using InovaSkill.Importer.Infrastructure.Processing.Patterns;
 
 namespace InovaSkill.Importer.Infrastructure.Processing;
 
-public sealed class FileTypeDetector : IFileTypeDetector
+internal sealed class FileTypeDetector(IEnumerable<ISpreadsheetImportPattern> patterns) : IFileTypeDetector
 {
     public string? DetectCode(IReadOnlyDictionary<string, string> row)
     {
-        var salesKeys = new[]
-        {
-            "documentnumber", "transactiondate", "customercode", "productcode", "totalamount",
-            "documento", "data", "produto", "quantidade", "total"
-        };
-
-        var salesScore = salesKeys.Count(row.ContainsKey);
-        if (salesScore >= 3 || (row.ContainsKey("documentnumber") && row.ContainsKey("productcode")))
-        {
-            return ImportFileTypeCodes.SalesInvoice;
-        }
-
-        if (HasAny(row, "ordernumber", "quantity", "productsku", "customeremail", "orderedat", "orderdate"))
-        {
-            return ImportFileTypeCodes.FinancialEntry;
-        }
-
-        if (HasAny(row, "sku", "price"))
-        {
-            return ImportFileTypeCodes.ProductList;
-        }
-
-        if (HasAny(row, "email", "name", "createdat", "nome", "cliente"))
-        {
-            return ImportFileTypeCodes.CustomerList;
-        }
-
-        return null;
-    }
-
-    private static bool HasAny(IReadOnlyDictionary<string, string> row, params string[] keys)
-    {
-        return keys.Any(k => row.ContainsKey(k));
+        var bestMatch = SpreadsheetImportPatternMatcher.SelectBest(patterns, string.Empty, row.Keys.ToArray());
+        return bestMatch?.MeetsMinimumConfidence == true
+            ? bestMatch.Pattern.ImportFileTypeCode
+            : null;
     }
 }

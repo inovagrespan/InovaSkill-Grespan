@@ -8,9 +8,9 @@ public class FileSchemaProviderTests
     private readonly FileSchemaProvider _sut = new();
 
     [Theory]
-    [InlineData(ImportFileTypeCodes.CustomerList)]
+    [InlineData(ImportFileTypeCodes.Customers)]
     [InlineData(ImportFileTypeCodes.FinancialEntry)]
-    [InlineData(ImportFileTypeCodes.ProductList)]
+    [InlineData(ImportFileTypeCodes.Products)]
     [InlineData(ImportFileTypeCodes.SalesInvoice)]
     public void GetSchema_ReturnsExpectedSchema(string code)
     {
