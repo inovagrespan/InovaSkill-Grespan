@@ -7,11 +7,15 @@ function readLoginRoute(): string {
 }
 
 describe("login route", () => {
-  it("orienta o login local com a senha seedada do administrador", () => {
+  it("preenche o login local com o administrador padrão", () => {
     const source = readLoginRoute();
 
-    expect(source).toContain('placeholder="admin ou admin@local.test"');
-    expect(source).toContain('placeholder="admin123*#"');
-    expect(source).not.toContain('placeholder="admin"');
+    expect(source).toContain('const DEFAULT_LOGIN_USER = "admin"');
+    expect(source).toContain('const DEFAULT_LOGIN_PASSWORD = "admin"');
+    expect(source).toContain("useState(DEFAULT_LOGIN_USER)");
+    expect(source).toContain("useState(DEFAULT_LOGIN_PASSWORD)");
+    expect(source).toContain("placeholder={DEFAULT_LOGIN_USER}");
+    expect(source).toContain("placeholder={DEFAULT_LOGIN_PASSWORD}");
+    expect(source).not.toContain("admin123*#");
   });
 });

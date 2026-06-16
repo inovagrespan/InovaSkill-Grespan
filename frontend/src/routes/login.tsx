@@ -18,13 +18,15 @@ export const Route = createFileRoute("/login")({
 type Message = { type: "success" | "error"; text: string } | null;
 
 const MIN_PASSWORD_LENGTH = 6;
+const DEFAULT_LOGIN_USER = "admin";
+const DEFAULT_LOGIN_PASSWORD = "admin";
 
 function LoginPage() {
   const search = Route.useSearch();
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [activeTab, setActiveTab] = useState<"login" | "cadastro">("login");
-  const [loginUser, setLoginUser] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
+  const [loginUser, setLoginUser] = useState(DEFAULT_LOGIN_USER);
+  const [loginPassword, setLoginPassword] = useState(DEFAULT_LOGIN_PASSWORD);
   const [registerName, setRegisterName] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
@@ -210,7 +212,7 @@ function LoginPage() {
                     value={loginUser}
                     onChange={(event) => setLoginUser(event.target.value)}
                     autoComplete="username"
-                    placeholder="admin ou admin@local.test"
+                    placeholder={DEFAULT_LOGIN_USER}
                     className="h-11 rounded-xl border-border/50 bg-white px-4 shadow-none transition-colors placeholder:text-muted-foreground/75 hover:border-border/70 focus-visible:border-primary/35 focus-visible:ring-2 focus-visible:ring-primary/8 dark:border-white/10 dark:bg-white/4 dark:hover:border-white/20 dark:placeholder:text-slate-400"
                     required
                   />
@@ -225,7 +227,7 @@ function LoginPage() {
                     value={loginPassword}
                     onChange={(event) => setLoginPassword(event.target.value)}
                     autoComplete="current-password"
-                    placeholder="admin123*#"
+                    placeholder={DEFAULT_LOGIN_PASSWORD}
                     className="h-11 rounded-xl border-border/50 bg-white px-4 shadow-none transition-colors placeholder:text-muted-foreground/75 hover:border-border/70 focus-visible:border-primary/35 focus-visible:ring-2 focus-visible:ring-primary/8 dark:border-white/10 dark:bg-white/4 dark:hover:border-white/20 dark:placeholder:text-slate-400"
                     required
                   />

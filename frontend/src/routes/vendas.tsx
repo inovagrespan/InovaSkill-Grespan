@@ -31,6 +31,7 @@ import {
   fetchCommercialInvoices,
   fetchCommercialTransactions,
 } from "@/lib/importer-api";
+import { getModuleHighlightFromLocation } from "@/lib/control-tower-dashboard";
 import { resolveSalesTimelineGranularity } from "@/lib/sales-timeline";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
@@ -273,6 +274,7 @@ function buildFriendlyError(error: unknown): string {
 }
 
 function VendasPage() {
+  const moduleHighlight = getModuleHighlightFromLocation();
   const defaultPeriod = resolveLastThreeMonthsPeriod();
   const persistedState = useMemo(() => readPersistedSalesState(defaultPeriod), [defaultPeriod.dateFrom, defaultPeriod.dateTo]);
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(persistedState.periodPreset);
@@ -610,6 +612,11 @@ function VendasPage() {
       {message && (
         <Alert variant="destructive" className="animate-soft-enter">
           <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      )}
+      {moduleHighlight && (
+        <Alert className="animate-soft-enter">
+          <AlertDescription>Indicador destacado pela Torre de Controle: {moduleHighlight}</AlertDescription>
         </Alert>
       )}
 

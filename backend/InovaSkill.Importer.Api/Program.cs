@@ -76,7 +76,7 @@ static async Task EnsureDefaultUsersAsync(ImportDbContext db, PasswordHasher<App
 {
     var defaults = new[]
     {
-        new SeedUser("admin", "admin@local.test", "admin123*#", AppUserRoles.Admin),
+        new SeedUser("admin", "admin@local.test", "admin", AppUserRoles.Admin),
         new SeedUser("grespan", "grespan@local.test", "inova2026", AppUserRoles.Gestor)
     };
 

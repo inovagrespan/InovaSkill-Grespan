@@ -374,6 +374,19 @@
   --sales-chart-select-border: #1d2a44;
 }
 
+.delivery-map-marker {
+  background: transparent;
+  border: 0;
+}
+
+.delivery-map-marker span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+}
+
 .dark .app-background {
   background:
     radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47, 0.16), transparent 36%),
