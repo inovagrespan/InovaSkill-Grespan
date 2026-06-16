@@ -9,22 +9,21 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SkeletonChart, SkeletonMetricCard, SkeletonModalContent, SkeletonTable } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowDownRight, ArrowUpRight, Building2, CalendarClock, DollarSign, MapPin, Minus, Receipt, TrendingUp, UserRound, Users } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Building2, CalendarClock, DollarSign, MapPin, Receipt, TrendingUp, UserRound, Users } from "lucide-react";
 import { Area, AreaChart, Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   fetchCustomerAnalyticsSummary,
-  fetchCustomerComparison,
-  fetchCustomerDetailsSummary,
   fetchFinanceDashboard,
+  fetchCustomerIndividualAnalysis,
   fetchCustomerNewCustomersMonthly,
   fetchCustomerPurchaseHistory,
   fetchCustomerRanking,
   fetchCustomerInsights,
-  fetchCustomerTimeline,
+  type CustomerIndividualAnalysisScope,
   type CustomerAnalyticsSummary,
-  type CustomerComparisonItem,
   type CustomerDetailSummary,
   type FinanceDashboardResponse,
   type CustomerNewCustomersMonthlyResponse,
@@ -57,6 +56,8 @@ const DEMO_PREVIOUS_REVENUE_FACTOR = 0.92;
 const REVENUE_CHART_STROKE = "#f43f5e";
 const REVENUE_CHART_GRID = "rgba(148, 163, 184, 0.12)";
 const FINANCE_PAGE_SIZE = 20;
+const HISTORY_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "historical";
+const CURRENT_FILTERS_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "current";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value ?? 0);
@@ -84,16 +85,35 @@ function formatTimelineMetricValue(value: number, metric: CustomerTimelineRespon
   return formatKpiCompactNumber(value);
 }
 
-function describeTimelineGranularity(granularity: CustomerTimelineResponse["granularity"]): string {
-  if (granularity === "daily") return "dia";
+function describeTimelineGranularity(granularity: CustomerTimelineResponse["granularity"] | "weekly" | "monthly"): string {
   if (granularity === "weekly") return "semana";
   return "mês";
 }
 
-function describeTimelineGranularityPlural(granularity: CustomerTimelineResponse["granularity"]): string {
-  if (granularity === "daily") return "dias";
+function describeTimelineGranularityPlural(granularity: CustomerTimelineResponse["granularity"] | "weekly" | "monthly"): string {
   if (granularity === "weekly") return "semanas";
   return "meses";
+}
+
+function buildAnalysisNarrative(
+  trendLabel: ReturnType<typeof buildCustomerPeriodTrend>["trendLabel"],
+  granularity: "weekly" | "monthly",
+  scope: CustomerIndividualAnalysisScope,
+): string {
+  const periodLabel = scope === HISTORY_ANALYSIS_SCOPE ? "Nos últimos 12 meses" : "No período filtrado";
+  if (trendLabel === "Crescendo") {
+    return `${periodLabel}, o cliente apresentou tendência de crescimento, com avanço consistente por ${describeTimelineGranularityPlural(granularity)}.`;
+  }
+
+  if (trendLabel === "Caindo") {
+    return `${periodLabel}, o cliente apresentou retração e pede acompanhamento mais próximo da frequência e do faturamento.`;
+  }
+
+  if (trendLabel === "Estável") {
+    return `${periodLabel}, o cliente manteve comportamento estável, sem oscilações relevantes entre os ${describeTimelineGranularityPlural(granularity)} analisados.`;
+  }
+
+  return `${periodLabel}, ainda não há base comparável suficiente para interpretar a evolução do cliente.`;
 }
 
 const DEMO_CUSTOMER_SUMMARY: CustomerAnalyticsSummary = {
@@ -151,38 +171,6 @@ function makeDemoFinanceDashboard(): FinanceDashboardResponse {
     pageSize: FINANCE_PAGE_SIZE,
     totalItems: DEMO_CUSTOMER_RANKING.length,
     totalPages: 1,
-  };
-}
-
-function canComparePeriod(item: CustomerComparisonItem): boolean {
-  return item.previousValue > 0 && item.variationPercent != null && !Number.isNaN(item.variationPercent);
-}
-
-function resolveComparisonTone(value: number): {
-  label: string;
-  className: string;
-  icon: typeof ArrowUpRight;
-} {
-  if (value > 0.05) {
-    return {
-      label: "Crescimento",
-      className: "border-[var(--success)]/30 bg-[var(--success)]/10 text-[var(--success)]",
-      icon: ArrowUpRight,
-    };
-  }
-
-  if (value < -0.05) {
-    return {
-      label: "Queda",
-      className: "border-[var(--danger)]/30 bg-[var(--danger)]/10 text-[var(--danger)]",
-      icon: ArrowDownRight,
-    };
-  }
-
-  return {
-    label: "Estável",
-    className: "border-border bg-muted/50 text-muted-foreground",
-    icon: Minus,
   };
 }
 
@@ -269,12 +257,12 @@ function ClientesPage() {
   const [detailsMessage, setDetailsMessage] = useState("");
   const [details, setDetails] = useState<CustomerDetailSummary | null>(null);
   const [timeline, setTimeline] = useState<CustomerTimelineResponse | null>(null);
-  const [comparison, setComparison] = useState<CustomerComparisonItem[]>([]);
   const [insights, setInsights] = useState<CustomerInsightsResponse | null>(null);
   const [history, setHistory] = useState<CustomerPurchaseHistoryResponse | null>(null);
   const [historyPage, setHistoryPage] = useState(1);
-  const [timelineGranularity, setTimelineGranularity] = useState<"daily" | "weekly" | "monthly">("monthly");
-  const [timelineMetric, setTimelineMetric] = useState<"revenue" | "quantity" | "weight" | "orders">("revenue");
+  const [analysisScope, setAnalysisScope] = useState<CustomerIndividualAnalysisScope>(HISTORY_ANALYSIS_SCOPE);
+  const [resolvedAnalysisPeriod, setResolvedAnalysisPeriod] = useState<{ periodStart: string; periodEnd: string } | null>(null);
+  const [timelineMetric, setTimelineMetric] = useState<"revenue" | "quantity" | "weight" | "orders" | "averageTicket">("revenue");
   const [newCustomersOpen, setNewCustomersOpen] = useState(false);
   const [newCustomersLoading, setNewCustomersLoading] = useState(false);
   const [newCustomersMessage, setNewCustomersMessage] = useState("");
@@ -335,10 +323,13 @@ function ClientesPage() {
     },
     [timeline, timelineMetric, insights?.predictedRevenue],
   );
-  const comparablePeriods = useMemo(() => comparison.filter(canComparePeriod), [comparison]);
   const periodTrendSummary = useMemo(
     () => buildCustomerPeriodTrend(timeline?.points ?? []),
     [timeline],
+  );
+  const analysisNarrative = useMemo(
+    () => buildAnalysisNarrative(periodTrendSummary.trendLabel, timeline?.granularity ?? "monthly", analysisScope),
+    [analysisScope, periodTrendSummary.trendLabel, timeline?.granularity],
   );
 
   async function load(targetPage: number) {
@@ -384,33 +375,47 @@ function ClientesPage() {
     }
   }
 
-  async function loadCustomerDetails(customerId: string, targetHistoryPage = 1, granularity = timelineGranularity, metric = timelineMetric) {
+  async function loadCustomerDetails(customerId: string, targetHistoryPage = 1, scope = analysisScope, metric = timelineMetric) {
     setDetailsLoading(true);
     setDetailsMessage("");
     try {
-      const [summaryData, timelineData, comparisonData, historyData, insightsData] = await Promise.allSettled([
-        fetchCustomerDetailsSummary({ customerId, dateFrom, dateTo }),
-        fetchCustomerTimeline({ customerId, dateFrom, dateTo, granularity, metric }),
-        fetchCustomerComparison({ customerId, referenceDate: dateTo }),
-        fetchCustomerPurchaseHistory({ customerId, dateFrom, dateTo, page: targetHistoryPage, pageSize: 10 }),
+      const [analysisData, insightsData] = await Promise.allSettled([
+        fetchCustomerIndividualAnalysis({
+          customerId,
+          scope,
+          metric,
+          dateFrom: scope === CURRENT_FILTERS_ANALYSIS_SCOPE ? dateFrom : undefined,
+          dateTo: scope === CURRENT_FILTERS_ANALYSIS_SCOPE ? dateTo : undefined,
+        }),
         fetchCustomerInsights({ customerId, movingAverageWindowMonths: 3 }),
       ]);
 
-      if (summaryData.status === "rejected") {
-        throw summaryData.reason;
+      if (analysisData.status === "rejected") {
+        throw analysisData.reason;
       }
 
-      setDetails(summaryData.value);
-      setTimeline(timelineData.status === "fulfilled" ? timelineData.value : null);
-      setComparison(comparisonData.status === "fulfilled" ? comparisonData.value.items : []);
+      const analysis = analysisData.value;
+      setDetails(analysis.summary);
+      setTimeline({
+        granularity: analysis.granularity,
+        metric: analysis.metric,
+        points: analysis.points,
+      });
+      setResolvedAnalysisPeriod({ periodStart: analysis.periodStart, periodEnd: analysis.periodEnd });
+
+      const historyData = await fetchCustomerPurchaseHistory({
+        customerId,
+        dateFrom: analysis.periodStart,
+        dateTo: analysis.periodEnd,
+        page: targetHistoryPage,
+        pageSize: 10,
+      });
+
       setInsights(insightsData.status === "fulfilled" ? insightsData.value : null);
-      setHistory(historyData.status === "fulfilled" ? historyData.value : { page: targetHistoryPage, pageSize: 10, totalItems: 0, items: [] });
+      setHistory(historyData);
       setHistoryPage(targetHistoryPage);
 
       const partialErrors: string[] = [];
-      if (timelineData.status === "rejected") partialErrors.push("evolução temporal");
-      if (comparisonData.status === "rejected") partialErrors.push("comparativo");
-      if (historyData.status === "rejected") partialErrors.push("histórico");
       if (insightsData.status === "rejected") partialErrors.push("insights");
       if (partialErrors.length > 0) {
         setDetailsMessage(`Alguns blocos não carregaram (${partialErrors.join(", ")}), mas o resumo do cliente foi exibido.`);
@@ -428,8 +433,13 @@ function ClientesPage() {
 
   useEffect(() => {
     if (!selectedCustomerId || !detailsOpen) return;
-    void loadCustomerDetails(selectedCustomerId, 1, timelineGranularity, timelineMetric);
-  }, [timelineGranularity, timelineMetric]);
+    void loadCustomerDetails(selectedCustomerId, 1, analysisScope, timelineMetric);
+  }, [analysisScope, timelineMetric]);
+
+  useEffect(() => {
+    if (!selectedCustomerId || !detailsOpen || analysisScope !== CURRENT_FILTERS_ANALYSIS_SCOPE) return;
+    void loadCustomerDetails(selectedCustomerId, 1, analysisScope, timelineMetric);
+  }, [analysisScope, dateFrom, dateTo, selectedCustomerId, detailsOpen, timelineMetric]);
 
   useEffect(() => {
     if (!detailsOpen && !newCustomersOpen) return;
@@ -438,7 +448,7 @@ function ClientesPage() {
       window.setTimeout(() => window.dispatchEvent(new Event("resize")), 180),
     ];
     return () => timers.forEach((timerId) => window.clearTimeout(timerId));
-  }, [detailsOpen, newCustomersOpen, timelineGranularity, timelineMetric, newCustomersMonthly?.points.length]);
+  }, [detailsOpen, newCustomersOpen, analysisScope, timelineMetric, newCustomersMonthly?.points.length]);
 
   useEffect(() => {
     if (!cliente) {
@@ -450,7 +460,7 @@ function ClientesPage() {
     if (cliente === selectedCustomerId && detailsOpen) return;
     setSelectedCustomerId(cliente);
     setDetailsOpen(true);
-    void loadCustomerDetails(cliente, 1);
+    void loadCustomerDetails(cliente, 1, analysisScope);
   }, [cliente]);
 
   function handleSubmit(e: FormEvent) {
@@ -780,12 +790,39 @@ function ClientesPage() {
               </Card>
 
               <section className="space-y-3">
+                <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4">
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Escopo da análise</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {analysisScope === HISTORY_ANALYSIS_SCOPE
+                        ? "Histórico do cliente nos últimos 12 meses, ignorando os demais filtros operacionais."
+                        : "Mesmo recorte aplicado hoje na tela principal."}
+                    </p>
+                  </div>
+                  <RadioGroup value={analysisScope} onValueChange={(value) => setAnalysisScope(value as CustomerIndividualAnalysisScope)} className="gap-3">
+                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/70 p-3">
+                      <RadioGroupItem value={HISTORY_ANALYSIS_SCOPE} id="analysis-scope-history" className="mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Histórico do cliente</p>
+                        <p className="text-xs text-muted-foreground">Cliente + últimos 12 meses, com agrupamento automático.</p>
+                      </div>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/70 p-3">
+                      <RadioGroupItem value={CURRENT_FILTERS_ANALYSIS_SCOPE} id="analysis-scope-current" className="mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Respeitar filtros atuais</p>
+                        <p className="text-xs text-muted-foreground">Mantém o recorte operacional atual da página.</p>
+                      </div>
+                    </label>
+                  </RadioGroup>
+                </div>
+
                 <div className="flex items-center gap-2 px-0.5">
                   <DollarSign className="h-4 w-4 text-primary" />
                   <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Indicadores financeiros</h4>
                 </div>
                 <div className="metric-row">
-                  <KpiCard className="border-primary/25 bg-gradient-to-b from-surface to-muted/35" title="Faturamento total" value={formatKpiCompactCurrency(details.totalRevenue)} valueTooltip={formatCurrency(details.totalRevenue)} showPercentageChange={false} icon={DollarSign} periodLabel="Faturamento acumulado no período selecionado" />
+                  <KpiCard className="border-primary/25 bg-gradient-to-b from-surface to-muted/35" title="Faturamento total" value={formatKpiCompactCurrency(details.totalRevenue)} valueTooltip={formatCurrency(details.totalRevenue)} showPercentageChange={false} icon={DollarSign} periodLabel={analysisScope === HISTORY_ANALYSIS_SCOPE ? "Faturamento acumulado nos últimos 12 meses" : "Faturamento acumulado no período selecionado"} />
                   <KpiCard className="border-primary/20 bg-gradient-to-b from-surface to-muted/30" title="Ticket médio" value={formatNullableCurrency(details.averageTicket, formatKpiCompactCurrency)} valueTooltip={formatNullableCurrencyTooltip(details.averageTicket, formatCurrency)} showPercentageChange={false} icon={Receipt} periodLabel="Faturamento total dividido pelo total de pedidos" />
                   <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Média mensal" value={formatNullableCurrency(details.averageRevenueMonthly, formatKpiCompactCurrency)} valueTooltip={formatNullableCurrencyTooltip(details.averageRevenueMonthly, formatCurrency)} showPercentageChange={false} icon={CalendarClock} periodLabel="Média das receitas por meses com compra no período" />
                   <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Média semanal" value={formatNullableCurrency(details.averageRevenueWeekly, formatKpiCompactCurrency)} valueTooltip={formatNullableCurrencyTooltip(details.averageRevenueWeekly, formatCurrency)} showPercentageChange={false} icon={CalendarClock} periodLabel="Média das receitas por semanas com compra no período" />
@@ -809,22 +846,21 @@ function ClientesPage() {
                 <CardHeader className="pb-2">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <CardTitle>Evolução temporal</CardTitle>
-                    <div className="flex flex-wrap gap-2">
-                      <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={timelineGranularity} onChange={(e) => setTimelineGranularity(e.target.value as any)}>
-                        <option value="daily">Diário</option>
-                        <option value="weekly">Semanal</option>
-                        <option value="monthly">Mensal</option>
-                      </select>
-                      <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={timelineMetric} onChange={(e) => setTimelineMetric(e.target.value as any)}>
-                        <option value="revenue">Faturamento</option>
-                        <option value="quantity">Quantidade</option>
-                        <option value="weight">Peso</option>
-                        <option value="orders">Pedidos</option>
-                      </select>
-                    </div>
+                    <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={timelineMetric} onChange={(e) => setTimelineMetric(e.target.value as any)}>
+                      <option value="revenue">Faturamento</option>
+                      <option value="orders">Quantidade de pedidos</option>
+                      <option value="quantity">Quantidade comprada</option>
+                      <option value="averageTicket">Ticket médio</option>
+                    </select>
                   </div>
                 </CardHeader>
                 <CardContent className="pb-5">
+                  {resolvedAnalysisPeriod && (
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      {analysisScope === HISTORY_ANALYSIS_SCOPE ? "Últimos 12 meses" : "Período filtrado"}: {formatDate(resolvedAnalysisPeriod.periodStart)} até {formatDate(resolvedAnalysisPeriod.periodEnd)}.
+                      {" "}Agrupamento automático por {describeTimelineGranularity(timeline?.granularity ?? "monthly")}.
+                    </p>
+                  )}
                   {!timeline && <p className="text-sm text-muted-foreground">Dados insuficientes para evolução temporal neste período.</p>}
                   {timeline && timeline.points.length === 0 && <p className="text-sm text-muted-foreground">Sem pontos para o período selecionado.</p>}
                   {timeline && timeline.points.length > 0 && (
@@ -889,9 +925,7 @@ function ClientesPage() {
                         />
                       </div>
                       <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-                        {periodTrendSummary.trendLabel === "Sem base"
-                          ? "Use um período com mais pontos no gráfico para entender se o cliente está subindo, caindo ou estável ao longo do tempo."
-                          : `Neste período, o cliente ficou ${periodTrendSummary.trendLabel.toLowerCase()}, com média de ${periodTrendSummary.averageChangePercent == null ? "sem comparação mês a mês suficiente" : `${formatVariationPercent(periodTrendSummary.averageChangePercent)} por ${describeTimelineGranularity(timeline.granularity)}`}.`}
+                        {analysisNarrative}
                       </div>
                     </div>
                   )}
@@ -905,69 +939,6 @@ function ClientesPage() {
                       <Line dataKey="predictedValue" name="Previsão" type="monotone" stroke="var(--color-forecast)" strokeWidth={2.4} dot={{ r: 3 }} strokeDasharray="6 6" connectNulls />
                     </LineChart>
                   </ChartContainer>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/80 bg-card/95">
-                <CardHeader>
-                  <div className="flex flex-col gap-1">
-                    <CardTitle>Comparativo de períodos</CardTitle>
-                    <p className="text-sm text-muted-foreground">Faturamento atual comparado com a base anterior equivalente.</p>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {comparablePeriods.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-                      Dados insuficientes para comparação
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-                      {comparison.map((item) => {
-                        const isComparable = canComparePeriod(item);
-                        const tone = isComparable ? resolveComparisonTone(item.variationPercent ?? 0) : null;
-                        const Icon = tone?.icon ?? Minus;
-
-                        return (
-                          <div key={item.label} className="rounded-lg border border-border bg-surface p-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {isComparable ? "Comparação com período anterior" : "Base anterior indisponível"}
-                                </p>
-                              </div>
-                              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${tone?.className ?? "border-border bg-muted/50 text-muted-foreground"}`}>
-                                <Icon className="h-3.5 w-3.5" />
-                                {isComparable ? tone?.label : "Sem dados"}
-                              </span>
-                            </div>
-
-                            {isComparable ? (
-                              <div className="mt-4 space-y-4">
-                                <p className={`text-3xl font-display tracking-tight ${tone?.className.includes("danger") ? "text-[var(--danger)]" : tone?.className.includes("success") ? "text-[var(--success)]" : "text-foreground"}`}>
-                                  {formatVariationPercent(item.variationPercent)}
-                                </p>
-                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                  <div className="rounded-md bg-muted/40 p-3">
-                                    <p className="text-xs text-muted-foreground">Atual</p>
-                                    <p className="mt-1 font-semibold">{formatCurrency(item.currentValue)}</p>
-                                  </div>
-                                  <div className="rounded-md bg-muted/40 p-3">
-                                    <p className="text-xs text-muted-foreground">Anterior</p>
-                                    <p className="mt-1 font-semibold">{formatCurrency(item.previousValue)}</p>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">
-                                Dados insuficientes para comparação
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </CardContent>
               </Card>
 
@@ -992,7 +963,7 @@ function ClientesPage() {
                     <TableBody>
                       {(history?.items ?? []).length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={8} className="py-6 text-center text-muted-foreground">Sem compras para o período selecionado.</TableCell>
+                          <TableCell colSpan={8} className="py-6 text-center text-muted-foreground">Sem compras para o escopo atual da análise.</TableCell>
                         </TableRow>
                       )}
                       {(history?.items ?? []).map((item) => (

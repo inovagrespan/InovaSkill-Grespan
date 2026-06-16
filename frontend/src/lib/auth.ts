@@ -1,3 +1,5 @@
+import { buildGatewayUrl } from "@/lib/api-url";
+
 const TOKEN_STORAGE_KEY = "inovaskill.auth.token";
 const SESSION_STORAGE_KEY = "inovaskill.auth.session";
 const LOGIN_PATH = "/login";
@@ -26,8 +28,6 @@ type TokenResponse = {
   token?: string;
   Token?: string;
 };
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
 
 function getFetch(): typeof fetch {
   if (typeof window !== "undefined" && typeof window.fetch === "function") {
@@ -162,7 +162,7 @@ async function parseAuthError(response: Response, fallbackMessage: string): Prom
 }
 
 export async function login(input: LoginInput): Promise<string> {
-  const response = await getFetch()(`${API_URL}/login`, {
+  const response = await getFetch()(buildGatewayUrl("login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -183,7 +183,7 @@ export async function login(input: LoginInput): Promise<string> {
 }
 
 export async function registerUser(input: RegisterInput): Promise<void> {
-  const response = await getFetch()(`${API_URL}/register`, {
+  const response = await getFetch()(buildGatewayUrl("register"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

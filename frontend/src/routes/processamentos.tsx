@@ -23,6 +23,7 @@ import {
 } from "@/lib/importer-api";
 import { clampProgressPercent, stageStatusLabel } from "@/lib/importer-progress";
 import { isCurrentUserAdmin } from "@/lib/auth";
+import { buildServiceUrl } from "@/lib/api-url";
 
 export const Route = createFileRoute("/processamentos")({
   beforeLoad: () => {
@@ -445,7 +446,7 @@ function ProcessamentosPage() {
 }
 
 function JobDetails({ details, onRetry, onCancel }: { details: ProcessingJobDetails; onRetry: () => void; onCancel: () => void }) {
-  const logUrl = `${import.meta.env.VITE_API_URL ?? "http://localhost:5279"}/api/processing-monitoring/jobs/${details.job.id}/logs/download`;
+  const logUrl = buildServiceUrl(`api/processing-monitoring/jobs/${details.job.id}/logs/download`);
   return (
     <div className="max-h-[75vh] space-y-4 overflow-auto pr-1">
       <div className="metric-row">
