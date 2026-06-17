@@ -404,7 +404,7 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
             .Select(x => new CustomerPurchaseHistoryItemDto(
                 x.TransactionDate,
                 x.DocumentNumber,
-                $"{x.ProductCode} - {x.ProductDescription}",
+                x.ProductDescription,
                 x.Quantity,
                 x.UnitPrice,
                 x.TotalAmount,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FeedbackMessage } from "@/components/ui/feedback-message";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,10 +46,6 @@ import {
 } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
-export const Route = createFileRoute("/vendas")({
-  component: VendasPage,
-});
-
 type PeriodPreset = "today" | "week" | "month" | "quarter" | "year" | "custom";
 type ViewMode = "invoices" | "items";
 type SalesCachedData = {
@@ -85,7 +81,7 @@ const SALES_STATE_STORAGE_KEY = "inovaskill:vendas:state:v2";
 const SALES_CACHE_TTL_MS = 60_000;
 const SALES_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]";
 const SALES_CHART_CARD_CLASS_NAME = "sales-chart-card overflow-hidden border-border/80 bg-card/95 shadow-sm hover:translate-y-0 hover:border-border/80 hover:shadow-sm";
-const SALES_CHART_SELECT_CLASS_NAME = "h-9 rounded-[var(--dashboard-control-radius)] border border-[var(--sales-chart-select-border)] bg-[var(--sales-chart-select-bg)] px-3 text-sm text-[var(--sales-chart-title)] shadow-xs outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-ring/40";
+const SALES_CHART_SELECT_CLASS_NAME = "h-9 rounded-lg border border-border bg-surface px-3 text-sm text-foreground shadow-xs outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-ring/40";
 const SALES_ANALYTICS_PANEL_CLASS_NAME = "rounded-[var(--dashboard-panel-radius)] border border-border/70 bg-[var(--surface-soft)]/70 p-4";
 const SALES_CHART_EMPTY_STATE_CLASS_NAME = "flex h-[var(--dashboard-chart-height)] items-center justify-center rounded-[var(--dashboard-panel-radius)] border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground";
 const SALES_GRID_STROKE = "var(--sales-chart-grid)";
@@ -272,7 +268,7 @@ function buildFriendlyError(error: unknown): string {
   return "Não foi possível carregar os dados de vendas.";
 }
 
-function VendasPage() {
+export function VendasPage({ embedded }: { embedded?: boolean } = {}) {
   const defaultPeriod = resolveLastThreeMonthsPeriod();
   const persistedState = useMemo(() => readPersistedSalesState(defaultPeriod), [defaultPeriod.dateFrom, defaultPeriod.dateTo]);
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(persistedState.periodPreset);
@@ -528,17 +524,8 @@ function VendasPage() {
   }, [periodPreset, dateFrom, dateTo, customerName, productCodeInput, documentNumberInput, city, companyName, productGroup, transactionType, advancedOpen, viewMode, trendMetric, rankingMetric, invoicePage, page]);
 
   return (
-    <div className="page-shell space-y-8">
-      <header className="animate-soft-enter space-y-5">
-        <div className="max-w-3xl">
-          <span className="page-header-kicker">Smart Core / Vendas</span>
-          <h1 className="mt-2 text-3xl font-display tracking-tight text-foreground md:text-4xl">Vendas</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Dashboard analítico para acompanhar emissão, composição e impacto das notas fiscais filtradas.
-          </p>
-        </div>
-
-        <section className="space-y-4 rounded-xl border border-border/80 bg-surface/95 p-4 shadow-xs">
+    <div className={embedded ? "space-y-4" : "page-shell"}>
+      <section className="space-y-4 rounded-xl border border-border/80 bg-surface/95 p-4 shadow-xs">
           <div className="flex flex-wrap gap-2">
             {periodOptions.map((option) => (
               <Button
@@ -605,12 +592,9 @@ function VendasPage() {
             </div>
           )}
         </section>
-      </header>
 
       {message && (
-        <Alert variant="destructive" className="animate-soft-enter">
-          <AlertDescription>{message}</AlertDescription>
-        </Alert>
+        <FeedbackMessage message={message} type="error" onDismiss={() => setMessage("")} />
       )}
 
       <section className="metric-row">
@@ -765,10 +749,12 @@ function VendasPage() {
                       dataKey="companyName"
                       interval={0}
                       tick={{ fill: SALES_AXIS_COLOR, fontSize: 10 }}
-                      tickFormatter={(value) => String(value).length > 12 ? `${String(value).slice(0, 12)}...` : String(value)}
+                      tickFormatter={(value) => String(value).length > 14 ? `${String(value).slice(0, 14)}...` : String(value)}
                       tickLine={false}
                       axisLine={false}
-                      height={38}
+                      height={50}
+                      angle={-20}
+                      textAnchor="end"
                     />
                     <YAxis
                       width={76}
@@ -999,9 +985,9 @@ function InvoiceTable({
               <TableCell>{invoice.customerName}</TableCell>
               <TableCell>{formatDate(invoice.transactionDate)}</TableCell>
               <TableCell>{formatCurrency(invoice.totalAmount)}</TableCell>
-              <TableCell>{formatDecimal(invoice.totalItems)}</TableCell>
-              <TableCell>{formatDecimal(invoice.totalQuantity)}</TableCell>
-              <TableCell>{formatDecimal(invoice.totalWeightKg)}</TableCell>
+              <TableCell>{formatDecimal(invoice.totalItems)} itens</TableCell>
+              <TableCell>{formatDecimal(invoice.totalQuantity)} un</TableCell>
+               <TableCell>{formatDecimal(invoice.totalWeightKg)} kg</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -1043,9 +1029,9 @@ function InvoiceDetailsDialog({
               <InvoiceInfo label="Cliente" value={details.customerName} />
               <InvoiceInfo label="Data da compra" value={formatDate(details.transactionDate)} />
               <InvoiceInfo label="Total da nota" value={formatCurrency(details.totalAmount)} />
-              <InvoiceInfo label="Quantidade total" value={formatDecimal(details.totalQuantity)} />
+              <InvoiceInfo label="Quantidade total" value={`${formatDecimal(details.totalQuantity)} un`} />
               <InvoiceInfo label="Peso total" value={`${formatDecimal(details.totalWeightKg)} kg`} />
-              <InvoiceInfo label="Itens na nota" value={String(details.totalItems)} />
+              <InvoiceInfo label="Itens na nota" value={`${details.totalItems} itens`} />
               <InvoiceInfo label="Operação" value={details.transactionType || "-"} />
             </div>
 
@@ -1067,8 +1053,8 @@ function InvoiceDetailsDialog({
                       <TableRow key={item.id}>
                         <TableCell>{index + 1}</TableCell>
                         <TableCell>{item.productCode} - {item.productDescription}</TableCell>
-                        <TableCell>{formatDecimal(item.quantity)}</TableCell>
-                        <TableCell>{formatDecimal(item.grossWeightKg)}</TableCell>
+                         <TableCell>{formatDecimal(item.quantity)} un</TableCell>
+                         <TableCell>{formatDecimal(item.grossWeightKg)} kg</TableCell>
                         <TableCell>{formatCurrency(item.totalAmount)}</TableCell>
                       </TableRow>
                     ))}
@@ -1121,8 +1107,8 @@ function ItemsTable({ loading, items, page, totalPages, onPrevious, onNext }: { 
             <TableRow key={item.id} className="animate-soft-enter">
               <TableCell>{item.documentNumber}</TableCell>
               <TableCell>{item.productCode} - {item.productDescription}</TableCell>
-              <TableCell>{formatDecimal(item.quantity)}</TableCell>
-              <TableCell>{formatDecimal(item.grossWeightKg)}</TableCell>
+               <TableCell>{formatDecimal(item.quantity)} un</TableCell>
+               <TableCell>{formatDecimal(item.grossWeightKg)} kg</TableCell>
               <TableCell>{formatCurrency(item.totalAmount)}</TableCell>
             </TableRow>
           ))}

@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VendasRouteImport } from './routes/vendas'
 import { Route as SimulacaoRouteImport } from './routes/simulacao'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as ProdutosRouteImport } from './routes/produtos'
@@ -20,15 +19,12 @@ import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as FinancasRouteImport } from './routes/financas'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LogisticaIndexRouteImport } from './routes/logistica.index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
+import { Route as LogisticaMapaRouteImport } from './routes/logistica.mapa'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
 import { Route as ClientesAnaliseComercialRouteImport } from './routes/clientes.analise-comercial'
 
-const VendasRoute = VendasRouteImport.update({
-  id: '/vendas',
-  path: '/vendas',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SimulacaoRoute = SimulacaoRouteImport.update({
   id: '/simulacao',
   path: '/simulacao',
@@ -79,10 +75,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LogisticaIndexRoute = LogisticaIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LogisticaRoute,
+} as any)
 const ImportacoesIndexRoute = ImportacoesIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ImportacoesRoute,
+} as any)
+const LogisticaMapaRoute = LogisticaMapaRouteImport.update({
+  id: '/mapa',
+  path: '/mapa',
+  getParentRoute: () => LogisticaRoute,
 } as any)
 const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
   id: '/files',
@@ -102,30 +108,31 @@ export interface FileRoutesByFullPath {
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
-  '/logistica': typeof LogisticaRoute
+  '/logistica': typeof LogisticaRouteWithChildren
   '/processamentos': typeof ProcessamentosRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/simulacao': typeof SimulacaoRoute
-  '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
+  '/logistica/mapa': typeof LogisticaMapaRoute
   '/importacoes/': typeof ImportacoesIndexRoute
+  '/logistica/': typeof LogisticaIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRouteWithChildren
   '/financas': typeof FinancasRoute
   '/login': typeof LoginRoute
-  '/logistica': typeof LogisticaRoute
   '/processamentos': typeof ProcessamentosRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/simulacao': typeof SimulacaoRoute
-  '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
+  '/logistica/mapa': typeof LogisticaMapaRoute
   '/importacoes': typeof ImportacoesIndexRoute
+  '/logistica': typeof LogisticaIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -134,15 +141,16 @@ export interface FileRoutesById {
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
-  '/logistica': typeof LogisticaRoute
+  '/logistica': typeof LogisticaRouteWithChildren
   '/processamentos': typeof ProcessamentosRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/simulacao': typeof SimulacaoRoute
-  '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
+  '/logistica/mapa': typeof LogisticaMapaRoute
   '/importacoes/': typeof ImportacoesIndexRoute
+  '/logistica/': typeof LogisticaIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -157,25 +165,26 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/relatorios'
     | '/simulacao'
-    | '/vendas'
     | '/clientes/analise-comercial'
     | '/importacoes/files'
+    | '/logistica/mapa'
     | '/importacoes/'
+    | '/logistica/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/clientes'
     | '/financas'
     | '/login'
-    | '/logistica'
     | '/processamentos'
     | '/produtos'
     | '/relatorios'
     | '/simulacao'
-    | '/vendas'
     | '/clientes/analise-comercial'
     | '/importacoes/files'
+    | '/logistica/mapa'
     | '/importacoes'
+    | '/logistica'
   id:
     | '__root__'
     | '/'
@@ -188,10 +197,11 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/relatorios'
     | '/simulacao'
-    | '/vendas'
     | '/clientes/analise-comercial'
     | '/importacoes/files'
+    | '/logistica/mapa'
     | '/importacoes/'
+    | '/logistica/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -200,23 +210,15 @@ export interface RootRouteChildren {
   FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LoginRoute: typeof LoginRoute
-  LogisticaRoute: typeof LogisticaRoute
+  LogisticaRoute: typeof LogisticaRouteWithChildren
   ProcessamentosRoute: typeof ProcessamentosRoute
   ProdutosRoute: typeof ProdutosRoute
   RelatoriosRoute: typeof RelatoriosRoute
   SimulacaoRoute: typeof SimulacaoRoute
-  VendasRoute: typeof VendasRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/vendas': {
-      id: '/vendas'
-      path: '/vendas'
-      fullPath: '/vendas'
-      preLoaderRoute: typeof VendasRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/simulacao': {
       id: '/simulacao'
       path: '/simulacao'
@@ -287,12 +289,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/logistica/': {
+      id: '/logistica/'
+      path: '/'
+      fullPath: '/logistica/'
+      preLoaderRoute: typeof LogisticaIndexRouteImport
+      parentRoute: typeof LogisticaRoute
+    }
     '/importacoes/': {
       id: '/importacoes/'
       path: '/'
       fullPath: '/importacoes/'
       preLoaderRoute: typeof ImportacoesIndexRouteImport
       parentRoute: typeof ImportacoesRoute
+    }
+    '/logistica/mapa': {
+      id: '/logistica/mapa'
+      path: '/mapa'
+      fullPath: '/logistica/mapa'
+      preLoaderRoute: typeof LogisticaMapaRouteImport
+      parentRoute: typeof LogisticaRoute
     }
     '/importacoes/files': {
       id: '/importacoes/files'
@@ -337,18 +353,31 @@ const ImportacoesRouteWithChildren = ImportacoesRoute._addFileChildren(
   ImportacoesRouteChildren,
 )
 
+interface LogisticaRouteChildren {
+  LogisticaMapaRoute: typeof LogisticaMapaRoute
+  LogisticaIndexRoute: typeof LogisticaIndexRoute
+}
+
+const LogisticaRouteChildren: LogisticaRouteChildren = {
+  LogisticaMapaRoute: LogisticaMapaRoute,
+  LogisticaIndexRoute: LogisticaIndexRoute,
+}
+
+const LogisticaRouteWithChildren = LogisticaRoute._addFileChildren(
+  LogisticaRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ClientesRoute: ClientesRouteWithChildren,
   FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LoginRoute: LoginRoute,
-  LogisticaRoute: LogisticaRoute,
+  LogisticaRoute: LogisticaRouteWithChildren,
   ProcessamentosRoute: ProcessamentosRoute,
   ProdutosRoute: ProdutosRoute,
   RelatoriosRoute: RelatoriosRoute,
   SimulacaoRoute: SimulacaoRoute,
-  VendasRoute: VendasRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

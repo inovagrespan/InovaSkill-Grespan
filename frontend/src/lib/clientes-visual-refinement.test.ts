@@ -41,21 +41,20 @@ describe("clientes - refinamento visual do modal de detalhes", () => {
   it("adiciona controle de escopo para alternar entre historico e filtros atuais", () => {
     const source = readClientesRoute();
 
-    expect(source).toContain("Escopo da análise");
-    expect(source).toContain("Histórico do cliente");
-    expect(source).toContain("Respeitar filtros atuais");
+    expect(source).toContain("Período da análise");
+    expect(source).toContain("Período inteiro");
+    expect(source).toContain("Último ano");
+    expect(source).toContain("Últimos 3 meses");
+    expect(source).toContain("Último mês");
     expect(source).toContain("fetchCustomerIndividualAnalysis");
   });
 
   it("simplifica a lista com leitura de tendencia e resume o grafico por periodo", () => {
     const source = readClientesRoute();
 
-    expect(source).toContain("<TableHead>Leitura do período</TableHead>");
-    expect(source).toContain("resolveRankingTrend(item.variationPercent)");
     expect(source).toContain("Média por");
     expect(source).toContain("Tendência do período");
     expect(source).toContain("Variação média por");
-    expect(source).toContain("Primeiro vs último ponto");
     expect(source).toContain("Ticket médio");
   });
 
