@@ -22,9 +22,10 @@ describe("operational, finance and reports pages", () => {
     expect(helper).toContain("Previsão de faturamento");
     expect(helper).toContain("Atrasos logísticos prováveis");
     expect(helper).toContain("Riscos financeiros");
-    expect(helper).toContain("/vendas?highlight=");
+    expect(helper).toContain("/clientes?aba=nota-fiscal&highlight=");
+    expect(helper).toContain("/clientes?aba=impacto&highlight=");
     expect(helper).toContain("/produtos?highlight=");
-    expect(helper).toContain("/financas?highlight=");
+    expect(helper).toContain("/clientes?aba=projecoes&highlight=");
     expect(helper).toContain("/logistica?highlight=");
   });
 

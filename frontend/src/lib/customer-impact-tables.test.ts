@@ -15,6 +15,7 @@ describe("customer finance impact tables", () => {
     expect(source.match(/Ver todos/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(route).toContain('createFileRoute("/clientes-impacto")');
     expect(route).toContain("Voltar para impacto");
+    expect(route).not.toContain("<TableHead>Atenção</TableHead>");
   });
 
   it("normaliza percentuais e nomes vindos da API antes de exibir impacto", () => {

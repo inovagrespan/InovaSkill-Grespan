@@ -60,9 +60,16 @@ import { VendasPage } from "@/routes/vendas";
 export const Route = createFileRoute("/clientes")({
   validateSearch: (search: Record<string, unknown>) => ({
     cliente: typeof search.cliente === "string" ? search.cliente : undefined,
+    aba: isClientesTab(search.aba) ? search.aba : undefined,
   }),
   component: ClientesPage,
 });
+
+type ClientesTab = "impacto" | "projecoes" | "clientes" | "nota-fiscal";
+
+function isClientesTab(value: unknown): value is ClientesTab {
+  return value === "impacto" || value === "projecoes" || value === "clientes" || value === "nota-fiscal";
+}
 
 const CLIENT_REVENUE_CHART_LIMIT = 8;
 const DEMO_PREVIOUS_REVENUE_FACTOR = 0.92;
@@ -70,7 +77,6 @@ const REVENUE_CHART_STROKE = "#f43f5e";
 const REVENUE_CHART_GRID = "rgba(148, 163, 184, 0.12)";
 const FINANCE_PAGE_SIZE = 20;
 const IMPACT_KPI_CARD_CLASS_NAME = "p-3";
-const IMPACT_KPI_VALUE_CLASS_NAME = "text-base sm:text-lg";
 const HISTORY_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "historical";
 const CURRENT_FILTERS_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "current";
 type CustomerDetailsPeriod = "all" | "1m" | "3m" | "12m";
@@ -257,6 +263,20 @@ function sortDemoCustomers(
   return sorted.sort((a, b) => b.revenue - a.revenue);
 }
 
+function buildRiskCustomerActionSuggestions(customer: any): string[] {
+  const customerName = getImpactCustomerName(customer);
+  const riskLevel = customer.nivelRisco ?? customer.NivelRisco ?? "risco";
+  const declinePeriod = customer.mesesQueda ?? customer.MesesQueda ?? "período recente";
+  const monthlyImpact = formatCurrency(customer.impactoFinanceiro ?? customer.ImpactoFinanceiro ?? 0);
+
+  return [
+    `Priorizar contato comercial com ${customerName} em até 24 horas para entender a causa da queda.`,
+    `Revisar pedidos, frequência e mix dos últimos meses, pois o cliente está em nível ${riskLevel} e acumula ${declinePeriod}.`,
+    `Montar uma oferta de recuperação com condição comercial controlada, limitada ao impacto estimado de ${monthlyImpact}/mês.`,
+    "Agendar acompanhamento semanal até estabilizar faturamento, frequência de compra e margem.",
+  ];
+}
+
 function RevenueAreaChart({
   data,
   gradientId,
@@ -352,7 +372,7 @@ function formatProjectionConfidence(value: number | null | undefined): string {
 
 function ClientesPage() {
   const navigate = useNavigate({ from: "/clientes" });
-  const { cliente } = Route.useSearch();
+  const { cliente, aba } = Route.useSearch();
   const [summary, setSummary] = useState<CustomerAnalyticsSummary | null>(null);
   const [items, setItems] = useState<CustomerRankingItem[]>([]);
   const [financeDashboard, setFinanceDashboard] = useState<FinanceDashboardResponse | null>(null);
@@ -362,9 +382,10 @@ function ClientesPage() {
   const [sortBy, setSortBy] = useState<"revenue" | "growth" | "drop" | "quantity" | "weight" | "ticket">("revenue");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [activeTab, setActiveTab] = useState<"impacto" | "projecoes" | "clientes" | "nota-fiscal">("impacto");
+  const [activeTab, setActiveTab] = useState<ClientesTab>(aba ?? "impacto");
   const [impactoData, setImpactoData] = useState<any>(null);
   const [impactoLoading, setImpactoLoading] = useState(false);
+  const [riskActionCustomer, setRiskActionCustomer] = useState<any | null>(null);
   const [projecoesData, setProjecoesData] = useState<any>(null);
   const [projecoesLoading, setProjecoesLoading] = useState(false);
   const [historicoData, setHistoricoData] = useState<any>(null);
@@ -618,6 +639,14 @@ function ClientesPage() {
   }, [sortBy, dateFrom, dateTo]);
 
   useEffect(() => {
+    if (!aba || aba === activeTab) return;
+    setActiveTab(aba);
+    if (aba === "impacto" && !impactoData && !impactoLoading) void loadImpacto();
+    if (aba === "projecoes" && !projecoesData && !projecoesLoading) void loadProjecoes();
+    if (aba === "clientes" && !historicoData && !historicoLoading) void loadHistorico(1, historicoSortBy);
+  }, [aba]);
+
+  useEffect(() => {
     if (!selectedCustomerId || !detailsOpen) return;
     void loadCustomerDetails(selectedCustomerId, 1, analysisScope, timelineMetric, detailsPeriod);
   }, [analysisScope, timelineMetric, detailsPeriod]);
@@ -718,6 +747,11 @@ function ClientesPage() {
             key={tab}
             onClick={() => {
               setActiveTab(tab);
+              void navigate({
+                to: "/clientes",
+                search: (prev) => ({ ...prev, aba: tab }),
+                replace: true,
+              });
               if (tab === "impacto" && !impactoData && !impactoLoading) void loadImpacto();
               if (tab === "projecoes" && !projecoesData && !projecoesLoading) void loadProjecoes();
               if (tab === "clientes" && !historicoData && !historicoLoading) void loadHistorico(1, historicoSortBy);
@@ -745,11 +779,11 @@ function ClientesPage() {
             <>
               {/* Resumo Executivo */}
               <section className="metric-row">
-                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Maior cliente" value={impactoData.resumo?.maiorClienteNome ?? impactoData.resumo?.maiorCliente ?? "—"} icon={DollarSign} periodLabel={impactoData.resumo?.maiorFaturamento ? formatCurrency(impactoData.resumo.maiorFaturamento) : ""} showPercentageChange={false} loading={false} />
-                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Maior crescimento" value={impactoData.resumo?.maiorCrescimentoNome ?? "—"} icon={TrendingUp} periodLabel={impactoData.resumo?.maiorCrescimentoPct ? `+${impactoData.resumo.maiorCrescimentoPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
-                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Maior queda" value={impactoData.resumo?.maiorQuedaNome ?? "—"} icon={ArrowDownRight} periodLabel={impactoData.resumo?.maiorQuedaPct ? `${impactoData.resumo.maiorQuedaPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
-                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Mais consistente" value={impactoData.resumo?.consistenteNome ?? "—"} icon={Target} periodLabel="" showPercentageChange={false} loading={false} />
-                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Maior potencial" value={impactoData.resumo?.maiorPotencialNome ?? "—"} icon={Target} periodLabel={impactoData.resumo?.maiorPotencialScore ? `Score ${impactoData.resumo.maiorPotencialScore}` : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Maior cliente" value={impactoData.resumo?.maiorClienteNome ?? impactoData.resumo?.maiorCliente ?? "—"} icon={DollarSign} periodLabel={impactoData.resumo?.maiorFaturamento ? formatCurrency(impactoData.resumo.maiorFaturamento) : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Maior crescimento" value={impactoData.resumo?.maiorCrescimentoNome ?? "—"} icon={TrendingUp} periodLabel={impactoData.resumo?.maiorCrescimentoPct ? `+${impactoData.resumo.maiorCrescimentoPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Maior queda" value={impactoData.resumo?.maiorQuedaNome ?? "—"} icon={ArrowDownRight} periodLabel={impactoData.resumo?.maiorQuedaPct ? `${impactoData.resumo.maiorQuedaPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Mais consistente" value={impactoData.resumo?.consistenteNome ?? "—"} icon={Target} periodLabel="" showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Maior potencial" value={impactoData.resumo?.maiorPotencialNome ?? "—"} icon={Target} periodLabel={impactoData.resumo?.maiorPotencialScore ? `Score ${impactoData.resumo.maiorPotencialScore}` : ""} showPercentageChange={false} loading={false} />
               </section>
 
               {/* Alertas */}
@@ -779,7 +813,7 @@ function ClientesPage() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {impactoData.risco?.length > 0 ? sortImpactListByAttention(impactoData.risco, "risco").slice(0, 6).map((c: any) => (
-                      <div key={c.clienteId ?? c.ClienteId ?? getImpactCustomerName(c)} className="flex items-center justify-between text-sm py-1.5 border-b border-border/30 last:border-0">
+                      <div key={c.clienteId ?? c.ClienteId ?? getImpactCustomerName(c)} className="flex items-center justify-between gap-3 text-sm py-1.5 border-b border-border/30 last:border-0">
                         <div className="min-w-0 flex-1">
                           <p className="font-medium truncate">{getImpactCustomerName(c)}</p>
                           <p className="text-xs text-muted-foreground">{c.nivelRisco} · {c.mesesQueda}</p>
@@ -788,6 +822,10 @@ function ClientesPage() {
                           <p className="text-[#B91C1C] font-medium">{formatImpactActionPercent(c, "risco")}</p>
                           <p className="text-xs text-muted-foreground">{formatCurrency(c.impactoFinanceiro)}/mês</p>
                         </div>
+                        <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setRiskActionCustomer(c)}>
+                          <AlertTriangle className="size-4 text-red-600" />
+                          Ações
+                        </Button>
                       </div>
                     )) : <p className="text-sm text-muted-foreground">Nenhum cliente em risco identificado.</p>}
                   </CardContent>
@@ -1226,6 +1264,43 @@ function ClientesPage() {
           <VendasPage embedded />
         </div>
       )}
+
+      <Dialog open={Boolean(riskActionCustomer)} onOpenChange={(open) => !open && setRiskActionCustomer(null)}>
+        <DialogContent className="custom-scrollbar max-h-[85vh] w-[95vw] max-w-2xl overflow-y-auto p-5 pt-8 pr-10 sm:p-6 sm:pt-9 sm:pr-12">
+          <DialogHeader>
+            <DialogTitle>Sugestões de ações</DialogTitle>
+            <DialogDescription>
+              Plano recomendado para sanar o risco de {riskActionCustomer ? getImpactCustomerName(riskActionCustomer) : "cliente"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {riskActionCustomer ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border/70 bg-muted/25 p-3">
+                <p className="text-sm font-semibold">{getImpactCustomerName(riskActionCustomer)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {riskActionCustomer.nivelRisco ?? riskActionCustomer.NivelRisco ?? "Risco"} · {riskActionCustomer.mesesQueda ?? riskActionCustomer.MesesQueda ?? "período recente"} · {formatCurrency(riskActionCustomer.impactoFinanceiro ?? riskActionCustomer.ImpactoFinanceiro ?? 0)}/mês
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {buildRiskCustomerActionSuggestions(riskActionCustomer).map((suggestion, index) => (
+                  <div key={suggestion} className="flex gap-3 rounded-lg border border-border/70 bg-surface p-3 text-sm">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      {index + 1}
+                    </span>
+                    <p>{suggestion}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end">
+                <Button type="button" onClick={() => setRiskActionCustomer(null)}>Entendi</Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={detailsOpen} onOpenChange={handleDetailsOpenChange}>
         <DialogContent className="custom-scrollbar max-h-[90vh] w-[95vw] max-w-6xl overflow-y-auto border-border/80 bg-surface p-4 pt-6 sm:p-6 sm:pt-7 [&>button]:right-3 [&>button]:top-3 [&>button]:inline-flex [&>button]:h-9 [&>button]:w-9 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-md [&>button]:border [&>button]:border-border/70 [&>button]:bg-surface [&>button]:opacity-100 [&>button_svg]:h-4.5 [&>button_svg]:w-4.5 sm:[&>button]:right-4 sm:[&>button]:top-4">

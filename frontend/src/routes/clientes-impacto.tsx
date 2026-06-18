@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   fetchCustomerFinanceImpact,
   formatImpactActionPercent,
-  getImpactAttentionScore,
   getImpactCustomerName,
   getImpactList,
   getImpactListTitle,
@@ -34,10 +33,6 @@ function formatCurrency(value: number | null | undefined): string {
 
 function formatDecimal(value: number | null | undefined): string {
   return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value ?? 0);
-}
-
-function formatAttentionScore(value: number): string {
-  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value);
 }
 
 function ClientesImpactoPage() {
@@ -133,7 +128,6 @@ function RiskTable({ rows }: { rows: any[] }) {
             <TableHead>Cliente</TableHead>
             <TableHead>Nível</TableHead>
             <TableHead>Variação</TableHead>
-            <TableHead>Atenção</TableHead>
             <TableHead>Impacto/mês</TableHead>
             <TableHead>Faturamento 12M</TableHead>
           </TableRow>
@@ -144,7 +138,6 @@ function RiskTable({ rows }: { rows: any[] }) {
               <TableCell className="font-medium">{getImpactCustomerName(customer)}</TableCell>
               <TableCell>{customer.nivelRisco ?? "—"}</TableCell>
               <TableCell>{formatImpactActionPercent(customer, "risco")}</TableCell>
-              <TableCell>{formatAttentionScore(getImpactAttentionScore(customer, "risco"))}</TableCell>
               <TableCell>{formatCurrency(customer.impactoFinanceiro ?? 0)}</TableCell>
               <TableCell>{formatCurrency(customer.faturamento12M ?? customer.Faturamento12M ?? 0)}</TableCell>
             </TableRow>
@@ -164,7 +157,6 @@ function GrowthTable({ rows }: { rows: any[] }) {
             <TableHead>Cliente</TableHead>
             <TableHead>Potencial</TableHead>
             <TableHead>Crescimento</TableHead>
-            <TableHead>Atenção</TableHead>
             <TableHead>Valor gerado</TableHead>
             <TableHead>Faturamento 12M</TableHead>
           </TableRow>
@@ -175,7 +167,6 @@ function GrowthTable({ rows }: { rows: any[] }) {
               <TableCell className="font-medium">{getImpactCustomerName(customer)}</TableCell>
               <TableCell>{customer.potencialFuturo ?? customer.potencial ?? "—"}</TableCell>
               <TableCell>{formatImpactActionPercent(customer, "crescimento", true)}</TableCell>
-              <TableCell>{formatAttentionScore(getImpactAttentionScore(customer, "crescimento"))}</TableCell>
               <TableCell>{formatCurrency(customer.valorGerado ?? 0)}</TableCell>
               <TableCell>{formatCurrency(customer.faturamento12M ?? customer.Faturamento12M ?? 0)}</TableCell>
             </TableRow>
@@ -196,7 +187,6 @@ function OpportunityTable({ rows }: { rows: any[] }) {
             <TableHead>Potencial</TableHead>
             <TableHead>Score</TableHead>
             <TableHead>Crescimento</TableHead>
-            <TableHead>Atenção</TableHead>
             <TableHead>Ticket médio</TableHead>
             <TableHead>Frequência</TableHead>
           </TableRow>
@@ -208,7 +198,6 @@ function OpportunityTable({ rows }: { rows: any[] }) {
               <TableCell>{customer.potencial ?? customer.potencialFuturo ?? "—"}</TableCell>
               <TableCell>{customer.scorePotencial ?? customer.ScorePotencial ?? "—"}</TableCell>
               <TableCell>{formatImpactActionPercent(customer, "oportunidades", true)}</TableCell>
-              <TableCell>{formatAttentionScore(getImpactAttentionScore(customer, "oportunidades"))}</TableCell>
               <TableCell>{formatCurrency(customer.ticketMedioGeral ?? customer.TicketMedioGeral ?? 0)}</TableCell>
               <TableCell>{formatDecimal(customer.frequenciaCompra ?? customer.FrequenciaCompra ?? 0)}</TableCell>
             </TableRow>

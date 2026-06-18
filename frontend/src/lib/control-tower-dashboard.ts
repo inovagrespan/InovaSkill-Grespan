@@ -25,6 +25,10 @@ const statusPriority: Record<ControlTowerStatus, number> = {
   green: 1,
 };
 
+function onlyUrgentCards(cards: ControlTowerCard[]): ControlTowerCard[] {
+  return cards.filter((card) => card.status !== "green");
+}
+
 const scenarios: Record<ControlTowerPeriod, ControlTowerScenario> = {
   today: {
     period: "today",
@@ -38,7 +42,7 @@ const scenarios: Record<ControlTowerPeriod, ControlTowerScenario> = {
         status: "green",
         description: "Receita acima da média recente, com boa tração em notas fiscais.",
         module: "Vendas",
-        href: "/vendas?highlight=revenue-today",
+        href: "/clientes?aba=nota-fiscal&highlight=revenue-today",
       },
       {
         id: "stock-risk-today",
@@ -56,7 +60,16 @@ const scenarios: Record<ControlTowerPeriod, ControlTowerScenario> = {
         status: "green",
         description: "Margem operacional preservada e faturamento suficiente para o ciclo atual.",
         module: "Finanças",
-        href: "/financas?highlight=cash-risk-today",
+        href: "/clientes?aba=projecoes&highlight=cash-risk-today",
+      },
+      {
+        id: "critical-customer-risk-today",
+        title: "Cliente crítico em risco",
+        value: "Supermercado Primavera",
+        status: "red",
+        description: "Cliente com queda recorrente e impacto financeiro relevante; priorizar plano de recuperação comercial.",
+        module: "Finanças",
+        href: "/clientes?aba=impacto&highlight=critical-customer-risk-today",
       },
       {
         id: "route-delay-today",
@@ -90,7 +103,7 @@ const scenarios: Record<ControlTowerPeriod, ControlTowerScenario> = {
         status: "yellow",
         description: "Clientes de conveniência mostram retração prevista nos próximos ciclos de compra.",
         module: "Vendas",
-        href: "/vendas?highlight=demand-drop-7d",
+        href: "/clientes?aba=impacto&highlight=demand-drop-7d",
       },
       {
         id: "revenue-forecast-7d",
@@ -99,7 +112,7 @@ const scenarios: Record<ControlTowerPeriod, ControlTowerScenario> = {
         status: "green",
         description: "Projeção semanal positiva se a reposição dos SKUs críticos for concluída.",
         module: "Finanças",
-        href: "/financas?highlight=revenue-forecast-7d",
+        href: "/clientes?aba=projecoes&highlight=revenue-forecast-7d",
       },
       {
         id: "logistics-delay-7d",
@@ -133,7 +146,7 @@ const scenarios: Record<ControlTowerPeriod, ControlTowerScenario> = {
         status: "green",
         description: "Tendência mensal favorece crescimento se ruptura e logística forem controladas.",
         module: "Vendas",
-        href: "/vendas?highlight=revenue-forecast-30d",
+        href: "/clientes?aba=nota-fiscal&highlight=revenue-forecast-30d",
       },
       {
         id: "finance-risk-30d",
@@ -142,7 +155,7 @@ const scenarios: Record<ControlTowerPeriod, ControlTowerScenario> = {
         status: "yellow",
         description: "Capital em estoque e variação de demanda podem reduzir caixa disponível.",
         module: "Finanças",
-        href: "/financas?highlight=finance-risk-30d",
+        href: "/clientes?aba=projecoes&highlight=finance-risk-30d",
       },
       {
         id: "strategic-logistics-30d",
@@ -158,7 +171,11 @@ const scenarios: Record<ControlTowerPeriod, ControlTowerScenario> = {
 };
 
 export function getControlTowerScenario(period: ControlTowerPeriod): ControlTowerScenario {
-  return scenarios[period];
+  const scenario = scenarios[period];
+  return {
+    ...scenario,
+    cards: onlyUrgentCards(scenario.cards),
+  };
 }
 
 export function sortControlTowerCardsByRisk(cards: ControlTowerCard[]): ControlTowerCard[] {
