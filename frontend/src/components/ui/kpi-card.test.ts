@@ -36,6 +36,7 @@ describe("kpi-card component markup", () => {
     expect(component).toContain("text-ellipsis");
     expect(component).toContain("whitespace-nowrap");
     expect(component).toContain("allowWrapValue");
+    expect(component).toContain("valueClassName");
     expect(component).toContain("whitespace-normal break-words");
     expect(component).toContain("title={valueTooltip ?? value}");
   });

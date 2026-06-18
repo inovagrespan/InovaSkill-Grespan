@@ -25,6 +25,8 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<CustomerSummaryDaily> CustomerSummariesDaily => Set<CustomerSummaryDaily>();
     public DbSet<CustomerSummaryWeekly> CustomerSummariesWeekly => Set<CustomerSummaryWeekly>();
     public DbSet<CustomerSummaryMonthly> CustomerSummariesMonthly => Set<CustomerSummaryMonthly>();
+    public DbSet<ClienteIndicador> ClienteIndicadores => Set<ClienteIndicador>();
+    public DbSet<ClienteForecast> ClienteForecasts => Set<ClienteForecast>();
     public DbSet<ImportFileType> ImportFileTypes => Set<ImportFileType>();
     public DbSet<ImportTemplate> ImportTemplates => Set<ImportTemplate>();
     public DbSet<ImportColumnMapping> ImportColumnMappings => Set<ImportColumnMapping>();
@@ -346,6 +348,47 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.HasIndex(x => new { x.MonthStartDate, x.CustomerName });
             e.HasIndex(x => new { x.SourceFileJobId, x.MonthStartDate, x.CustomerCode, x.City, x.ProductGroup, x.TransactionType })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<ClienteIndicador>(e =>
+        {
+            e.ToTable("ClienteIndicadores");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ClienteId).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Faturamento3M).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Faturamento6M).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Faturamento12M).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Crescimento3M).HasColumnType("decimal(9,2)");
+            e.Property(x => x.Crescimento6M).HasColumnType("decimal(9,2)");
+            e.Property(x => x.Crescimento12M).HasColumnType("decimal(9,2)");
+            e.Property(x => x.MediaMovel3M).HasColumnType("decimal(18,2)");
+            e.Property(x => x.MediaMovel6M).HasColumnType("decimal(18,2)");
+            e.Property(x => x.MediaMovel12M).HasColumnType("decimal(18,2)");
+            e.Property(x => x.FrequenciaCompra).HasColumnType("decimal(18,2)");
+            e.Property(x => x.TicketMedioGeral).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Tendencia).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Classificacao).HasMaxLength(16).IsRequired();
+            e.Property(x => x.AtualizadoEm).IsRequired();
+            e.HasIndex(x => x.ClienteId).IsUnique();
+            e.HasIndex(x => x.ScorePotencial);
+            e.HasIndex(x => x.Tendencia);
+            e.HasIndex(x => x.Classificacao);
+        });
+
+        modelBuilder.Entity<ClienteForecast>(e =>
+        {
+            e.ToTable("ClienteForecasts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ClienteId).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Previsao30Dias).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Previsao60Dias).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Previsao90Dias).HasColumnType("decimal(18,2)");
+            e.Property(x => x.TendenciaPrevista).HasMaxLength(64).IsRequired();
+            e.Property(x => x.ErroMedioHistorico).HasColumnType("decimal(18,2)");
+            e.Property(x => x.ConfiancaModelo).HasColumnType("decimal(9,2)");
+            e.Property(x => x.AtualizadoEm).IsRequired();
+            e.HasIndex(x => x.ClienteId).IsUnique();
+            e.HasIndex(x => x.TendenciaPrevista);
         });
 
         modelBuilder.Entity<ImportFileType>(e =>

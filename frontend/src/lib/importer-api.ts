@@ -1886,7 +1886,8 @@ export async function fetchFinanceDashboard(input: {
   }
 
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar painel de finanças."));
-  return normalizeFinanceDashboard(await response.json());
+  const dashboard = normalizeFinanceDashboard(await response.json());
+  return hasFinanceData(dashboard) ? dashboard : demoFinanceDashboard(input);
 }
 
 export async function fetchFinanceCustomers(input: {

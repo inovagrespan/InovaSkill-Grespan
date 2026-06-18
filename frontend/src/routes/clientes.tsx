@@ -1,5 +1,5 @@
 ﻿import { FormEvent, useEffect, useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FeedbackMessage } from "@/components/ui/feedback-message";
@@ -15,7 +15,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SkeletonChart, SkeletonMetricCard, SkeletonModalContent, SkeletonTable } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InsightCard } from "@/components/ui/insight-card";
-import { TrendBadge } from "@/components/ui/trend-badge";
 import { ArrowDownRight, ArrowUpRight, Building2, CalendarClock, DollarSign, MapPin, Receipt, TrendingUp, UserRound, Users, AlertTriangle, Target, BarChart3 } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import {
@@ -46,6 +45,13 @@ import {
 } from "@/lib/customer-details";
 import { computeNewCustomersInsights } from "@/lib/customer-new-customers";
 import { buildCustomerPeriodTrend } from "@/lib/customer-period-insights";
+import {
+  fetchCustomerFinanceImpact,
+  formatImpactActionPercent,
+  getImpactCustomerName,
+  sortImpactListByAttention,
+} from "@/lib/customer-finance-impact";
+import { calculateProjectedMarginPercent, calculateSimulatedProjectedCost, fetchCustomerFinanceProjections } from "@/lib/customer-finance-projections";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import { authFetch } from "@/lib/auth";
 import { buildServiceUrl } from "@/lib/api-url";
@@ -63,6 +69,8 @@ const DEMO_PREVIOUS_REVENUE_FACTOR = 0.92;
 const REVENUE_CHART_STROKE = "#f43f5e";
 const REVENUE_CHART_GRID = "rgba(148, 163, 184, 0.12)";
 const FINANCE_PAGE_SIZE = 20;
+const IMPACT_KPI_CARD_CLASS_NAME = "p-3";
+const IMPACT_KPI_VALUE_CLASS_NAME = "text-base sm:text-lg";
 const HISTORY_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "historical";
 const CURRENT_FILTERS_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "current";
 type CustomerDetailsPeriod = "all" | "1m" | "3m" | "12m";
@@ -336,6 +344,12 @@ function RankingBarChart({ data }: { data: Array<{ label: string; value: number 
   );
 }
 
+function formatProjectionConfidence(value: number | null | undefined): string {
+  if (value == null) return "—";
+  const normalized = value > 1 ? value : value * 100;
+  return `${normalized.toFixed(0)}%`;
+}
+
 function ClientesPage() {
   const navigate = useNavigate({ from: "/clientes" });
   const { cliente } = Route.useSearch();
@@ -405,10 +419,10 @@ function ClientesPage() {
     [financeDashboard?.customerRanking],
   );
   const projecoesReceitaCustoData = useMemo(
-    () => (financeDashboard?.revenueTrend ?? []).map((item) => ({
+    () => (financeDashboard?.revenueTrend ?? []).map((item, index) => ({
       label: item.label,
       receita: item.revenue,
-      custo: 0,
+      custo: calculateSimulatedProjectedCost(item.revenue, index),
     })),
     [financeDashboard?.revenueTrend],
   );
@@ -505,14 +519,24 @@ function ClientesPage() {
 
   async function loadImpacto() {
     setImpactoLoading(true);
-    try { const base = buildServiceUrl("api/analytics-financeiro"); const r = await authFetch(`${base}/impacto`); if (r.ok) setImpactoData(await r.json()); }
-    catch { /* */ } finally { setImpactoLoading(false); }
+    try {
+      setImpactoData(await fetchCustomerFinanceImpact());
+    } catch {
+      setImpactoData(null);
+    } finally {
+      setImpactoLoading(false);
+    }
   }
 
   async function loadProjecoes() {
     setProjecoesLoading(true);
-    try { const base = buildServiceUrl("api/analytics-financeiro"); const r = await authFetch(`${base}/projecoes`); if (r.ok) setProjecoesData(await r.json()); }
-    catch { /* */ } finally { setProjecoesLoading(false); }
+    try {
+      setProjecoesData(await fetchCustomerFinanceProjections());
+    } catch {
+      setProjecoesData(null);
+    } finally {
+      setProjecoesLoading(false);
+    }
   }
 
   async function loadHistorico(pagina = 1, sort = "revenue") {
@@ -720,12 +744,12 @@ function ClientesPage() {
           ) : impactoData ? (
             <>
               {/* Resumo Executivo */}
-              <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                <KpiCard title="Maior cliente" value={impactoData.resumo?.maiorClienteNome ?? impactoData.resumo?.maiorCliente ?? "—"} icon={DollarSign} periodLabel={impactoData.resumo?.maiorFaturamento ? formatCurrency(impactoData.resumo.maiorFaturamento) : ""} showPercentageChange={false} loading={false} />
-                <KpiCard title="Maior crescimento" value={impactoData.resumo?.maiorCrescimentoNome ?? "—"} icon={TrendingUp} periodLabel={impactoData.resumo?.maiorCrescimentoPct ? `+${impactoData.resumo.maiorCrescimentoPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
-                <KpiCard title="Maior queda" value={impactoData.resumo?.maiorQuedaNome ?? "—"} icon={ArrowDownRight} periodLabel={impactoData.resumo?.maiorQuedaPct ? `${impactoData.resumo.maiorQuedaPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
-                <KpiCard title="Mais consistente" value={impactoData.resumo?.consistenteNome ?? "—"} icon={Target} periodLabel="" showPercentageChange={false} loading={false} />
-                <KpiCard title="Maior potencial" value={impactoData.resumo?.maiorPotencialNome ?? "—"} icon={Target} periodLabel={impactoData.resumo?.maiorPotencialScore ? `Score ${impactoData.resumo.maiorPotencialScore}` : ""} showPercentageChange={false} loading={false} />
+              <section className="metric-row">
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Maior cliente" value={impactoData.resumo?.maiorClienteNome ?? impactoData.resumo?.maiorCliente ?? "—"} icon={DollarSign} periodLabel={impactoData.resumo?.maiorFaturamento ? formatCurrency(impactoData.resumo.maiorFaturamento) : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Maior crescimento" value={impactoData.resumo?.maiorCrescimentoNome ?? "—"} icon={TrendingUp} periodLabel={impactoData.resumo?.maiorCrescimentoPct ? `+${impactoData.resumo.maiorCrescimentoPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Maior queda" value={impactoData.resumo?.maiorQuedaNome ?? "—"} icon={ArrowDownRight} periodLabel={impactoData.resumo?.maiorQuedaPct ? `${impactoData.resumo.maiorQuedaPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Mais consistente" value={impactoData.resumo?.consistenteNome ?? "—"} icon={Target} periodLabel="" showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} valueClassName={IMPACT_KPI_VALUE_CLASS_NAME} title="Maior potencial" value={impactoData.resumo?.maiorPotencialNome ?? "—"} icon={Target} periodLabel={impactoData.resumo?.maiorPotencialScore ? `Score ${impactoData.resumo.maiorPotencialScore}` : ""} showPercentageChange={false} loading={false} />
               </section>
 
               {/* Alertas */}
@@ -745,16 +769,23 @@ function ClientesPage() {
               {/* Risco e Crescimento lado a lado */}
               <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <Card>
-                  <CardHeader><CardTitle className="text-sm font-semibold text-[#B91C1C]">Clientes em Risco</CardTitle></CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3">
+                    <CardTitle className="text-sm font-semibold text-[#B91C1C]">Clientes em Risco</CardTitle>
+                    {impactoData.risco?.length > 0 && (
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <Link to="/clientes-impacto" search={{ tipo: "risco" }}>Ver todos</Link>
+                      </Button>
+                    )}
+                  </CardHeader>
                   <CardContent className="space-y-3">
-                    {impactoData.risco?.length > 0 ? impactoData.risco.slice(0, 6).map((c: any) => (
-                      <div key={c.clienteId} className="flex items-center justify-between text-sm py-1.5 border-b border-border/30 last:border-0">
+                    {impactoData.risco?.length > 0 ? sortImpactListByAttention(impactoData.risco, "risco").slice(0, 6).map((c: any) => (
+                      <div key={c.clienteId ?? c.ClienteId ?? getImpactCustomerName(c)} className="flex items-center justify-between text-sm py-1.5 border-b border-border/30 last:border-0">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{c.clienteNome ?? c.clienteId}</p>
+                          <p className="font-medium truncate">{getImpactCustomerName(c)}</p>
                           <p className="text-xs text-muted-foreground">{c.nivelRisco} · {c.mesesQueda}</p>
                         </div>
                         <div className="text-right ml-3 shrink-0">
-                          <p className="text-[#B91C1C] font-medium">{c.variacaoPercentual != null ? `${c.variacaoPercentual.toFixed(1)}%` : "—"}</p>
+                          <p className="text-[#B91C1C] font-medium">{formatImpactActionPercent(c, "risco")}</p>
                           <p className="text-xs text-muted-foreground">{formatCurrency(c.impactoFinanceiro)}/mês</p>
                         </div>
                       </div>
@@ -763,16 +794,23 @@ function ClientesPage() {
                 </Card>
 
                 <Card>
-                  <CardHeader><CardTitle className="text-sm font-semibold text-[#059669]">Maiores Crescimentos</CardTitle></CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3">
+                    <CardTitle className="text-sm font-semibold text-[#059669]">Maiores Crescimentos</CardTitle>
+                    {impactoData.crescimento?.length > 0 && (
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <Link to="/clientes-impacto" search={{ tipo: "crescimento" }}>Ver todos</Link>
+                      </Button>
+                    )}
+                  </CardHeader>
                   <CardContent className="space-y-3">
-                    {impactoData.crescimento?.length > 0 ? impactoData.crescimento.slice(0, 6).map((c: any) => (
-                      <div key={c.clienteId} className="flex items-center justify-between text-sm py-1.5 border-b border-border/30 last:border-0">
+                    {impactoData.crescimento?.length > 0 ? sortImpactListByAttention(impactoData.crescimento, "crescimento").slice(0, 6).map((c: any) => (
+                      <div key={c.clienteId ?? c.ClienteId ?? getImpactCustomerName(c)} className="flex items-center justify-between text-sm py-1.5 border-b border-border/30 last:border-0">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{c.clienteNome ?? c.clienteId}</p>
+                          <p className="font-medium truncate">{getImpactCustomerName(c)}</p>
                           <p className="text-xs text-muted-foreground">{c.potencialFuturo}</p>
                         </div>
                         <div className="text-right ml-3 shrink-0">
-                          <p className="text-[#059669] font-medium">{c.crescimento12M != null ? `+${c.crescimento12M.toFixed(1)}%` : "—"}</p>
+                          <p className="text-[#059669] font-medium">{formatImpactActionPercent(c, "crescimento", true)}</p>
                           <p className="text-xs text-muted-foreground">{formatCurrency(c.valorGerado)} gerado</p>
                         </div>
                       </div>
@@ -784,15 +822,20 @@ function ClientesPage() {
               {/* Oportunidades */}
               {impactoData.oportunidades?.length > 0 && (
                 <Card>
-                  <CardHeader><CardTitle className="text-sm font-semibold text-[#059669]">Oportunidades</CardTitle></CardHeader>
-                  <CardContent>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3">
+                    <CardTitle className="text-sm font-semibold text-[#059669]">Oportunidades</CardTitle>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <Link to="/clientes-impacto" search={{ tipo: "oportunidades" }}>Ver todos</Link>
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {impactoData.oportunidades.slice(0, 6).map((c: any) => (
-                        <div key={c.clienteId} className="rounded-lg border p-3 space-y-1">
-                          <p className="font-medium text-sm">{c.clienteNome ?? c.clienteId}</p>
+                      {sortImpactListByAttention(impactoData.oportunidades, "oportunidades").slice(0, 6).map((c: any) => (
+                        <div key={c.clienteId ?? c.ClienteId ?? getImpactCustomerName(c)} className="rounded-lg border p-3 space-y-1">
+                          <p className="font-medium text-sm">{getImpactCustomerName(c)}</p>
                           <p className="text-xs text-muted-foreground">{c.potencial} · Score {c.scorePotencial}</p>
                           <div className="flex justify-between text-xs">
-                            <span className="text-[#059669]">{c.crescimento12M != null ? `+${c.crescimento12M.toFixed(1)}%` : "—"}</span>
+                            <span className="text-[#059669]">{formatImpactActionPercent(c, "oportunidades", true)}</span>
                             <span>{formatCurrency(c.faturamento12M)}</span>
                           </div>
                         </div>
@@ -894,7 +937,7 @@ function ClientesPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-semibold">Receita vs Custo</CardTitle>
-                    <span className="text-xs text-muted-foreground">Custo — placeholder (0) até integração</span>
+                    <span className="text-xs text-muted-foreground">Custo simulado até integração</span>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -916,38 +959,48 @@ function ClientesPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="overflow-x-auto custom-scrollbar">
-                      <Table className="min-w-[650px]">
+                      <Table className="min-w-[860px]">
                         <TableHeader>
                           <TableRow>
                             <TableHead>Cliente</TableHead>
                             <TableHead className="text-right">Valor atual (3M)</TableHead>
                             <TableHead className="text-right">Projetado (30d)</TableHead>
+                            <TableHead className="text-right">Custo simulado</TableHead>
+                            <TableHead className="text-right">Margem proj.</TableHead>
                             <TableHead className="text-right">Diferença</TableHead>
                             <TableHead>Tendência</TableHead>
                             <TableHead className="text-right">Confiança</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {(projecoesData.evolucaoClientes ?? []).map((evo: any) => (
-                            <TableRow key={evo.ClienteId ?? evo.clienteId}>
-                              <TableCell className="font-medium">{evo.clienteNome ?? evo.ClienteId ?? evo.clienteId}</TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(evo.valorAtual ?? 0)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(evo.valorProjetado ?? 0)}</TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {(evo.diferenca ?? 0) >= 0 ? (
-                                  <span className="text-green-600 font-semibold">+{formatCurrency(evo.diferenca)}</span>
-                                ) : (
-                                  <span className="text-red-600 font-semibold">{formatCurrency(evo.diferenca)}</span>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className={cn("w-fit whitespace-nowrap border-0 font-semibold", (evo.TendenciaPrevista ?? "") === "Crescimento" ? "bg-green-600 text-white" : (evo.TendenciaPrevista ?? "") === "Queda" ? "bg-red-600 text-white" : "bg-blue-600 text-white")}>
-                                  {evo.TendenciaPrevista ?? "—"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">{evo.ConfiancaModelo != null ? `${(evo.ConfiancaModelo * 100).toFixed(0)}%` : "—"}</TableCell>
-                            </TableRow>
-                          ))}
+                          {(projecoesData.evolucaoClientes ?? []).map((evo: any, index: number) => {
+                            const projectedRevenue = evo.valorProjetado ?? 0;
+                            const projectedCost = evo.custoProjetado ?? calculateSimulatedProjectedCost(projectedRevenue, index);
+                            const projectedMargin = evo.margemProjetadaPercentual ?? calculateProjectedMarginPercent(projectedRevenue, projectedCost);
+
+                            return (
+                              <TableRow key={evo.ClienteId ?? evo.clienteId}>
+                                <TableCell className="font-medium">{evo.clienteNome ?? evo.ClienteId ?? evo.clienteId}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatCurrency(evo.valorAtual ?? 0)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatCurrency(projectedRevenue)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatCurrency(projectedCost)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatDecimal(projectedMargin)}%</TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {(evo.diferenca ?? 0) >= 0 ? (
+                                    <span className="text-green-600 font-semibold">+{formatCurrency(evo.diferenca)}</span>
+                                  ) : (
+                                    <span className="text-red-600 font-semibold">{formatCurrency(evo.diferenca)}</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className={cn("w-fit whitespace-nowrap border-0 font-semibold", (evo.tendenciaPrevista ?? evo.TendenciaPrevista ?? "") === "Crescimento" ? "bg-green-600 text-white" : (evo.tendenciaPrevista ?? evo.TendenciaPrevista ?? "") === "Queda" ? "bg-red-600 text-white" : "bg-blue-600 text-white")}>
+                                    {evo.tendenciaPrevista ?? evo.TendenciaPrevista ?? "—"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">{formatProjectionConfidence(evo.confiancaModelo ?? evo.ConfiancaModelo)}</TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>

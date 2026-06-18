@@ -17,6 +17,7 @@ type KpiCardProps = {
   loading?: boolean;
   description?: string;
   className?: string;
+  valueClassName?: string;
   allowWrapValue?: boolean;
 };
 
@@ -39,6 +40,7 @@ export function KpiCard({
   loading = false,
   description,
   className,
+  valueClassName,
   allowWrapValue = false,
 }: KpiCardProps) {
   const direction = resolveTrendDirection(percentageChange, trendDirection);
@@ -82,6 +84,7 @@ export function KpiCard({
               allowWrapValue
                 ? "whitespace-normal break-words"
                 : "overflow-hidden text-ellipsis whitespace-nowrap",
+              valueClassName,
             )}
           >
             {value}

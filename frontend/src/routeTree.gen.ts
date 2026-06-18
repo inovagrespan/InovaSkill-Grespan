@@ -17,6 +17,7 @@ import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as FinancasRouteImport } from './routes/financas'
+import { Route as ClientesImpactoRouteImport } from './routes/clientes-impacto'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LogisticaIndexRouteImport } from './routes/logistica.index'
@@ -65,6 +66,11 @@ const FinancasRoute = FinancasRouteImport.update({
   path: '/financas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClientesImpactoRoute = ClientesImpactoRouteImport.update({
+  id: '/clientes-impacto',
+  path: '/clientes-impacto',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClientesRoute = ClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
@@ -105,6 +111,7 @@ const ClientesAnaliseComercialRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/clientes-impacto': typeof ClientesImpactoRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/clientes-impacto': typeof ClientesImpactoRoute
   '/financas': typeof FinancasRoute
   '/login': typeof LoginRoute
   '/processamentos': typeof ProcessamentosRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/clientes-impacto': typeof ClientesImpactoRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/clientes'
+    | '/clientes-impacto'
     | '/financas'
     | '/importacoes'
     | '/login'
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/clientes'
+    | '/clientes-impacto'
     | '/financas'
     | '/login'
     | '/processamentos'
@@ -189,6 +200,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/clientes'
+    | '/clientes-impacto'
     | '/financas'
     | '/importacoes'
     | '/login'
@@ -207,6 +219,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ClientesRoute: typeof ClientesRouteWithChildren
+  ClientesImpactoRoute: typeof ClientesImpactoRoute
   FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LoginRoute: typeof LoginRoute
@@ -273,6 +286,13 @@ declare module '@tanstack/react-router' {
       path: '/financas'
       fullPath: '/financas'
       preLoaderRoute: typeof FinancasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clientes-impacto': {
+      id: '/clientes-impacto'
+      path: '/clientes-impacto'
+      fullPath: '/clientes-impacto'
+      preLoaderRoute: typeof ClientesImpactoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clientes': {
@@ -370,6 +390,7 @@ const LogisticaRouteWithChildren = LogisticaRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ClientesRoute: ClientesRouteWithChildren,
+  ClientesImpactoRoute: ClientesImpactoRoute,
   FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LoginRoute: LoginRoute,
