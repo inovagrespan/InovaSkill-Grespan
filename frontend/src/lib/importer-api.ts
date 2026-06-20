@@ -1,5 +1,13 @@
 ﻿import { authFetch } from "@/lib/auth";
+import {
+  buildFinanceCustomerRevenueRanking,
+  buildFinanceRevenueTrend,
+  calculateFinanceMetrics,
+  financeDemoTransactions,
+  listFinanceCustomers,
+} from "@/lib/finance-demo-metrics";
 import { buildFallbackStages, type FileJobStageProgress } from "@/lib/importer-progress";
+import { getApiServiceBaseUrl } from "@/lib/api-url";
 
 export type FileType = "Unknown" | "Customers" | "Orders" | "Products" | "CommercialTransaction";
 
@@ -47,6 +55,15 @@ export type PagedResult<T> = {
   items: T[];
 };
 
+export type Product = {
+  id: number;
+  sku: string;
+  name: string;
+  price: number;
+  createdAt: string;
+  sourceFileJobId: number;
+};
+
 export type CommercialTransaction = {
   id: number;
   documentNumber: string;
@@ -78,6 +95,8 @@ export type SummaryGranularity = "daily" | "weekly" | "monthly";
 export type SummarySortBy = "growth" | "amount" | "weight" | "quantity";
 export type CommercialTransactionCompanySummary = {
   companyName: string;
+  documentCount: number;
+  singleDocumentNumber: string | null;
   totalAmount: number;
   totalQuantity: number;
   totalWeightKg: number;
@@ -102,7 +121,70 @@ export type CommercialTransactionSummaryResponse = {
   totalCompanies: number;
   items: CommercialTransactionCompanySummary[];
 };
-export type CommercialTransactionTimelineGranularity = "daily" | "weekly" | "monthly";
+export type CommercialInvoiceSummary = {
+  documentNumber: string;
+  transactionDate: string;
+  customerCode: string;
+  customerName: string;
+  city: string;
+  transactionType: string;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  totalItems: number;
+};
+export type CommercialInvoiceSummaryResponse = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  items: CommercialInvoiceSummary[];
+};
+export type CommercialInvoiceDetails = {
+  documentNumber: string;
+  transactionDate: string;
+  customerCode: string;
+  customerName: string;
+  city: string;
+  transactionType: string;
+  totalAmount: number;
+  totalQuantity: number;
+  totalWeightKg: number;
+  totalItems: number;
+  items: CommercialTransaction[];
+};
+export type CommercialInvoiceAnalyticsGranularity = "day" | "week" | "month";
+export type CommercialInvoiceAnalyticsTrendPoint = {
+  periodStart: string;
+  invoiceCount: number;
+  totalAmount: number;
+  totalWeightKg: number;
+};
+export type CommercialInvoiceAnalyticsRankingItem = {
+  customerCode: string;
+  customerName: string;
+  totalAmount: number;
+  invoiceCount: number;
+  totalItems: number;
+  totalWeightKg: number;
+};
+export type CommercialInvoiceAnalyticsSummary = {
+  totalInvoices: number;
+  totalAmount: number;
+  totalWeightKg: number;
+  totalCustomers: number;
+  totalItems: number;
+  totalQuantity: number;
+};
+export type CommercialInvoiceAnalyticsResponse = {
+  granularity: CommercialInvoiceAnalyticsGranularity;
+  summary: CommercialInvoiceAnalyticsSummary;
+  trend: CommercialInvoiceAnalyticsTrendPoint[];
+  ranking: CommercialInvoiceAnalyticsRankingItem[];
+};
+export type CommercialTransactionTimelineGranularity = "hour" | "day" | "week" | "month" | "quarter";
 export type CommercialTransactionTimelinePoint = {
   periodStart: string;
   totalAmount: number;
@@ -152,6 +234,7 @@ export type ProcessingJobQueueItem = {
   processedRows: number;
   totalRows: number;
   errorCount: number;
+  canRunManualActions: boolean;
 };
 
 export type ProcessingDailyPoint = {
@@ -287,11 +370,24 @@ export type CustomerTimelinePoint = {
   quantity: number;
   weight: number;
   orders: number;
+  averageTicket: number;
 };
 
 export type CustomerTimelineResponse = {
   granularity: "daily" | "weekly" | "monthly";
-  metric: "revenue" | "quantity" | "weight" | "orders";
+  metric: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
+  points: CustomerTimelinePoint[];
+};
+
+export type CustomerIndividualAnalysisScope = "historical" | "current";
+
+export type CustomerIndividualAnalysisResponse = {
+  scope: CustomerIndividualAnalysisScope;
+  periodStart: string;
+  periodEnd: string;
+  granularity: "weekly" | "monthly";
+  metric: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
+  summary: CustomerDetailSummary;
   points: CustomerTimelinePoint[];
 };
 
@@ -453,7 +549,52 @@ export type CustomerCommercialHealthAlert = {
   detail: string;
 };
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
+export type FinanceRevenueGranularity = "weekly" | "monthly" | "yearly";
+
+export type FinanceDashboardSummary = {
+  totalRevenue: number;
+  totalOrders: number;
+  totalQuantity: number;
+  averageTicket: number;
+};
+
+export type FinanceDashboardItem = {
+  customer: string;
+  date: string;
+  revenue: number;
+  orders: number;
+  quantity: number;
+};
+
+export type FinanceRevenueTrendPoint = {
+  period: string;
+  label: string;
+  revenue: number;
+};
+
+export type FinanceCustomerRevenuePoint = {
+  customer: string;
+  revenue: number;
+};
+
+export type FinanceCustomerOption = {
+  id: string;
+  nome: string;
+};
+
+export type FinanceDashboardResponse = {
+  customers: string[];
+  summary: FinanceDashboardSummary;
+  revenueTrend: FinanceRevenueTrendPoint[];
+  customerRanking: FinanceCustomerRevenuePoint[];
+  items: FinanceDashboardItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+const API_URL = getApiServiceBaseUrl();
 export const MAX_UPLOAD_SIZE_BYTES = 524_288_000;
 const DEMO_PAGE = 1;
 const DEMO_PAGE_SIZE = 20;
@@ -462,9 +603,22 @@ const DEMO_TOTAL_ROWS = 48_000;
 const DEMO_DATE_TODAY = "2026-06-07";
 const DEMO_SALES_DATE_TODAY = "2026-06-08";
 const DEMO_UPLOAD_JOB_ID_BASE = 900;
+const DEMO_PRODUCT_JOB_ID = 501;
 
 function shouldUseDemoData(error: unknown): boolean {
   return error instanceof Error && /Failed to fetch|NetworkError|Load failed|ECONNREFUSED|fetch failed/i.test(error.message);
+}
+
+function hasItems<T extends { items?: unknown[]; total?: number; totalItems?: number }>(value: T): boolean {
+  return (value.items?.length ?? 0) > 0 || (value.total ?? value.totalItems ?? 0) > 0;
+}
+
+function hasFinanceData(value: FinanceDashboardResponse): boolean {
+  return value.summary.totalRevenue !== 0 || value.items.length > 0 || value.revenueTrend.length > 0 || value.customerRanking.length > 0;
+}
+
+function hasProcessingData(value: ProcessingMonitoringDashboard): boolean {
+  return value.jobs.length > 0 || value.daily.length > 0 || value.workers.length > 0 || value.summary.completedToday > 0 || value.summary.runningJobs > 0;
 }
 
 function demoUploadJobId(fileName: string): number {
@@ -479,15 +633,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "NF-2026-001",
       transactionDate: "2026-06-03",
       customerCode: "CLI-001",
-      customerName: "Mercado São Bento",
-      productCode: "PRD-104",
-      productDescription: "Arroz Tipo 1 5kg",
+      customerName: "Padaria São Bento",
+      productCode: "PAN-104",
+      productDescription: "Pão Francês Congelado 60g",
       quantity: 240,
       unitPrice: 27.9,
       totalAmount: 6_696,
       transactionType: "Venda",
       city: "Campinas",
-      productGroup: "Mercearia",
+      productGroup: "Pães Congelados",
       grossWeightKg: 1_200,
       sourceFileJobId: 501,
     },
@@ -496,15 +650,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "NF-2026-002",
       transactionDate: "2026-06-04",
       customerCode: "CLI-002",
-      customerName: "Atacado Primavera",
-      productCode: "PRD-221",
-      productDescription: "Feijão Carioca 1kg",
+      customerName: "Supermercado Primavera",
+      productCode: "PAN-221",
+      productDescription: "Pão de Queijo Congelado 1kg",
       quantity: 520,
       unitPrice: 8.7,
       totalAmount: 4_524,
       transactionType: "Venda",
       city: "Ribeirão Preto",
-      productGroup: "Mercearia",
+      productGroup: "Salgados Congelados",
       grossWeightKg: 520,
       sourceFileJobId: 501,
     },
@@ -513,15 +667,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "NF-2026-003",
       transactionDate: "2026-06-05",
       customerCode: "CLI-003",
-      customerName: "Super Lopes",
-      productCode: "PRD-318",
-      productDescription: "Óleo de Soja 900ml",
+      customerName: "Cafeteria Grão & Massa",
+      productCode: "PAN-318",
+      productDescription: "Croissant Congelado 80g",
       quantity: 360,
       unitPrice: 6.4,
       totalAmount: 2_304,
       transactionType: "Venda",
       city: "Sorocaba",
-      productGroup: "Alimentos",
+      productGroup: "Folhados",
       grossWeightKg: 340,
       sourceFileJobId: 502,
     },
@@ -530,15 +684,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "NF-2026-004",
       transactionDate: "2026-06-06",
       customerCode: "CLI-004",
-      customerName: "Distribuidora Central",
-      productCode: "PRD-411",
-      productDescription: "Café Tradicional 500g",
+      customerName: "Rede Conveniência Rota 12",
+      productCode: "EQP-411",
+      productDescription: "Freezer Comercial Expositor 410L",
       quantity: 180,
       unitPrice: 18.5,
       totalAmount: 3_330,
       transactionType: "Venda",
       city: "São Paulo",
-      productGroup: "Bebidas",
+      productGroup: "Equipamentos",
       grossWeightKg: 90,
       sourceFileJobId: 502,
     },
@@ -547,15 +701,15 @@ function demoCommercialTransactions(): CommercialTransaction[] {
       documentNumber: "DEV-2026-001",
       transactionDate: DEMO_SALES_DATE_TODAY,
       customerCode: "CLI-002",
-      customerName: "Atacado Primavera",
-      productCode: "PRD-104",
-      productDescription: "Arroz Tipo 1 5kg",
+      customerName: "Supermercado Primavera",
+      productCode: "PAN-104",
+      productDescription: "Pão Francês Congelado 60g",
       quantity: -24,
       unitPrice: 27.9,
       totalAmount: -669.6,
       transactionType: "Devolução",
       city: "Ribeirão Preto",
-      productGroup: "Mercearia",
+      productGroup: "Pães Congelados",
       grossWeightKg: -120,
       sourceFileJobId: 503,
     },
@@ -614,7 +768,7 @@ function includesNormalized(value: string, filter?: string): boolean {
 }
 
 function filterDemoCommercialTransactions(input: DemoCommercialTransactionFilters): CommercialTransaction[] {
-  return demoCommercialTransactions().filter((item) => {
+  const filtered = demoCommercialTransactions().filter((item) => {
     if (!includesNormalized(item.documentNumber, input.documentNumber)) return false;
     if (!includesNormalized(item.customerCode, input.customerCode)) return false;
     if (!includesNormalized(item.customerName, input.customerName)) return false;
@@ -626,11 +780,36 @@ function filterDemoCommercialTransactions(input: DemoCommercialTransactionFilter
     if (input.dateTo?.trim() && item.transactionDate > input.dateTo.trim()) return false;
     return true;
   });
+
+  return filtered.length > 0 ? filtered : demoCommercialTransactions();
 }
 
 function paginateDemoItems<T>(items: T[], page = DEMO_PAGE, pageSize = DEMO_PAGE_SIZE): T[] {
   const start = Math.max(0, page - 1) * pageSize;
   return items.slice(start, start + pageSize);
+}
+
+function demoProducts(): Product[] {
+  return [
+    { id: 2001, sku: "PAN-104", name: "Pão Francês Congelado 60g", price: 27.9, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
+    { id: 2002, sku: "PAN-221", name: "Pão de Queijo Congelado 1kg", price: 8.7, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
+    { id: 2003, sku: "PAN-318", name: "Croissant Congelado 80g", price: 6.4, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
+    { id: 2004, sku: "PAN-512", name: "Massa para Pizza Congelada 400g", price: 12.9, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
+    { id: 2005, sku: "EQP-411", name: "Freezer Comercial Expositor 410L", price: 18.5, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
+    { id: 2006, sku: "EQP-620", name: "Armário de Crescimento 20 Esteiras", price: 7_890, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
+  ];
+}
+
+function filterDemoProducts(search?: string): Product[] {
+  const normalizedSearch = search?.trim().toLowerCase();
+  const filtered = demoProducts()
+    .filter((item) => {
+      if (!normalizedSearch) return true;
+      return item.sku.toLowerCase().includes(normalizedSearch) || item.name.toLowerCase().includes(normalizedSearch);
+    })
+    .sort((left, right) => left.name.localeCompare(right.name, "pt-BR") || left.sku.localeCompare(right.sku, "pt-BR"));
+
+  return filtered.length > 0 ? filtered : demoProducts();
 }
 
 function demoCommercialSummary(input: {
@@ -645,6 +824,8 @@ function demoCommercialSummary(input: {
   for (const item of filteredItems) {
     const current = groups.get(item.customerName) ?? {
       companyName: item.customerName,
+      documentCount: 0,
+      singleDocumentNumber: null,
       totalAmount: 0,
       totalQuantity: 0,
       totalWeightKg: 0,
@@ -657,6 +838,12 @@ function demoCommercialSummary(input: {
     current.totalQuantity += item.quantity;
     current.totalWeightKg += item.grossWeightKg;
     current.currentPeriodAmount += item.totalAmount;
+    const documents = filteredItems
+      .filter((candidate) => candidate.customerName === item.customerName)
+      .map((candidate) => candidate.documentNumber);
+    const uniqueDocuments = Array.from(new Set(documents));
+    current.documentCount = uniqueDocuments.length;
+    current.singleDocumentNumber = uniqueDocuments.length === 1 ? uniqueDocuments[0] : null;
     groups.set(item.customerName, current);
   }
 
@@ -692,12 +879,128 @@ function demoCommercialSummary(input: {
   };
 }
 
+function demoCommercialInvoices(input: {
+  page?: number;
+  pageSize?: number;
+} & DemoCommercialTransactionFilters): CommercialInvoiceSummaryResponse {
+  const filteredItems = filterDemoCommercialTransactions(input);
+  const groups = new Map<string, CommercialInvoiceSummary>();
+
+  for (const item of filteredItems) {
+    const current = groups.get(item.documentNumber) ?? {
+      documentNumber: item.documentNumber,
+      transactionDate: item.transactionDate,
+      customerCode: item.customerCode,
+      customerName: item.customerName,
+      city: item.city,
+      transactionType: item.transactionType,
+      totalAmount: 0,
+      totalQuantity: 0,
+      totalWeightKg: 0,
+      totalItems: 0,
+    };
+
+    current.totalAmount += item.totalAmount;
+    current.totalQuantity += item.quantity;
+    current.totalWeightKg += item.grossWeightKg;
+    current.totalItems += 1;
+    groups.set(item.documentNumber, current);
+  }
+
+  const items = Array.from(groups.values()).sort((left, right) =>
+    right.transactionDate.localeCompare(left.transactionDate, "pt-BR") ||
+    right.documentNumber.localeCompare(left.documentNumber, "pt-BR"),
+  );
+  const page = input.page ?? DEMO_PAGE;
+  const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+
+  return {
+    page,
+    pageSize,
+    totalItems: items.length,
+    totalAmount: items.reduce((total, item) => total + item.totalAmount, 0),
+    totalQuantity: items.reduce((total, item) => total + item.totalQuantity, 0),
+    totalWeightKg: items.reduce((total, item) => total + item.totalWeightKg, 0),
+    items: paginateDemoItems(items, page, pageSize),
+  };
+}
+
+function demoCommercialInvoiceDetails(documentNumber: string): CommercialInvoiceDetails {
+  const items = filterDemoCommercialTransactions({ documentNumber }).filter((item) => item.documentNumber === documentNumber);
+  const firstItem = items[0];
+
+  return {
+    documentNumber,
+    transactionDate: firstItem?.transactionDate ?? "",
+    customerCode: firstItem?.customerCode ?? "",
+    customerName: firstItem?.customerName ?? "",
+    city: firstItem?.city ?? "",
+    transactionType: firstItem?.transactionType ?? "",
+    totalAmount: items.reduce((total, item) => total + item.totalAmount, 0),
+    totalQuantity: items.reduce((total, item) => total + item.quantity, 0),
+    totalWeightKg: items.reduce((total, item) => total + item.grossWeightKg, 0),
+    totalItems: items.length,
+    items,
+  };
+}
+
+function demoCommercialInvoiceAnalytics(input: {
+  granularity?: CommercialInvoiceAnalyticsGranularity;
+} & DemoCommercialTransactionFilters): CommercialInvoiceAnalyticsResponse {
+  const invoices = demoCommercialInvoices(input).items;
+  const granularity = input.granularity ?? "month";
+  const trendGroups = new Map<string, CommercialInvoiceAnalyticsTrendPoint>();
+  const rankingGroups = new Map<string, CommercialInvoiceAnalyticsRankingItem>();
+
+  for (const invoice of invoices) {
+    const periodStart = resolveDemoTimelinePeriodStart(invoice.transactionDate, granularity);
+    const trendPoint = trendGroups.get(periodStart) ?? {
+      periodStart,
+      invoiceCount: 0,
+      totalAmount: 0,
+      totalWeightKg: 0,
+    };
+    trendPoint.invoiceCount += 1;
+    trendPoint.totalAmount += invoice.totalAmount;
+    trendPoint.totalWeightKg += invoice.totalWeightKg;
+    trendGroups.set(periodStart, trendPoint);
+
+    const rankingPoint = rankingGroups.get(invoice.customerCode) ?? {
+      customerCode: invoice.customerCode,
+      customerName: invoice.customerName,
+      totalAmount: 0,
+      invoiceCount: 0,
+      totalItems: 0,
+      totalWeightKg: 0,
+    };
+    rankingPoint.totalAmount += invoice.totalAmount;
+    rankingPoint.invoiceCount += 1;
+    rankingPoint.totalItems += invoice.totalItems;
+    rankingPoint.totalWeightKg += invoice.totalWeightKg;
+    rankingGroups.set(invoice.customerCode, rankingPoint);
+  }
+
+  return {
+    granularity,
+    summary: {
+      totalInvoices: invoices.length,
+      totalAmount: invoices.reduce((total, item) => total + item.totalAmount, 0),
+      totalWeightKg: invoices.reduce((total, item) => total + item.totalWeightKg, 0),
+      totalCustomers: new Set(invoices.map((item) => item.customerCode)).size,
+      totalItems: invoices.reduce((total, item) => total + item.totalItems, 0),
+      totalQuantity: invoices.reduce((total, item) => total + item.totalQuantity, 0),
+    },
+    trend: Array.from(trendGroups.values()).sort((left, right) => left.periodStart.localeCompare(right.periodStart, "pt-BR")),
+    ranking: Array.from(rankingGroups.values()).sort((left, right) => right.totalAmount - left.totalAmount || left.customerName.localeCompare(right.customerName, "pt-BR")),
+  };
+}
+
 function demoCommercialTimeline(input: {
   granularity?: CommercialTransactionTimelineGranularity;
 } & DemoCommercialTransactionFilters): CommercialTransactionTimelineResponse {
   const filteredItems = filterDemoCommercialTransactions(input);
 
-  const granularity = input.granularity ?? "monthly";
+  const granularity = input.granularity ?? "month";
   const grouped = new Map<string, CommercialTransactionTimelinePoint>();
 
   for (const item of filteredItems) {
@@ -730,13 +1033,23 @@ function resolveDemoTimelinePeriodStart(
   const date = new Date(`${transactionDate}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return transactionDate;
 
-  if (granularity === "daily") {
+  if (granularity === "hour") {
+    return `${transactionDate}T00:00:00Z`;
+  }
+
+  if (granularity === "day") {
     return transactionDate;
   }
 
-  if (granularity === "weekly") {
+  if (granularity === "week") {
     const dayOffset = (date.getUTCDay() + 6) % 7;
     date.setUTCDate(date.getUTCDate() - dayOffset);
+    return date.toISOString().slice(0, 10);
+  }
+
+  if (granularity === "quarter") {
+    const quarterStartMonth = Math.floor(date.getUTCMonth() / 3) * 3;
+    date.setUTCMonth(quarterStartMonth, 1);
     return date.toISOString().slice(0, 10);
   }
 
@@ -823,6 +1136,7 @@ function demoProcessingDashboard(): ProcessingMonitoringDashboard {
         processedRows: 8_160,
         totalRows: 12_000,
         errorCount: 3,
+        canRunManualActions: false,
       },
       {
         id: 501,
@@ -840,6 +1154,7 @@ function demoProcessingDashboard(): ProcessingMonitoringDashboard {
         processedRows: 12_480,
         totalRows: 12_480,
         errorCount: 0,
+        canRunManualActions: true,
       },
     ],
     daily: [
@@ -908,10 +1223,10 @@ function demoCustomerSummary(): CustomerAnalyticsSummary {
 
 function demoCustomerRanking(input: { page?: number; pageSize?: number }): CustomerRankingResponse {
   const items: CustomerRankingItem[] = [
-    { customerCode: "CLI-001", customerName: "Mercado São Bento", revenue: 64_850, quantity: 2_420, weight: 12_800, orders: 28, averageTicket: 2_316.07, variationPercent: 12.6 },
-    { customerCode: "CLI-002", customerName: "Atacado Primavera", revenue: 52_300, quantity: 3_180, weight: 9_750, orders: 21, averageTicket: 2_490.48, variationPercent: -6.4 },
-    { customerCode: "CLI-003", customerName: "Super Lopes", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
-    { customerCode: "CLI-004", customerName: "Distribuidora Central", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
+    { customerCode: "CLI-001", customerName: "Padaria São Bento", revenue: 64_850, quantity: 2_420, weight: 12_800, orders: 28, averageTicket: 2_316.07, variationPercent: 12.6 },
+    { customerCode: "CLI-002", customerName: "Supermercado Primavera", revenue: 52_300, quantity: 3_180, weight: 9_750, orders: 21, averageTicket: 2_490.48, variationPercent: -6.4 },
+    { customerCode: "CLI-003", customerName: "Cafeteria Grão & Massa", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
+    { customerCode: "CLI-004", customerName: "Rede Conveniência Rota 12", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
   ];
   return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_PAGE_SIZE, totalItems: items.length, items };
 }
@@ -939,28 +1254,53 @@ function demoCustomerDetails(customerId: string): CustomerDetailSummary {
 
 function demoCustomerTimeline(input: {
   granularity?: "daily" | "weekly" | "monthly";
-  metric?: "revenue" | "quantity" | "weight" | "orders";
+  metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
 }): CustomerTimelineResponse {
   const points: CustomerTimelinePoint[] = [
-    { periodStart: "2026-01-01", value: 21_400, revenue: 21_400, quantity: 880, weight: 3_200, orders: 9 },
-    { periodStart: "2026-02-01", value: 24_900, revenue: 24_900, quantity: 940, weight: 3_520, orders: 10 },
-    { periodStart: "2026-03-01", value: 19_700, revenue: 19_700, quantity: 790, weight: 2_980, orders: 8 },
-    { periodStart: "2026-04-01", value: 28_600, revenue: 28_600, quantity: 1_120, weight: 4_100, orders: 12 },
-    { periodStart: "2026-05-01", value: 31_200, revenue: 31_200, quantity: 1_280, weight: 4_450, orders: 13 },
-    { periodStart: "2026-06-01", value: 38_940, revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18 },
+    { periodStart: "2025-07-01", value: 18_500, revenue: 18_500, quantity: 760, weight: 2_940, orders: 8, averageTicket: 2_312.5 },
+    { periodStart: "2025-08-01", value: 0, revenue: 0, quantity: 0, weight: 0, orders: 0, averageTicket: 0 },
+    { periodStart: "2025-09-01", value: 20_200, revenue: 20_200, quantity: 810, weight: 3_040, orders: 9, averageTicket: 2_244.44 },
+    { periodStart: "2025-10-01", value: 21_400, revenue: 21_400, quantity: 880, weight: 3_200, orders: 9, averageTicket: 2_377.78 },
+    { periodStart: "2025-11-01", value: 24_900, revenue: 24_900, quantity: 940, weight: 3_520, orders: 10, averageTicket: 2_490 },
+    { periodStart: "2025-12-01", value: 19_700, revenue: 19_700, quantity: 790, weight: 2_980, orders: 8, averageTicket: 2_462.5 },
+    { periodStart: "2026-01-01", value: 28_600, revenue: 28_600, quantity: 1_120, weight: 4_100, orders: 12, averageTicket: 2_383.33 },
+    { periodStart: "2026-02-01", value: 0, revenue: 0, quantity: 0, weight: 0, orders: 0, averageTicket: 0 },
+    { periodStart: "2026-03-01", value: 31_200, revenue: 31_200, quantity: 1_280, weight: 4_450, orders: 13, averageTicket: 2_400 },
+    { periodStart: "2026-04-01", value: 29_400, revenue: 29_400, quantity: 1_140, weight: 4_280, orders: 12, averageTicket: 2_450 },
+    { periodStart: "2026-05-01", value: 33_800, revenue: 33_800, quantity: 1_430, weight: 4_780, orders: 15, averageTicket: 2_253.33 },
+    { periodStart: "2026-06-01", value: 38_940, revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33 },
   ];
+  const metric = input.metric ?? "revenue";
   return {
     granularity: input.granularity ?? "monthly",
-    metric: input.metric ?? "revenue",
-    points: points.map((point) => ({ ...point, value: point[input.metric ?? "revenue"] })),
+    metric,
+    points: points.map((point) => ({ ...point, value: point[metric] })),
+  };
+}
+
+function demoCustomerIndividualAnalysis(input: {
+  customerId: string;
+  scope?: CustomerIndividualAnalysisScope;
+  metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
+}): CustomerIndividualAnalysisResponse {
+  const summary = demoCustomerDetails(input.customerId);
+  const timeline = demoCustomerTimeline({ granularity: "monthly", metric: input.metric ?? "revenue" });
+  return {
+    scope: input.scope ?? "historical",
+    periodStart: "2025-07-01",
+    periodEnd: DEMO_DATE_TODAY,
+    granularity: "monthly",
+    metric: timeline.metric,
+    summary,
+    points: timeline.points,
   };
 }
 
 function demoCustomerTopProducts(): CustomerTopProductItem[] {
   return [
-    { productCode: "PRD-104", productDescription: "Arroz Tipo 1 5kg", quantity: 820, revenue: 22_878, sharePercent: 35.2 },
-    { productCode: "PRD-221", productDescription: "Feijão Carioca 1kg", quantity: 1_100, revenue: 9_570, sharePercent: 14.7 },
-    { productCode: "PRD-411", productDescription: "Café Tradicional 500g", quantity: 480, revenue: 8_880, sharePercent: 13.7 },
+    { productCode: "PAN-104", productDescription: "Pão Francês Congelado 60g", quantity: 820, revenue: 22_878, sharePercent: 35.2 },
+    { productCode: "PAN-221", productDescription: "Pão de Queijo Congelado 1kg", quantity: 1_100, revenue: 9_570, sharePercent: 14.7 },
+    { productCode: "PAN-318", productDescription: "Croissant Congelado 80g", quantity: 480, revenue: 8_880, sharePercent: 13.7 },
   ];
 }
 
@@ -1171,6 +1511,10 @@ export async function fetchJobs(page = 1, pageSize = 10): Promise<PagedResult<Fi
     };
   });
 
+  if (items.length === 0) {
+    return demoFileJobs(page, pageSize);
+  }
+
   return {
     page: (raw as PagedResult<BackendFileJob>).page ?? (raw as { Page?: number }).Page ?? page,
     pageSize:
@@ -1285,7 +1629,8 @@ export async function fetchProcessingMonitoringDashboard(): Promise<ProcessingMo
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar monitoramento de jobs."));
-  return normalizeProcessingDashboard(await response.json());
+  const dashboard = normalizeProcessingDashboard(await response.json());
+  return hasProcessingData(dashboard) ? dashboard : demoProcessingDashboard();
 }
 
 export async function fetchProcessingJobDetails(jobId: number): Promise<ProcessingJobDetails> {
@@ -1320,6 +1665,24 @@ export async function cancelProcessingJob(jobId: number): Promise<void> {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao cancelar job."));
+}
+
+export async function runProcessingManualAction(input: {
+  action: "sales-summary" | "customer-summary";
+  jobIds: number[];
+}): Promise<void> {
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/processing-monitoring/jobs/manual-actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    if (shouldUseDemoData(error)) return;
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao executar ação manual."));
 }
 
 function normalizeProcessingDashboard(raw: any): ProcessingMonitoringDashboard {
@@ -1382,6 +1745,7 @@ function normalizeProcessingJobItem(raw: any): ProcessingJobQueueItem {
     processedRows: raw.processedRows ?? raw.ProcessedRows ?? 0,
     totalRows: raw.totalRows ?? raw.TotalRows ?? 0,
     errorCount: raw.errorCount ?? raw.ErrorCount ?? 0,
+    canRunManualActions: raw.canRunManualActions ?? raw.CanRunManualActions ?? false,
   };
 }
 
@@ -1453,6 +1817,274 @@ function normalizeProcessingLog(raw: any): ProcessingLog {
   };
 }
 
+function demoFinanceDashboard(input: {
+  customer?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  allTime?: boolean;
+  revenueGranularity?: FinanceRevenueGranularity;
+}): FinanceDashboardResponse {
+  const filteredMetrics = calculateFinanceMetrics(
+    {
+      customer: input.customer ?? "",
+      dateFrom: input.dateFrom ?? "",
+      dateTo: input.dateTo ?? "",
+      allTime: input.allTime ?? true,
+    },
+    financeDemoTransactions,
+  );
+  const metrics = filteredMetrics.items.length > 0
+    ? filteredMetrics
+    : calculateFinanceMetrics({ customer: "", dateFrom: "", dateTo: "", allTime: true }, financeDemoTransactions);
+
+  return {
+    customers: listFinanceCustomers(financeDemoTransactions),
+    summary: {
+      totalRevenue: metrics.totalRevenue,
+      totalOrders: metrics.totalOrders,
+      totalQuantity: metrics.totalQuantity,
+      averageTicket: metrics.averageTicket,
+    },
+    revenueTrend: buildFinanceRevenueTrend(metrics.items, input.revenueGranularity ?? "monthly"),
+    customerRanking: buildFinanceCustomerRevenueRanking(metrics.items),
+    items: metrics.items.slice(((input.page ?? 1) - 1) * (input.pageSize ?? 20), ((input.page ?? 1) - 1) * (input.pageSize ?? 20) + (input.pageSize ?? 20)),
+    page: input.page ?? 1,
+    pageSize: input.pageSize ?? 20,
+    totalItems: metrics.items.length,
+    totalPages: Math.max(1, Math.ceil(metrics.items.length / (input.pageSize ?? 20))),
+  };
+}
+
+function demoFinanceCustomers(input: { search?: string; limit?: number }): FinanceCustomerOption[] {
+  const normalizedSearch = input.search?.trim().toLowerCase() ?? "";
+  return listFinanceCustomers(financeDemoTransactions)
+    .filter((customer) => !normalizedSearch || customer.toLowerCase().includes(normalizedSearch))
+    .slice(0, input.limit ?? 20)
+    .map((customer) => ({ id: customer, nome: customer }));
+}
+
+function normalizeFinanceDashboard(raw: any): FinanceDashboardResponse {
+  return {
+    customers: raw.customers ?? raw.Customers ?? [],
+    summary: {
+      totalRevenue: raw.summary?.totalRevenue ?? raw.Summary?.TotalRevenue ?? 0,
+      totalOrders: raw.summary?.totalOrders ?? raw.Summary?.TotalOrders ?? 0,
+      totalQuantity: raw.summary?.totalQuantity ?? raw.Summary?.TotalQuantity ?? 0,
+      averageTicket: raw.summary?.averageTicket ?? raw.Summary?.AverageTicket ?? 0,
+    },
+    revenueTrend: (raw.revenueTrend ?? raw.RevenueTrend ?? []).map((item: any) => ({
+      period: item.period ?? item.Period ?? "",
+      label: item.label ?? item.Label ?? "",
+      revenue: item.revenue ?? item.Revenue ?? 0,
+    })),
+    customerRanking: (raw.customerRanking ?? raw.CustomerRanking ?? []).map((item: any) => ({
+      customer: item.customer ?? item.Customer ?? "",
+      revenue: item.revenue ?? item.Revenue ?? 0,
+    })),
+    items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
+      customer: item.customer ?? item.Customer ?? "",
+      date: String(item.date ?? item.Date ?? "").split("T")[0] ?? "",
+      revenue: item.revenue ?? item.Revenue ?? 0,
+      orders: item.orders ?? item.Orders ?? 0,
+      quantity: item.quantity ?? item.Quantity ?? 0,
+    })),
+    page: raw.page ?? raw.Page ?? 1,
+    pageSize: raw.pageSize ?? raw.PageSize ?? 20,
+    totalItems: raw.totalItems ?? raw.TotalItems ?? (raw.items ?? raw.Items ?? []).length ?? 0,
+    totalPages: raw.totalPages ?? raw.TotalPages ?? 1,
+  };
+}
+
+export async function fetchFinanceDashboard(input: {
+  customer?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  allTime?: boolean;
+  revenueGranularity?: FinanceRevenueGranularity;
+  page?: number;
+  pageSize?: number;
+}): Promise<FinanceDashboardResponse> {
+  const query = new URLSearchParams();
+  if (input.customer?.trim()) query.set("customer", input.customer.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+  query.set("allTime", String(input.allTime ?? true));
+  query.set("revenueGranularity", input.revenueGranularity ?? "monthly");
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/finance/dashboard?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) {
+      return demoFinanceDashboard(input);
+    }
+    throw error;
+  }
+
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar painel de finanças."));
+  const dashboard = normalizeFinanceDashboard(await response.json());
+  return hasFinanceData(dashboard) ? dashboard : demoFinanceDashboard(input);
+}
+
+export async function fetchFinanceCustomers(input: {
+  search?: string;
+  limit?: number;
+  signal?: AbortSignal;
+} = {}): Promise<FinanceCustomerOption[]> {
+  const query = new URLSearchParams();
+  if (input.search?.trim()) query.set("search", input.search.trim());
+  query.set("limit", String(input.limit ?? 20));
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/finance/customers?${query.toString()}`, {
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) {
+      return demoFinanceCustomers(input);
+    }
+
+    throw error;
+  }
+
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao buscar clientes."));
+  const customers = ((await response.json()) as any[]).map((item) => ({
+    id: item.id ?? item.Id ?? item.nome ?? item.Nome ?? "",
+    nome: item.nome ?? item.Nome ?? item.name ?? item.Name ?? "",
+  }));
+  return customers.length > 0 ? customers : demoFinanceCustomers(input);
+}
+
+export async function fetchProducts(input: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  signal?: AbortSignal;
+} = {}): Promise<PagedResult<Product>> {
+  const query = new URLSearchParams();
+  const page = input.page ?? DEMO_PAGE;
+  const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+  query.set("page", String(page));
+  query.set("pageSize", String(pageSize));
+  if (input.search?.trim()) query.set("search", input.search.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/products?${query.toString()}`, {
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) {
+      const items = filterDemoProducts(input.search);
+      return { page, pageSize, total: items.length, items: paginateDemoItems(items, page, pageSize) };
+    }
+
+    throw error;
+  }
+
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos."));
+
+  const raw = (await response.json()) as
+    | PagedResult<Product>
+    | { Page?: number; PageSize?: number; Total?: number; Items?: Array<Product | { Id?: number; Sku?: string; Name?: string; Price?: number; CreatedAt?: string; SourceFileJobId?: number }> };
+  const rawItems = (raw as PagedResult<Product>).items ?? (raw as { Items?: Product[] }).Items ?? [];
+
+  const result = {
+    page: (raw as PagedResult<Product>).page ?? (raw as { Page?: number }).Page ?? page,
+    pageSize: (raw as PagedResult<Product>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? pageSize,
+    total: (raw as PagedResult<Product>).total ?? (raw as { Total?: number }).Total ?? 0,
+    items: rawItems.map((item: any) => ({
+      id: item.id ?? item.Id ?? 0,
+      sku: item.sku ?? item.Sku ?? "",
+      name: item.name ?? item.Name ?? "",
+      price: item.price ?? item.Price ?? 0,
+      createdAt: item.createdAt ?? item.CreatedAt ?? "",
+      sourceFileJobId: item.sourceFileJobId ?? item.SourceFileJobId ?? 0,
+    })),
+  };
+  if (!hasItems(result)) {
+    const items = filterDemoProducts(input.search);
+    return { page, pageSize, total: items.length, items: paginateDemoItems(items, page, pageSize) };
+  }
+  return result;
+}
+
+function demoCustomerNewCustomersMonthly(): CustomerNewCustomersMonthlyResponse {
+  return {
+    periodStart: "2026-01-01",
+    periodEnd: DEMO_DATE_TODAY,
+    totalNewCustomers: 27,
+    activeMonths: 6,
+    points: [
+      { monthStart: "2026-01-01", newCustomers: 3 },
+      { monthStart: "2026-02-01", newCustomers: 4 },
+      { monthStart: "2026-03-01", newCustomers: 2 },
+      { monthStart: "2026-04-01", newCustomers: 5 },
+      { monthStart: "2026-05-01", newCustomers: 7 },
+      { monthStart: "2026-06-01", newCustomers: 6 },
+    ],
+  };
+}
+
+function demoCustomerPurchaseHistory(input: {
+  page?: number;
+  pageSize?: number;
+}): CustomerPurchaseHistoryResponse {
+  const items: CustomerPurchaseHistoryItem[] = demoCommercialTransactions().map((item) => ({
+    date: item.transactionDate,
+    document: item.documentNumber,
+    product: item.productDescription,
+    quantity: item.quantity,
+    unitPrice: item.unitPrice,
+    total: item.totalAmount,
+    weight: item.grossWeightKg,
+    operationType: item.transactionType,
+  }));
+  const page = input.page ?? DEMO_PAGE;
+  const pageSize = input.pageSize ?? DEMO_HISTORY_PAGE_SIZE;
+  return { page, pageSize, totalItems: items.length, items: paginateDemoItems(items, page, pageSize) };
+}
+
+function demoCustomerComparison(): CustomerComparisonResponse {
+  return {
+    items: [
+      { label: "Mês atual", currentValue: 38_940, previousValue: 31_200, variationPercent: 24.8 },
+      { label: "Últimos 3 meses", currentValue: 98_500, previousValue: 91_000, variationPercent: 8.2 },
+      { label: "Últimos 6 meses", currentValue: 165_800, previousValue: 172_400, variationPercent: -3.8 },
+    ],
+  };
+}
+
+function demoCustomerInsights(): CustomerInsightsResponse {
+  return {
+    averagePurchaseFrequencyDays: 11,
+    estimatedNextPurchaseDate: "2026-06-18",
+    predictedRevenue: 42_000,
+    predictedQuantity: 1_920,
+    consumptionTrend: "Crescimento",
+    riskLevel: "Sem risco",
+    daysWithoutPurchase: 3,
+    riskScore: 12,
+    frequencyReason: "Frequência fictícia baseada em compras mensais.",
+    nextPurchaseReason: "Data estimada apenas para demonstração.",
+    revenuePredictionReason: "Projeção demo para validar o layout.",
+    quantityPredictionReason: "Quantidade prevista com dados fictícios.",
+    riskReason: "Cliente com compra recente na base demo.",
+    monthlyHistoryPeriods: 6,
+  };
+}
+
 export async function fetchCommercialTransactions(input: {
   page?: number;
   pageSize?: number;
@@ -1465,6 +2097,7 @@ export async function fetchCommercialTransactions(input: {
   transactionType?: string;
   dateFrom?: string;
   dateTo?: string;
+  signal?: AbortSignal;
 }): Promise<PagedResult<CommercialTransaction>> {
   const query = new URLSearchParams();
   query.set("page", String(input.page ?? 1));
@@ -1482,8 +2115,14 @@ export async function fetchCommercialTransactions(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions?${query.toString()}`);
+    response = await authFetch(`${API_URL}/api/commercial-transactions?${query.toString()}`, {
+      signal: input.signal,
+    });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
     if (shouldUseDemoData(error)) {
       const page = input.page ?? DEMO_PAGE;
       const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
@@ -1500,12 +2139,211 @@ export async function fetchCommercialTransactions(input: {
 
   const items = (raw as PagedResult<CommercialTransaction>).items ?? (raw as { Items?: CommercialTransaction[] }).Items ?? [];
 
-  return {
+  const result = {
     page: (raw as PagedResult<CommercialTransaction>).page ?? (raw as { Page?: number }).Page ?? 1,
     pageSize: (raw as PagedResult<CommercialTransaction>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? 20,
     total: (raw as PagedResult<CommercialTransaction>).total ?? (raw as { Total?: number }).Total ?? 0,
     items,
   };
+  if (!hasItems(result)) {
+    const page = input.page ?? DEMO_PAGE;
+    const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
+    const demoItems = filterDemoCommercialTransactions(input);
+    return { page, pageSize, total: demoItems.length, items: paginateDemoItems(demoItems, page, pageSize) };
+  }
+  return result;
+}
+
+function normalizeCommercialInvoiceSummary(raw: any): CommercialInvoiceSummaryResponse {
+  return {
+    page: raw.page ?? raw.Page ?? 1,
+    pageSize: raw.pageSize ?? raw.PageSize ?? 20,
+    totalItems: raw.totalItems ?? raw.TotalItems ?? 0,
+    totalAmount: raw.totalAmount ?? raw.TotalAmount ?? 0,
+    totalQuantity: raw.totalQuantity ?? raw.TotalQuantity ?? 0,
+    totalWeightKg: raw.totalWeightKg ?? raw.TotalWeightKg ?? 0,
+    items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
+      documentNumber: item.documentNumber ?? item.DocumentNumber ?? "",
+      transactionDate: String(item.transactionDate ?? item.TransactionDate ?? "").split("T")[0] ?? "",
+      customerCode: item.customerCode ?? item.CustomerCode ?? "",
+      customerName: item.customerName ?? item.CustomerName ?? "",
+      city: item.city ?? item.City ?? "",
+      transactionType: item.transactionType ?? item.TransactionType ?? "",
+      totalAmount: item.totalAmount ?? item.TotalAmount ?? 0,
+      totalQuantity: item.totalQuantity ?? item.TotalQuantity ?? 0,
+      totalWeightKg: item.totalWeightKg ?? item.TotalWeightKg ?? 0,
+      totalItems: item.totalItems ?? item.TotalItems ?? 0,
+    })),
+  };
+}
+
+function normalizeCommercialInvoiceDetails(raw: any): CommercialInvoiceDetails {
+  return {
+    documentNumber: raw.documentNumber ?? raw.DocumentNumber ?? "",
+    transactionDate: String(raw.transactionDate ?? raw.TransactionDate ?? "").split("T")[0] ?? "",
+    customerCode: raw.customerCode ?? raw.CustomerCode ?? "",
+    customerName: raw.customerName ?? raw.CustomerName ?? "",
+    city: raw.city ?? raw.City ?? "",
+    transactionType: raw.transactionType ?? raw.TransactionType ?? "",
+    totalAmount: raw.totalAmount ?? raw.TotalAmount ?? 0,
+    totalQuantity: raw.totalQuantity ?? raw.TotalQuantity ?? 0,
+    totalWeightKg: raw.totalWeightKg ?? raw.TotalWeightKg ?? 0,
+    totalItems: raw.totalItems ?? raw.TotalItems ?? 0,
+    items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
+      id: item.id ?? item.Id ?? 0,
+      documentNumber: item.documentNumber ?? item.DocumentNumber ?? "",
+      transactionDate: String(item.transactionDate ?? item.TransactionDate ?? "").split("T")[0] ?? "",
+      customerCode: item.customerCode ?? item.CustomerCode ?? "",
+      customerName: item.customerName ?? item.CustomerName ?? "",
+      productCode: item.productCode ?? item.ProductCode ?? "",
+      productDescription: item.productDescription ?? item.ProductDescription ?? "",
+      quantity: item.quantity ?? item.Quantity ?? 0,
+      unitPrice: item.unitPrice ?? item.UnitPrice ?? 0,
+      totalAmount: item.totalAmount ?? item.TotalAmount ?? 0,
+      transactionType: item.transactionType ?? item.TransactionType ?? "",
+      city: item.city ?? item.City ?? "",
+      productGroup: item.productGroup ?? item.ProductGroup ?? "",
+      grossWeightKg: item.grossWeightKg ?? item.GrossWeightKg ?? 0,
+      sourceFileJobId: item.sourceFileJobId ?? item.SourceFileJobId ?? 0,
+    })),
+  };
+}
+
+function normalizeCommercialInvoiceAnalytics(raw: any): CommercialInvoiceAnalyticsResponse {
+  return {
+    granularity: raw.granularity ?? raw.Granularity ?? "month",
+    summary: {
+      totalInvoices: raw.summary?.totalInvoices ?? raw.Summary?.TotalInvoices ?? 0,
+      totalAmount: raw.summary?.totalAmount ?? raw.Summary?.TotalAmount ?? 0,
+      totalWeightKg: raw.summary?.totalWeightKg ?? raw.Summary?.TotalWeightKg ?? 0,
+      totalCustomers: raw.summary?.totalCustomers ?? raw.Summary?.TotalCustomers ?? 0,
+      totalItems: raw.summary?.totalItems ?? raw.Summary?.TotalItems ?? 0,
+      totalQuantity: raw.summary?.totalQuantity ?? raw.Summary?.TotalQuantity ?? 0,
+    },
+    trend: (raw.trend ?? raw.Trend ?? []).map((item: any) => ({
+      periodStart: String(item.periodStart ?? item.PeriodStart ?? "").split("T")[0] ?? "",
+      invoiceCount: item.invoiceCount ?? item.InvoiceCount ?? 0,
+      totalAmount: item.totalAmount ?? item.TotalAmount ?? 0,
+      totalWeightKg: item.totalWeightKg ?? item.TotalWeightKg ?? 0,
+    })),
+    ranking: (raw.ranking ?? raw.Ranking ?? []).map((item: any) => ({
+      customerCode: item.customerCode ?? item.CustomerCode ?? "",
+      customerName: item.customerName ?? item.CustomerName ?? "",
+      totalAmount: item.totalAmount ?? item.TotalAmount ?? 0,
+      invoiceCount: item.invoiceCount ?? item.InvoiceCount ?? 0,
+      totalItems: item.totalItems ?? item.TotalItems ?? 0,
+      totalWeightKg: item.totalWeightKg ?? item.TotalWeightKg ?? 0,
+    })),
+  };
+}
+
+export async function fetchCommercialInvoiceAnalytics(input: {
+  granularity?: CommercialInvoiceAnalyticsGranularity;
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  productGroup?: string;
+  transactionType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  signal?: AbortSignal;
+}): Promise<CommercialInvoiceAnalyticsResponse> {
+  const query = new URLSearchParams();
+  query.set("granularity", input.granularity ?? "month");
+
+  if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
+  if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
+  if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions/invoice-analytics?${query.toString()}`, {
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) return demoCommercialInvoiceAnalytics(input);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise de notas fiscais."));
+
+  return normalizeCommercialInvoiceAnalytics(await response.json());
+}
+
+export async function fetchCommercialInvoices(input: {
+  page?: number;
+  pageSize?: number;
+  documentNumber?: string;
+  customerCode?: string;
+  customerName?: string;
+  productCode?: string;
+  city?: string;
+  productGroup?: string;
+  transactionType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  signal?: AbortSignal;
+}): Promise<CommercialInvoiceSummaryResponse> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+
+  if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
+  if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
+  if (input.customerName?.trim()) query.set("customerName", input.customerName.trim());
+  if (input.productCode?.trim()) query.set("productCode", input.productCode.trim());
+  if (input.city?.trim()) query.set("city", input.city.trim());
+  if (input.productGroup?.trim()) query.set("productGroup", input.productGroup.trim());
+  if (input.transactionType?.trim()) query.set("transactionType", input.transactionType.trim());
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions/invoices?${query.toString()}`, {
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) return demoCommercialInvoices(input);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar notas fiscais."));
+
+  return normalizeCommercialInvoiceSummary(await response.json());
+}
+
+export async function fetchCommercialInvoiceDetails(documentNumber: string, signal?: AbortSignal): Promise<CommercialInvoiceDetails> {
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/commercial-transactions/invoices/${encodeURIComponent(documentNumber)}`, {
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
+    if (shouldUseDemoData(error)) return demoCommercialInvoiceDetails(documentNumber);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes da nota fiscal."));
+
+  return normalizeCommercialInvoiceDetails(await response.json());
 }
 
 export async function fetchProducts(input: {
@@ -1641,6 +2479,7 @@ export async function fetchCommercialTransactionsSummary(input: {
   dateFrom?: string;
   dateTo?: string;
   referenceDate?: string;
+  signal?: AbortSignal;
 }): Promise<CommercialTransactionSummaryResponse> {
   const query = new URLSearchParams();
   query.set("page", String(input.page ?? 1));
@@ -1661,14 +2500,21 @@ export async function fetchCommercialTransactionsSummary(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`);
+    response = await authFetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`, {
+      signal: input.signal,
+    });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
     if (shouldUseDemoData(error)) return demoCommercialSummary(input);
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de vendas."));
 
-  return (await response.json()) as CommercialTransactionSummaryResponse;
+  const summary = (await response.json()) as CommercialTransactionSummaryResponse;
+  return summary.totalRecords > 0 || summary.items.length > 0 ? summary : demoCommercialSummary(input);
 }
 
 export async function fetchCommercialTransactionsTimeline(input: {
@@ -1682,9 +2528,10 @@ export async function fetchCommercialTransactionsTimeline(input: {
   transactionType?: string;
   dateFrom?: string;
   dateTo?: string;
+  signal?: AbortSignal;
 }): Promise<CommercialTransactionTimelineResponse> {
   const query = new URLSearchParams();
-  query.set("granularity", input.granularity ?? "monthly");
+  query.set("groupBy", input.granularity ?? "month");
 
   if (input.documentNumber?.trim()) query.set("documentNumber", input.documentNumber.trim());
   if (input.customerCode?.trim()) query.set("customerCode", input.customerCode.trim());
@@ -1698,14 +2545,21 @@ export async function fetchCommercialTransactionsTimeline(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions/timeline?${query.toString()}`);
+    response = await authFetch(`${API_URL}/api/commercial-transactions/timeline?${query.toString()}`, {
+      signal: input.signal,
+    });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
     if (shouldUseDemoData(error)) return demoCommercialTimeline(input);
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a evolução de vendas."));
 
-  return (await response.json()) as CommercialTransactionTimelineResponse;
+  const timeline = (await response.json()) as CommercialTransactionTimelineResponse;
+  return timeline.items.length > 0 ? timeline : demoCommercialTimeline(input);
 }
 
 export async function fetchCustomerAnalyticsSummary(input: {
@@ -1734,7 +2588,8 @@ export async function fetchCustomerAnalyticsSummary(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de clientes."));
-  return (await response.json()) as CustomerAnalyticsSummary;
+  const summary = (await response.json()) as CustomerAnalyticsSummary;
+  return summary.activeCustomers > 0 || summary.totalRevenue > 0 || summary.totalOrders > 0 ? summary : demoCustomerSummary();
 }
 
 export async function fetchCustomerRanking(input: {
@@ -1770,7 +2625,8 @@ export async function fetchCustomerRanking(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar ranking de clientes."));
-  return (await response.json()) as CustomerRankingResponse;
+  const ranking = (await response.json()) as CustomerRankingResponse;
+  return ranking.items.length > 0 || ranking.totalItems > 0 ? ranking : demoCustomerRanking(input);
 }
 
 export async function fetchCustomerNewCustomersMonthly(input: {
@@ -1795,26 +2651,12 @@ export async function fetchCustomerNewCustomersMonthly(input: {
   try {
     response = await authFetch(`${API_URL}/api/customer-analytics-v2/new-customers-monthly?${query.toString()}`);
   } catch (error) {
-    if (shouldUseDemoData(error)) {
-      return {
-        periodStart: "2026-01-01",
-        periodEnd: DEMO_DATE_TODAY,
-        totalNewCustomers: 27,
-        activeMonths: 6,
-        points: [
-          { monthStart: "2026-01-01", newCustomers: 3 },
-          { monthStart: "2026-02-01", newCustomers: 4 },
-          { monthStart: "2026-03-01", newCustomers: 2 },
-          { monthStart: "2026-04-01", newCustomers: 5 },
-          { monthStart: "2026-05-01", newCustomers: 7 },
-          { monthStart: "2026-06-01", newCustomers: 6 },
-        ],
-      };
-    }
+    if (shouldUseDemoData(error)) return demoCustomerNewCustomersMonthly();
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução mensal de novos clientes."));
-  return (await response.json()) as CustomerNewCustomersMonthlyResponse;
+  const monthly = (await response.json()) as CustomerNewCustomersMonthlyResponse;
+  return monthly.points.length > 0 || monthly.totalNewCustomers > 0 ? monthly : demoCustomerNewCustomersMonthly();
 }
 
 export async function fetchCustomerDetailsSummary(input: {
@@ -1834,13 +2676,71 @@ export async function fetchCustomerDetailsSummary(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo do cliente."));
-  return (await response.json()) as CustomerDetailSummary;
+  const details = (await response.json()) as CustomerDetailSummary;
+  return details.totalOrders > 0 || details.totalRevenue > 0 ? details : demoCustomerDetails(input.customerId);
+}
+
+export async function fetchCustomerIndividualAnalysis(input: {
+  customerId: string;
+  scope?: CustomerIndividualAnalysisScope;
+  metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<CustomerIndividualAnalysisResponse> {
+  const query = new URLSearchParams();
+  query.set("scope", input.scope ?? "historical");
+  query.set("metric", input.metric ?? "revenue");
+  if (input.dateFrom?.trim()) query.set("dateFrom", input.dateFrom.trim());
+  if (input.dateTo?.trim()) query.set("dateTo", input.dateTo.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/individual-analysis?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoCustomerIndividualAnalysis(input);
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise individual do cliente."));
+
+  const raw = await response.json() as any;
+  return {
+    scope: (raw.scope ?? raw.Scope ?? "historical") as CustomerIndividualAnalysisScope,
+    periodStart: String(raw.periodStart ?? raw.PeriodStart ?? ""),
+    periodEnd: String(raw.periodEnd ?? raw.PeriodEnd ?? ""),
+    granularity: (raw.granularity ?? raw.Granularity ?? "monthly") as "weekly" | "monthly",
+    metric: (raw.metric ?? raw.Metric ?? "revenue") as CustomerIndividualAnalysisResponse["metric"],
+    summary: {
+      customerCode: String(raw.summary?.customerCode ?? raw.Summary?.CustomerCode ?? ""),
+      customerName: String(raw.summary?.customerName ?? raw.Summary?.CustomerName ?? ""),
+      city: String(raw.summary?.city ?? raw.Summary?.City ?? ""),
+      linkedCompany: String(raw.summary?.linkedCompany ?? raw.Summary?.LinkedCompany ?? ""),
+      lastPurchaseDate: raw.summary?.lastPurchaseDate ?? raw.Summary?.LastPurchaseDate ?? null,
+      status: String(raw.summary?.status ?? raw.Summary?.Status ?? "Ativo") as CustomerDetailSummary["status"],
+      totalRevenue: Number(raw.summary?.totalRevenue ?? raw.Summary?.TotalRevenue ?? 0),
+      averageTicket: raw.summary?.averageTicket == null && raw.Summary?.AverageTicket == null ? null : Number(raw.summary?.averageTicket ?? raw.Summary?.AverageTicket ?? 0),
+      averageRevenueMonthly: raw.summary?.averageRevenueMonthly == null && raw.Summary?.AverageRevenueMonthly == null ? null : Number(raw.summary?.averageRevenueMonthly ?? raw.Summary?.AverageRevenueMonthly ?? 0),
+      averageRevenueWeekly: raw.summary?.averageRevenueWeekly == null && raw.Summary?.AverageRevenueWeekly == null ? null : Number(raw.summary?.averageRevenueWeekly ?? raw.Summary?.AverageRevenueWeekly ?? 0),
+      totalQuantity: Number(raw.summary?.totalQuantity ?? raw.Summary?.TotalQuantity ?? 0),
+      totalWeight: Number(raw.summary?.totalWeight ?? raw.Summary?.TotalWeight ?? 0),
+      totalOrders: Number(raw.summary?.totalOrders ?? raw.Summary?.TotalOrders ?? 0),
+      averageDaysBetweenPurchases: raw.summary?.averageDaysBetweenPurchases == null && raw.Summary?.AverageDaysBetweenPurchases == null ? null : Number(raw.summary?.averageDaysBetweenPurchases ?? raw.Summary?.AverageDaysBetweenPurchases ?? 0),
+    },
+    points: (raw.points ?? raw.Points ?? []).map((point: any) => ({
+      periodStart: String(point.periodStart ?? point.PeriodStart ?? ""),
+      value: Number(point.value ?? point.Value ?? 0),
+      revenue: Number(point.revenue ?? point.Revenue ?? 0),
+      quantity: Number(point.quantity ?? point.Quantity ?? 0),
+      weight: Number(point.weight ?? point.Weight ?? 0),
+      orders: Number(point.orders ?? point.Orders ?? 0),
+      averageTicket: Number(point.averageTicket ?? point.AverageTicket ?? 0),
+    })),
+  };
 }
 
 export async function fetchCustomerTimeline(input: {
   customerId: string;
   granularity?: "daily" | "weekly" | "monthly";
-  metric?: "revenue" | "quantity" | "weight" | "orders";
+  metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
   dateFrom?: string;
   dateTo?: string;
 }): Promise<CustomerTimelineResponse> {
@@ -1858,7 +2758,8 @@ export async function fetchCustomerTimeline(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução temporal do cliente."));
-  return (await response.json()) as CustomerTimelineResponse;
+  const timeline = (await response.json()) as CustomerTimelineResponse;
+  return timeline.points.length > 0 ? timeline : demoCustomerTimeline(input);
 }
 
 export async function fetchCustomerTopProducts(input: {
@@ -1878,7 +2779,8 @@ export async function fetchCustomerTopProducts(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos mais comprados."));
-  return (await response.json()) as CustomerTopProductItem[];
+  const products = (await response.json()) as CustomerTopProductItem[];
+  return products.length > 0 ? products : demoCustomerTopProducts();
 }
 
 export async function fetchCustomerPurchaseHistory(input: {
@@ -1898,23 +2800,12 @@ export async function fetchCustomerPurchaseHistory(input: {
   try {
     response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/purchase-history?${query.toString()}`);
   } catch (error) {
-    if (shouldUseDemoData(error)) {
-      const items: CustomerPurchaseHistoryItem[] = demoCommercialTransactions().map((item) => ({
-        date: item.transactionDate,
-        document: item.documentNumber,
-        product: item.productDescription,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        total: item.totalAmount,
-        weight: item.grossWeightKg,
-        operationType: item.transactionType,
-      }));
-      return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_HISTORY_PAGE_SIZE, totalItems: items.length, items };
-    }
+    if (shouldUseDemoData(error)) return demoCustomerPurchaseHistory(input);
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar histórico de compras."));
-  return (await response.json()) as CustomerPurchaseHistoryResponse;
+  const history = (await response.json()) as CustomerPurchaseHistoryResponse;
+  return history.items.length > 0 || history.totalItems > 0 ? history : demoCustomerPurchaseHistory(input);
 }
 
 export async function fetchCustomerComparison(input: {
@@ -1928,19 +2819,12 @@ export async function fetchCustomerComparison(input: {
   try {
     response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/comparison?${query.toString()}`);
   } catch (error) {
-    if (shouldUseDemoData(error)) {
-      return {
-        items: [
-          { label: "Mês atual", currentValue: 38_940, previousValue: 31_200, variationPercent: 24.8 },
-          { label: "Últimos 3 meses", currentValue: 98_500, previousValue: 91_000, variationPercent: 8.2 },
-          { label: "Últimos 6 meses", currentValue: 165_800, previousValue: 172_400, variationPercent: -3.8 },
-        ],
-      };
-    }
+    if (shouldUseDemoData(error)) return demoCustomerComparison();
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar comparativo do cliente."));
-  return (await response.json()) as CustomerComparisonResponse;
+  const comparison = (await response.json()) as CustomerComparisonResponse;
+  return comparison.items.length > 0 ? comparison : demoCustomerComparison();
 }
 
 export async function fetchCustomerInsights(input: {
@@ -1954,28 +2838,12 @@ export async function fetchCustomerInsights(input: {
   try {
     response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`);
   } catch (error) {
-    if (shouldUseDemoData(error)) {
-      return {
-        averagePurchaseFrequencyDays: 11,
-        estimatedNextPurchaseDate: "2026-06-18",
-        predictedRevenue: 42_000,
-        predictedQuantity: 1_920,
-        consumptionTrend: "Crescimento",
-        riskLevel: "Sem risco",
-        daysWithoutPurchase: 3,
-        riskScore: 12,
-        frequencyReason: "Frequência fictícia baseada em compras mensais.",
-        nextPurchaseReason: "Data estimada apenas para demonstração.",
-        revenuePredictionReason: "Projeção demo para validar o layout.",
-        quantityPredictionReason: "Quantidade prevista com dados fictícios.",
-        riskReason: "Cliente com compra recente na base demo.",
-        monthlyHistoryPeriods: 6,
-      };
-    }
+    if (shouldUseDemoData(error)) return demoCustomerInsights();
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar insights do cliente."));
-  return (await response.json()) as CustomerInsightsResponse;
+  const insights = (await response.json()) as CustomerInsightsResponse;
+  return insights.monthlyHistoryPeriods > 0 || insights.predictedRevenue != null ? insights : demoCustomerInsights();
 }
 
 export async function fetchCustomerCommercialHealth(input: {
@@ -1989,6 +2857,7 @@ export async function fetchCustomerCommercialHealth(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise comercial do cliente."));
-  return (await response.json()) as CustomerCommercialHealthReport;
+  const report = (await response.json()) as CustomerCommercialHealthReport;
+  return report.evolution.length > 0 || report.products.length > 0 || report.timeline.length > 0 ? report : demoCustomerCommercialHealth(input.customerId);
 }
 

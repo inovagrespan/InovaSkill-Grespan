@@ -12,6 +12,11 @@ import { AppSidebar } from "../components/AppSidebar";
 import { isAuthenticated, redirectToLogin } from "../lib/auth";
 import { cn } from "../lib/utils";
 
+const KPI_CARD_BASE_WIDTH_PX = 248;
+const KPI_CARD_MIN_ZOOM_COMPENSATION = 1;
+const KPI_CARD_MAX_ZOOM_COMPENSATION = 3;
+const KPI_CARD_ZOOM_PRECISION = 4;
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -87,6 +92,35 @@ function RootComponent() {
   useEffect(() => {
     document.title = "AAI Seguri - ERP Corporativo";
     document.documentElement.lang = "pt-BR";
+  }, []);
+
+  useEffect(() => {
+    const baselineDevicePixelRatio = window.devicePixelRatio || KPI_CARD_MIN_ZOOM_COMPENSATION;
+    const rootStyle = document.documentElement.style;
+
+    function updateMetricCardZoomCompensation() {
+      const currentDevicePixelRatio = window.devicePixelRatio || baselineDevicePixelRatio;
+      const zoomFactor = Math.min(
+        KPI_CARD_MAX_ZOOM_COMPENSATION,
+        Math.max(KPI_CARD_MIN_ZOOM_COMPENSATION, currentDevicePixelRatio / baselineDevicePixelRatio),
+      );
+      const metricCardZoom = KPI_CARD_MIN_ZOOM_COMPENSATION / zoomFactor;
+      const metricCardColumnWidth = KPI_CARD_BASE_WIDTH_PX / zoomFactor;
+
+      rootStyle.setProperty("--metric-card-zoom", metricCardZoom.toFixed(KPI_CARD_ZOOM_PRECISION));
+      rootStyle.setProperty("--metric-card-column-width", `${metricCardColumnWidth.toFixed(2)}px`);
+    }
+
+    updateMetricCardZoomCompensation();
+    window.addEventListener("resize", updateMetricCardZoomCompensation);
+    window.visualViewport?.addEventListener("resize", updateMetricCardZoomCompensation);
+
+    return () => {
+      window.removeEventListener("resize", updateMetricCardZoomCompensation);
+      window.visualViewport?.removeEventListener("resize", updateMetricCardZoomCompensation);
+      rootStyle.removeProperty("--metric-card-zoom");
+      rootStyle.removeProperty("--metric-card-column-width");
+    };
   }, []);
 
   useEffect(() => {

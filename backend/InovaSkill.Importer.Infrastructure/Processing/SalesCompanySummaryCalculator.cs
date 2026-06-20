@@ -19,6 +19,8 @@ public enum SalesSummarySortBy
 
 public sealed record SalesCompanySummaryItem(
     string CompanyName,
+    int DocumentCount,
+    string? SingleDocumentNumber,
     decimal TotalAmount,
     decimal TotalQuantity,
     decimal TotalWeightKg,
@@ -80,6 +82,12 @@ public static class SalesCompanySummaryCalculator
             .GroupBy(x => string.IsNullOrWhiteSpace(x.CustomerName) ? "Empresa não identificada" : x.CustomerName.Trim())
             .Select(g =>
             {
+                var documents = g
+                    .Select(x => x.DocumentNumber?.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
                 var currentAmount = g
                     .Where(x => GetPeriodKey(x.TransactionDate, granularity) == current)
                     .Sum(CalculateTransactionAmount);
@@ -95,6 +103,8 @@ public static class SalesCompanySummaryCalculator
 
                 return new SalesCompanySummaryItem(
                     g.Key,
+                    documents.Count,
+                    documents.Count == 1 ? documents[0] : null,
                     Round3(g.Sum(CalculateTransactionAmount)),
                     Round3(g.Sum(x => x.Quantity)),
                     Round3(g.Sum(x => x.GrossWeightKg)),

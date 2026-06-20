@@ -1,71 +1,101 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SkeletonMetricCard, SkeletonTable } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { calculatePeriodAverages } from "@/lib/business-metrics";
 import {
-  buildSalesRevenueComparisonText,
+  buildSalesRankingData,
   buildSalesTrendData,
+  describeSalesRankingMetric,
+  describeSalesTimelineGranularity,
+  describeSalesTrendMetric,
+  type SalesRankingMetric,
+  type SalesTrendMetric,
 } from "@/lib/sales-dashboard";
 import {
+  type CommercialInvoiceAnalyticsGranularity,
+  type CommercialInvoiceAnalyticsResponse,
+  type CommercialInvoiceDetails,
+  type CommercialInvoiceSummaryResponse,
   type CommercialTransaction,
-  type CommercialTransactionSummaryResponse,
-  type CommercialTransactionTimelineResponse,
+  fetchCommercialInvoiceAnalytics,
+  fetchCommercialInvoiceDetails,
+  fetchCommercialInvoices,
   fetchCommercialTransactions,
-  fetchCommercialTransactionsSummary,
-  fetchCommercialTransactionsTimeline,
-  type SummaryGranularity,
-  type SummarySortBy,
 } from "@/lib/importer-api";
 import { resolveSalesTimelineGranularity } from "@/lib/sales-timeline";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import {
-  CalendarDays,
   ChevronDown,
-  DollarSign,
+  PackageSearch,
+  ReceiptText,
   Search,
   SlidersHorizontal,
+  Users,
   Weight,
   type LucideIcon,
 } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 export const Route = createFileRoute("/vendas")({
   component: VendasPage,
 });
 
 type PeriodPreset = "today" | "week" | "month" | "quarter" | "year" | "custom";
-type ViewMode = "summary" | "items";
+type ViewMode = "invoices" | "items";
+type SalesCachedData = {
+  items: Awaited<ReturnType<typeof fetchCommercialTransactions>>;
+  invoices: CommercialInvoiceSummaryResponse;
+  analytics: CommercialInvoiceAnalyticsResponse;
+  storedAt: number;
+};
+type PersistedSalesState = {
+  periodPreset: PeriodPreset;
+  dateFrom: string;
+  dateTo: string;
+  customerName: string;
+  productCodeInput: string;
+  documentNumberInput: string;
+  city: string;
+  companyName: string;
+  productGroup: string;
+  transactionType: string;
+  advancedOpen: boolean;
+  viewMode: ViewMode;
+  trendMetric: SalesTrendMetric;
+  rankingMetric: SalesRankingMetric;
+  invoicePage: number;
+  page: number;
+};
 
 const FILTER_DEBOUNCE_MS = 300;
+const SEARCH_MIN_LENGTH = 2;
 const DEFAULT_PAGE_SIZE = 20;
 const DEFAULT_SUMMARY_PAGE_SIZE = 20;
+const SALES_STATE_STORAGE_KEY = "inovaskill:vendas:state:v2";
+const SALES_CACHE_TTL_MS = 60_000;
 const SALES_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]";
-const SALES_CHART_CARD_CLASS_NAME = "overflow-hidden border-border/80 bg-card/95 shadow-sm hover:translate-y-0 hover:border-border/80 hover:shadow-sm";
-const SALES_CHART_SELECT_CLASS_NAME = "h-9 rounded-[var(--dashboard-control-radius)] border border-input bg-surface px-3 text-sm text-foreground shadow-xs outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-ring/40";
+const SALES_CHART_CARD_CLASS_NAME = "sales-chart-card overflow-hidden border-border/80 bg-card/95 shadow-sm hover:translate-y-0 hover:border-border/80 hover:shadow-sm";
+const SALES_CHART_SELECT_CLASS_NAME = "h-9 rounded-[var(--dashboard-control-radius)] border border-[var(--sales-chart-select-border)] bg-[var(--sales-chart-select-bg)] px-3 text-sm text-[var(--sales-chart-title)] shadow-xs outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-ring/40";
 const SALES_ANALYTICS_PANEL_CLASS_NAME = "rounded-[var(--dashboard-panel-radius)] border border-border/70 bg-[var(--surface-soft)]/70 p-4";
 const SALES_CHART_EMPTY_STATE_CLASS_NAME = "flex h-[var(--dashboard-chart-height)] items-center justify-center rounded-[var(--dashboard-panel-radius)] border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground";
-const SALES_GRID_STROKE = "rgba(107,114,128,0.18)";
-const SALES_AXIS_COLOR = "var(--text-muted)";
-const SALES_CURSOR_STROKE = "rgba(180,35,47,0.22)";
-const SALES_REVENUE_COLOR = "var(--primary-red)";
-const SALES_REVENUE_COLOR_SOFT = "rgba(180,35,47,0.10)";
+const SALES_GRID_STROKE = "var(--sales-chart-grid)";
+const SALES_AXIS_COLOR = "var(--sales-chart-axis)";
+const SALES_CURSOR_STROKE = "var(--sales-chart-cursor)";
+const SALES_REVENUE_COLOR = "var(--sales-chart-line)";
+const SALES_REVENUE_FILL = "var(--sales-chart-fill)";
+const SALES_REVENUE_FILL_END = "var(--sales-chart-fill-end)";
 const SALES_RANKING_COLOR = "rgba(180,35,47,0.82)";
 const SALES_RANKING_COLOR_SOFT = "rgba(180,35,47,0.58)";
-
-const revenueModeOptions = [
-  { value: "daily", label: "Diário" },
-  { value: "weekly", label: "Semanal" },
-  { value: "monthly", label: "Mensal" },
-] as const;
 
 const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
   { value: "today", label: "Hoje" },
@@ -76,18 +106,17 @@ const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
   { value: "custom", label: "Personalizado" },
 ];
 
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value || "N/A";
-  return date.toLocaleDateString("pt-BR");
-}
-
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value ?? 0);
 }
 
 function formatDecimal(value: number): string {
   return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 }).format(value ?? 0);
+}
+
+function formatDate(value: string): string {
+  if (!value) return "-";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
 }
 
 function formatRevenueAxisTick(value: number): string {
@@ -110,11 +139,6 @@ function formatRevenueAxisTick(value: number): string {
   }
 
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(numericValue);
-}
-
-function formatDelta(value: number | null): string {
-  if (value == null) return "N/A";
-  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
 function toInputDate(value: Date): string {
@@ -143,30 +167,100 @@ function resolvePeriod(preset: PeriodPreset): { dateFrom: string; dateTo: string
   return { dateFrom: toInputDate(new Date(now.getFullYear(), now.getMonth(), 1)), dateTo: toInputDate(now) };
 }
 
-function makeEmptySummary(): CommercialTransactionSummaryResponse {
+function resolveLastThreeMonthsPeriod(): { dateFrom: string; dateTo: string } {
+  const now = new Date();
   return {
-    page: 1,
-    pageSize: DEFAULT_SUMMARY_PAGE_SIZE,
-    totalItems: 0,
-    granularity: "weekly",
-    currentPeriodStart: "",
-    previousPeriodStart: "",
-    currentPeriodTotalAmount: 0,
-    previousPeriodTotalAmount: 0,
-    totalGrowthPercent: null,
-    totalRecords: 0,
-    totalAmount: 0,
-    totalQuantity: 0,
-    totalWeightKg: 0,
-    totalCompanies: 0,
-    items: [],
+    dateFrom: toInputDate(new Date(now.getFullYear(), now.getMonth() - 2, 1)),
+    dateTo: toInputDate(now),
   };
 }
 
-function makeEmptyTimeline(granularity: CommercialTransactionTimelineResponse["granularity"]): CommercialTransactionTimelineResponse {
+function makeEmptyAnalytics(granularity: CommercialInvoiceAnalyticsGranularity): CommercialInvoiceAnalyticsResponse {
   return {
     granularity,
-    items: [],
+    summary: {
+      totalInvoices: 0,
+      totalAmount: 0,
+      totalWeightKg: 0,
+      totalCustomers: 0,
+      totalItems: 0,
+      totalQuantity: 0,
+    },
+    trend: [],
+    ranking: [],
+  };
+}
+
+export function normalizeSalesSearchFilter(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length >= SEARCH_MIN_LENGTH ? trimmed : "";
+}
+
+export function buildSalesTimelineSubtitle(granularity: CommercialInvoiceAnalyticsGranularity, metric: SalesTrendMetric): string {
+  return `${describeSalesTrendMetric(metric)} por ${describeSalesTimelineGranularity(granularity)}.`;
+}
+
+function buildSalesRankingSubtitle(metric: SalesRankingMetric): string {
+  return `${describeSalesRankingMetric(metric)} nos filtros atuais.`;
+}
+
+function resolveInvoiceAnalyticsGranularity(input: {
+  periodPreset: PeriodPreset;
+  dateFrom: string;
+  dateTo: string;
+}): CommercialInvoiceAnalyticsGranularity {
+  const timelineGranularity = resolveSalesTimelineGranularity(input);
+  switch (timelineGranularity) {
+    case "hour":
+    case "day":
+      return "day";
+    case "week":
+      return "week";
+    default:
+      return "month";
+  }
+}
+
+function readPersistedSalesState(defaultPeriod: { dateFrom: string; dateTo: string }): PersistedSalesState {
+  if (typeof window === "undefined") {
+    return buildDefaultSalesState(defaultPeriod);
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(SALES_STATE_STORAGE_KEY);
+    if (!raw) return buildDefaultSalesState(defaultPeriod);
+    const parsed = JSON.parse(raw) as Partial<PersistedSalesState> & { summaryPage?: number; viewMode?: "summary" | ViewMode };
+    return {
+      ...buildDefaultSalesState(defaultPeriod),
+      ...parsed,
+      viewMode: parsed.viewMode === "summary" ? "invoices" : (parsed.viewMode ?? "invoices"),
+      trendMetric: parsed.trendMetric ?? "invoiceCount",
+      rankingMetric: parsed.rankingMetric ?? "amount",
+      invoicePage: parsed.invoicePage ?? parsed.summaryPage ?? 1,
+    };
+  } catch {
+    return buildDefaultSalesState(defaultPeriod);
+  }
+}
+
+function buildDefaultSalesState(defaultPeriod: { dateFrom: string; dateTo: string }): PersistedSalesState {
+  return {
+    periodPreset: "quarter",
+    dateFrom: defaultPeriod.dateFrom,
+    dateTo: defaultPeriod.dateTo,
+    customerName: "",
+    productCodeInput: "",
+    documentNumberInput: "",
+    city: "",
+    companyName: "",
+    productGroup: "",
+    transactionType: "",
+    advancedOpen: false,
+    viewMode: "invoices",
+    trendMetric: "invoiceCount",
+    rankingMetric: "amount",
+    invoicePage: 1,
+    page: 1,
   };
 }
 
@@ -179,72 +273,112 @@ function buildFriendlyError(error: unknown): string {
 }
 
 function VendasPage() {
-  const defaultPeriod = resolvePeriod("month");
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("month");
-  const [dateFrom, setDateFrom] = useState(defaultPeriod.dateFrom);
-  const [dateTo, setDateTo] = useState(defaultPeriod.dateTo);
-  const [customerName, setCustomerName] = useState("");
-  const [productCode, setProductCode] = useState("");
-  const [documentNumber, setDocumentNumber] = useState("");
-  const [city, setCity] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [productGroup, setProductGroup] = useState("");
-  const [transactionType, setTransactionType] = useState("");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("summary");
-  const [companySortBy, setCompanySortBy] = useState<SummarySortBy>("amount");
-  const [summaryGranularity, setSummaryGranularity] = useState<SummaryGranularity>("weekly");
-  const [summaryPage, setSummaryPage] = useState(1);
-  const [page, setPage] = useState(1);
+  const defaultPeriod = resolveLastThreeMonthsPeriod();
+  const persistedState = useMemo(() => readPersistedSalesState(defaultPeriod), [defaultPeriod.dateFrom, defaultPeriod.dateTo]);
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>(persistedState.periodPreset);
+  const [dateFrom, setDateFrom] = useState(persistedState.dateFrom);
+  const [dateTo, setDateTo] = useState(persistedState.dateTo);
+  const [customerName, setCustomerName] = useState(persistedState.customerName);
+  const [productCodeInput, setProductCodeInput] = useState(persistedState.productCodeInput);
+  const [documentNumberInput, setDocumentNumberInput] = useState(persistedState.documentNumberInput);
+  const [city, setCity] = useState(persistedState.city);
+  const [companyName, setCompanyName] = useState(persistedState.companyName);
+  const [productGroup, setProductGroup] = useState(persistedState.productGroup);
+  const [transactionType, setTransactionType] = useState(persistedState.transactionType);
+  const [advancedOpen, setAdvancedOpen] = useState(persistedState.advancedOpen);
+  const [viewMode, setViewMode] = useState<ViewMode>(persistedState.viewMode);
+  const [trendMetric, setTrendMetric] = useState<SalesTrendMetric>(persistedState.trendMetric);
+  const [rankingMetric, setRankingMetric] = useState<SalesRankingMetric>(persistedState.rankingMetric);
+  const [invoicePage, setInvoicePage] = useState(persistedState.invoicePage);
+  const [page, setPage] = useState(persistedState.page);
   const [items, setItems] = useState<CommercialTransaction[]>([]);
   const [total, setTotal] = useState(0);
-  const [summary, setSummary] = useState<CommercialTransactionSummaryResponse | null>(null);
-  const [timeline, setTimeline] = useState<CommercialTransactionTimelineResponse | null>(null);
+  const [invoices, setInvoices] = useState<CommercialInvoiceSummaryResponse | null>(null);
+  const [analytics, setAnalytics] = useState<CommercialInvoiceAnalyticsResponse | null>(null);
+  const [selectedInvoiceNumber, setSelectedInvoiceNumber] = useState("");
+  const [invoiceDetailsOpen, setInvoiceDetailsOpen] = useState(false);
+  const [invoiceDetailsByNumber, setInvoiceDetailsByNumber] = useState<Record<string, CommercialInvoiceDetails>>({});
+  const [invoiceDetailsLoadingNumber, setInvoiceDetailsLoadingNumber] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const requestIdRef = useRef(0);
+  const cacheRef = useRef(new Map<string, SalesCachedData>());
+
+  const debouncedDocumentNumber = useDebouncedValue(documentNumberInput, FILTER_DEBOUNCE_MS);
+  const debouncedProductCode = useDebouncedValue(productCodeInput, FILTER_DEBOUNCE_MS);
+  const documentNumber = normalizeSalesSearchFilter(debouncedDocumentNumber);
+  const productCode = normalizeSalesSearchFilter(debouncedProductCode);
 
   const pageSize = DEFAULT_PAGE_SIZE;
   const summaryPageSize = DEFAULT_SUMMARY_PAGE_SIZE;
   const effectiveCustomerName = customerName.trim() || companyName.trim();
   const hasAdvancedFilters = Boolean(customerName || city || companyName || productGroup || transactionType || periodPreset === "custom");
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
-  const summaryTotalPages = useMemo(() => Math.max(1, Math.ceil((summary?.totalItems ?? 0) / summaryPageSize)), [summary?.totalItems, summaryPageSize]);
-  const hasResults = (summary?.totalRecords ?? 0) > 0;
-  const salesAverages = useMemo(
-    () => calculatePeriodAverages(summary?.totalAmount ?? 0, dateFrom, dateTo),
-    [summary?.totalAmount, dateFrom, dateTo],
-  );
-  const timelineGranularity = useMemo(
-    () => resolveSalesTimelineGranularity({ periodPreset, dateFrom, dateTo }),
+  const invoiceTotalPages = useMemo(() => Math.max(1, Math.ceil((invoices?.totalItems ?? 0) / summaryPageSize)), [invoices?.totalItems, summaryPageSize]);
+  const analyticsGranularity = useMemo(
+    () => resolveInvoiceAnalyticsGranularity({ periodPreset, dateFrom, dateTo }),
     [dateFrom, dateTo, periodPreset],
   );
+  const hasResults = (analytics?.summary.totalInvoices ?? 0) > 0;
+  const trendData = useMemo(() => buildSalesTrendData(analytics, trendMetric), [analytics, trendMetric]);
+  const chartData = useMemo(() => buildSalesRankingData(analytics, rankingMetric), [analytics, rankingMetric]);
 
-  const invoiceSuggestions = useMemo(
-    () => Array.from(new Set(items.map((item) => item.documentNumber).filter(Boolean))).slice(0, 12),
-    [items],
-  );
-  const productSuggestions = useMemo(
-    () => Array.from(new Set(items.map((item) => `${item.productCode} - ${item.productDescription}`).filter(Boolean))).slice(0, 12),
-    [items],
-  );
-  const chartData = useMemo(
-    () => (summary?.items ?? []).slice(0, 8).map((item) => ({
-      companyName: item.companyName,
-      faturamento: item.totalAmount,
-      quantidade: item.totalQuantity,
-      crescimento: item.growthPercent ?? 0,
-    })),
-    [summary?.items],
-  );
-  const trendData = useMemo(() => buildSalesTrendData(timeline), [timeline]);
-  const revenueComparisonText = useMemo(() => buildSalesRevenueComparisonText(summary), [summary]);
+  async function loadInvoiceDetails(documentNumberValue: string) {
+    setInvoiceDetailsLoadingNumber(documentNumberValue);
+    try {
+      const details = await fetchCommercialInvoiceDetails(documentNumberValue);
+      setInvoiceDetailsByNumber((current) => ({ ...current, [documentNumberValue]: details }));
+    } catch (error) {
+      setMessage(buildFriendlyError(error));
+    } finally {
+      setInvoiceDetailsLoadingNumber((current) => (current === documentNumberValue ? "" : current));
+    }
+  }
 
-  async function loadData(targetPage = page, targetSummaryPage = summaryPage) {
+  async function openInvoiceDetails(documentNumberValue: string) {
+    setSelectedInvoiceNumber(documentNumberValue);
+    setInvoiceDetailsOpen(true);
+    if (invoiceDetailsByNumber[documentNumberValue]) {
+      return;
+    }
+
+    await loadInvoiceDetails(documentNumberValue);
+  }
+
+  async function loadData(targetPage = page, targetInvoicePage = invoicePage, signal?: AbortSignal) {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setMessage("");
 
+    const queryKey = JSON.stringify({
+      targetPage,
+      targetInvoicePage,
+      pageSize,
+      summaryPageSize,
+      documentNumber,
+      customerName: effectiveCustomerName,
+      productCode,
+      city,
+      productGroup,
+      transactionType,
+      dateFrom,
+      dateTo,
+      analyticsGranularity,
+    });
+    const cached = cacheRef.current.get(queryKey);
+    if (cached && Date.now() - cached.storedAt < SALES_CACHE_TTL_MS) {
+      setItems(cached.items.items);
+      setPage(cached.items.page);
+      setTotal(cached.items.total);
+      setInvoices(cached.invoices);
+      setInvoicePage(cached.invoices.page);
+      setAnalytics(cached.analytics);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const [itemsData, summaryData, timelineData] = await Promise.all([
+      const [itemsData, invoicesData, analyticsData] = await Promise.all([
         fetchCommercialTransactions({
           page: targetPage,
           pageSize,
@@ -256,11 +390,10 @@ function VendasPage() {
           transactionType,
           dateFrom,
           dateTo,
+          signal,
         }),
-        fetchCommercialTransactionsSummary({
-          granularity: summaryGranularity,
-          sortBy: companySortBy,
-          page: targetSummaryPage,
+        fetchCommercialInvoices({
+          page: targetInvoicePage,
           pageSize: summaryPageSize,
           documentNumber,
           customerName: effectiveCustomerName,
@@ -270,10 +403,10 @@ function VendasPage() {
           transactionType,
           dateFrom,
           dateTo,
-          referenceDate: dateTo,
+          signal,
         }),
-        fetchCommercialTransactionsTimeline({
-          granularity: timelineGranularity,
+        fetchCommercialInvoiceAnalytics({
+          granularity: analyticsGranularity,
           documentNumber,
           customerName: effectiveCustomerName,
           productCode,
@@ -282,25 +415,42 @@ function VendasPage() {
           transactionType,
           dateFrom,
           dateTo,
+          signal,
         }),
       ]);
 
+      if (requestId !== requestIdRef.current || signal?.aborted) {
+        return;
+      }
+
+      cacheRef.current.set(queryKey, {
+        items: itemsData,
+        invoices: invoicesData,
+        analytics: analyticsData,
+        storedAt: Date.now(),
+      });
       setItems(itemsData.items);
       setPage(itemsData.page);
       setTotal(itemsData.total);
-      setSummary(summaryData);
-      setSummaryPage(summaryData.page);
-      setTimeline(timelineData);
+      setInvoices(invoicesData);
+      setInvoicePage(invoicesData.page);
+      setAnalytics(analyticsData);
     } catch (error) {
+      if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted || requestId !== requestIdRef.current) {
+        return;
+      }
+
       setItems([]);
       setPage(targetPage);
       setTotal(0);
-      setSummary(makeEmptySummary());
-      setSummaryPage(targetSummaryPage);
-      setTimeline(makeEmptyTimeline(timelineGranularity));
+      setInvoices({ page: targetInvoicePage, pageSize: summaryPageSize, totalItems: 0, totalAmount: 0, totalQuantity: 0, totalWeightKg: 0, items: [] });
+      setInvoicePage(targetInvoicePage);
+      setAnalytics(makeEmptyAnalytics(analyticsGranularity));
       setMessage(buildFriendlyError(error));
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current && !signal?.aborted) {
+        setLoading(false);
+      }
     }
   }
 
@@ -317,36 +467,65 @@ function VendasPage() {
   }
 
   function clearFilters() {
-    const next = resolvePeriod("month");
-    setPeriodPreset("month");
+    const next = resolveLastThreeMonthsPeriod();
+    setPeriodPreset("quarter");
     setDateFrom(next.dateFrom);
     setDateTo(next.dateTo);
     setCustomerName("");
-    setProductCode("");
-    setDocumentNumber("");
+    setProductCodeInput("");
+    setDocumentNumberInput("");
     setCity("");
     setCompanyName("");
     setProductGroup("");
     setTransactionType("");
-    setSummaryPage(1);
+    setInvoicePage(1);
     setPage(1);
+    setSelectedInvoiceNumber("");
+    setInvoiceDetailsOpen(false);
   }
 
   useEffect(() => {
-    setSummaryPage(1);
+    setInvoicePage(1);
     setPage(1);
-  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, summaryGranularity, companySortBy]);
+    setSelectedInvoiceNumber("");
+    setInvoiceDetailsOpen(false);
+  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadData(1, 1);
-    }, FILTER_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, summaryGranularity, companySortBy, timelineGranularity]);
+    const controller = new AbortController();
+    void loadData(1, 1, controller.signal);
+    return () => controller.abort();
+  }, [dateFrom, dateTo, customerName, productCode, documentNumber, city, companyName, productGroup, transactionType, analyticsGranularity]);
 
   useEffect(() => {
-    void loadData(page, summaryPage);
-  }, [page, summaryPage]);
+    const controller = new AbortController();
+    void loadData(page, invoicePage, controller.signal);
+    return () => controller.abort();
+  }, [page, invoicePage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const state: PersistedSalesState = {
+      periodPreset,
+      dateFrom,
+      dateTo,
+      customerName,
+      productCodeInput,
+      documentNumberInput,
+      city,
+      companyName,
+      productGroup,
+      transactionType,
+      advancedOpen,
+      viewMode,
+      trendMetric,
+      rankingMetric,
+      invoicePage,
+      page,
+    };
+    window.sessionStorage.setItem(SALES_STATE_STORAGE_KEY, JSON.stringify(state));
+  }, [periodPreset, dateFrom, dateTo, customerName, productCodeInput, documentNumberInput, city, companyName, productGroup, transactionType, advancedOpen, viewMode, trendMetric, rankingMetric, invoicePage, page]);
 
   return (
     <div className="page-shell space-y-8">
@@ -355,7 +534,7 @@ function VendasPage() {
           <span className="page-header-kicker">Smart Core / Vendas</span>
           <h1 className="mt-2 text-3xl font-display tracking-tight text-foreground md:text-4xl">Vendas</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Dashboard analítico para descobrir desempenho, ranking e itens importados sem começar por um formulário.
+            Dashboard analítico para acompanhar emissão, composição e impacto das notas fiscais filtradas.
           </p>
         </div>
 
@@ -379,22 +558,26 @@ function VendasPage() {
               <Label htmlFor="sales-document">Nota fiscal</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="sales-document" list="sales-document-options" className="pl-9" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} placeholder="Buscar por nota fiscal" />
+                <Input id="sales-document" className="pl-9 pr-16" value={documentNumberInput} onChange={(event) => setDocumentNumberInput(event.target.value)} placeholder="Buscar por nota fiscal" />
+                {documentNumberInput && (
+                  <Button type="button" variant="ghost" size="sm" className="absolute right-1 top-1/2 h-8 -translate-y-1/2 px-2 text-xs" onClick={() => setDocumentNumberInput("")}>
+                    Limpar
+                  </Button>
+                )}
               </div>
-              <datalist id="sales-document-options">
-                {invoiceSuggestions.map((value) => <option key={value} value={value} />)}
-              </datalist>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="sales-product">Produto</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="sales-product" list="sales-product-options" className="pl-9" value={productCode} onChange={(event) => setProductCode(event.target.value.split(" - ")[0] ?? event.target.value)} placeholder="Buscar código ou descrição" />
+                <Input id="sales-product" className="pl-9 pr-16" value={productCodeInput} onChange={(event) => setProductCodeInput(event.target.value)} placeholder="Buscar código ou descrição" />
+                {productCodeInput && (
+                  <Button type="button" variant="ghost" size="sm" className="absolute right-1 top-1/2 h-8 -translate-y-1/2 px-2 text-xs" onClick={() => setProductCodeInput("")}>
+                    Limpar
+                  </Button>
+                )}
               </div>
-              <datalist id="sales-product-options">
-                {productSuggestions.map((value) => <option key={value} value={value} />)}
-              </datalist>
             </div>
 
             <Button type="button" variant="outline" className="h-10" onClick={() => setAdvancedOpen((value) => !value)}>
@@ -430,47 +613,45 @@ function VendasPage() {
         </Alert>
       )}
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="metric-row">
         <MetricCard
           loading={loading}
           error={Boolean(message)}
           empty={!hasResults}
-          title="Faturamento"
-          value={formatKpiCompactCurrency(summary?.totalAmount ?? 0)}
-          tooltip={formatCurrency(summary?.totalAmount ?? 0)}
-          percentageChange={summary?.totalGrowthPercent ?? null}
-          periodLabel={revenueComparisonText}
-          icon={DollarSign}
-          trendData={trendData.map((item) => item.value)}
+          title="Notas fiscais"
+          value={formatKpiCompactNumber(analytics?.summary.totalInvoices ?? 0)}
+          tooltip={String(analytics?.summary.totalInvoices ?? 0)}
+          periodLabel="Total de notas fiscais encontradas nos filtros"
+          icon={ReceiptText}
         />
         <MetricCard
           loading={loading}
           error={Boolean(message)}
           empty={!hasResults}
-          title="Média mensal"
-          value={formatKpiCompactCurrency(salesAverages.monthly)}
-          tooltip={formatCurrency(salesAverages.monthly)}
-          periodLabel="Faturamento médio mensal dos filtros"
-          icon={CalendarDays}
+          title="Valor das notas"
+          value={formatKpiCompactCurrency(analytics?.summary.totalAmount ?? 0)}
+          tooltip={formatCurrency(analytics?.summary.totalAmount ?? 0)}
+          periodLabel="Valor total acumulado nas notas fiscais filtradas"
+          icon={Users}
         />
         <MetricCard
           loading={loading}
           error={Boolean(message)}
           empty={!hasResults}
-          title="Média semanal"
-          value={formatKpiCompactCurrency(salesAverages.weekly)}
-          tooltip={formatCurrency(salesAverages.weekly)}
-          periodLabel="Faturamento médio semanal dos filtros"
-          icon={CalendarDays}
+          title="Peso movimentado"
+          value={formatKpiCompactNumber(analytics?.summary.totalWeightKg ?? 0)}
+          tooltip={`${formatDecimal(analytics?.summary.totalWeightKg ?? 0)} kg`}
+          periodLabel="Peso total movimentado nas notas filtradas"
+          icon={PackageSearch}
         />
         <MetricCard
           loading={loading}
           error={Boolean(message)}
           empty={!hasResults}
-          title="Peso bruto"
-          value={formatKpiCompactNumber(summary?.totalWeightKg ?? 0)}
-          tooltip={`${formatDecimal(summary?.totalWeightKg ?? 0)} kg`}
-          periodLabel="Peso bruto acumulado"
+          title="Clientes impactados"
+          value={formatKpiCompactNumber(analytics?.summary.totalCustomers ?? 0)}
+          tooltip={String(analytics?.summary.totalCustomers ?? 0)}
+          periodLabel="Clientes com participação nas notas do período"
           icon={Weight}
         />
       </section>
@@ -478,22 +659,15 @@ function VendasPage() {
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className={SALES_CHART_CARD_CLASS_NAME}>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle className="text-base text-foreground">Evolução da receita</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">Faturamento acumulado por período.</p>
+                <CardTitle className="text-base text-[var(--sales-chart-title)]">Evolução das notas fiscais</CardTitle>
+                <p className="mt-1 text-xs text-[var(--sales-chart-muted)]">{buildSalesTimelineSubtitle(analyticsGranularity, trendMetric)}</p>
               </div>
-              <select
-                className={SALES_CHART_SELECT_CLASS_NAME}
-                value={timelineGranularity}
-                onChange={() => undefined}
-                aria-label="Modo do gráfico de receita"
-              >
-                {revenueModeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+              <select className={SALES_CHART_SELECT_CLASS_NAME} value={trendMetric} onChange={(event) => setTrendMetric(event.target.value as SalesTrendMetric)}>
+                <option value="invoiceCount">Quantidade de notas</option>
+                <option value="totalAmount">Valor total das notas</option>
+                <option value="totalWeightKg">Peso total movimentado</option>
               </select>
             </div>
           </CardHeader>
@@ -501,22 +675,21 @@ function VendasPage() {
             {loading ? (
               <SkeletonTable rows={4} columns={2} />
             ) : !hasResults || trendData.length === 0 ? (
-              <EmptyState text="Sem resultado para gerar gráfico de faturamento." />
+              <EmptyState text="Sem resultado para gerar a evolução das notas fiscais." />
             ) : (
               <div className={SALES_ANALYTICS_PANEL_CLASS_NAME}>
                 <ChartContainer
-                  config={{ value: { label: "Faturamento", color: SALES_REVENUE_COLOR } }}
-                  className={`${SALES_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--text-muted)]`}
+                  config={{ value: { label: describeSalesTrendMetric(trendMetric), color: SALES_REVENUE_COLOR } }}
+                  className={`${SALES_CHART_HEIGHT_CLASS_NAME} w-full [&_.recharts-cartesian-axis-tick_text]:fill-[var(--sales-chart-axis)]`}
                 >
                   <AreaChart data={trendData} margin={{ left: 0, right: 8, top: 12, bottom: 4 }}>
                     <defs>
                       <linearGradient id="sales-revenue-fill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={SALES_REVENUE_COLOR} stopOpacity={0.22} />
-                        <stop offset="60%" stopColor={SALES_REVENUE_COLOR_SOFT} stopOpacity={0.10} />
-                        <stop offset="100%" stopColor={SALES_REVENUE_COLOR_SOFT} stopOpacity={0.02} />
+                        <stop offset="0%" stopColor={SALES_REVENUE_FILL} stopOpacity={1} />
+                        <stop offset="100%" stopColor={SALES_REVENUE_FILL_END} stopOpacity={1} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke={SALES_GRID_STROKE} strokeDasharray="3 6" />
+                    <CartesianGrid vertical={false} stroke={SALES_GRID_STROKE} />
                     <XAxis
                       dataKey="label"
                       tickLine={false}
@@ -534,24 +707,18 @@ function VendasPage() {
                       tickFormatter={formatRevenueAxisTick}
                     />
                     <ChartTooltip
-                      cursor={{ stroke: SALES_CURSOR_STROKE, strokeWidth: 1 }}
-                      content={<SalesRevenueTooltip />}
+                      cursor={{ stroke: SALES_CURSOR_STROKE, strokeWidth: 2 }}
+                      content={<SalesRevenueTooltip metric={trendMetric} />}
                     />
                     <Area
                       dataKey="value"
+                      name={describeSalesTrendMetric(trendMetric)}
                       type="monotone"
                       fill="url(#sales-revenue-fill)"
-                      stroke="none"
-                      strokeWidth={0}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      dataKey="value"
-                      type="monotone"
                       stroke={SALES_REVENUE_COLOR}
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4, fill: SALES_REVENUE_COLOR, stroke: "#ffffff", strokeWidth: 2 }}
+                      strokeWidth={2.8}
+                      dot={{ r: 3, fill: SALES_REVENUE_COLOR, strokeWidth: 0 }}
+                      activeDot={{ r: 5, fill: SALES_REVENUE_COLOR }}
                       isAnimationActive={false}
                     />
                   </AreaChart>
@@ -566,19 +733,14 @@ function VendasPage() {
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
                 <CardTitle className="text-base text-foreground">Ranking por empresa</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">Comparação das empresas com maior impacto nos filtros.</p>
+                <p className="mt-1 text-xs text-muted-foreground">{buildSalesRankingSubtitle(rankingMetric)}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <select className={SALES_CHART_SELECT_CLASS_NAME} value={summaryGranularity} onChange={(event) => setSummaryGranularity(event.target.value as SummaryGranularity)}>
-                  <option value="daily">Diário</option>
-                  <option value="weekly">Semanal</option>
-                  <option value="monthly">Mensal</option>
-                </select>
-                <select className={SALES_CHART_SELECT_CLASS_NAME} value={companySortBy} onChange={(event) => setCompanySortBy(event.target.value as SummarySortBy)}>
+                <select className={SALES_CHART_SELECT_CLASS_NAME} value={rankingMetric} onChange={(event) => setRankingMetric(event.target.value as SalesRankingMetric)}>
                   <option value="amount">Maior faturamento</option>
-                  <option value="growth">Maior crescimento</option>
-                  <option value="weight">Maior peso</option>
-                  <option value="quantity">Maior quantidade</option>
+                  <option value="invoiceCount">Maior quantidade de notas</option>
+                  <option value="items">Maior quantidade de itens</option>
+                  <option value="weight">Maior peso movimentado</option>
                 </select>
               </div>
             </div>
@@ -590,7 +752,7 @@ function VendasPage() {
               <EmptyState text="Sem empresas para o ranking atual." />
             ) : (
               <div className={SALES_ANALYTICS_PANEL_CLASS_NAME}>
-                <ChartContainer config={{ faturamento: { label: "Faturamento", color: SALES_RANKING_COLOR } }} className={`${SALES_CHART_HEIGHT_CLASS_NAME} w-full`}>
+                <ChartContainer config={{ valor: { label: describeSalesRankingMetric(rankingMetric), color: SALES_RANKING_COLOR } }} className={`${SALES_CHART_HEIGHT_CLASS_NAME} w-full`}>
                   <BarChart data={chartData} margin={{ left: 0, right: 8, top: 12, bottom: 18 }}>
                     <defs>
                       <linearGradient id="sales-ranking-bar" x1="0" y1="0" x2="0" y2="1">
@@ -613,10 +775,10 @@ function VendasPage() {
                       tick={{ fill: SALES_AXIS_COLOR, fontSize: 11 }}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(value) => formatKpiCompactCurrency(Number(value))}
+                      tickFormatter={(value) => rankingMetric === "amount" ? formatKpiCompactCurrency(Number(value)) : formatKpiCompactNumber(Number(value))}
                     />
-                    <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
-                    <Bar dataKey="faturamento" name="Faturamento" fill="url(#sales-ranking-bar)" radius={[6, 6, 0, 0]} />
+                    <ChartTooltip content={<ChartTooltipContent formatter={(value) => rankingMetric === "amount" ? formatCurrency(Number(value)) : formatDecimal(Number(value))} />} />
+                    <Bar dataKey="value" name={describeSalesRankingMetric(rankingMetric)} fill="url(#sales-ranking-bar)" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ChartContainer>
               </div>
@@ -629,14 +791,14 @@ function VendasPage() {
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <CardTitle>{viewMode === "summary" ? "Ranking detalhado" : "Itens de venda"}</CardTitle>
+              <CardTitle>{viewMode === "invoices" ? "Notas fiscais" : "Itens de venda"}</CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                {loading ? "Carregando..." : `${viewMode === "summary" ? summary?.totalItems ?? 0 : total} registro(s) nesta visualização`}
+                {loading ? "Carregando..." : `${viewMode === "invoices" ? invoices?.totalItems ?? 0 : total} registro(s) nesta visualização`}
               </p>
             </div>
             <div className="inline-flex w-fit rounded-md border border-border p-1">
-              <Button type="button" size="sm" variant={viewMode === "summary" ? "default" : "ghost"} onClick={() => setViewMode("summary")}>
-                Resumo
+              <Button type="button" size="sm" variant={viewMode === "invoices" ? "default" : "ghost"} onClick={() => setViewMode("invoices")}>
+                Notas
               </Button>
               <Button type="button" size="sm" variant={viewMode === "items" ? "default" : "ghost"} onClick={() => setViewMode("items")}>
                 Itens
@@ -645,14 +807,15 @@ function VendasPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {viewMode === "summary" ? (
-            <SummaryTable
+          {viewMode === "invoices" ? (
+            <InvoiceTable
               loading={loading}
-              summary={summary ?? makeEmptySummary()}
-              summaryPage={summaryPage}
-              summaryTotalPages={summaryTotalPages}
-              onPrevious={() => setSummaryPage((value) => Math.max(1, value - 1))}
-              onNext={() => setSummaryPage((value) => value + 1)}
+              invoices={invoices ?? { page: 1, pageSize: summaryPageSize, totalItems: 0, totalAmount: 0, totalQuantity: 0, totalWeightKg: 0, items: [] }}
+              invoicePage={invoicePage}
+              invoiceTotalPages={invoiceTotalPages}
+              onOpenInvoice={openInvoiceDetails}
+              onPrevious={() => setInvoicePage((value) => Math.max(1, value - 1))}
+              onNext={() => setInvoicePage((value) => value + 1)}
             />
           ) : (
             <ItemsTable
@@ -666,6 +829,14 @@ function VendasPage() {
           )}
         </CardContent>
       </Card>
+
+      <InvoiceDetailsDialog
+        open={invoiceDetailsOpen}
+        onOpenChange={setInvoiceDetailsOpen}
+        documentNumber={selectedInvoiceNumber}
+        details={selectedInvoiceNumber ? invoiceDetailsByNumber[selectedInvoiceNumber] : undefined}
+        loading={selectedInvoiceNumber !== "" && invoiceDetailsLoadingNumber === selectedInvoiceNumber}
+      />
     </div>
   );
 }
@@ -689,32 +860,31 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
 }
 
 function EmptyState({ text }: { text: string }) {
-  return (
-    <div className={SALES_CHART_EMPTY_STATE_CLASS_NAME}>
-      {text}
-    </div>
-  );
+  return <div className={SALES_CHART_EMPTY_STATE_CLASS_NAME}>{text}</div>;
 }
 
 function SalesRevenueTooltip({
   active,
   payload,
+  metric,
 }: {
   active?: boolean;
   payload?: Array<{ value?: number; payload?: { tooltipLabel?: string } }>;
+  metric: SalesTrendMetric;
 }) {
   if (!active || !payload?.length) {
     return null;
   }
 
   const point = payload[0];
-  const amount = typeof point?.value === "number" ? point.value : Number(point?.value ?? 0);
+  const value = typeof point?.value === "number" ? point.value : Number(point?.value ?? 0);
   const tooltipLabel = point?.payload?.tooltipLabel ?? "";
+  const formattedValue = metric === "totalAmount" ? formatCurrency(value) : metric === "totalWeightKg" ? `${formatDecimal(value)} kg` : formatDecimal(value);
 
   return (
     <div className="min-w-[196px] rounded-lg border border-border/70 bg-surface px-4 py-3 text-left shadow-md">
       <p className="text-xs font-medium text-muted-foreground">{tooltipLabel}</p>
-      <p className="mt-1 text-sm font-semibold text-foreground">{formatCurrency(amount)}</p>
+      <p className="mt-1 text-sm font-semibold text-foreground">{formattedValue}</p>
     </div>
   );
 }
@@ -766,108 +936,194 @@ function MetricCard({
   );
 }
 
-function SummaryTable({
+function InvoiceTable({
   loading,
-  summary,
-  summaryPage,
-  summaryTotalPages,
+  invoices,
+  invoicePage,
+  invoiceTotalPages,
+  onOpenInvoice,
   onPrevious,
   onNext,
 }: {
   loading: boolean;
-  summary: CommercialTransactionSummaryResponse;
-  summaryPage: number;
-  summaryTotalPages: number;
+  invoices: CommercialInvoiceSummaryResponse;
+  invoicePage: number;
+  invoiceTotalPages: number;
+  onOpenInvoice: (documentNumber: string) => void | Promise<void>;
   onPrevious: () => void;
   onNext: () => void;
 }) {
-  if (loading) return <SkeletonTable rows={6} columns={5} />;
+  if (loading) return <SkeletonTable rows={6} columns={7} />;
 
   return (
     <>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Empresa</TableHead>
-            <TableHead>Faturamento</TableHead>
+            <TableHead>Nota fiscal</TableHead>
+            <TableHead>Cliente</TableHead>
+            <TableHead>Data</TableHead>
+            <TableHead>Total da nota</TableHead>
+            <TableHead>Itens</TableHead>
             <TableHead>Quantidade</TableHead>
             <TableHead>Peso (kg)</TableHead>
-            <TableHead>Variação</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {summary.items.length === 0 && (
+          {invoices.items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                Sem dados para montar ranking.
+              <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                Nenhuma nota fiscal encontrada.
               </TableCell>
             </TableRow>
           )}
-          {summary.items.map((row) => (
-            <TableRow key={row.companyName}>
-              <TableCell>{row.companyName}</TableCell>
-              <TableCell>{formatCurrency(row.totalAmount)}</TableCell>
-              <TableCell>{formatDecimal(row.totalQuantity)}</TableCell>
-              <TableCell>{formatDecimal(row.totalWeightKg)}</TableCell>
+          {invoices.items.map((invoice) => (
+            <TableRow
+              key={invoice.documentNumber}
+              className="animate-soft-enter cursor-pointer"
+              onClick={() => void onOpenInvoice(invoice.documentNumber)}
+            >
               <TableCell>
-                <Badge
-                  variant={row.growthPercent == null ? "outline" : row.growthPercent >= 0 ? "secondary" : "destructive"}
-                  className={
-                    row.growthPercent == null
-                      ? "text-muted-foreground"
-                      : row.growthPercent >= 0
-                        ? "border-[color:var(--success)]/20 bg-[color:var(--success)]/10 text-[color:var(--success)]"
-                        : "border-[color:var(--danger)]/20 bg-[color:var(--danger)]/10 text-[color:var(--danger)]"
-                  }
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto px-0 text-left font-semibold"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void onOpenInvoice(invoice.documentNumber);
+                  }}
                 >
-                  {formatDelta(row.growthPercent)}
-                </Badge>
+                  {invoice.documentNumber}
+                </Button>
               </TableCell>
+              <TableCell>{invoice.customerName}</TableCell>
+              <TableCell>{formatDate(invoice.transactionDate)}</TableCell>
+              <TableCell>{formatCurrency(invoice.totalAmount)}</TableCell>
+              <TableCell>{formatDecimal(invoice.totalItems)}</TableCell>
+              <TableCell>{formatDecimal(invoice.totalQuantity)}</TableCell>
+              <TableCell>{formatDecimal(invoice.totalWeightKg)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-      <Pager page={summaryPage} totalPages={summaryTotalPages} disabled={loading} onPrevious={onPrevious} onNext={onNext} />
+      <Pager page={invoicePage} totalPages={invoiceTotalPages} disabled={loading} onPrevious={onPrevious} onNext={onNext} />
     </>
   );
 }
 
+function InvoiceDetailsDialog({
+  open,
+  onOpenChange,
+  documentNumber,
+  details,
+  loading,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  documentNumber: string;
+  details?: CommercialInvoiceDetails;
+  loading: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="custom-scrollbar max-h-[90vh] w-[95vw] max-w-5xl overflow-y-auto border-border/80 bg-surface p-4 pt-6 sm:p-6 sm:pt-7">
+        <DialogHeader>
+          <DialogTitle>Detalhes da Nota Fiscal</DialogTitle>
+          <DialogDescription>
+            {documentNumber ? `Informações da nota ${documentNumber}.` : "Informações detalhadas da nota fiscal selecionada."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="py-8 text-sm text-muted-foreground">Carregando detalhes da nota fiscal...</div>
+        ) : details ? (
+          <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <InvoiceInfo label="Nota fiscal" value={details.documentNumber} />
+              <InvoiceInfo label="Cliente" value={details.customerName} />
+              <InvoiceInfo label="Data da compra" value={formatDate(details.transactionDate)} />
+              <InvoiceInfo label="Total da nota" value={formatCurrency(details.totalAmount)} />
+              <InvoiceInfo label="Quantidade total" value={formatDecimal(details.totalQuantity)} />
+              <InvoiceInfo label="Peso total" value={`${formatDecimal(details.totalWeightKg)} kg`} />
+              <InvoiceInfo label="Itens na nota" value={String(details.totalItems)} />
+              <InvoiceInfo label="Operação" value={details.transactionType || "-"} />
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Itens da nota</h3>
+              <div className="overflow-x-auto rounded-lg border border-border/70">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Produto</TableHead>
+                      <TableHead>Quantidade</TableHead>
+                      <TableHead>Peso (kg)</TableHead>
+                      <TableHead>Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {details.items.map((item, index) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>{item.productCode} - {item.productDescription}</TableCell>
+                        <TableCell>{formatDecimal(item.quantity)}</TableCell>
+                        <TableCell>{formatDecimal(item.grossWeightKg)}</TableCell>
+                        <TableCell>{formatCurrency(item.totalAmount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-sm text-muted-foreground">Não foi possível carregar os detalhes desta nota fiscal.</div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InvoiceInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 font-medium text-foreground">{value}</p>
+    </div>
+  );
+}
+
 function ItemsTable({ loading, items, page, totalPages, onPrevious, onNext }: { loading: boolean; items: CommercialTransaction[]; page: number; totalPages: number; onPrevious: () => void; onNext: () => void }) {
-  if (loading) return <SkeletonTable rows={8} columns={8} />;
+  if (loading) return <SkeletonTable rows={8} columns={5} />;
 
   return (
     <>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Data</TableHead>
-            <TableHead>Cliente</TableHead>
+            <TableHead>Documento</TableHead>
             <TableHead>Produto</TableHead>
-            <TableHead>Qtd</TableHead>
-            <TableHead>Unitário</TableHead>
-            <TableHead>Total</TableHead>
-            <TableHead>Operação</TableHead>
-            <TableHead>Cidade</TableHead>
+            <TableHead>Quantidade</TableHead>
+            <TableHead>Peso (kg)</TableHead>
+            <TableHead>Faturamento</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+              <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                 Nenhuma venda encontrada.
               </TableCell>
             </TableRow>
           )}
           {items.map((item) => (
             <TableRow key={item.id} className="animate-soft-enter">
-              <TableCell>{formatDate(item.transactionDate)}</TableCell>
-              <TableCell>{item.customerName}</TableCell>
-              <TableCell>{item.productCode}</TableCell>
+              <TableCell>{item.documentNumber}</TableCell>
+              <TableCell>{item.productCode} - {item.productDescription}</TableCell>
               <TableCell>{formatDecimal(item.quantity)}</TableCell>
-              <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
+              <TableCell>{formatDecimal(item.grossWeightKg)}</TableCell>
               <TableCell>{formatCurrency(item.totalAmount)}</TableCell>
-              <TableCell>{item.transactionType || "-"}</TableCell>
-              <TableCell>{item.city || "-"}</TableCell>
             </TableRow>
           ))}
         </TableBody>

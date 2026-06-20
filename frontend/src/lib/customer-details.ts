@@ -3,6 +3,42 @@
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
+export function resolveRankingTrend(value: number | null): {
+  label: "Crescendo" | "Caindo" | "Estável" | "Sem base";
+  badgeVariant: "default" | "destructive" | "secondary" | "outline";
+  textClassName: string;
+} {
+  if (value == null || Number.isNaN(value)) {
+    return {
+      label: "Sem base",
+      badgeVariant: "outline",
+      textClassName: "text-muted-foreground",
+    };
+  }
+
+  if (value >= 5) {
+    return {
+      label: "Crescendo",
+      badgeVariant: "default",
+      textClassName: "text-[var(--success)]",
+    };
+  }
+
+  if (value <= -5) {
+    return {
+      label: "Caindo",
+      badgeVariant: "destructive",
+      textClassName: "text-[var(--danger)]",
+    };
+  }
+
+  return {
+    label: "Estável",
+    badgeVariant: "secondary",
+    textClassName: "text-muted-foreground",
+  };
+}
+
 export function resolveComparisonColor(value: number | null): string {
   if (value == null || Number.isNaN(value)) return "text-muted-foreground";
   if (value > 0.05) return "text-[var(--success)]";

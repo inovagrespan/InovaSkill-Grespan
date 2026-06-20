@@ -9,6 +9,7 @@ namespace InovaSkill.Importer.Api.Controllers;
 [Route("api/products")]
 public sealed class ProductsController(ImportDbContext dbContext) : ControllerBase
 {
+<<<<<<< HEAD
     private const int MinimumPage = 1;
     private const int MinimumPageSize = 10;
     private const int MaximumPageSize = 100;
@@ -56,6 +57,27 @@ public sealed class ProductsController(ImportDbContext dbContext) : ControllerBa
         if (priceMax.HasValue)
         {
             query = query.Where(x => x.Price <= priceMax.Value);
+=======
+    private const int MinPageSize = 10;
+    private const int MaxPageSize = 100;
+
+    [HttpGet]
+    public async Task<ActionResult<PagedResult<ProductDto>>> GetPaged(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, MinPageSize, MaxPageSize);
+
+        var query = dbContext.Products.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim().ToUpper();
+            query = query.Where(x => x.Sku.ToUpper().Contains(normalizedSearch) || x.Name.ToUpper().Contains(normalizedSearch));
+>>>>>>> 63b18f765086c6de4ac2dbaf716dcfa70e776cc1
         }
 
         var total = await query.CountAsync(cancellationToken);

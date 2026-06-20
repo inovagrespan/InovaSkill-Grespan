@@ -92,7 +92,8 @@ public sealed record CustomerTimelinePointDto(
     decimal Revenue,
     decimal Quantity,
     decimal Weight,
-    int Orders);
+    int Orders,
+    decimal AverageTicket);
 
 public sealed record CustomerComparisonItemDto(
     string Label,
@@ -134,3 +135,12 @@ public sealed record CustomerInsightsResponseDto(
     string? QuantityPredictionReason,
     string? RiskReason,
     int MonthlyHistoryPeriods);
+
+public sealed record CustomerIndividualAnalysisResponseDto(
+    string Scope,
+    DateTime PeriodStart,
+    DateTime PeriodEnd,
+    string Granularity,
+    string Metric,
+    CustomerSummaryResponseDto Summary,
+    IReadOnlyList<CustomerTimelinePointDto> Points);

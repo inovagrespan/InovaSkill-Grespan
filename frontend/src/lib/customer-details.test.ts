@@ -5,6 +5,7 @@ import {
   formatPurchaseFrequency,
   formatVariationPercent,
   resolveComparisonColor,
+  resolveRankingTrend,
   resolveRiskBadgeVariant,
   resolveCustomerStatusVariant,
 } from "./customer-details";
@@ -30,6 +31,13 @@ describe("customer detail helpers", () => {
     expect(resolveCustomerStatusVariant("Em crescimento")).toBe("default");
     expect(resolveCustomerStatusVariant("Inativo")).toBe("destructive");
     expect(resolveCustomerStatusVariant("Ativo")).toBe("secondary");
+  });
+
+  it("traduz a variação da lista em uma tendência legível", () => {
+    expect(resolveRankingTrend(12).label).toBe("Crescendo");
+    expect(resolveRankingTrend(-8).label).toBe("Caindo");
+    expect(resolveRankingTrend(2).label).toBe("Estável");
+    expect(resolveRankingTrend(null).label).toBe("Sem base");
   });
 
   it("mostra estados explícitos para valores ausentes", () => {

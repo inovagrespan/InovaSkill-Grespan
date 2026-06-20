@@ -43,7 +43,7 @@
       dockerfile: InovaSkill.Importer.Api/Dockerfile
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:8080
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: Production
       DisableHttpsRedirection: "true"
       Storage__UploadsPath: /data/uploads
       ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
@@ -68,7 +68,7 @@
       context: ./backend
       dockerfile: InovaSkill.Importer.Worker/Dockerfile
     environment:
-      DOTNET_ENVIRONMENT: Development
+      DOTNET_ENVIRONMENT: Production
       Storage__UploadsPath: /data/uploads
       ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
       ConnectionStrings__Redis: redis:6379
@@ -91,10 +91,10 @@
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    environment:
-      VITE_API_URL: http://localhost:5279
+      args:
+        VITE_API_URL: /api
     ports:
-      - "5173:5173"
+      - "80:80"
     depends_on:
       api:
         condition: service_started

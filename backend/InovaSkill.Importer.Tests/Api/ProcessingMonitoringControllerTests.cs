@@ -5,8 +5,10 @@ using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Domain.ValueObjects;
 using InovaSkill.Importer.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace InovaSkill.Importer.Tests.Api;
 
@@ -76,7 +78,7 @@ public sealed class ProcessingMonitoringControllerTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(2, 1), new StubJobService());
+        var controller = CreateController(db, new StubQueueMonitor(2, 1), new StubJobService(), new StubPostImportJobQueue());
 
         var result = await controller.GetDashboard();
 
@@ -140,7 +142,7 @@ public sealed class ProcessingMonitoringControllerTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubJobService());
+        var controller = CreateController(db, new StubQueueMonitor(), new StubJobService(), new StubPostImportJobQueue());
 
         var result = await controller.GetJobDetails(5);
 
@@ -165,7 +167,7 @@ public sealed class ProcessingMonitoringControllerTests
             CurrentStep = "Aguardando processamento"
         });
         await db.SaveChangesAsync();
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubJobService());
+        var controller = CreateController(db, new StubQueueMonitor(), new StubJobService(), new StubPostImportJobQueue());
 
         var result = await controller.Cancel(9);
 
@@ -204,7 +206,7 @@ public sealed class ProcessingMonitoringControllerTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubJobService());
+        var controller = CreateController(db, new StubQueueMonitor(), new StubJobService(), new StubPostImportJobQueue());
 
         var result = await controller.GetDashboard();
 
@@ -229,13 +231,78 @@ public sealed class ProcessingMonitoringControllerTests
             FinishedAt = DateTime.UtcNow
         });
         await db.SaveChangesAsync();
-        var controller = new ProcessingMonitoringController(db, new StubQueueMonitor(), new StubJobService());
+        var controller = CreateController(db, new StubQueueMonitor(), new StubJobService(), new StubPostImportJobQueue());
 
         var result = await controller.Cancel(12);
 
         Assert.IsType<ConflictObjectResult>(result);
         var job = await db.FileJobs.SingleAsync(x => x.Id == 12);
         Assert.Equal(FileJobStatus.Completed, job.Status);
+    }
+
+    [Fact]
+    public async Task RunManualAction_EnqueuesPostImportJobForCompletedFileJobs()
+    {
+        await using var db = CreateDb();
+        db.FileJobs.Add(new FileJob
+        {
+            Id = 20,
+            FilePath = "vendas.xlsx",
+            OriginalFileName = "vendas.xlsx",
+            Status = FileJobStatus.Completed,
+            CurrentStep = "Processamento concluido",
+            FinishedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var queue = new StubPostImportJobQueue();
+        var controller = CreateController(db, new StubQueueMonitor(), new StubJobService(), queue);
+
+        var result = await controller.RunManualAction(new ProcessingManualActionRequestDto("sales-summary", [20]));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<ProcessingManualActionResponseDto>(ok.Value);
+        Assert.Equal("sales-summary", payload.Action);
+        Assert.Equal(1, payload.EnqueuedJobs);
+        var queued = Assert.Single(queue.Items);
+        Assert.Equal(20, queued.FileJobId);
+        Assert.Equal(PostImportJobType.SalesSummary, queued.JobType);
+    }
+
+    [Fact]
+    public async Task RunManualAction_RejectsNonCompletedJobs()
+    {
+        await using var db = CreateDb();
+        db.FileJobs.Add(new FileJob
+        {
+            Id = 21,
+            FilePath = "clientes.xlsx",
+            OriginalFileName = "clientes.xlsx",
+            Status = FileJobStatus.Importing,
+            CurrentStep = "Importando dados"
+        });
+        await db.SaveChangesAsync();
+        var controller = CreateController(db, new StubQueueMonitor(), new StubJobService(), new StubPostImportJobQueue());
+
+        var result = await controller.RunManualAction(new ProcessingManualActionRequestDto("customer-summary", [21]));
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetDashboard_ReturnsForbiddenForGestor()
+    {
+        await using var db = CreateDb();
+        var controller = CreateController(
+            db,
+            new StubQueueMonitor(),
+            new StubJobService(),
+            new StubPostImportJobQueue(),
+            AppUserRoles.Gestor);
+
+        var result = await controller.GetDashboard();
+
+        var forbidden = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
     }
 
     private static ImportDbContext CreateDb()
@@ -245,6 +312,29 @@ public sealed class ProcessingMonitoringControllerTests
             .Options;
 
         return new ImportDbContext(options);
+    }
+
+    private static ProcessingMonitoringController CreateController(
+        ImportDbContext db,
+        IProcessingQueueMonitor queueMonitor,
+        IJobService jobService,
+        IPostImportJobQueue postImportJobQueue,
+        string role = AppUserRoles.Admin)
+    {
+        var controller = new ProcessingMonitoringController(db, queueMonitor, jobService, postImportJobQueue);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                [
+                    new Claim("role", role),
+                    new Claim(ClaimTypes.Role, role)
+                ], "TestAuth"))
+            }
+        };
+
+        return controller;
     }
 
     private sealed class StubQueueMonitor(int importQueueLength = 0, int postImportQueueLength = 0) : IProcessingQueueMonitor
@@ -260,6 +350,22 @@ public sealed class ProcessingMonitoringControllerTests
         public Task<long> EnqueueAsync(string type, object payload, string? userId, CancellationToken cancellationToken)
         {
             return Task.FromResult(1L);
+        }
+    }
+
+    private sealed class StubPostImportJobQueue : IPostImportJobQueue
+    {
+        public List<PostImportJobItem> Items { get; } = [];
+
+        public Task EnqueueAsync(PostImportJobItem job, CancellationToken cancellationToken)
+        {
+            Items.Add(job);
+            return Task.CompletedTask;
+        }
+
+        public Task<PostImportJobItem?> DequeueAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<PostImportJobItem?>(null);
         }
     }
 }

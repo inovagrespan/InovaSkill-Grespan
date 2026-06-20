@@ -11,9 +11,9 @@ const routeOccupancy = [
 ];
 
 const stockBreaks = [
-  { sku: "PRD-104", product: "Arroz Tipo 1 5kg", warehouse: "CD Central", stock: 320, demand: 580, ruptureRisk: 45 },
-  { sku: "PRD-221", product: "Feijão Carioca 1kg", warehouse: "CD Campinas", stock: 140, demand: 260, ruptureRisk: 46 },
-  { sku: "PRD-411", product: "Café Tradicional 500g", warehouse: "CD Ribeirão", stock: 90, demand: 180, ruptureRisk: 50 },
+  { sku: "PAN-104", product: "Pão Francês Congelado 60g", warehouse: "CD Central", stock: 320, demand: 580, ruptureRisk: 45 },
+  { sku: "PAN-221", product: "Pão de Queijo Congelado 1kg", warehouse: "CD Campinas", stock: 140, demand: 260, ruptureRisk: 46 },
+  { sku: "PAN-318", product: "Croissant Congelado 80g", warehouse: "CD Ribeirão", stock: 90, demand: 180, ruptureRisk: 50 },
 ];
 
 const CRITICAL_ROUTE_OCCUPANCY_PERCENT = 90;
@@ -34,17 +34,17 @@ function Logistica() {
             Linha de base da frota, ocupação por rota e risco de ruptura para priorizar reposição antes do pico de venda.
           </p>
         </div>
-        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">Sync · há 4 min</span>
+        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">Sync - há 4 min</span>
       </header>
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="metric-row">
         {[
           { label: "Frota ativa", value: "86", sub: "de 92 veículos", icon: Truck, tone: "text-foreground" },
           { label: "Ocupação por rota", value: `${averageOccupancy}%`, sub: `${criticalRoutes} rotas acima de 90%`, icon: Activity, tone: "text-primary" },
           { label: "Ruptura de estoque", value: `${ruptureItems}`, sub: "SKUs com risco alto", icon: Package, tone: "text-amber-600" },
           { label: "SLA entregas", value: "93,1%", sub: "alerta em 2 rotas", icon: Clock, tone: "text-foreground" },
         ].map((item) => (
-          <div key={item.label} className="rounded-xl border border-border bg-surface p-5 shadow-xs">
+          <div key={item.label} className="metric-card-item rounded-xl border border-border bg-surface p-5 shadow-xs">
             <div className="mb-3 flex items-start justify-between">
               <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{item.label}</p>
               <item.icon className="size-3.5 text-muted-foreground" />
@@ -70,7 +70,7 @@ function Logistica() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold">{item.route}</p>
-                    <p className="text-xs text-muted-foreground">{item.truck} · {item.loadKg} · {item.stops} paradas</p>
+                    <p className="text-xs text-muted-foreground">{item.truck} - {item.loadKg} - {item.stops} paradas</p>
                   </div>
                   <span className={item.occupancy >= CRITICAL_ROUTE_OCCUPANCY_PERCENT ? "text-sm font-semibold text-amber-600" : "text-sm font-semibold text-muted-foreground"}>{item.status}</span>
                 </div>
@@ -97,7 +97,7 @@ function Logistica() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold">{item.product}</p>
-                    <p className="text-xs text-muted-foreground">{item.sku} · {item.warehouse}</p>
+                    <p className="text-xs text-muted-foreground">{item.sku} - {item.warehouse}</p>
                   </div>
                   <span className="text-sm font-semibold text-amber-600">{item.ruptureRisk}%</span>
                 </div>

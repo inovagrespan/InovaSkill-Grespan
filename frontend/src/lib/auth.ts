@@ -1,3 +1,5 @@
+import { buildGatewayUrl } from "@/lib/api-url";
+
 const TOKEN_STORAGE_KEY = "inovaskill.auth.token";
 const SESSION_STORAGE_KEY = "inovaskill.auth.session";
 const LOGIN_PATH = "/login";
@@ -6,6 +8,7 @@ export type AuthTokenPayload = {
   sub?: string;
   name?: string;
   email?: string;
+  role?: string;
   exp?: number;
 };
 
@@ -25,8 +28,6 @@ type TokenResponse = {
   token?: string;
   Token?: string;
 };
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5279";
 
 function getFetch(): typeof fetch {
   if (typeof window !== "undefined" && typeof window.fetch === "function") {
@@ -82,6 +83,19 @@ export function getAuthToken(): string | null {
   }
 
   return token;
+}
+
+export function getCurrentUser(): AuthTokenPayload | null {
+  const token = getAuthToken();
+  return token ? parseJwtPayload(token) : null;
+}
+
+export function getCurrentUserRole(): string | null {
+  return getCurrentUser()?.role?.trim().toLowerCase() ?? null;
+}
+
+export function isCurrentUserAdmin(): boolean {
+  return getCurrentUserRole() === "admin";
 }
 
 export function saveAuthToken(token: string): void {
@@ -148,7 +162,7 @@ async function parseAuthError(response: Response, fallbackMessage: string): Prom
 }
 
 export async function login(input: LoginInput): Promise<string> {
-  const response = await getFetch()(`${API_URL}/login`, {
+  const response = await getFetch()(buildGatewayUrl("login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -169,7 +183,7 @@ export async function login(input: LoginInput): Promise<string> {
 }
 
 export async function registerUser(input: RegisterInput): Promise<void> {
-  const response = await getFetch()(`${API_URL}/register`, {
+  const response = await getFetch()(buildGatewayUrl("register"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -194,7 +208,7 @@ export async function authFetch(
   headers.set("Authorization", `Bearer ${token}`);
 
   const response = await getFetch()(input, { ...init, headers });
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
     redirectToLogin();
   }
 

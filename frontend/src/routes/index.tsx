@@ -18,7 +18,7 @@ function Dashboard() {
         <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">Versão 4.2.0</span>
       </header>
 
-      <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 animate-soft-enter">
+      <section className="metric-row mb-8 animate-soft-enter">
         {[
           { label: "Faturamento Total", value: "R$ 187,6 mil", icon: ReceiptText, pct: 7.7, trend: [132, 146, 151, 168, 174, 188] },
           { label: "Frota Operacional", value: "86", icon: Truck, pct: -1.3, trend: [91, 90, 90, 89, 87, 86] },

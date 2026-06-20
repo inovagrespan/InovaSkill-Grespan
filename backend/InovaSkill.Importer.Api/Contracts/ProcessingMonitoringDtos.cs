@@ -34,7 +34,8 @@ public sealed record ProcessingJobQueueItemDto(
     double ElapsedSeconds,
     int ProcessedRows,
     int TotalRows,
-    int ErrorCount);
+    int ErrorCount,
+    bool CanRunManualActions);
 
 public sealed record ProcessingDailyPointDto(
     DateTime Date,
@@ -92,3 +93,11 @@ public sealed record ProcessingLogDto(
     string Stage,
     string Level,
     string Message);
+
+public sealed record ProcessingManualActionRequestDto(
+    string Action,
+    IReadOnlyList<long> JobIds);
+
+public sealed record ProcessingManualActionResponseDto(
+    string Action,
+    int EnqueuedJobs);

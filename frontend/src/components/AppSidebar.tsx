@@ -1,9 +1,13 @@
 ﻿import { Link, useRouterState } from "@tanstack/react-router";
+<<<<<<< HEAD
 import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, Package, ReceiptText, ServerCog, Sun, TrendingUp, Truck, Users } from "lucide-react";
+=======
+import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, PackageSearch, ServerCog, Sun, TrendingUp, Truck, Users } from "lucide-react";
+>>>>>>> 63b18f765086c6de4ac2dbaf716dcfa70e776cc1
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { logout } from "@/lib/auth";
+import { isCurrentUserAdmin, logout } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 type AppSidebarProps = {
@@ -16,14 +20,17 @@ type AppSidebarProps = {
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/vendas", label: "Vendas", icon: TrendingUp },
+<<<<<<< HEAD
   { to: "/produtos", label: "Produtos", icon: Package },
+=======
+  { to: "/produtos", label: "Produtos", icon: PackageSearch },
+>>>>>>> 63b18f765086c6de4ac2dbaf716dcfa70e776cc1
   {
     to: "/clientes",
-    label: "Clientes",
+    label: "Finanças",
     icon: Users,
   },
-  { to: "/processamentos", label: "Processamentos", icon: ServerCog },
-  { to: "/financas", label: "Finanças", icon: ReceiptText },
+  { to: "/processamentos", label: "Processamentos", icon: ServerCog, adminOnly: true },
   { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/logistica", label: "Logística", icon: Truck },
   { to: "/importacoes", label: "Importações", icon: FileUp },
@@ -33,6 +40,7 @@ const items = [
 export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme }: AppSidebarProps) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const visibleItems = items.filter((item) => !item.adminOnly || isCurrentUserAdmin());
 
   function isItemActive(to: string): boolean {
     if (to === "/importacoes") return pathname === "/importacoes" || pathname.startsWith("/importacoes/");
@@ -41,8 +49,8 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
 
   function renderNav(showCollapsed: boolean, onNavigate?: () => void) {
     return (
-      <nav className="flex-1 space-y-2 px-3">
-        {items.map((item) => {
+      <nav className="custom-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-3 pb-2">
+        {visibleItems.map((item) => {
           const active = isItemActive(item.to);
           const Icon = item.icon;
           const topLevelLink = (
@@ -108,9 +116,9 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
             <SheetHeader className="border-b border-border px-4 py-4 text-left">
               <SheetTitle>Menu</SheetTitle>
             </SheetHeader>
-            <div className="flex h-full flex-col py-3">
+            <div className="flex h-full min-h-0 flex-col py-3">
               {renderNav(false, () => setMobileOpen(false))}
-              <div className="mt-auto px-3 pb-3">
+              <div className="shrink-0 border-t border-border bg-surface px-3 pt-3 pb-3">
                 <button
                   type="button"
                   onClick={onToggleTheme}
@@ -172,7 +180,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
         </div>
 
         {renderNav(collapsed)}
-        <div className="mt-auto space-y-2 p-3">
+        <div className="shrink-0 space-y-2 border-t border-border bg-surface/80 p-3">
           <button
             type="button"
             onClick={onToggleTheme}

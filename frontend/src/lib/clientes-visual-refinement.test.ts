@@ -38,34 +38,42 @@ describe("clientes - refinamento visual do modal de detalhes", () => {
     expect(source).toContain("bottom: 20");
   });
 
-  it("troca tabela do comparativo por paineis visuais com estado de dados insuficientes", () => {
+  it("adiciona controle de escopo para alternar entre historico e filtros atuais", () => {
     const source = readClientesRoute();
 
-    expect(source).toContain("Dados insuficientes para comparação");
-    expect(source).toContain("comparablePeriods.length === 0");
-    expect(source).toContain("formatVariationPercent(item.variationPercent)");
-    expect(source).not.toContain("<TableHead>Valor atual</TableHead>");
+    expect(source).toContain("Escopo da análise");
+    expect(source).toContain("Histórico do cliente");
+    expect(source).toContain("Respeitar filtros atuais");
+    expect(source).toContain("fetchCustomerIndividualAnalysis");
   });
 
-  it("transforma insights em inteligencia comercial acionavel", () => {
+  it("simplifica a lista com leitura de tendencia e resume o grafico por periodo", () => {
     const source = readClientesRoute();
 
-    expect(source).toContain("Inteligência Comercial");
-    expect(source).toContain("Saúde do Cliente");
-    expect(source).toContain("Tendência de Consumo");
-    expect(source).toContain("Potencial Esperado");
-    expect(source).toContain("Recomendação Comercial");
-    expect(source).toContain("Estabilidade de Consumo");
-    expect(source).toContain("Produtos Mais Relevantes");
-    expect(source).not.toContain("Previsão indisponível");
-    expect(source).not.toContain("Previsão com média móvel");
+    expect(source).toContain("<TableHead>Leitura do período</TableHead>");
+    expect(source).toContain("resolveRankingTrend(item.variationPercent)");
+    expect(source).toContain("Média por");
+    expect(source).toContain("Tendência do período");
+    expect(source).toContain("Variação média por");
+    expect(source).toContain("Primeiro vs último ponto");
+    expect(source).toContain("Ticket médio");
   });
 
-  it("exibe produtos mais comprados com nome do produto", () => {
+  it("remove inteligencia comercial e produtos mais comprados do modal", () => {
     const source = readClientesRoute();
 
-    expect(source).toContain("<CardTitle>Produtos mais comprados</CardTitle>");
-    expect(source).toContain("<TableHead>Produto</TableHead>");
-    expect(source).toContain("<TableCell>{item.productDescription}</TableCell>");
+    expect(source).not.toContain("Inteligência Comercial");
+    expect(source).not.toContain("Saúde do Cliente");
+    expect(source).not.toContain("Recomendação Comercial");
+    expect(source).not.toContain("Produtos Mais Relevantes");
+    expect(source).not.toContain("<CardTitle>Produtos mais comprados</CardTitle>");
+    expect(source).not.toContain("fetchCustomerTopProducts");
+  });
+
+  it("remove o comparativo separado para priorizar a leitura historica", () => {
+    const source = readClientesRoute();
+
+    expect(source).not.toContain("<CardTitle>Comparativo de períodos</CardTitle>");
+    expect(source).not.toContain("Dados insuficientes para comparação");
   });
 });

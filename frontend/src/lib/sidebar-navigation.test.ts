@@ -7,11 +7,12 @@ function readSidebar(): string {
 }
 
 describe("sidebar navigation", () => {
-  it("remove submenu unico de clientes e mantem acesso principal direto", () => {
+  it("renomeia a aba de clientes para financas e mantem acesso principal direto", () => {
     const source = readSidebar();
 
     expect(source).toContain('to: "/clientes"');
-    expect(source).toContain('label: "Clientes"');
+    expect(source).toContain('label: "Finanças"');
+    expect(source).not.toContain('label: "Clientes"');
     expect(source).not.toContain('to: "/clientes/analise-comercial", label: "Análise Comercial", icon: Activity');
   });
 

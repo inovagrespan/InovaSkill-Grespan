@@ -52,7 +52,7 @@ export function KpiCard({
     <div
       className={cn(
         "h-full rounded-xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(250,251,253,0.96))] p-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-sm dark:bg-[linear-gradient(180deg,rgba(23,28,37,0.98),rgba(20,25,34,0.98))]",
-        "animate-soft-enter",
+        "metric-card-item animate-soft-enter",
         className,
       )}
     >
