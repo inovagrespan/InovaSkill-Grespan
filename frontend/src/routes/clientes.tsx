@@ -51,6 +51,7 @@ import {
   getImpactCustomerName,
   sortImpactListByAttention,
 } from "@/lib/customer-finance-impact";
+import { buildSupplierRouteDashboard } from "@/lib/customer-supplier-routing";
 import { calculateProjectedMarginPercent, calculateSimulatedProjectedCost, fetchCustomerFinanceProjections } from "@/lib/customer-finance-projections";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import { authFetch } from "@/lib/auth";
@@ -65,10 +66,10 @@ export const Route = createFileRoute("/clientes")({
   component: ClientesPage,
 });
 
-type ClientesTab = "impacto" | "projecoes" | "clientes" | "nota-fiscal";
+type ClientesTab = "impacto" | "projecoes" | "fornecedores" | "clientes" | "nota-fiscal";
 
 function isClientesTab(value: unknown): value is ClientesTab {
-  return value === "impacto" || value === "projecoes" || value === "clientes" || value === "nota-fiscal";
+  return value === "impacto" || value === "projecoes" || value === "fornecedores" || value === "clientes" || value === "nota-fiscal";
 }
 
 const CLIENT_REVENUE_CHART_LIMIT = 8;
@@ -77,6 +78,8 @@ const REVENUE_CHART_STROKE = "#f43f5e";
 const REVENUE_CHART_GRID = "rgba(148, 163, 184, 0.12)";
 const FINANCE_PAGE_SIZE = 20;
 const IMPACT_KPI_CARD_CLASS_NAME = "p-3";
+const SUPPLIER_SKELETON_CARD_KEYS = ["notified", "routes", "escalated"] as const;
+const ALL_SUPPLIERS_FILTER_VALUE = "todos";
 const HISTORY_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "historical";
 const CURRENT_FILTERS_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "current";
 type CustomerDetailsPeriod = "all" | "1m" | "3m" | "12m";
@@ -277,6 +280,25 @@ function buildRiskCustomerActionSuggestions(customer: any): string[] {
   ];
 }
 
+function getSupplierRiskBadgeClassName(riskLevel: string): string {
+  if (riskLevel === "critical") return "bg-red-900 text-white";
+  if (riskLevel === "high") return "bg-red-600 text-white";
+  return "bg-amber-500 text-white";
+}
+
+function getSupplierStatusLabel(status: string): string {
+  if (status === "escalated") return "Escalado à gerência";
+  if (status === "notified") return "Aguardando ação";
+  return "Em atenção";
+}
+
+function formatSupplierDateTime(value: string | null): string {
+  if (!value) return "Sem notificação";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
 function RevenueAreaChart({
   data,
   gradientId,
@@ -386,6 +408,8 @@ function ClientesPage() {
   const [impactoData, setImpactoData] = useState<any>(null);
   const [impactoLoading, setImpactoLoading] = useState(false);
   const [riskActionCustomer, setRiskActionCustomer] = useState<any | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState(ALL_SUPPLIERS_FILTER_VALUE);
+  const [supplierCaseCustomer, setSupplierCaseCustomer] = useState<any | null>(null);
   const [projecoesData, setProjecoesData] = useState<any>(null);
   const [projecoesLoading, setProjecoesLoading] = useState(false);
   const [historicoData, setHistoricoData] = useState<any>(null);
@@ -446,6 +470,10 @@ function ClientesPage() {
       custo: calculateSimulatedProjectedCost(item.revenue, index),
     })),
     [financeDashboard?.revenueTrend],
+  );
+  const supplierRouteDashboard = useMemo(
+    () => buildSupplierRouteDashboard(impactoData?.risco ?? [], selectedSupplier),
+    [impactoData?.risco, selectedSupplier],
   );
   const timelineChartData = useMemo(
     () => {
@@ -635,6 +663,7 @@ function ClientesPage() {
   useEffect(() => {
     void load(1);
     if (activeTab === "impacto" && !impactoData && !impactoLoading) void loadImpacto();
+    if (activeTab === "fornecedores" && !impactoData && !impactoLoading) void loadImpacto();
     if (activeTab === "projecoes" && !projecoesData && !projecoesLoading) void loadProjecoes();
   }, [sortBy, dateFrom, dateTo]);
 
@@ -642,6 +671,7 @@ function ClientesPage() {
     if (!aba || aba === activeTab) return;
     setActiveTab(aba);
     if (aba === "impacto" && !impactoData && !impactoLoading) void loadImpacto();
+    if (aba === "fornecedores" && !impactoData && !impactoLoading) void loadImpacto();
     if (aba === "projecoes" && !projecoesData && !projecoesLoading) void loadProjecoes();
     if (aba === "clientes" && !historicoData && !historicoLoading) void loadHistorico(1, historicoSortBy);
   }, [aba]);
@@ -742,7 +772,7 @@ function ClientesPage() {
       <FeedbackMessage message={message} type="error" onDismiss={() => setMessage("")} />
 
       <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1 animate-soft-enter">
-        {(["impacto", "projecoes", "clientes", "nota-fiscal"] as const).map(tab => (
+        {(["impacto", "projecoes", "fornecedores", "clientes", "nota-fiscal"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => {
@@ -753,6 +783,7 @@ function ClientesPage() {
                 replace: true,
               });
               if (tab === "impacto" && !impactoData && !impactoLoading) void loadImpacto();
+              if (tab === "fornecedores" && !impactoData && !impactoLoading) void loadImpacto();
               if (tab === "projecoes" && !projecoesData && !projecoesLoading) void loadProjecoes();
               if (tab === "clientes" && !historicoData && !historicoLoading) void loadHistorico(1, historicoSortBy);
             }}
@@ -763,6 +794,7 @@ function ClientesPage() {
           >
             {tab === "impacto" && "Impacto"}
             {tab === "projecoes" && "Projeções"}
+            {tab === "fornecedores" && "Fornecedores"}
             {tab === "clientes" && "Clientes"}
             {tab === "nota-fiscal" && "Nota Fiscal"}
           </button>
@@ -885,6 +917,232 @@ function ClientesPage() {
             </>
           ) : (
             <p className="text-sm text-muted-foreground py-8 text-center">Carregue os dados para ver o painel de impacto.</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === "fornecedores" && (
+        <div className="space-y-4 animate-soft-enter">
+          {impactoLoading ? (
+            <div className="metric-row">{SUPPLIER_SKELETON_CARD_KEYS.map((key) => <SkeletonMetricCard key={key} />)}</div>
+          ) : impactoData ? (
+            <>
+              <Card>
+                <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <CardTitle className="text-sm font-semibold">Central de Fornecedores</CardTitle>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Dados consumidos da integração Grespan/TOTVS, sem cadastro manual de fornecedores.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1 sm:min-w-[260px]">
+                    <Label htmlFor="supplier-filter" className="text-xs text-muted-foreground">Filtrar por fornecedor</Label>
+                    <select
+                      id="supplier-filter"
+                      value={selectedSupplier}
+                      onChange={(event) => setSelectedSupplier(event.target.value)}
+                      className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                    >
+                      <option value={ALL_SUPPLIERS_FILTER_VALUE}>Todos os fornecedores</option>
+                      {supplierRouteDashboard.suppliers.map((supplier) => (
+                        <option key={supplier.supplierId} value={supplier.supplierId}>{supplier.supplierName}</option>
+                      ))}
+                    </select>
+                  </div>
+                </CardHeader>
+              </Card>
+
+              <section className="metric-row">
+                <KpiCard
+                  title="Clientes por fornecedor"
+                  value={formatKpiCompactNumber(supplierRouteDashboard.summary.totalCustomers)}
+                  showPercentageChange={false}
+                  icon={Users}
+                  periodLabel="Relacionamento recebido da integração"
+                  loading={false}
+                />
+                <KpiCard
+                  title="Clientes em risco"
+                  value={formatKpiCompactNumber(supplierRouteDashboard.summary.riskCustomers)}
+                  showPercentageChange={false}
+                  icon={AlertTriangle}
+                  periodLabel="Atenção, Alto e Crítico"
+                  loading={false}
+                />
+                <KpiCard
+                  title="Casos aguardando ação"
+                  value={formatKpiCompactNumber(supplierRouteDashboard.summary.awaitingAction)}
+                  showPercentageChange={false}
+                  icon={CalendarClock}
+                  periodLabel={`${supplierRouteDashboard.summary.notifiedCustomers} fornecedor(es) notificado(s)`}
+                  loading={false}
+                />
+                <KpiCard
+                  title="Escalados à gerência"
+                  value={formatKpiCompactNumber(supplierRouteDashboard.summary.escalatedCustomers)}
+                  showPercentageChange={false}
+                  icon={UserRound}
+                  periodLabel="Sem ação registrada no prazo"
+                  loading={false}
+                />
+                <KpiCard
+                  title="Tempo médio de resposta"
+                  value={supplierRouteDashboard.summary.averageSupplierResponseHours == null ? "—" : `${supplierRouteDashboard.summary.averageSupplierResponseHours}h`}
+                  showPercentageChange={false}
+                  icon={BarChart3}
+                  periodLabel="Baseado nas notificações registradas"
+                  loading={false}
+                />
+              </section>
+
+              {supplierRouteDashboard.routes.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">Nenhum cliente em risco para notificar fornecedores.</p>
+              ) : (
+                <>
+                  <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    {([
+                      { key: "attention", label: "Atenção", value: supplierRouteDashboard.riskBuckets.attention, className: "border-amber-300 bg-amber-50 text-amber-700" },
+                      { key: "high", label: "Alto", value: supplierRouteDashboard.riskBuckets.high, className: "border-red-300 bg-red-50 text-red-700" },
+                      { key: "critical", label: "Crítico", value: supplierRouteDashboard.riskBuckets.critical, className: "border-red-900 bg-red-950 text-white" },
+                    ] as const).map((bucket) => (
+                      <Card key={bucket.key} className={cn("border", bucket.className)}>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-semibold">{bucket.label}</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-2xl font-semibold tabular-nums">{formatKpiCompactNumber(bucket.value)}</p>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </section>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm font-semibold">Dashboard Gerencial por Fornecedor</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto custom-scrollbar">
+                        <Table className="min-w-[840px]">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Fornecedor</TableHead>
+                              <TableHead className="text-right">Clientes</TableHead>
+                              <TableHead className="text-right">Em risco</TableHead>
+                              <TableHead className="text-right">Críticos</TableHead>
+                              <TableHead className="text-right">Aguardando ação</TableHead>
+                              <TableHead className="text-right">Escalados</TableHead>
+                              <TableHead className="text-right">Tempo médio</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {supplierRouteDashboard.suppliers.map((supplier) => (
+                              <TableRow key={supplier.supplierId}>
+                                <TableCell className="font-medium">{supplier.supplierName}</TableCell>
+                                <TableCell className="text-right tabular-nums">{supplier.totalCustomers}</TableCell>
+                                <TableCell className="text-right tabular-nums">{supplier.riskCustomers}</TableCell>
+                                <TableCell className="text-right tabular-nums">{supplier.criticalCustomers}</TableCell>
+                                <TableCell className="text-right tabular-nums">{supplier.awaitingAction}</TableCell>
+                                <TableCell className="text-right tabular-nums">{supplier.escalatedCustomers}</TableCell>
+                                <TableCell className="text-right tabular-nums">{supplier.averageResponseHours == null ? "—" : `${supplier.averageResponseHours}h`}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {supplierRouteDashboard.managementQueue.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm font-semibold text-red-700">Fila da Gerência</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {supplierRouteDashboard.managementQueue.map((situation) => (
+                          <button
+                            key={situation.customerId}
+                            type="button"
+                            onClick={() => setSupplierCaseCustomer(situation)}
+                            className="flex w-full items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-left text-sm transition-colors hover:bg-red-100"
+                          >
+                            <span>
+                              <span className="font-medium text-red-900">{situation.customerName}</span>
+                              <span className="block text-xs text-red-700">{situation.supplierName} · {situation.riskReason}</span>
+                            </span>
+                            <Badge variant="outline" className="border-0 bg-red-700 text-white">Escalado</Badge>
+                          </button>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                    {supplierRouteDashboard.routes.map((route) => (
+                      <Card key={route.routeName}>
+                        <CardHeader>
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                              <MapPin className="size-4 text-primary" />
+                              {route.routeName}
+                            </CardTitle>
+                            <span className="text-xs text-muted-foreground">Origem: integração Grespan/TOTVS</span>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="overflow-x-auto custom-scrollbar">
+                            <Table className="min-w-[860px]">
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Cliente</TableHead>
+                                  <TableHead>Fornecedor</TableHead>
+                                  <TableHead>Risco</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead>Notificação</TableHead>
+                                  <TableHead className="text-right">Impacto/mês</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {route.customers.map((situation) => (
+                                  <TableRow
+                                    key={situation.customerId}
+                                    className="cursor-pointer"
+                                    onClick={() => setSupplierCaseCustomer(situation)}
+                                  >
+                                    <TableCell className="font-medium">{situation.customerName}</TableCell>
+                                    <TableCell>{situation.supplierName}</TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline" className={cn("w-fit border-0 font-semibold", getSupplierRiskBadgeClassName(situation.riskLevel))}>
+                                        {situation.riskLabel}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="space-y-1">
+                                        <span className="text-sm">{getSupplierStatusLabel(situation.status)}</span>
+                                        <p className="text-xs text-muted-foreground">
+                                          {situation.status === "escalated"
+                                            ? `Passou de ${situation.responseDeadlineHours}h sem ação`
+                                            : situation.status === "notified"
+                                              ? `${situation.remainingHours}h para evitar escalonamento`
+                                              : "Monitorar evolução"}
+                                        </p>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>{formatSupplierDateTime(situation.notificationSentAt)}</TableCell>
+                                    <TableCell className="text-right tabular-nums">{formatCurrency(situation.monthlyImpact)}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </section>
+                </>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground py-8 text-center">Carregue o impacto para ver fornecedores por rota.</p>
           )}
         </div>
       )}
@@ -1296,6 +1554,83 @@ function ClientesPage() {
 
               <div className="flex justify-end">
                 <Button type="button" onClick={() => setRiskActionCustomer(null)}>Entendi</Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(supplierCaseCustomer)} onOpenChange={(open) => !open && setSupplierCaseCustomer(null)}>
+        <DialogContent className="custom-scrollbar max-h-[88vh] w-[95vw] max-w-3xl overflow-y-auto p-5 pt-8 pr-10 sm:p-6 sm:pt-9 sm:pr-12">
+          <DialogHeader>
+            <DialogTitle>Central de acompanhamento</DialogTitle>
+            <DialogDescription>
+              Situação importada da integração e monitorada até ação do fornecedor ou escalonamento à gerência.
+            </DialogDescription>
+          </DialogHeader>
+
+          {supplierCaseCustomer ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-border/70 bg-muted/25 p-3">
+                  <p className="text-xs text-muted-foreground">Cliente</p>
+                  <p className="mt-1 text-sm font-semibold">{supplierCaseCustomer.customerName}</p>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/25 p-3">
+                  <p className="text-xs text-muted-foreground">Fornecedor responsável</p>
+                  <p className="mt-1 text-sm font-semibold">{supplierCaseCustomer.supplierName}</p>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/25 p-3">
+                  <p className="text-xs text-muted-foreground">Nível de risco</p>
+                  <Badge variant="outline" className={cn("mt-1 w-fit border-0 font-semibold", getSupplierRiskBadgeClassName(supplierCaseCustomer.riskLevel))}>
+                    {supplierCaseCustomer.riskLabel}
+                  </Badge>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/25 p-3">
+                  <p className="text-xs text-muted-foreground">Prazo para resolução</p>
+                  <p className="mt-1 text-sm font-semibold">{formatSupplierDateTime(supplierCaseCustomer.responseDeadlineAt)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{getSupplierStatusLabel(supplierCaseCustomer.status)}</p>
+                </div>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-semibold">Motivo do risco</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{supplierCaseCustomer.riskReason}</p>
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-semibold">Histórico de ocorrências</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {supplierCaseCustomer.occurrenceHistory.map((item: string) => (
+                      <div key={item} className="rounded-md border border-border/70 bg-surface p-2 text-sm">{item}</div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-semibold">Checklist de ações</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {supplierCaseCustomer.actionChecklist.map((item: string) => (
+                      <label key={item} className="flex items-start gap-2 rounded-md border border-border/70 bg-surface p-2 text-sm">
+                        <input type="checkbox" className="mt-1" readOnly />
+                        <span>{item}</span>
+                      </label>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+                Notificação ao fornecedor: {formatSupplierDateTime(supplierCaseCustomer.notificationSentAt)}.
               </div>
             </div>
           ) : null}

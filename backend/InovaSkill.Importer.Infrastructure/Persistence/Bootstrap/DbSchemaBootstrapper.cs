@@ -280,6 +280,9 @@ public static class DbSchemaBootstrapper
                 "TransactionDate" timestamp with time zone NOT NULL,
                 "CustomerCode" character varying(64) NOT NULL,
                 "CustomerName" character varying(256) NOT NULL,
+                "SupplierCode" character varying(64) NOT NULL DEFAULT '',
+                "SupplierName" character varying(256) NOT NULL DEFAULT '',
+                "RouteName" character varying(256) NOT NULL DEFAULT '',
                 "ProductCode" character varying(64) NOT NULL,
                 "ProductDescription" character varying(512) NOT NULL,
                 "Quantity" numeric(18,3) NOT NULL,
@@ -291,6 +294,27 @@ public static class DbSchemaBootstrapper
                 "GrossWeightKg" numeric(18,3) NOT NULL,
                 "SourceFileJobId" bigint NOT NULL
             );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "CommercialTransactions"
+            ADD COLUMN IF NOT EXISTS "SupplierCode" character varying(64) NOT NULL DEFAULT '';
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "CommercialTransactions"
+            ADD COLUMN IF NOT EXISTS "SupplierName" character varying(256) NOT NULL DEFAULT '';
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            ALTER TABLE "CommercialTransactions"
+            ADD COLUMN IF NOT EXISTS "RouteName" character varying(256) NOT NULL DEFAULT '';
             """,
             cancellationToken);
 
@@ -319,6 +343,20 @@ public static class DbSchemaBootstrapper
             """
             CREATE INDEX IF NOT EXISTS "IX_CommercialTransactions_CustomerName"
             ON "CommercialTransactions" ("CustomerName");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_CommercialTransactions_SupplierName"
+            ON "CommercialTransactions" ("SupplierName");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_CommercialTransactions_RouteName"
+            ON "CommercialTransactions" ("RouteName");
             """,
             cancellationToken);
 

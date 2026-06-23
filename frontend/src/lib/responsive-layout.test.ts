@@ -24,7 +24,7 @@ describe("responsive layout behavior", () => {
     const dashboard = readSource("src/routes/index.tsx");
     const vendas = readSource("src/routes/vendas.tsx");
     const financas = readSource("src/routes/financas.tsx");
-    const logistica = readSource("src/routes/logistica.tsx");
+    const logistica = readSource("src/routes/logistica.index.tsx");
     const clientes = readSource("src/routes/clientes.tsx");
     const processamentos = readSource("src/routes/processamentos.tsx");
 
@@ -41,8 +41,10 @@ describe("responsive layout behavior", () => {
     expect(root).toContain("--metric-card-column-width");
     expect(root).toContain("--metric-card-zoom");
 
-    for (const source of [dashboard, vendas, financas, logistica, clientes, processamentos]) {
+    for (const source of [dashboard, vendas, financas, clientes, processamentos]) {
       expect(source).toContain("metric-row");
     }
+    expect(logistica).toContain("grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5");
+    expect(logistica).toContain("Indicadores logísticos");
   });
 });

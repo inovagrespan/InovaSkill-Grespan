@@ -214,6 +214,9 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.DocumentNumber).HasMaxLength(64).IsRequired();
             e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
             e.Property(x => x.CustomerName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.SupplierCode).HasMaxLength(64).IsRequired();
+            e.Property(x => x.SupplierName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.RouteName).HasMaxLength(256).IsRequired();
             e.Property(x => x.ProductCode).HasMaxLength(64).IsRequired();
             e.Property(x => x.ProductDescription).HasMaxLength(512).IsRequired();
             e.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
@@ -227,6 +230,8 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.HasIndex(x => x.SourceFileJobId);
             e.HasIndex(x => x.TransactionDate);
             e.HasIndex(x => x.CustomerName);
+            e.HasIndex(x => x.SupplierName);
+            e.HasIndex(x => x.RouteName);
             e.HasIndex(x => x.ProductCode);
             e.HasIndex(x => x.ProductDescription);
             e.HasIndex(x => x.City);

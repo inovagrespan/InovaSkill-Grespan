@@ -38,4 +38,24 @@ describe("customer impact layout", () => {
     expect(source).toContain('const [activeTab, setActiveTab] = useState<ClientesTab>(aba ?? "impacto")');
     expect(source).toContain("search: (prev) => ({ ...prev, aba: tab })");
   });
+
+  it("exibe aba de fornecedores sem cadastro manual, com filtro, risco e escalonamento gerencial", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
+
+    expect(source).toContain('"fornecedores"');
+    expect(source).toContain("Fornecedores");
+    expect(source).toContain("buildSupplierRouteDashboard");
+    expect(source).toContain("Filtrar por fornecedor");
+    expect(source).toContain("Todos os fornecedores");
+    expect(source).toContain("Dados consumidos da integração Grespan/TOTVS");
+    expect(source).toContain("Atenção");
+    expect(source).toContain("Alto");
+    expect(source).toContain("Crítico");
+    expect(source).toContain("Central de acompanhamento");
+    expect(source).toContain("Fila da Gerência");
+    expect(source).toContain("Escalado à gerência");
+    expect(source).not.toContain("Cadastrar fornecedor");
+    expect(source).not.toContain("Editar fornecedor");
+    expect(source).not.toContain("Excluir fornecedor");
+  });
 });
