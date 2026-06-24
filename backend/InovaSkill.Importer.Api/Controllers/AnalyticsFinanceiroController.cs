@@ -256,7 +256,7 @@ public sealed class AnalyticsFinanceiroController(ImportDbContext dbContext) : C
                     Math.Round(f.Previsao30Dias, 2),
                     Math.Round(f.Previsao30Dias - mediaMensal, 2),
                     f.TendenciaPrevista,
-                    f.ConfiancaModelo);
+                    f.ConfiancaModelo ?? 0);
             }).ToList()
             : BuildProjectionRowsFromIndicadores(indicadores, nomesClientes);
 

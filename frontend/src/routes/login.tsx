@@ -18,8 +18,8 @@ export const Route = createFileRoute("/login")({
 type Message = { type: "success" | "error"; text: string } | null;
 
 const MIN_PASSWORD_LENGTH = 6;
-const DEFAULT_LOGIN_USER = "admin";
-const DEFAULT_LOGIN_PASSWORD = "admin";
+const DEFAULT_LOGIN_USER = "rh";
+const DEFAULT_LOGIN_PASSWORD = "rh";
 
 function LoginPage() {
   const search = Route.useSearch();

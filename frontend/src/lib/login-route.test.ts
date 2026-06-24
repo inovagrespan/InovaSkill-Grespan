@@ -7,11 +7,11 @@ function readLoginRoute(): string {
 }
 
 describe("login route", () => {
-  it("preenche o login local com o administrador padrão", () => {
+  it("preenche o login local com o administrador padrão rh", () => {
     const source = readLoginRoute();
 
-    expect(source).toContain('const DEFAULT_LOGIN_USER = "admin"');
-    expect(source).toContain('const DEFAULT_LOGIN_PASSWORD = "admin"');
+    expect(source).toContain('const DEFAULT_LOGIN_USER = "rh"');
+    expect(source).toContain('const DEFAULT_LOGIN_PASSWORD = "rh"');
     expect(source).toContain("useState(DEFAULT_LOGIN_USER)");
     expect(source).toContain("useState(DEFAULT_LOGIN_PASSWORD)");
     expect(source).toContain("placeholder={DEFAULT_LOGIN_USER}");

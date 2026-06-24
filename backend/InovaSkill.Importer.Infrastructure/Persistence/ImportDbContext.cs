@@ -27,6 +27,10 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<CustomerSummaryMonthly> CustomerSummariesMonthly => Set<CustomerSummaryMonthly>();
     public DbSet<ClienteIndicador> ClienteIndicadores => Set<ClienteIndicador>();
     public DbSet<ClienteForecast> ClienteForecasts => Set<ClienteForecast>();
+    public DbSet<AiAlert> AiAlerts => Set<AiAlert>();
+    public DbSet<AiAlertStatusHistory> AiAlertStatusHistory => Set<AiAlertStatusHistory>();
+    public DbSet<AiAlertNotificationHistory> AiAlertNotificationHistory => Set<AiAlertNotificationHistory>();
+    public DbSet<AiAlertEscalationHistory> AiAlertEscalationHistory => Set<AiAlertEscalationHistory>();
     public DbSet<ImportFileType> ImportFileTypes => Set<ImportFileType>();
     public DbSet<ImportTemplate> ImportTemplates => Set<ImportTemplate>();
     public DbSet<ImportColumnMapping> ImportColumnMappings => Set<ImportColumnMapping>();
@@ -35,6 +39,18 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<PreProcessorTemplate> PreProcessorTemplates => Set<PreProcessorTemplate>();
     public DbSet<PreProcessorTemplateRule> PreProcessorTemplateRules => Set<PreProcessorTemplateRule>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<Meeting> Meetings => Set<Meeting>();
+    public DbSet<MeetingParticipant> MeetingParticipants => Set<MeetingParticipant>();
+    public DbSet<MeetingComment> MeetingComments => Set<MeetingComment>();
+    public DbSet<MeetingProblem> MeetingProblems => Set<MeetingProblem>();
+    public DbSet<MeetingQuestion> MeetingQuestions => Set<MeetingQuestion>();
+    public DbSet<MeetingAnswer> MeetingAnswers => Set<MeetingAnswer>();
+    public DbSet<MeetingAiAnalysis> MeetingAiAnalyses => Set<MeetingAiAnalysis>();
+    public DbSet<MeetingDecision> MeetingDecisions => Set<MeetingDecision>();
+    public DbSet<MeetingAction> MeetingActions => Set<MeetingAction>();
+    public DbSet<MeetingHistory> MeetingHistories => Set<MeetingHistory>();
+    public DbSet<CriticalPending> CriticalPendencies => Set<CriticalPending>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -391,9 +407,78 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.TendenciaPrevista).HasMaxLength(64).IsRequired();
             e.Property(x => x.ErroMedioHistorico).HasColumnType("decimal(18,2)");
             e.Property(x => x.ConfiancaModelo).HasColumnType("decimal(9,2)");
+            e.Property(x => x.UltimaObservacao).IsRequired();
             e.Property(x => x.AtualizadoEm).IsRequired();
             e.HasIndex(x => x.ClienteId).IsUnique();
             e.HasIndex(x => x.TendenciaPrevista);
+        });
+
+        modelBuilder.Entity<AiAlert>(e =>
+        {
+            e.ToTable("AiAlerts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.ResponsibleArea).HasMaxLength(64).IsRequired();
+            e.Property(x => x.ResponsibleManager).HasMaxLength(256).IsRequired();
+            e.Property(x => x.InvolvedAreasCsv).HasMaxLength(512).IsRequired();
+            e.Property(x => x.InvolvedUsersCsv).HasMaxLength(1024).IsRequired();
+            e.Property(x => x.Severity).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Origin).HasMaxLength(64).IsRequired();
+            e.Property(x => x.EvidenceJson).HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.ExpectedImpact).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.AiSuggestion).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.RelatedTasksCsv).HasMaxLength(1024).IsRequired();
+            e.Property(x => x.LinkedDecision).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.CancellationReason).HasMaxLength(2000).IsRequired();
+            e.HasIndex(x => new { x.ResponsibleArea, x.Status, x.Severity });
+            e.HasIndex(x => x.ResponseDeadlineAt);
+            e.HasIndex(x => x.ActionDeadlineAt);
+            e.HasIndex(x => x.EscalatedAt);
+        });
+
+        modelBuilder.Entity<AiAlertStatusHistory>(e =>
+        {
+            e.ToTable("AiAlertStatusHistory");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.PreviousStatus).HasMaxLength(64).IsRequired();
+            e.Property(x => x.NewStatus).HasMaxLength(64).IsRequired();
+            e.Property(x => x.ChangedBy).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Justification).HasMaxLength(2000).IsRequired();
+            e.HasIndex(x => new { x.AiAlertId, x.ChangedAt });
+            e.HasOne(x => x.AiAlert)
+                .WithMany(x => x.StatusHistory)
+                .HasForeignKey(x => x.AiAlertId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AiAlertNotificationHistory>(e =>
+        {
+            e.ToTable("AiAlertNotificationHistory");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Recipient).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Channel).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Reason).HasMaxLength(1024).IsRequired();
+            e.HasIndex(x => new { x.AiAlertId, x.SentAt });
+            e.HasOne(x => x.AiAlert)
+                .WithMany(x => x.NotificationHistory)
+                .HasForeignKey(x => x.AiAlertId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AiAlertEscalationHistory>(e =>
+        {
+            e.ToTable("AiAlertEscalationHistory");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.FromRecipient).HasMaxLength(256).IsRequired();
+            e.Property(x => x.ToRecipient).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Reason).HasMaxLength(1024).IsRequired();
+            e.HasIndex(x => new { x.AiAlertId, x.EscalatedAt });
+            e.HasOne(x => x.AiAlert)
+                .WithMany(x => x.EscalationHistory)
+                .HasForeignKey(x => x.AiAlertId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ImportFileType>(e =>
@@ -505,6 +590,189 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.CreatedAt).IsRequired();
             e.HasIndex(x => x.Email).IsUnique();
             e.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<Meeting>(e =>
+        {
+            e.ToTable("Meetings");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.Reason).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CurrentStage).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CreatedByName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Context).HasMaxLength(8000).IsRequired();
+            e.Property(x => x.InvolvedAreasCsv).HasMaxLength(1024).IsRequired();
+            e.Property(x => x.AiSummary).HasMaxLength(8000).IsRequired();
+            e.Property(x => x.CancellationReason).HasMaxLength(4000).IsRequired();
+            e.HasIndex(x => new { x.CreatedByUserId, x.Status });
+            e.HasIndex(x => x.CreatedAt);
+            e.HasMany(x => x.Participants).WithOne(x => x.Meeting).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Comments).WithOne(x => x.Meeting).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Problems).WithOne(x => x.Meeting).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Questions).WithOne(x => x.Meeting).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.AiAnalyses).WithOne(x => x.Meeting).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Decisions).WithOne(x => x.Meeting).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Actions).WithOne(x => x.Meeting).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.History).WithOne(x => x.Meeting).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MeetingParticipant>(e =>
+        {
+            e.ToTable("MeetingParticipants");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UserName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.UserEmail).HasMaxLength(256).IsRequired();
+            e.Property(x => x.UserRole).HasMaxLength(64).IsRequired();
+            e.Property(x => x.UserSector).HasMaxLength(128).IsRequired();
+            e.Property(x => x.RoleInMeeting).HasMaxLength(64).IsRequired();
+            e.Property(x => x.ParticipationStatus).HasMaxLength(64).IsRequired();
+            e.HasIndex(x => new { x.MeetingId, x.UserId }).IsUnique();
+        });
+
+        modelBuilder.Entity<MeetingComment>(e =>
+        {
+            e.ToTable("MeetingComments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UserName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Message).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.Stage).HasMaxLength(64).IsRequired();
+            e.HasIndex(x => new { x.MeetingId, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<MeetingProblem>(e =>
+        {
+            e.ToTable("MeetingProblems");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Sector).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.Severity).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Origin).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CreatedByName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.AiSuggestion).HasMaxLength(4000).IsRequired();
+            e.HasIndex(x => new { x.MeetingId, x.Sector });
+            e.HasMany(x => x.Questions).WithOne(x => x.Problem).HasForeignKey(x => x.ProblemId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MeetingQuestion>(e =>
+        {
+            e.ToTable("MeetingQuestions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Question).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.ResponsibleName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Sector).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            e.HasIndex(x => new { x.MeetingId, x.Status });
+            e.HasOne(x => x.Answer).WithOne(x => x.Question).HasForeignKey<MeetingAnswer>(x => x.QuestionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MeetingAnswer>(e =>
+        {
+            e.ToTable("MeetingAnswers");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UserName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Sector).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Answer).HasMaxLength(8000).IsRequired();
+        });
+
+        modelBuilder.Entity<MeetingHistory>(e =>
+        {
+            e.ToTable("MeetingHistories");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.EventType).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.UserName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.DataBefore).HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.DataAfter).HasColumnType("jsonb").IsRequired();
+            e.HasIndex(x => new { x.MeetingId, x.CreatedAt });
+            e.HasIndex(x => x.EventType);
+        });
+
+        modelBuilder.Entity<MeetingAiAnalysis>(e =>
+        {
+            e.ToTable("MeetingAiAnalyses");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ProblemDescription).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.ProposedSolution).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.PositivePoints).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.NegativePoints).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.Risks).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.ExpectedImpact).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.Recommendation).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.AlternativeSolution).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.SuggestedDecision).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.RelatedPendencies).HasMaxLength(4000).IsRequired();
+            e.HasIndex(x => new { x.MeetingId, x.ProblemId });
+        });
+
+        modelBuilder.Entity<MeetingDecision>(e =>
+        {
+            e.ToTable("MeetingDecisions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ProblemDescription).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.ChosenSolution).HasMaxLength(8000).IsRequired();
+            e.Property(x => x.SolutionOrigin).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Justification).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.ResponsibleName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Sector).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Priority).HasMaxLength(32).IsRequired();
+            e.Property(x => x.TrackingMetric).HasMaxLength(256).IsRequired();
+            e.Property(x => x.AcceptedRisk).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.NextSteps).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.ClosedPendencies).HasMaxLength(4000).IsRequired();
+            e.HasIndex(x => new { x.MeetingId, x.ProblemId });
+        });
+
+        modelBuilder.Entity<MeetingAction>(e =>
+        {
+            e.ToTable("MeetingActions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.ResponsibleName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Sector).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Priority).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            e.Property(x => x.CompletionEvidence).HasMaxLength(8000).IsRequired();
+            e.Property(x => x.Comments).HasMaxLength(4000).IsRequired();
+            e.HasIndex(x => new { x.MeetingId, x.ResponsibleUserId, x.Status });
+            e.HasIndex(x => new { x.Status, x.DeadlineAt });
+            e.HasOne(x => x.Decision).WithMany().HasForeignKey(x => x.DecisionId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CriticalPending>(e =>
+        {
+            e.ToTable("CriticalPendencies");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.Origin).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Sector).HasMaxLength(128).IsRequired();
+            e.Property(x => x.ResponsibleName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Priority).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(64).IsRequired();
+            e.Property(x => x.NotificationHistoryJson).HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.EscalationHistoryJson).HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.AiSuggestion).HasMaxLength(4000).IsRequired();
+            e.HasIndex(x => new { x.Status, x.Priority });
+            e.HasIndex(x => x.DeadlineAt);
+            e.HasIndex(x => x.ResponsibleUserId);
+        });
+
+        modelBuilder.Entity<Notification>(e =>
+        {
+            e.ToTable("Notifications");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Message).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.Type).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Priority).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            e.Property(x => x.RelatedLink).HasMaxLength(1024).IsRequired();
+            e.Property(x => x.RelatedEntity).HasMaxLength(128).IsRequired();
+            e.HasIndex(x => new { x.UserId, x.Status, x.CreatedAt });
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
         });
     }
 }

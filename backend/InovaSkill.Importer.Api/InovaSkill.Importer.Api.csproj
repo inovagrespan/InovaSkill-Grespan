@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.*" />
     <ProjectReference Include="..\InovaSkill.Importer.Infrastructure\InovaSkill.Importer.Infrastructure.csproj" />
     <ProjectReference Include="..\InovaSkill.Importer.Application\InovaSkill.Importer.Application.csproj" />
     <ProjectReference Include="..\InovaSkill.Importer.Domain\InovaSkill.Importer.Domain.csproj" />

@@ -162,7 +162,7 @@ describe("operational, finance and reports pages", () => {
     expect(styles).toContain(".finance-chart-card");
     expect(styles).toContain(".dark .finance-chart-card");
     expect(sidebar).not.toContain('to: "/financas"');
-    expect(sidebar).toContain('label: "Finanças"');
+    expect(sidebar).not.toContain('label: "Finanças"');
   });
 
   it("mescla clientes e finanças com métricas financeiras no topo e lista de clientes abaixo", () => {
@@ -180,38 +180,43 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("financeCustomerRankingData");
     expect(source).toContain("RevenueAreaChart");
     expect(source).toContain("<CardTitle>Clientes</CardTitle>");
-    expect(source).toContain("Clique em um cliente para abrir a tela de detalhes.");
-    expect(source).toContain("onClick={() => openDetails(item.customerCode)}");
-    expect(sidebar).toContain('to: "/clientes"');
-    expect(sidebar).toContain('label: "Finanças"');
+    expect(source).toContain("onClick={() => openDetails(item.ClienteId ?? item.customerCode ?? item.clienteId)}");
+    expect(sidebar).not.toContain('to: "/clientes"');
+    expect(sidebar).not.toContain('label: "Finanças"');
     expect(sidebar).not.toContain('label: "Clientes"');
     expect(sidebar).not.toContain('to: "/financas"');
   });
 
-  it("cria aba de produtos para consultar produtos cadastrados", () => {
+  it("transforma a rota de produtos em painel demonstrativo de produção com KPIs explicáveis", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/produtos.tsx"), "utf8");
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
 
     expect(source).toContain('createFileRoute("/produtos")');
-    expect(source).toContain("Produtos cadastrados");
-    expect(source).toContain("SKU ou descrição do produto");
-    expect(source).toContain("fetchProducts");
-    expect(source).toContain("useDebouncedValue(search, PRODUCT_SEARCH_DEBOUNCE_MS)");
-    expect(source).toContain("PRODUCT_SEARCH_DEBOUNCE_MS = 300");
-    expect(source).toContain("new AbortController()");
-    expect(source).toContain("Nenhum produto encontrado.");
-    expect(source).toContain("Página {page} de {totalPages}");
-    expect(source).toContain("getModuleHighlightFromLocation");
-    expect(source).toContain("Indicador destacado pela Torre de Controle");
+    expect(source).toContain("Produção");
+    expect(source).toContain("Dados demonstrativos");
+    expect(source).toContain("Eficiência de Produção");
+    expect(source).toContain("Cumprimento do Plano");
+    expect(source).toContain("Índice de Refugo");
+    expect(source).toContain("OEE Simulado");
+    expect(source).toContain("MetricDetailsDialog");
+    expect(source).toContain("Fórmula");
+    expect(source).toContain("Como foi calculado");
+    expect(source).toContain("Histórico do indicador");
+    expect(source).toContain("Dados usados");
+    expect(source).not.toContain("fetchProducts");
+    expect(source).not.toContain("useDebouncedValue");
     expect(sidebar).toContain('to: "/produtos"');
-    expect(sidebar).toContain('label: "Produtos"');
-    expect(sidebar).toContain("PackageSearch");
+    expect(sidebar).toContain('label: "Produção"');
+    expect(sidebar).toContain("Factory");
   });
 
   it("exibe kpis operacionais de nota fiscal na tela de vendas", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/vendas.tsx"), "utf8");
+    const salesTower = fs.readFileSync(path.resolve(process.cwd(), "src/components/SalesControlTower.tsx"), "utf8");
     const dashboardHelper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/sales-dashboard.ts"), "utf8");
 
+    expect(source).toContain('createFileRoute("/vendas")({ component: SalesControlTower })');
+    expect(salesTower).toContain("Torre Comercial");
     expect(source).toContain("Notas fiscais");
     expect(source).toContain("Valor das notas");
     expect(source).toContain("Peso movimentado");
@@ -221,8 +226,6 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("AreaChart");
     expect(source).toContain("linearGradient");
     expect(source).toContain("SALES_CHART_CARD_CLASS_NAME");
-    expect(source).toContain("getModuleHighlightFromLocation");
-    expect(source).toContain("Indicador destacado pela Torre de Controle");
     expect(dashboardHelper).toContain("formatSalesTimelineLabel");
     expect(dashboardHelper).toContain("buildSalesTrendData");
     expect(dashboardHelper).toContain("buildSalesRankingData");
@@ -262,7 +265,7 @@ describe("operational, finance and reports pages", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
 
     expect(source).toContain("<TableHead>Cliente</TableHead>");
-    expect(source).toContain("<TableHead>Faturamento</TableHead>");
+    expect(source).toContain("<TableHead className=\"text-right\">Fat. 12M</TableHead>");
     expect(source).toContain("DialogTitle>Detalhes do Cliente");
     expect(source).toContain("loadCustomerDetails");
   });

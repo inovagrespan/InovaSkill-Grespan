@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "../components/AppSidebar";
+import { NotificationCenter } from "../components/NotificationCenter";
 import { isAuthenticated, redirectToLogin } from "../lib/auth";
 import { cn } from "../lib/utils";
 
@@ -168,10 +169,12 @@ function RootComponent() {
             onToggleTheme={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
           />
         ) : null}
+        {canRenderPrivateApp ? <NotificationCenter /> : null}
         <main
           className={cn(
             "min-h-screen transition-[margin] duration-200 ease-out motion-reduce:transition-none",
-            canRenderPrivateApp && (sidebarCollapsed ? "md:ml-[72px]" : "md:ml-[264px]"),
+            canRenderPrivateApp && (sidebarCollapsed ? "md:ml-[76px]" : "md:ml-[264px]"),
+            canRenderPrivateApp && "pt-0",
           )}
         >
           {isLoginRoute || authenticated ? <Outlet /> : null}

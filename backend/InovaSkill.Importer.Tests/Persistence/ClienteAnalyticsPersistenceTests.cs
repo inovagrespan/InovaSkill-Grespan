@@ -44,6 +44,7 @@ public sealed class ClienteAnalyticsPersistenceTests
             TendenciaPrevista = "Crescimento",
             ErroMedioHistorico = 5,
             ConfiancaModelo = 90,
+            UltimaObservacao = DateTime.UtcNow,
             AtualizadoEm = DateTime.UtcNow
         });
 

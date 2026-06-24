@@ -91,11 +91,44 @@ export function getCurrentUser(): AuthTokenPayload | null {
 }
 
 export function getCurrentUserRole(): string | null {
-  return getCurrentUser()?.role?.trim().toLowerCase() ?? null;
+  return normalizeUserRole(getCurrentUser()?.role);
+}
+
+export function normalizeUserRole(role?: string | null): string | null {
+  const normalized = role
+    ?.trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  return normalized || null;
 }
 
 export function isCurrentUserAdmin(): boolean {
   return getCurrentUserRole() === "admin";
+}
+
+export function isCurrentUserSystemAdmin(): boolean {
+  const role = getCurrentUserRole();
+  return role === "admin_system" || role === "admin";
+}
+
+export function isCurrentUserDirector(): boolean {
+  return getCurrentUserRole() === "diretor";
+}
+
+export function canCurrentUserAccessAllAreas(): boolean {
+  return getCurrentUserRole() === "diretor";
+}
+
+export function canCurrentUserAccessAdministrativeArea(): boolean {
+  const role = getCurrentUserRole();
+  return role === "diretor" || role === "administrativo";
+}
+
+export function canCurrentUserAccessProcessingArea(): boolean {
+  const role = getCurrentUserRole();
+  return role === "admin_system" || role === "admin";
 }
 
 export function saveAuthToken(token: string): void {
@@ -162,11 +195,19 @@ async function parseAuthError(response: Response, fallbackMessage: string): Prom
 }
 
 export async function login(input: LoginInput): Promise<string> {
-  const response = await getFetch()(buildGatewayUrl("login"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  let response: Response;
+  try {
+    response = await getFetch()(buildGatewayUrl("login"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    if (error instanceof TypeError && /Failed to fetch|NetworkError|Load failed|fetch failed/i.test(error.message)) {
+      throw new Error("Não foi possível conectar à API. Verifique se o backend está rodando em http://localhost:5279.");
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     throw new Error(await parseAuthError(response, "Usuário/e-mail ou senha inválidos."));
@@ -183,11 +224,19 @@ export async function login(input: LoginInput): Promise<string> {
 }
 
 export async function registerUser(input: RegisterInput): Promise<void> {
-  const response = await getFetch()(buildGatewayUrl("register"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  let response: Response;
+  try {
+    response = await getFetch()(buildGatewayUrl("register"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    if (error instanceof TypeError && /Failed to fetch|NetworkError|Load failed|fetch failed/i.test(error.message)) {
+      throw new Error("Não foi possível conectar à API. Verifique se o backend está rodando em http://localhost:5279.");
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     throw new Error(await parseAuthError(response, "Não foi possível criar o usuário."));

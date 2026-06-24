@@ -11,18 +11,25 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VendasRouteImport } from './routes/vendas'
 import { Route as SimulacaoRouteImport } from './routes/simulacao'
+import { Route as ReunioesRouteImport } from './routes/reunioes'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as ProdutosRouteImport } from './routes/produtos'
 import { Route as ProcessamentosRouteImport } from './routes/processamentos'
+import { Route as PendenciasRouteImport } from './routes/pendencias'
+import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as FinancasRouteImport } from './routes/financas'
 import { Route as ClientesImpactoRouteImport } from './routes/clientes-impacto'
 import { Route as ClientesRouteImport } from './routes/clientes'
+import { Route as AlertasRouteImport } from './routes/alertas'
+import { Route as AdministrativoRouteImport } from './routes/administrativo'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ReunioesIndexRouteImport } from './routes/reunioes.index'
 import { Route as LogisticaIndexRouteImport } from './routes/logistica.index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
+import { Route as ReunioesIdRouteImport } from './routes/reunioes.$id'
 import { Route as LogisticaMapaRouteImport } from './routes/logistica.mapa'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
 import { Route as ClientesAnaliseComercialRouteImport } from './routes/clientes.analise-comercial'
@@ -35,6 +42,11 @@ const VendasRoute = VendasRouteImport.update({
 const SimulacaoRoute = SimulacaoRouteImport.update({
   id: '/simulacao',
   path: '/simulacao',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReunioesRoute = ReunioesRouteImport.update({
+  id: '/reunioes',
+  path: '/reunioes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RelatoriosRoute = RelatoriosRouteImport.update({
@@ -50,6 +62,16 @@ const ProdutosRoute = ProdutosRouteImport.update({
 const ProcessamentosRoute = ProcessamentosRouteImport.update({
   id: '/processamentos',
   path: '/processamentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PendenciasRoute = PendenciasRouteImport.update({
+  id: '/pendencias',
+  path: '/pendencias',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificacoesRoute = NotificacoesRouteImport.update({
+  id: '/notificacoes',
+  path: '/notificacoes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LogisticaRoute = LogisticaRouteImport.update({
@@ -82,10 +104,25 @@ const ClientesRoute = ClientesRouteImport.update({
   path: '/clientes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AlertasRoute = AlertasRouteImport.update({
+  id: '/alertas',
+  path: '/alertas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdministrativoRoute = AdministrativoRouteImport.update({
+  id: '/administrativo',
+  path: '/administrativo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ReunioesIndexRoute = ReunioesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ReunioesRoute,
 } as any)
 const LogisticaIndexRoute = LogisticaIndexRouteImport.update({
   id: '/',
@@ -96,6 +133,11 @@ const ImportacoesIndexRoute = ImportacoesIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ImportacoesRoute,
+} as any)
+const ReunioesIdRoute = ReunioesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ReunioesRoute,
 } as any)
 const LogisticaMapaRoute = LogisticaMapaRouteImport.update({
   id: '/mapa',
@@ -116,29 +158,40 @@ const ClientesAnaliseComercialRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/administrativo': typeof AdministrativoRoute
+  '/alertas': typeof AlertasRoute
   '/clientes': typeof ClientesRouteWithChildren
   '/clientes-impacto': typeof ClientesImpactoRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
+  '/notificacoes': typeof NotificacoesRoute
+  '/pendencias': typeof PendenciasRoute
   '/processamentos': typeof ProcessamentosRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
+  '/reunioes': typeof ReunioesRouteWithChildren
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
+  '/reunioes/$id': typeof ReunioesIdRoute
   '/importacoes/': typeof ImportacoesIndexRoute
   '/logistica/': typeof LogisticaIndexRoute
+  '/reunioes/': typeof ReunioesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/administrativo': typeof AdministrativoRoute
+  '/alertas': typeof AlertasRoute
   '/clientes': typeof ClientesRouteWithChildren
   '/clientes-impacto': typeof ClientesImpactoRoute
   '/financas': typeof FinancasRoute
   '/login': typeof LoginRoute
+  '/notificacoes': typeof NotificacoesRoute
+  '/pendencias': typeof PendenciasRoute
   '/processamentos': typeof ProcessamentosRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
@@ -147,56 +200,76 @@ export interface FileRoutesByTo {
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
+  '/reunioes/$id': typeof ReunioesIdRoute
   '/importacoes': typeof ImportacoesIndexRoute
   '/logistica': typeof LogisticaIndexRoute
+  '/reunioes': typeof ReunioesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/administrativo': typeof AdministrativoRoute
+  '/alertas': typeof AlertasRoute
   '/clientes': typeof ClientesRouteWithChildren
   '/clientes-impacto': typeof ClientesImpactoRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
+  '/notificacoes': typeof NotificacoesRoute
+  '/pendencias': typeof PendenciasRoute
   '/processamentos': typeof ProcessamentosRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
+  '/reunioes': typeof ReunioesRouteWithChildren
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
   '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
+  '/reunioes/$id': typeof ReunioesIdRoute
   '/importacoes/': typeof ImportacoesIndexRoute
   '/logistica/': typeof LogisticaIndexRoute
+  '/reunioes/': typeof ReunioesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/administrativo'
+    | '/alertas'
     | '/clientes'
     | '/clientes-impacto'
     | '/financas'
     | '/importacoes'
     | '/login'
     | '/logistica'
+    | '/notificacoes'
+    | '/pendencias'
     | '/processamentos'
     | '/produtos'
     | '/relatorios'
+    | '/reunioes'
     | '/simulacao'
     | '/vendas'
     | '/clientes/analise-comercial'
     | '/importacoes/files'
     | '/logistica/mapa'
+    | '/reunioes/$id'
     | '/importacoes/'
     | '/logistica/'
+    | '/reunioes/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/administrativo'
+    | '/alertas'
     | '/clientes'
     | '/clientes-impacto'
     | '/financas'
     | '/login'
+    | '/notificacoes'
+    | '/pendencias'
     | '/processamentos'
     | '/produtos'
     | '/relatorios'
@@ -205,40 +278,54 @@ export interface FileRouteTypes {
     | '/clientes/analise-comercial'
     | '/importacoes/files'
     | '/logistica/mapa'
+    | '/reunioes/$id'
     | '/importacoes'
     | '/logistica'
+    | '/reunioes'
   id:
     | '__root__'
     | '/'
+    | '/administrativo'
+    | '/alertas'
     | '/clientes'
     | '/clientes-impacto'
     | '/financas'
     | '/importacoes'
     | '/login'
     | '/logistica'
+    | '/notificacoes'
+    | '/pendencias'
     | '/processamentos'
     | '/produtos'
     | '/relatorios'
+    | '/reunioes'
     | '/simulacao'
     | '/vendas'
     | '/clientes/analise-comercial'
     | '/importacoes/files'
     | '/logistica/mapa'
+    | '/reunioes/$id'
     | '/importacoes/'
     | '/logistica/'
+    | '/reunioes/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdministrativoRoute: typeof AdministrativoRoute
+  AlertasRoute: typeof AlertasRoute
   ClientesRoute: typeof ClientesRouteWithChildren
   ClientesImpactoRoute: typeof ClientesImpactoRoute
   FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LoginRoute: typeof LoginRoute
   LogisticaRoute: typeof LogisticaRouteWithChildren
+  NotificacoesRoute: typeof NotificacoesRoute
+  PendenciasRoute: typeof PendenciasRoute
   ProcessamentosRoute: typeof ProcessamentosRoute
   ProdutosRoute: typeof ProdutosRoute
   RelatoriosRoute: typeof RelatoriosRoute
+  ReunioesRoute: typeof ReunioesRouteWithChildren
   SimulacaoRoute: typeof SimulacaoRoute
   VendasRoute: typeof VendasRoute
 }
@@ -257,6 +344,13 @@ declare module '@tanstack/react-router' {
       path: '/simulacao'
       fullPath: '/simulacao'
       preLoaderRoute: typeof SimulacaoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reunioes': {
+      id: '/reunioes'
+      path: '/reunioes'
+      fullPath: '/reunioes'
+      preLoaderRoute: typeof ReunioesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/relatorios': {
@@ -278,6 +372,20 @@ declare module '@tanstack/react-router' {
       path: '/processamentos'
       fullPath: '/processamentos'
       preLoaderRoute: typeof ProcessamentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pendencias': {
+      id: '/pendencias'
+      path: '/pendencias'
+      fullPath: '/pendencias'
+      preLoaderRoute: typeof PendenciasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notificacoes': {
+      id: '/notificacoes'
+      path: '/notificacoes'
+      fullPath: '/notificacoes'
+      preLoaderRoute: typeof NotificacoesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/logistica': {
@@ -322,12 +430,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClientesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/alertas': {
+      id: '/alertas'
+      path: '/alertas'
+      fullPath: '/alertas'
+      preLoaderRoute: typeof AlertasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administrativo': {
+      id: '/administrativo'
+      path: '/administrativo'
+      fullPath: '/administrativo'
+      preLoaderRoute: typeof AdministrativoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/reunioes/': {
+      id: '/reunioes/'
+      path: '/'
+      fullPath: '/reunioes/'
+      preLoaderRoute: typeof ReunioesIndexRouteImport
+      parentRoute: typeof ReunioesRoute
     }
     '/logistica/': {
       id: '/logistica/'
@@ -342,6 +471,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/importacoes/'
       preLoaderRoute: typeof ImportacoesIndexRouteImport
       parentRoute: typeof ImportacoesRoute
+    }
+    '/reunioes/$id': {
+      id: '/reunioes/$id'
+      path: '/$id'
+      fullPath: '/reunioes/$id'
+      preLoaderRoute: typeof ReunioesIdRouteImport
+      parentRoute: typeof ReunioesRoute
     }
     '/logistica/mapa': {
       id: '/logistica/mapa'
@@ -407,17 +543,36 @@ const LogisticaRouteWithChildren = LogisticaRoute._addFileChildren(
   LogisticaRouteChildren,
 )
 
+interface ReunioesRouteChildren {
+  ReunioesIdRoute: typeof ReunioesIdRoute
+  ReunioesIndexRoute: typeof ReunioesIndexRoute
+}
+
+const ReunioesRouteChildren: ReunioesRouteChildren = {
+  ReunioesIdRoute: ReunioesIdRoute,
+  ReunioesIndexRoute: ReunioesIndexRoute,
+}
+
+const ReunioesRouteWithChildren = ReunioesRoute._addFileChildren(
+  ReunioesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdministrativoRoute: AdministrativoRoute,
+  AlertasRoute: AlertasRoute,
   ClientesRoute: ClientesRouteWithChildren,
   ClientesImpactoRoute: ClientesImpactoRoute,
   FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LoginRoute: LoginRoute,
   LogisticaRoute: LogisticaRouteWithChildren,
+  NotificacoesRoute: NotificacoesRoute,
+  PendenciasRoute: PendenciasRoute,
   ProcessamentosRoute: ProcessamentosRoute,
   ProdutosRoute: ProdutosRoute,
   RelatoriosRoute: RelatoriosRoute,
+  ReunioesRoute: ReunioesRouteWithChildren,
   SimulacaoRoute: SimulacaoRoute,
   VendasRoute: VendasRoute,
 }

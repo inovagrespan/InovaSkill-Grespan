@@ -256,6 +256,96 @@ export type WorkerHealth = {
   currentTask: string;
 };
 
+export type AiAlertSeverity = "Baixo" | "Médio" | "Alto" | "Crítico";
+export type AiAlertStatus =
+  | "Novo"
+  | "Visualizado"
+  | "Em análise"
+  | "Reunião sugerida"
+  | "Reunião agendada"
+  | "Decisão pendente"
+  | "Ação em execução"
+  | "Atrasado"
+  | "Escalado para diretoria"
+  | "Resolvido"
+  | "Cancelado com justificativa";
+
+export type AiAlertDashboard = {
+  summary: AiAlertSummary;
+  alerts: AiAlertItem[];
+};
+
+export type AiAlertSummary = {
+  total: number;
+  critical: number;
+  late: number;
+  escalated: number;
+  requiresMeeting: number;
+  byArea: AiAlertAreaSummary[];
+};
+
+export type AiAlertAreaSummary = {
+  area: string;
+  total: number;
+  critical: number;
+  late: number;
+};
+
+export type AiAlertItem = {
+  id: number;
+  title: string;
+  description: string;
+  responsibleArea: string;
+  responsibleManager: string;
+  involvedAreas: string[];
+  involvedUsers: string[];
+  severity: AiAlertSeverity | string;
+  status: AiAlertStatus | string;
+  origin: string;
+  evidenceJson: string;
+  expectedImpact: string;
+  responseDeadlineAt: string;
+  actionDeadlineAt: string | null;
+  aiSuggestion: string;
+  requiresMeeting: boolean;
+  relatedTasks: string[];
+  linkedDecision: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  cancellationReason: string;
+  viewedAt: string | null;
+  lastNotificationAt: string | null;
+  escalatedAt: string | null;
+  notificationCount: number;
+  escalationCount: number;
+  isLate: boolean;
+  statusHistory: AiAlertStatusHistory[];
+  notificationHistory: AiAlertNotificationHistory[];
+  escalationHistory: AiAlertEscalationHistory[];
+};
+
+export type AiAlertStatusHistory = {
+  previousStatus: string;
+  newStatus: string;
+  changedBy: string;
+  justification: string;
+  changedAt: string;
+};
+
+export type AiAlertNotificationHistory = {
+  recipient: string;
+  channel: string;
+  reason: string;
+  sentAt: string;
+};
+
+export type AiAlertEscalationHistory = {
+  fromRecipient: string;
+  toRecipient: string;
+  reason: string;
+  escalatedAt: string;
+};
+
 export type ProcessingJobDetails = {
   job: ProcessingJobQueueItem;
   timeline: ProcessingStep[];
@@ -1645,6 +1735,376 @@ export async function runProcessingManualAction(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao executar ação manual."));
+}
+
+export async function fetchAiAlertsDashboard(input: {
+  area?: string;
+  status?: string;
+  severity?: string;
+} = {}): Promise<AiAlertDashboard> {
+  const query = new URLSearchParams();
+  if (input.area?.trim()) query.set("area", input.area.trim());
+  if (input.status?.trim()) query.set("status", input.status.trim());
+  if (input.severity?.trim()) query.set("severity", input.severity.trim());
+
+  let response: Response;
+  try {
+    response = await authFetch(`${API_URL}/api/ai-alerts/dashboard?${query.toString()}`);
+  } catch (error) {
+    if (shouldUseDemoData(error)) return demoAiAlertsDashboard();
+    throw error;
+  }
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar alertas da IA."));
+  const dashboard = normalizeAiAlertDashboard(await response.json());
+  return dashboard.alerts.length > 0 ? dashboard : demoAiAlertsDashboard(input);
+}
+
+export async function updateAiAlertStatus(input: {
+  id: number;
+  status: AiAlertStatus;
+  justification?: string;
+  cancellationReason?: string;
+}): Promise<AiAlertItem> {
+  const response = await authFetch(`${API_URL}/api/ai-alerts/${input.id}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      status: input.status,
+      justification: input.justification ?? "",
+      cancellationReason: input.cancellationReason ?? "",
+    }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao atualizar status do alerta."));
+  return normalizeAiAlertItem(await response.json());
+}
+
+export async function evaluateAiAlertEscalation(id: number): Promise<void> {
+  const response = await authFetch(`${API_URL}/api/ai-alerts/${id}/evaluate-escalation`, { method: "POST" });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao avaliar escalonamento do alerta."));
+}
+
+function normalizeAiAlertDashboard(raw: any): AiAlertDashboard {
+  return {
+    summary: normalizeAiAlertSummary(raw.summary ?? raw.Summary ?? {}),
+    alerts: (raw.alerts ?? raw.Alerts ?? []).map(normalizeAiAlertItem),
+  };
+}
+
+function normalizeAiAlertSummary(raw: any): AiAlertSummary {
+  return {
+    total: Number(raw.total ?? raw.Total ?? 0),
+    critical: Number(raw.critical ?? raw.Critical ?? 0),
+    late: Number(raw.late ?? raw.Late ?? 0),
+    escalated: Number(raw.escalated ?? raw.Escalated ?? 0),
+    requiresMeeting: Number(raw.requiresMeeting ?? raw.RequiresMeeting ?? 0),
+    byArea: (raw.byArea ?? raw.ByArea ?? []).map((item: any) => ({
+      area: String(item.area ?? item.Area ?? ""),
+      total: Number(item.total ?? item.Total ?? 0),
+      critical: Number(item.critical ?? item.Critical ?? 0),
+      late: Number(item.late ?? item.Late ?? 0),
+    })),
+  };
+}
+
+function normalizeAiAlertItem(raw: any): AiAlertItem {
+  const responsibleArea = stringOrFallback(raw.responsibleArea ?? raw.ResponsibleArea, "Área não informada");
+  const title = stringOrFallback(raw.title ?? raw.Title, "Alerta gerado pela IA");
+  const status = stringOrFallback(raw.status ?? raw.Status, "Novo");
+  const createdAt = stringOrFallback(raw.createdAt ?? raw.CreatedAt, new Date().toISOString());
+
+  return {
+    id: Number(raw.id ?? raw.Id ?? 0),
+    title,
+    description: stringOrFallback(raw.description ?? raw.Description, "A IA gerou este alerta, mas a descrição detalhada ainda não foi sincronizada."),
+    responsibleArea,
+    responsibleManager: stringOrFallback(raw.responsibleManager ?? raw.ResponsibleManager, `Gestor de ${responsibleArea}`),
+    involvedAreas: (raw.involvedAreas ?? raw.InvolvedAreas ?? []).map(String),
+    involvedUsers: (raw.involvedUsers ?? raw.InvolvedUsers ?? []).map(String),
+    severity: stringOrFallback(raw.severity ?? raw.Severity, "Médio"),
+    status,
+    origin: stringOrFallback(raw.origin ?? raw.Origin, "IA"),
+    evidenceJson: String(raw.evidenceJson ?? raw.EvidenceJson ?? "{}"),
+    expectedImpact: stringOrFallback(raw.expectedImpact ?? raw.ExpectedImpact, "Impacto ainda não calculado pela IA."),
+    responseDeadlineAt: String(raw.responseDeadlineAt ?? raw.ResponseDeadlineAt ?? ""),
+    actionDeadlineAt: raw.actionDeadlineAt ?? raw.ActionDeadlineAt ?? null,
+    aiSuggestion: stringOrFallback(raw.aiSuggestion ?? raw.AiSuggestion, "Revisar o alerta com o gestor responsável e registrar a decisão tomada."),
+    requiresMeeting: Boolean(raw.requiresMeeting ?? raw.RequiresMeeting ?? false),
+    relatedTasks: (raw.relatedTasks ?? raw.RelatedTasks ?? []).map(String),
+    linkedDecision: String(raw.linkedDecision ?? raw.LinkedDecision ?? ""),
+    createdAt,
+    resolvedAt: raw.resolvedAt ?? raw.ResolvedAt ?? null,
+    cancellationReason: String(raw.cancellationReason ?? raw.CancellationReason ?? ""),
+    viewedAt: raw.viewedAt ?? raw.ViewedAt ?? null,
+    lastNotificationAt: raw.lastNotificationAt ?? raw.LastNotificationAt ?? null,
+    escalatedAt: raw.escalatedAt ?? raw.EscalatedAt ?? null,
+    notificationCount: Number(raw.notificationCount ?? raw.NotificationCount ?? 0),
+    escalationCount: Number(raw.escalationCount ?? raw.EscalationCount ?? 0),
+    isLate: Boolean(raw.isLate ?? raw.IsLate ?? false),
+    statusHistory: (raw.statusHistory ?? raw.StatusHistory ?? []).map((item: any) => ({
+      previousStatus: String(item.previousStatus ?? item.PreviousStatus ?? ""),
+      newStatus: String(item.newStatus ?? item.NewStatus ?? ""),
+      changedBy: String(item.changedBy ?? item.ChangedBy ?? ""),
+      justification: String(item.justification ?? item.Justification ?? ""),
+      changedAt: String(item.changedAt ?? item.ChangedAt ?? ""),
+    })),
+    notificationHistory: (raw.notificationHistory ?? raw.NotificationHistory ?? []).map((item: any) => ({
+      recipient: String(item.recipient ?? item.Recipient ?? ""),
+      channel: String(item.channel ?? item.Channel ?? ""),
+      reason: String(item.reason ?? item.Reason ?? ""),
+      sentAt: String(item.sentAt ?? item.SentAt ?? ""),
+    })),
+    escalationHistory: (raw.escalationHistory ?? raw.EscalationHistory ?? []).map((item: any) => ({
+      fromRecipient: String(item.fromRecipient ?? item.FromRecipient ?? ""),
+      toRecipient: String(item.toRecipient ?? item.ToRecipient ?? ""),
+      reason: String(item.reason ?? item.Reason ?? ""),
+      escalatedAt: String(item.escalatedAt ?? item.EscalatedAt ?? ""),
+    })),
+  };
+}
+
+function stringOrFallback(value: unknown, fallback: string): string {
+  const text = String(value ?? "").trim();
+  return text ? text : fallback;
+}
+
+function demoAiAlertsDashboard(input: {
+  area?: string;
+  status?: string;
+  severity?: string;
+} = {}): AiAlertDashboard {
+  const alerts: AiAlertItem[] = [
+    {
+      id: 9101,
+      title: "Risco de não atender demanda do cliente X",
+      description: "A IA identificou aumento incomum de demanda, estoque abaixo do necessário e atraso previsto de produção.",
+      responsibleArea: "Produção",
+      responsibleManager: "Gestor Produção",
+      involvedAreas: ["Vendas", "Logística", "Estoque"],
+      involvedUsers: ["operacao@local.test"],
+      severity: "Crítico",
+      status: "Escalado para diretoria",
+      origin: "IA",
+      evidenceJson: "{\"demanda\":\"+32%\",\"atraso\":\"2 dias\"}",
+      expectedImpact: "Risco de atraso para cliente importante e perda de faturamento.",
+      responseDeadlineAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      actionDeadlineAt: new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString(),
+      aiSuggestion: "Agendar reunião entre Vendas, Produção e Logística para repriorizar atendimento.",
+      requiresMeeting: true,
+      relatedTasks: ["Validar estoque", "Replanejar produção"],
+      linkedDecision: "",
+      createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      resolvedAt: null,
+      cancellationReason: "",
+      viewedAt: null,
+      lastNotificationAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      escalatedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      notificationCount: 3,
+      escalationCount: 1,
+      isLate: true,
+      statusHistory: [],
+      notificationHistory: [],
+      escalationHistory: [],
+    },
+    {
+      id: 9102,
+      title: "Baixa ocupação dos caminhões",
+      description: "Rotas planejadas apresentam ocupação abaixo do ideal para a próxima janela de entrega.",
+      responsibleArea: "Logística",
+      responsibleManager: "Gestor Logística",
+      involvedAreas: ["Vendas"],
+      involvedUsers: [],
+      severity: "Alto",
+      status: "Em análise",
+      origin: "IA",
+      evidenceJson: "{\"ocupacao\":\"58%\"}",
+      expectedImpact: "Custo logístico acima do previsto.",
+      responseDeadlineAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      actionDeadlineAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      aiSuggestion: "Consolidar cargas e revisar janela de entrega com Vendas.",
+      requiresMeeting: false,
+      relatedTasks: ["Revisar rotas"],
+      linkedDecision: "",
+      createdAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+      resolvedAt: null,
+      cancellationReason: "",
+      viewedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      lastNotificationAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+      escalatedAt: null,
+      notificationCount: 1,
+      escalationCount: 0,
+      isLate: false,
+      statusHistory: [],
+      notificationHistory: [],
+      escalationHistory: [],
+    },
+    {
+      id: 9103,
+      title: "Queda de conversão em propostas comerciais",
+      description: "A IA detectou queda na taxa de fechamento em propostas com locação de equipamentos e mix inicial de congelados.",
+      responsibleArea: "Vendas",
+      responsibleManager: "Gestor Vendas",
+      involvedAreas: ["Diretoria", "Administrativo"],
+      involvedUsers: ["vendas@local.test"],
+      severity: "Alto",
+      status: "Novo",
+      origin: "IA",
+      evidenceJson: "{\"conversao\":\"24,8%\",\"meta\":\"32%\",\"propostas_abertas\":\"18\",\"ticket_exposto\":\"R$ 186 mil\"}",
+      expectedImpact: "Risco de perda de faturamento mensal e atraso na expansão de novos clientes.",
+      responseDeadlineAt: new Date(Date.now() + 90 * 60 * 1000).toISOString(),
+      actionDeadlineAt: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString(),
+      aiSuggestion: "Revisar propostas paradas há mais de 15 dias e priorizar clientes com maior ticket potencial.",
+      requiresMeeting: true,
+      relatedTasks: ["Revisar propostas abertas", "Validar objeções comerciais", "Definir proposta padrão para locação"],
+      linkedDecision: "Padronizar política comercial para equipamentos alugados",
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      resolvedAt: null,
+      cancellationReason: "",
+      viewedAt: null,
+      lastNotificationAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      escalatedAt: null,
+      notificationCount: 1,
+      escalationCount: 0,
+      isLate: false,
+      statusHistory: [],
+      notificationHistory: [],
+      escalationHistory: [],
+    },
+    {
+      id: 9104,
+      title: "Risco administrativo em conciliação financeira",
+      description: "Notas de clientes estratégicos aparecem sem conciliação dentro da janela esperada, com potencial impacto no fechamento do mês.",
+      responsibleArea: "Administrativo",
+      responsibleManager: "Gestor Administrativo",
+      involvedAreas: ["Vendas", "Diretoria"],
+      involvedUsers: ["administrativo@local.test"],
+      severity: "Médio",
+      status: "Em análise",
+      origin: "IA",
+      evidenceJson: "{\"notas_pendentes\":\"14\",\"valor_total\":\"R$ 94 mil\",\"maior_cliente\":\"Rede Primavera\"}",
+      expectedImpact: "Fechamento financeiro pode apresentar divergência temporária e atraso na análise gerencial.",
+      responseDeadlineAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+      actionDeadlineAt: new Date(Date.now() + 30 * 60 * 60 * 1000).toISOString(),
+      aiSuggestion: "Cruzar notas pendentes com recebíveis, identificar divergências por cliente e registrar justificativas.",
+      requiresMeeting: false,
+      relatedTasks: ["Conferir notas pendentes", "Cruzar recebíveis", "Atualizar status financeiro"],
+      linkedDecision: "",
+      createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+      resolvedAt: null,
+      cancellationReason: "",
+      viewedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+      lastNotificationAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+      escalatedAt: null,
+      notificationCount: 2,
+      escalationCount: 0,
+      isLate: false,
+      statusHistory: [],
+      notificationHistory: [],
+      escalationHistory: [],
+    },
+    {
+      id: 9105,
+      title: "Capacidade produtiva insuficiente para pedido prioritário",
+      description: "Pedido de alto valor entrou na carteira com prazo curto e a capacidade simulada da linha principal está abaixo da necessidade.",
+      responsibleArea: "Produção",
+      responsibleManager: "Gestor Produção",
+      involvedAreas: ["Vendas", "Logística"],
+      involvedUsers: ["producao@local.test"],
+      severity: "Crítico",
+      status: "Atrasado",
+      origin: "IA",
+      evidenceJson: "{\"capacidade_livre\":\"14,5%\",\"pedido\":\"R$ 72 mil\",\"linha\":\"Linha 3\",\"atraso_estimado\":\"1,5 dia\"}",
+      expectedImpact: "Atraso provável em cliente prioritário e necessidade de replanejamento de entrega.",
+      responseDeadlineAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+      actionDeadlineAt: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
+      aiSuggestion: "Repriorizar ordens da Linha 3 e confirmar nova janela de entrega com Vendas e Logística.",
+      requiresMeeting: true,
+      relatedTasks: ["Replanejar fila da Linha 3", "Confirmar promessa comercial", "Reservar janela logística"],
+      linkedDecision: "",
+      createdAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
+      resolvedAt: null,
+      cancellationReason: "",
+      viewedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+      lastNotificationAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+      escalatedAt: null,
+      notificationCount: 2,
+      escalationCount: 0,
+      isLate: true,
+      statusHistory: [],
+      notificationHistory: [],
+      escalationHistory: [],
+    },
+    {
+      id: 9106,
+      title: "Cliente com queda brusca de consumo recorrente",
+      description: "A IA identificou redução acima do normal no consumo de um cliente ativo com histórico de compras semanais.",
+      responsibleArea: "Vendas",
+      responsibleManager: "Gestor Vendas",
+      involvedAreas: ["Diretoria"],
+      involvedUsers: ["vendas@local.test"],
+      severity: "Médio",
+      status: "Reunião sugerida",
+      origin: "IA",
+      evidenceJson: "{\"cliente\":\"Supermercado Vitória\",\"queda\":\"-29,4%\",\"produto\":\"Pão Francês Congelado 60g\",\"recorrencia\":\"semanal\"}",
+      expectedImpact: "Possível perda de recorrência e abertura para concorrente na categoria principal.",
+      responseDeadlineAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+      actionDeadlineAt: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),
+      aiSuggestion: "Acionar vendedor responsável e propor revisão de mix, preço e disponibilidade de equipamento.",
+      requiresMeeting: true,
+      relatedTasks: ["Contatar cliente", "Revisar histórico de preço", "Preparar proposta de recuperação"],
+      linkedDecision: "",
+      createdAt: new Date(Date.now() - 70 * 60 * 1000).toISOString(),
+      resolvedAt: null,
+      cancellationReason: "",
+      viewedAt: null,
+      lastNotificationAt: new Date(Date.now() - 70 * 60 * 1000).toISOString(),
+      escalatedAt: null,
+      notificationCount: 1,
+      escalationCount: 0,
+      isLate: false,
+      statusHistory: [],
+      notificationHistory: [],
+      escalationHistory: [],
+    },
+  ];
+
+  const filteredAlerts = alerts.filter((alert) => {
+    const areaMatches = !input.area?.trim() || normalizeComparableText(alert.responsibleArea) === normalizeComparableText(input.area);
+    const statusMatches = !input.status?.trim() || normalizeComparableText(alert.status) === normalizeComparableText(input.status);
+    const severityMatches = !input.severity?.trim() || normalizeComparableText(alert.severity) === normalizeComparableText(input.severity);
+    return areaMatches && statusMatches && severityMatches;
+  });
+
+  return buildAiAlertsDashboardFromItems(filteredAlerts.length > 0 ? filteredAlerts : alerts);
+}
+
+function buildAiAlertsDashboardFromItems(alerts: AiAlertItem[]): AiAlertDashboard {
+  return {
+    summary: {
+      total: alerts.length,
+      critical: alerts.filter((alert) => alert.severity === "Crítico").length,
+      late: alerts.filter((alert) => alert.isLate).length,
+      escalated: alerts.filter((alert) => alert.escalatedAt).length,
+      requiresMeeting: alerts.filter((alert) => alert.requiresMeeting).length,
+      byArea: buildAiAlertAreaSummary(alerts),
+    },
+    alerts,
+  };
+}
+
+function buildAiAlertAreaSummary(alerts: AiAlertItem[]): AiAlertAreaSummary[] {
+  const summary = new Map<string, AiAlertAreaSummary>();
+  for (const alert of alerts) {
+    const current = summary.get(alert.responsibleArea) ?? { area: alert.responsibleArea, total: 0, critical: 0, late: 0 };
+    current.total += 1;
+    current.critical += alert.severity === "Crítico" ? 1 : 0;
+    current.late += alert.isLate ? 1 : 0;
+    summary.set(alert.responsibleArea, current);
+  }
+  return Array.from(summary.values()).sort((a, b) => a.area.localeCompare(b.area, "pt-BR"));
+}
+
+function normalizeComparableText(value: string): string {
+  return value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 function normalizeProcessingDashboard(raw: any): ProcessingMonitoringDashboard {

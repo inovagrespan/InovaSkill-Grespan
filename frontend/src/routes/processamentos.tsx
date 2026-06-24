@@ -22,12 +22,12 @@ import {
   type ProcessingMonitoringDashboard,
 } from "@/lib/importer-api";
 import { clampProgressPercent, stageStatusLabel } from "@/lib/importer-progress";
-import { isCurrentUserAdmin } from "@/lib/auth";
+import { canCurrentUserAccessProcessingArea } from "@/lib/auth";
 import { buildServiceUrl } from "@/lib/api-url";
 
 export const Route = createFileRoute("/processamentos")({
   beforeLoad: () => {
-    if (!isCurrentUserAdmin()) {
+    if (!canCurrentUserAccessProcessingArea()) {
       throw redirect({ to: "/" });
     }
   },
