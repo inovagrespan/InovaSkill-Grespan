@@ -23,13 +23,13 @@ import { useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LogisticsRegionMap } from "@/components/ui/logistics-region-map";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   LOGISTICS_PERIOD_OPTIONS,
   LOGISTICS_REFERENCE_DATE,
   buildContextualLogisticsRecommendation,
-  buildLogisticsRoutePerformance,
-  calculateLogisticsKpis,
+  buildDemoLogisticsMetricHistory,
   compareLogisticsPeriods,
   demoLogisticsDashboardSource,
   filterLogisticsDashboardSource,
@@ -45,7 +45,8 @@ import {
   type LogisticsRootCause,
 } from "@/lib/logistics-dashboard";
 import { cn } from "@/lib/utils";
-import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { buildTrafficDelayRanking, demoLogisticsMapCustomers, demoLogisticsMapRoutes } from "@/lib/logistics-map-data";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 export const Route = createFileRoute("/logistica/")({ component: LogisticaPage });
 
@@ -113,7 +114,6 @@ const ATTENTION_TRANSIT_MINUTES = 240;
 const HEALTHY_DAMAGE_RATE_PERCENT = 1;
 const ATTENTION_DAMAGE_RATE_PERCENT = 2;
 const PERCENT_DECIMAL_PLACES = 1;
-const TRANSIT_TIME_TARGET_MINUTES = 240;
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const numberFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
@@ -321,11 +321,14 @@ function buildInvestigationFactors(
   }
   if (metric === "occupancy") return [
     { id: "underused-route", title: "Ocupação por rota", summary: `${lowOccupancyRoutes[0]?.routeName ?? "Rota sem dados"} apresenta a menor utilização da capacidade disponível.`, cause: "low_occupancy", evidence: lowOccupancyRoutes.slice(0, 4).map((route) => routeEvidence(route, "baixa ocupação", true)) },
-    { id: "loading-impact", title: "Espera no carregamento", summary: "Carregamentos mais longos reduzem o giro dos veículos e a consolidação das saídas.", cause: "loading_bottleneck", evidence: slowLoads.slice(0, 3).map((route) => routeEvidence(route, "gargalo de carregamento")) },
+    { id: "loading-impact", title: "Espera no carregamento", summary: "Cargas mistas de pães congelados e fornos alugados aumentam o tempo de preparação e reduzem o giro dos veículos.", cause: "loading_bottleneck", evidence: slowLoads.slice(0, 3).map((route) => routeEvidence(route, "gargalo de carregamento")) },
   ];
-  if (metric === "loading") return [{ id: "loading-bottleneck", title: "Gargalo no pátio", summary: `${slowLoads.filter((route) => route.loadingMinutes > 50).length} viagens ultrapassaram 50 minutos de carregamento.`, cause: "loading_bottleneck", evidence: slowLoads.slice(0, 4).map((route) => routeEvidence(route, "carregamento lento")) }];
+  if (metric === "loading") return [{ id: "loading-bottleneck", title: "Gargalo no pátio", summary: `${slowLoads.filter((route) => route.loadingMinutes > 50).length} viagens com pães congelados e equipamentos de panificação ultrapassaram 50 minutos de carregamento.`, cause: "loading_bottleneck", evidence: slowLoads.slice(0, 4).map((route) => routeEvidence(route, "carregamento lento")) }];
   if (metric === "transit") return [{ id: "traffic-route", title: "Rotas acima do tempo planejado", summary: `${slowRoutes.filter((route) => route.transitMinutes > ATTENTION_TRANSIT_MINUTES).length} viagens excederam quatro horas, com concentração nos corredores do interior.`, cause: "congestion", evidence: slowRoutes.slice(0, 4).map((route) => routeEvidence(route, "congestionamento")) }];
-  if (metric === "total-cost" || metric === "route-cost") return [{ id: "expensive-route", title: "Concentração de custo por rota", summary: `${costlyRoutes[0]?.routeName ?? "Rota sem dados"} possui o maior custo do período.`, cause: "route_cost", evidence: costlyRoutes.slice(0, 4).map((route) => routeEvidence(route, "custo elevado")) }];
+  if (metric === "total-cost" || metric === "route-cost") return [
+    { id: "expensive-route", title: "Concentração de custo por rota", summary: `${costlyRoutes[0]?.routeName ?? "Rota sem dados"} possui o maior custo do período.`, cause: "route_cost", evidence: costlyRoutes.slice(0, 4).map((route) => routeEvidence(route, "custo elevado")) },
+    { id: "rental-equipment", title: "Movimentação de equipamentos alugados", summary: "Entregas e retiradas de fornos nos clientes aumentaram quilometragem, tempo de parada e custo operacional.", cause: "route_cost", evidence: costlyRoutes.slice(0, 3).map((route) => routeEvidence(route, "entrega de forno alugado")) },
+  ];
   if (metric === "inventory-accuracy") return [{ id: "inventory-difference", title: "Divergências físicas", summary: `${divergences[0]?.item.productName ?? "Produto sem dados"} apresenta a maior diferença entre saldo sistêmico e contado.`, cause: "inventory_divergence", evidence: divergences.slice(0, 4).map((entry) => ({ id: `divergence-${entry.item.sku}`, title: entry.item.productName, subtitle: `${entry.difference} unidades de divergência · ${entry.item.warehouse}`, fields: [{ label: "Sistema", value: String(entry.item.systemStock) }, { label: "Contado", value: String(entry.item.countedStock) }, { label: "Produto", value: entry.item.sku }, { label: "Filial", value: entry.item.warehouse }], recommendationContext: { subject: "divergência", product: entry.item.productName } })) }];
   if (metric === "stockout") return [
     { id: "forecast-error", title: "Previsão abaixo da demanda", summary: `${shortages.length} produtos não possuem saldo suficiente para cobrir a demanda projetada.`, cause: "demand_forecast", evidence: shortages.slice(0, 3).map(inventoryEvidence) },
@@ -349,10 +352,11 @@ function LogisticaPage() {
   const filteredSource = useMemo(() => filterLogisticsDashboardSource(demoLogisticsDashboardSource, periodDays, LOGISTICS_REFERENCE_DATE), [periodDays]);
   const routeSummaries = useMemo(() => summarizeLogisticsRoutes(filteredSource.routes), [filteredSource.routes]);
   const inventory = useMemo(() => selectLatestInventoryBySku(filteredSource.inventory), [filteredSource.inventory]);
-  const routePerformance = useMemo(() => buildLogisticsRoutePerformance(filteredSource.routes), [filteredSource.routes]);
+  const trafficDelayRanking = useMemo(() => buildTrafficDelayRanking(demoLogisticsMapRoutes, periodDays), [periodDays]);
   const metrics = comparison.current;
   const executiveCards = buildExecutiveCards(metrics, comparison.changes);
   const selectedCard = executiveCards.find((card) => card.id === selectedMetric) ?? null;
+  const metricHistory = useMemo(() => selectedMetric ? buildMetricHistory(selectedMetric, periodDays) : [], [selectedMetric, periodDays]);
   const investigationFactors = useMemo(
     () => buildInvestigationFactors(selectedMetric, filteredSource.routes, inventory),
     [selectedMetric, filteredSource.routes, inventory],
@@ -388,45 +392,31 @@ function LogisticaPage() {
         {executiveCards.map((card) => <ExecutiveMetricCard key={card.id} card={card} onSelect={() => openMetric(card.id)} />)}
       </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2" aria-label="Gráficos operacionais de logística">
-        <Card className="logistics-chart-card">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2" aria-label="Distribuição regional dos clientes">
+        <Card className="h-full">
           <CardHeader>
-            <CardTitle className="text-lg">Ocupação por rota</CardTitle>
-            <CardDescription>Capacidade utilizada em cada rota no período.</CardDescription>
+            <CardTitle className="text-lg">Clientes, rotas e trânsito</CardTitle>
+            <CardDescription>Todos os clientes, trajetos operacionais e pontos com impacto de congestionamento.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={routePerformance} margin={{ left: 0, right: 12, top: 12, bottom: 0 }}>
-                  <defs><linearGradient id="logisticsOccupancyGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--logistics-chart-line)" stopOpacity={0.42} /><stop offset="100%" stopColor="var(--logistics-chart-line)" stopOpacity={0.02} /></linearGradient></defs>
-                  <CartesianGrid vertical={false} stroke="var(--logistics-chart-grid)" strokeDasharray="3 3" />
-                  <XAxis dataKey="routeId" axisLine={false} tickLine={false} tick={{ fill: "var(--logistics-chart-axis)", fontSize: 11 }} />
-                  <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: "var(--logistics-chart-axis)", fontSize: 11 }} tickFormatter={(value) => `${value}%`} />
-                  <Tooltip labelFormatter={(routeId) => routePerformance.find((route) => route.routeId === routeId)?.routeName ?? routeId} formatter={(value) => [`${Number(value).toFixed(1)}%`, "Ocupação"]} contentStyle={{ background: "var(--logistics-chart-tooltip-bg)", borderColor: "var(--logistics-chart-tooltip-border)", borderRadius: 8, color: "var(--logistics-chart-text)" }} />
-                  <Area type="monotone" dataKey="occupancyPercent" stroke="var(--logistics-chart-line)" strokeWidth={2.4} fill="url(#logisticsOccupancyGradient)" dot={{ r: 3, fill: "var(--logistics-chart-line)", strokeWidth: 0 }} activeDot={{ r: 5 }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <LogisticsRegionMap customers={demoLogisticsMapCustomers} routes={demoLogisticsMapRoutes} periodDays={periodDays} compact />
           </CardContent>
         </Card>
-
-        <Card className="logistics-chart-card">
+        <Card className="logistics-city-chart-card h-full">
           <CardHeader>
-            <CardTitle className="text-lg">Transit Time por rota</CardTitle>
-            <CardDescription>Tempo médio comparado à meta operacional de quatro horas.</CardDescription>
+            <CardTitle className="text-lg">Rotas com mais atrasos por congestionamento</CardTitle>
+            <CardDescription>Minutos perdidos por rota no período selecionado, considerando apenas ocorrências de trânsito.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-72 w-full">
+            <div className="h-[560px] min-h-[430px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={routePerformance} margin={{ left: 0, right: 12, top: 12, bottom: 0 }}>
-                  <defs><linearGradient id="logisticsTransitGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--logistics-chart-line)" stopOpacity={0.42} /><stop offset="100%" stopColor="var(--logistics-chart-line)" stopOpacity={0.02} /></linearGradient></defs>
-                  <CartesianGrid vertical={false} stroke="var(--logistics-chart-grid)" strokeDasharray="3 3" />
-                  <XAxis dataKey="routeId" axisLine={false} tickLine={false} tick={{ fill: "var(--logistics-chart-axis)", fontSize: 11 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--logistics-chart-axis)", fontSize: 11 }} tickFormatter={(value) => formatLogisticsDuration(Number(value))} />
-                  <Tooltip labelFormatter={(routeId) => routePerformance.find((route) => route.routeId === routeId)?.routeName ?? routeId} formatter={(value) => [formatLogisticsDuration(Number(value)), "Transit Time"]} contentStyle={{ background: "var(--logistics-chart-tooltip-bg)", borderColor: "var(--logistics-chart-tooltip-border)", borderRadius: 8, color: "var(--logistics-chart-text)" }} />
-                  <ReferenceLine y={TRANSIT_TIME_TARGET_MINUTES} stroke="var(--logistics-chart-target)" strokeDasharray="5 5" label={{ value: "Meta 4h", position: "insideTopRight", fill: "var(--logistics-chart-target)", fontSize: 11 }} />
-                  <Area type="monotone" dataKey="averageTransitMinutes" stroke="var(--logistics-chart-line)" strokeWidth={2.4} fill="url(#logisticsTransitGradient)" dot={{ r: 3, fill: "var(--logistics-chart-line)", strokeWidth: 0 }} activeDot={{ r: 5 }} />
-                </AreaChart>
+                <BarChart data={trafficDelayRanking} layout="vertical" margin={{ left: 10, right: 28, top: 4, bottom: 4 }}>
+                  <CartesianGrid horizontal={false} stroke="var(--logistics-city-chart-grid)" strokeDasharray="3 3" />
+                  <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: "var(--logistics-city-chart-axis)", fontSize: 11 }} />
+                  <YAxis type="category" dataKey="routeName" width={72} axisLine={false} tickLine={false} tick={{ fill: "var(--logistics-city-chart-axis)", fontSize: 11 }} />
+                  <Tooltip formatter={(value, _name, item) => [`${formatLogisticsDuration(Number(value))} · ${item.payload.congestionCount} registros`, "Atraso por trânsito"]} labelFormatter={(_label, payload) => payload[0]?.payload?.cities ?? "Rota"} contentStyle={{ background: "var(--logistics-city-chart-tooltip-bg)", borderColor: "var(--logistics-city-chart-tooltip-border)", borderRadius: 8, color: "var(--logistics-city-chart-text)" }} />
+                  <Bar dataKey="delayMinutes" fill="var(--logistics-city-chart-bar)" radius={[0, 6, 6, 0]} maxBarSize={24} />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
@@ -448,6 +438,7 @@ function LogisticaPage() {
                   <div className="rounded-lg border bg-muted/20 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que aconteceu</p><p className="mt-2 text-lg font-semibold">{selectedCard.value}</p><p className="mt-1 text-sm text-muted-foreground">{formatChange(selectedCard.change)}</p></div>
                   <div className="rounded-lg border bg-muted/20 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Por que está neste status</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{selectedCard.insight}</p></div>
                 </div>
+                <MetricHistoryChart history={metricHistory} periodDays={periodDays} />
                 <div><h3 className="text-sm font-semibold">Principais fatores que impactaram o resultado</h3><div className="mt-3 space-y-2">{investigationFactors.map((factor) => <button type="button" key={factor.id} onClick={() => openFactor(factor)} className="flex w-full items-center justify-between gap-3 rounded-lg border p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"><div><p className="text-sm font-semibold">{factor.title}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{factor.summary}</p></div><ChevronRight className="size-4 shrink-0 text-primary" /></button>)}</div></div>
               </div>
             </>
@@ -474,23 +465,7 @@ function ForecastItem({ title, value, detail }: { title: string; value: string; 
   return <div className="rounded-lg border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">{title}</p><p className="mt-1 text-lg font-semibold">{value}</p><p className="mt-1 text-[11px] text-muted-foreground">{detail}</p></div>;
 }
 
-const HISTORY_POINT_COUNT = 6;
-const MILLISECONDS_PER_DAY = 86_400_000;
-
 type MetricHistoryPoint = { label: string; value: number; formattedValue: string };
-
-function metricNumericValue(metric: ExecutiveMetricId, metrics: LogisticsKpis): number {
-  if (metric === "returns") return metrics.returnRatePercent;
-  if (metric === "occupancy") return metrics.occupancyRatePercent;
-  if (metric === "loading") return metrics.averageLoadingMinutes;
-  if (metric === "transit") return metrics.averageTransitMinutes;
-  if (metric === "total-cost") return metrics.totalLogisticsCost;
-  if (metric === "route-cost") return metrics.costPerRoute;
-  if (metric === "inventory-accuracy") return metrics.inventoryAccuracyPercent;
-  if (metric === "stockout") return metrics.stockoutSkuCount;
-  if (metric === "occurrences") return metrics.damageRatePercent;
-  return metrics.fillRatePercent;
-}
 
 function formatMetricHistoryValue(metric: ExecutiveMetricId, value: number): string {
   if (metric === "loading" || metric === "transit") return formatLogisticsDuration(value);
@@ -500,19 +475,10 @@ function formatMetricHistoryValue(metric: ExecutiveMetricId, value: number): str
 }
 
 function buildMetricHistory(metric: ExecutiveMetricId, periodDays: LogisticsPeriodDays): MetricHistoryPoint[] {
-  const referenceTime = Date.parse(`${LOGISTICS_REFERENCE_DATE}T00:00:00Z`);
-  return Array.from({ length: HISTORY_POINT_COUNT }, (_, index) => {
-    const periodsAgo = HISTORY_POINT_COUNT - index - 1;
-    const pointTime = referenceTime - periodsAgo * periodDays * MILLISECONDS_PER_DAY;
-    const pointDate = new Date(pointTime).toISOString().slice(0, 10);
-    const pointSource = filterLogisticsDashboardSource(demoLogisticsDashboardSource, periodDays, pointDate);
-    const value = metricNumericValue(metric, calculateLogisticsKpis(pointSource));
-    return {
-      label: new Date(pointTime).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" }),
-      value,
-      formattedValue: formatMetricHistoryValue(metric, value),
-    };
-  });
+  return buildDemoLogisticsMetricHistory(metric, periodDays).map((point) => ({
+    ...point,
+    formattedValue: formatMetricHistoryValue(metric, point.value),
+  }));
 }
 
 function MetricStatusBadge({ status }: { status: MetricStatus }) {
@@ -520,19 +486,22 @@ function MetricStatusBadge({ status }: { status: MetricStatus }) {
   return <Badge variant="outline" className={presentation.className}><span className={cn("mr-1.5 size-1.5 rounded-full", presentation.dotClassName)} />{presentation.label}</Badge>;
 }
 
-function MetricHistoryChart({ history }: { history: MetricHistoryPoint[] }) {
-  const maximum = Math.max(1, ...history.map((point) => point.value));
+function MetricHistoryChart({ history, periodDays }: { history: MetricHistoryPoint[]; periodDays: LogisticsPeriodDays }) {
+  const timelineLabel = periodDays === 1 ? "Hoje, por horário" : `Últimos ${periodDays} dias`;
   return (
-    <div>
-      <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Histórico do indicador</h3><span className="text-xs text-muted-foreground">{history.length} períodos</span></div>
-      <div className="mt-3 flex h-48 items-end gap-2 rounded-lg border bg-muted/15 p-4">
-        {history.map((point) => (
-          <div key={point.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2" title={`${point.label}: ${point.formattedValue}`}>
-            <span className="text-[10px] text-muted-foreground">{point.formattedValue}</span>
-            <div className="w-full rounded-t bg-primary/75 transition-all" style={{ height: `${Math.max(4, (point.value / maximum) * 100)}%` }} />
-            <span className="text-[10px] text-muted-foreground">{point.label}</span>
-          </div>
-        ))}
+    <div className="logistics-modal-chart rounded-xl border p-4">
+      <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-[var(--logistics-modal-chart-title)]">Evolução do indicador</h3><p className="mt-0.5 text-xs text-[var(--logistics-modal-chart-muted)]">Linha temporal: {timelineLabel}</p></div><Badge variant="outline">{periodLabels[periodDays]}</Badge></div>
+      <div className="mt-3 h-44 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={history} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
+            <defs><linearGradient id="logisticsMetricTrendGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--logistics-modal-chart-line)" stopOpacity={0.42} /><stop offset="100%" stopColor="var(--logistics-modal-chart-line)" stopOpacity={0.02} /></linearGradient></defs>
+            <CartesianGrid vertical={false} stroke="var(--logistics-modal-chart-grid)" strokeDasharray="3 3" />
+            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "var(--logistics-modal-chart-axis)", fontSize: 10 }} />
+            <YAxis axisLine={false} tickLine={false} width={42} tick={{ fill: "var(--logistics-modal-chart-axis)", fontSize: 10 }} />
+            <Tooltip formatter={(_, __, item) => [item.payload.formattedValue, "Valor"]} contentStyle={{ background: "var(--logistics-modal-chart-tooltip-bg)", borderColor: "var(--logistics-modal-chart-tooltip-border)", borderRadius: 8, color: "var(--logistics-modal-chart-title)" }} />
+            <Area type="monotone" dataKey="value" stroke="var(--logistics-modal-chart-line)" strokeWidth={2.3} fill="url(#logisticsMetricTrendGradient)" dot={{ r: 2.5, fill: "var(--logistics-modal-chart-line)", strokeWidth: 0 }} activeDot={{ r: 4.5 }} />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

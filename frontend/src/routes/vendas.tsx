@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { SalesControlTower } from "@/components/SalesControlTower";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FeedbackMessage } from "@/components/ui/feedback-message";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +49,8 @@ import {
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 type PeriodPreset = "today" | "week" | "month" | "quarter" | "year" | "custom";
+
+export const Route = createFileRoute("/vendas")({ component: SalesControlTower });
 type ViewMode = "invoices" | "items";
 type SalesCachedData = {
   items: Awaited<ReturnType<typeof fetchCommercialTransactions>>;

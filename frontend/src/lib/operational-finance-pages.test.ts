@@ -63,6 +63,14 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("Nível 4 · Tomada de decisão");
     expect(source).toContain("Ação recomendada");
     expect(source).toContain("buildContextualLogisticsRecommendation");
+    expect(source).toContain("<MetricHistoryChart history={metricHistory} periodDays={periodDays}");
+    expect(source).toContain("Hoje, por horário");
+    expect(source).toContain("Linha temporal: {timelineLabel}");
+    expect(source).toContain("logisticsMetricTrendGradient");
+    expect(source).toContain("Evolução do indicador");
+    expect(source).toContain("buildDemoLogisticsMetricHistory");
+    expect(source).toContain("pães congelados e equipamentos de panificação");
+    expect(source).toContain("Movimentação de equipamentos alugados");
     expect(source).not.toContain("TabsList");
     expect(source).toContain('1: "Hoje"');
     expect(source).not.toContain('to="/logistica/mapa"');
@@ -99,17 +107,22 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("Saudável");
     expect(source).toContain("Folga");
     expect(source).toContain("de ocupação");
-    expect(source).toContain("Ocupação por rota");
-    expect(source).toContain("Transit Time por rota");
-    expect(source).toContain("buildLogisticsRoutePerformance");
+    expect(source).toContain("Distribuição regional dos clientes");
+    expect(source).toContain("LogisticsRegionMap");
+    expect(source).toContain("demoLogisticsMapCustomers");
     expect(source).toContain("<AreaChart");
-    expect(source).toContain("<ReferenceLine");
-    expect(source).toContain("logisticsOccupancyGradient");
-    expect(source).toContain("logisticsTransitGradient");
-    expect(source).toContain("logistics-chart-card");
-    expect(styles).toContain(".logistics-chart-card");
-    expect(styles).toContain(".dark .logistics-chart-card");
-    expect(styles).toContain("--logistics-chart-tooltip-bg");
+    expect(source).toContain("<BarChart");
+    expect(source).toContain("buildTrafficDelayRanking");
+    expect(source).toContain("demoLogisticsMapRoutes");
+    expect(source).toContain("<LogisticsRegionMap customers={demoLogisticsMapCustomers} routes={demoLogisticsMapRoutes} periodDays={periodDays} compact");
+    expect(source).toContain("grid grid-cols-1 gap-4 xl:grid-cols-2");
+    expect(source).toContain("Rotas com mais atrasos por congestionamento");
+    expect(styles).toContain(".logistics-map-headquarters");
+    expect(styles).toContain(".logistics-map-popup");
+    expect(styles).toContain(".logistics-city-chart-card");
+    expect(styles).toContain(".dark .logistics-city-chart-card");
+    expect(styles).toContain(".logistics-modal-chart");
+    expect(styles).toContain(".dark .logistics-modal-chart");
   });
 
   it("mantem rota de finanças com filtros, métricas e paginação vindas da API", () => {

@@ -15,6 +15,7 @@ type AppSidebarProps = {
 
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/vendas", label: "Vendas", icon: TrendingUp },
   { to: "/clientes", label: "Finanças", icon: Users },
   { to: "/processamentos", label: "Processamentos", icon: ServerCog, adminOnly: true },
   { to: "/relatorios", label: "Relatórios", icon: BarChart3 },

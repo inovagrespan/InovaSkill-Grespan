@@ -95,6 +95,20 @@ export type LogisticsRecommendationContext = {
   vehicle?: string;
 };
 
+export type LogisticsMetricHistoryKey =
+  | "returns"
+  | "occupancy"
+  | "loading"
+  | "transit"
+  | "total-cost"
+  | "route-cost"
+  | "inventory-accuracy"
+  | "stockout"
+  | "occurrences"
+  | "fill-rate";
+
+export type LogisticsMetricHistoryPoint = { label: string; value: number };
+
 export type LogisticsRouteSummary = {
   routeId: string;
   routeName: string;
@@ -305,6 +319,43 @@ export function buildContextualLogisticsRecommendation(
   return `Revisar a composição de custo da rota ${context.route ?? context.subject}, priorizando ocupação, pedágios e reentregas antes de renegociar a operação.`;
 }
 
+const DEMO_METRIC_HISTORY_VALUES: Record<LogisticsMetricHistoryKey, number[]> = {
+  returns: [2.9, 2.7, 2.5, 2.6, 2.2, 2.0, 1.8],
+  occupancy: [71, 74, 77, 76, 81, 84, 86],
+  loading: [64, 61, 58, 59, 55, 52, 49],
+  transit: [258, 249, 243, 246, 232, 222, 214],
+  "total-cost": [48_600, 50_200, 49_700, 52_900, 51_800, 53_600, 54_400],
+  "route-cost": [4_050, 4_180, 4_140, 4_410, 4_320, 4_470, 4_530],
+  "inventory-accuracy": [93.8, 94.6, 95.1, 95.0, 96.2, 97.0, 97.6],
+  stockout: [9, 8, 7, 7, 5, 4, 3],
+  occurrences: [3.8, 3.4, 3.1, 3.3, 2.7, 2.3, 1.9],
+  "fill-rate": [88.5, 89.7, 91.2, 90.8, 93.1, 94.4, 95.6],
+};
+
+function historyLabels(periodDays: LogisticsPeriodDays): string[] {
+  if (periodDays === 1) return ["06h", "09h", "12h", "15h", "18h", "21h", "24h"];
+  const pointCount = 7;
+  const referenceTime = Date.parse(`${LOGISTICS_REFERENCE_DATE}T00:00:00Z`);
+  const startTime = referenceTime - (periodDays - 1) * MILLISECONDS_PER_DAY;
+  return Array.from({ length: pointCount }, (_, index) => {
+    const progress = index / (pointCount - 1);
+    const dayOffset = Math.round((periodDays - 1) * progress);
+    const pointTime = startTime + dayOffset * MILLISECONDS_PER_DAY;
+    const isoDate = new Date(pointTime).toISOString().slice(0, 10);
+    const [year, month, day] = isoDate.split("-");
+    void year;
+    return `${day}/${month}`;
+  });
+}
+
+export function buildDemoLogisticsMetricHistory(
+  metric: LogisticsMetricHistoryKey,
+  periodDays: LogisticsPeriodDays,
+): LogisticsMetricHistoryPoint[] {
+  const labels = historyLabels(periodDays);
+  return DEMO_METRIC_HISTORY_VALUES[metric].map((value, index) => ({ label: labels[index], value }));
+}
+
 export function summarizeLogisticsRoutes(records: LogisticsRouteRecord[]): LogisticsRouteSummary[] {
   const summaries = new Map<string, LogisticsRouteSummary>();
   for (const record of records) {
@@ -373,10 +424,11 @@ export function formatLogisticsDuration(totalMinutes: number): string {
   return remainingMinutes ? `${hours}h ${remainingMinutes}min` : `${hours}h`;
 }
 
-export const LOGISTICS_REFERENCE_DATE = "2026-06-23";
+export const LOGISTICS_REFERENCE_DATE = "2026-06-24";
 
 export const demoLogisticsDashboardSource: LogisticsDashboardSource = {
   routes: [
+    { date: "2026-06-24", routeId: "ROT-02", routeName: "São Paulo → ABC", vehicleType: "Toco", loadedKg: 6280, capacityKg: 7300, loadingMinutes: 46, transitMinutes: 172, logisticsCost: 1890, requestedUnits: 530, dispatchedUnits: 516, deliveredUnits: 501, returnedUnits: 7, damagedUnits: 3, stops: 15 },
     { date: "2026-06-23", routeId: "ROT-01", routeName: "Campinas → Interior SP", vehicleType: "Truck 3/4", loadedKg: 7820, capacityKg: 8500, loadingMinutes: 52, transitMinutes: 225, logisticsCost: 2380, requestedUnits: 640, dispatchedUnits: 620, deliveredUnits: 602, returnedUnits: 12, damagedUnits: 5, stops: 18 },
     { date: "2026-06-22", routeId: "ROT-02", routeName: "São Paulo → ABC", vehicleType: "Toco", loadedKg: 6140, capacityKg: 7300, loadingMinutes: 44, transitMinutes: 168, logisticsCost: 1840, requestedUnits: 510, dispatchedUnits: 498, deliveredUnits: 486, returnedUnits: 8, damagedUnits: 3, stops: 14 },
     { date: "2026-06-21", routeId: "ROT-03", routeName: "Ribeirão Preto → Norte", vehicleType: "Carreta", loadedKg: 18900, capacityKg: 25000, loadingMinutes: 68, transitMinutes: 310, logisticsCost: 4210, requestedUnits: 880, dispatchedUnits: 852, deliveredUnits: 826, returnedUnits: 14, damagedUnits: 7, stops: 22 },
@@ -385,6 +437,9 @@ export const demoLogisticsDashboardSource: LogisticsDashboardSource = {
     { date: "2026-05-12", routeId: "ROT-02", routeName: "São Paulo → ABC", vehicleType: "Toco", loadedKg: 5980, capacityKg: 7300, loadingMinutes: 46, transitMinutes: 175, logisticsCost: 1790, requestedUnits: 490, dispatchedUnits: 475, deliveredUnits: 461, returnedUnits: 7, damagedUnits: 4, stops: 13 },
   ],
   inventory: [
+    { date: "2026-06-24", sku: "PAN-104", productName: "Pão Francês Congelado 60g", warehouse: "CD Central", systemStock: 318, countedStock: 310, demandUnits: 560, availableUnits: 310 },
+    { date: "2026-06-24", sku: "PAN-221", productName: "Pão de Queijo Congelado 1kg", warehouse: "CD Campinas", systemStock: 138, countedStock: 134, demandUnits: 250, availableUnits: 134 },
+    { date: "2026-06-24", sku: "PAN-318", productName: "Croissant Congelado 80g", warehouse: "CD Ribeirão", systemStock: 88, countedStock: 86, demandUnits: 78, availableUnits: 86 },
     { date: "2026-06-23", sku: "PAN-104", productName: "Pão Francês Congelado 60g", warehouse: "CD Central", systemStock: 332, countedStock: 320, demandUnits: 580, availableUnits: 320 },
     { date: "2026-06-23", sku: "PAN-221", productName: "Pão de Queijo Congelado 1kg", warehouse: "CD Campinas", systemStock: 145, countedStock: 140, demandUnits: 260, availableUnits: 140 },
     { date: "2026-06-23", sku: "PAN-318", productName: "Croissant Congelado 80g", warehouse: "CD Ribeirão", systemStock: 94, countedStock: 90, demandUnits: 80, availableUnits: 90 },

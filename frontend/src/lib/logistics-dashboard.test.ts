@@ -4,6 +4,7 @@ import {
   buildLogisticsForecast,
   buildContextualLogisticsRecommendation,
   buildLogisticsRoutePerformance,
+  buildDemoLogisticsMetricHistory,
   compareLogisticsPeriods,
   filterLogisticsDashboardSource,
   formatLogisticsDuration,
@@ -162,5 +163,19 @@ describe("logistics dashboard metrics", () => {
     ].sort((left, right) => right.occupancyPercent - left.occupancyPercent));
     expect(performance.reduce((total, route) => total + route.tripCount, 0)).toBe(source.routes.length);
     expect(buildLogisticsRoutePerformance([])).toEqual([]);
+  });
+
+  it("fornece histórico específico, completo e coerente para cada KPI logístico", () => {
+    const metricKeys = ["returns", "occupancy", "loading", "transit", "total-cost", "route-cost", "inventory-accuracy", "stockout", "occurrences", "fill-rate"] as const;
+    const histories = metricKeys.map((metric) => buildDemoLogisticsMetricHistory(metric, 30));
+    expect(histories.every((history) => history.length === 7 && history.every((point) => point.value > 0))).toBe(true);
+    expect(new Set(histories.map((history) => history.map((point) => point.value).join(","))).size).toBe(metricKeys.length);
+    expect(buildDemoLogisticsMetricHistory("occupancy", 30).at(-1)?.value).toBe(86);
+    expect(buildDemoLogisticsMetricHistory("stockout", 30).at(-1)?.value).toBe(3);
+    expect(buildDemoLogisticsMetricHistory("fill-rate", 30).at(-1)?.value).toBe(95.6);
+    expect(buildDemoLogisticsMetricHistory("transit", 1).map((point) => point.label)).toEqual(["06h", "09h", "12h", "15h", "18h", "21h", "24h"]);
+    expect(buildDemoLogisticsMetricHistory("occupancy", 7).map((point) => point.label)).toEqual(["18/06", "19/06", "20/06", "21/06", "22/06", "23/06", "24/06"]);
+    expect(buildDemoLogisticsMetricHistory("returns", 30).map((point) => point.label)).toEqual(["26/05", "31/05", "05/06", "10/06", "14/06", "19/06", "24/06"]);
+    expect(buildDemoLogisticsMetricHistory("total-cost", 90).map((point) => point.label)).toEqual(["27/03", "11/04", "26/04", "11/05", "25/05", "09/06", "24/06"]);
   });
 });
