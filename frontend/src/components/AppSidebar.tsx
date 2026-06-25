@@ -17,6 +17,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useState } from "react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getCurrentUser, getCurrentUserRole, logout, normalizeUserRole } from "@/lib/auth";
@@ -166,6 +167,26 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
     );
   }
 
+  function renderBrandHeader(compact = collapsed) {
+    return (
+      <Link
+        to="/"
+        aria-label="Conecta360"
+        className={cn(
+          "flex min-w-0 items-center rounded-md outline-none ring-primary/40 focus-visible:ring-2",
+          compact ? "justify-center" : "flex-1",
+        )}
+      >
+        <BrandLogo
+          compact={compact}
+          markClassName={compact ? "size-10" : "size-9"}
+          textClassName="text-lg"
+          taglineClassName="hidden"
+        />
+      </Link>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={120}>
       <div className="fixed left-3 top-3 z-30 md:hidden">
@@ -177,7 +198,9 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
           </SheetTrigger>
           <SheetContent side="left" className="w-[280px] border-border bg-surface p-0">
             <SheetHeader className="border-b border-border px-4 py-4 text-left">
-              <SheetTitle>Navegação</SheetTitle>
+              <SheetTitle>
+                <BrandLogo markClassName="size-9" textClassName="text-lg" taglineClassName="hidden" />
+              </SheetTitle>
             </SheetHeader>
             <div className="flex h-full min-h-0 flex-col py-3">
               <div className="mb-3 border-b border-border px-3 pb-3">{renderUserHeader(false)}</div>
@@ -206,7 +229,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
         aria-label="Navegação principal"
       >
         <div className={cn("mb-2 flex border-b border-border px-3 py-3.5", collapsed ? "flex-col items-center gap-2" : "items-center gap-2")}>
-          {renderUserHeader()}
+          {renderBrandHeader()}
           <div className={cn("flex shrink-0 items-center", collapsed ? "flex-col gap-2" : "gap-1")}>
             <button
               onClick={onToggleCollapsed}
@@ -217,6 +240,8 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
             </button>
           </div>
         </div>
+
+        {!collapsed ? <div className="mb-3 border-b border-border px-3 pb-3">{renderUserHeader(false)}</div> : null}
 
         {renderNav(collapsed)}
 

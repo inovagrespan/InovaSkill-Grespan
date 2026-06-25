@@ -22,13 +22,16 @@ describe("logistics map demo fallback", () => {
     expect(customers.find((customer) => customer.name === "Panificadora Avenida")).toEqual(expect.objectContaining({ city: "Bauru" }));
   });
 
-  it("mantém mapa interativo com todos os clientes, rotas, trânsito, popup e controles", () => {
+  it("mantém mapa interativo com clientes, trânsito, trajetos tracejados, popup e controles", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/components/ui/logistics-region-map.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve(process.cwd(), "src/styles.css"), "utf8");
     expect(source).toContain("openstreetmap.org");
     expect(source).toContain("zoomControl: true");
     expect(source).toContain("scrollWheelZoom: true");
     expect(source).toContain("L.polyline");
+    expect(source).toContain('dashArray: "8 8"');
+    expect(source).toContain("Trajeto estimado");
+    expect(source).toContain("routePopup(route)");
     expect(source).toContain("route.congestionPoints");
     expect(source).not.toContain("cityGroups");
     expect(source).toContain("bindPopup");

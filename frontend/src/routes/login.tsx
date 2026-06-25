@@ -1,7 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { LogIn, Moon, Sun, UserPlus } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,15 +146,21 @@ function LoginPage() {
           </div>
 
           <div>
-            <div className="flex size-11 items-center justify-center rounded-xl bg-white/14 font-display text-lg font-bold shadow-sm ring-1 ring-white/10 backdrop-blur">
-              G
-            </div>
+            <BrandLogo
+              className="rounded-2xl bg-white/95 p-4 shadow-sm ring-1 ring-white/40"
+              markClassName="size-12"
+              textClassName="text-3xl text-[#06122b]"
+              taglineClassName="text-sm text-slate-600"
+            />
             <h1 className="mt-9 max-w-sm font-display text-[2.1rem] font-bold leading-tight tracking-tight">
-              Acesso seguro ao GRESPAN
+              Acesso seguro ao Conecta360
             </h1>
             <p className="mt-5 max-w-sm text-[15px] leading-7 text-white/82">
-              A tela de login é obrigatória. Entre com nome de usuário ou e-mail para liberar o acesso ao sistema.
+              Entre com nome de usuário ou e-mail para acompanhar indicadores, reuniões e ações em um só lugar.
             </p>
+            <Button asChild variant="outline" className="mt-7 border-white/30 bg-white/8 text-white hover:bg-white/14 hover:text-white">
+              <Link to="/landing">Conhecer o Conecta360</Link>
+            </Button>
           </div>
 
           <div className="h-px w-full bg-white/12" />
@@ -161,10 +168,8 @@ function LoginPage() {
 
         <section className="bg-white/80 p-6 backdrop-blur-[2px] dark:bg-transparent sm:p-8 lg:p-10">
           <div className="mb-7 md:hidden">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary font-display text-lg font-bold text-primary-foreground shadow-sm">
-              G
-            </div>
-            <h1 className="mt-4 font-display text-2xl font-bold tracking-tight">Acesso seguro ao GRESPAN</h1>
+            <BrandLogo markClassName="size-10" textClassName="text-xl" taglineClassName="text-[11px]" />
+            <h1 className="mt-4 font-display text-2xl font-bold tracking-tight">Acesso seguro ao Conecta360</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               Entre com seu usuário ou e-mail para liberar o acesso ao sistema.
             </p>

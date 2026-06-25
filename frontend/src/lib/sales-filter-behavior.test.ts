@@ -46,8 +46,8 @@ describe("sales filter behavior", () => {
   it("exibe ranking detalhado com documento e sem coluna de variacao", () => {
     const routeSource = read("src/routes/vendas.tsx");
 
-    expect(routeSource).toContain("Documento/Nota Fiscal");
-    expect(routeSource).toContain("buildSalesDocumentLabel");
+    expect(routeSource).toContain("<TableHead>Nota fiscal</TableHead>");
+    expect(routeSource).toContain("fetchCommercialInvoiceDetails");
     expect(routeSource).not.toContain("<TableHead>Variação</TableHead>");
   });
 });

@@ -17,6 +17,11 @@ const KPI_CARD_BASE_WIDTH_PX = 248;
 const KPI_CARD_MIN_ZOOM_COMPENSATION = 1;
 const KPI_CARD_MAX_ZOOM_COMPENSATION = 3;
 const KPI_CARD_ZOOM_PRECISION = 4;
+const PUBLIC_ROUTES = new Set(["/login", "/landing"]);
+
+function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.has(pathname);
+}
 
 function NotFoundComponent() {
   return (
@@ -64,7 +69,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   beforeLoad: ({ location }) => {
-    if (location.pathname === "/login") return;
+    if (isPublicRoute(location.pathname)) return;
 
     if (!isAuthenticated()) {
       throw redirect({
@@ -83,11 +88,11 @@ function RootComponent() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const isLoginRoute = pathname === "/login";
+  const isPublicPage = isPublicRoute(pathname);
   const [authenticated, setAuthenticated] = useState<boolean>(() => isAuthenticated());
   const canRenderPrivateApp = useMemo(
-    () => !isLoginRoute && authenticated,
-    [authenticated, isLoginRoute],
+    () => !isPublicPage && authenticated,
+    [authenticated, isPublicPage],
   );
 
   useEffect(() => {
@@ -129,10 +134,10 @@ function RootComponent() {
   }, [pathname]);
 
   useEffect(() => {
-    if (!isLoginRoute && !authenticated) {
+    if (!isPublicPage && !authenticated) {
       redirectToLogin();
     }
-  }, [authenticated, isLoginRoute]);
+  }, [authenticated, isPublicPage]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("app.sidebar.collapsed");
@@ -177,7 +182,7 @@ function RootComponent() {
             canRenderPrivateApp && "pt-0",
           )}
         >
-          {isLoginRoute || authenticated ? <Outlet /> : null}
+          {isPublicPage || authenticated ? <Outlet /> : null}
         </main>
       </div>
     </QueryClientProvider>

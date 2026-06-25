@@ -19,6 +19,7 @@ import { Route as PendenciasRouteImport } from './routes/pendencias'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LandingRouteImport } from './routes/landing'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as FinancasRouteImport } from './routes/financas'
 import { Route as ClientesImpactoRouteImport } from './routes/clientes-impacto'
@@ -82,6 +83,11 @@ const LogisticaRoute = LogisticaRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LandingRoute = LandingRouteImport.update({
+  id: '/landing',
+  path: '/landing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImportacoesRoute = ImportacoesRouteImport.update({
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/clientes-impacto': typeof ClientesImpactoRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
+  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByTo {
   '/clientes': typeof ClientesRouteWithChildren
   '/clientes-impacto': typeof ClientesImpactoRoute
   '/financas': typeof FinancasRoute
+  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/notificacoes': typeof NotificacoesRoute
   '/pendencias': typeof PendenciasRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/clientes-impacto': typeof ClientesImpactoRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
+  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/clientes-impacto'
     | '/financas'
     | '/importacoes'
+    | '/landing'
     | '/login'
     | '/logistica'
     | '/notificacoes'
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/clientes-impacto'
     | '/financas'
+    | '/landing'
     | '/login'
     | '/notificacoes'
     | '/pendencias'
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | '/clientes-impacto'
     | '/financas'
     | '/importacoes'
+    | '/landing'
     | '/login'
     | '/logistica'
     | '/notificacoes'
@@ -318,6 +330,7 @@ export interface RootRouteChildren {
   ClientesImpactoRoute: typeof ClientesImpactoRoute
   FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
+  LandingRoute: typeof LandingRoute
   LoginRoute: typeof LoginRoute
   LogisticaRoute: typeof LogisticaRouteWithChildren
   NotificacoesRoute: typeof NotificacoesRoute
@@ -400,6 +413,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/landing': {
+      id: '/landing'
+      path: '/landing'
+      fullPath: '/landing'
+      preLoaderRoute: typeof LandingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/importacoes': {
@@ -565,6 +585,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClientesImpactoRoute: ClientesImpactoRoute,
   FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
+  LandingRoute: LandingRoute,
   LoginRoute: LoginRoute,
   LogisticaRoute: LogisticaRouteWithChildren,
   NotificacoesRoute: NotificacoesRoute,

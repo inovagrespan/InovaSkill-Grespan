@@ -95,7 +95,7 @@ describe("auth", () => {
     expect(getCurrentUserRole()).toBe("diretor");
     expect(canCurrentUserAccessAllAreas()).toBe(true);
     expect(canCurrentUserAccessAdministrativeArea()).toBe(true);
-    expect(canCurrentUserAccessProcessingArea()).toBe(true);
+    expect(canCurrentUserAccessProcessingArea()).toBe(false);
   });
 
   it("diferencia acesso administrativo da empresa vs processamento do sistema", () => {

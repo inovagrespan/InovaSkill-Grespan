@@ -93,7 +93,7 @@ Regressões cobertas:
 - `customer-details.ts`: formatação de variação, cor de comparação, status visual, valores monetários nulos e frequência média.
 - `customer-commercial-intelligence.ts`: classifica saúde, tendência, potencial, estabilidade, produtos relevantes e recomendação comercial a partir dos dados calculados pelo backend.
 - `customer-new-customers.ts`: calcula total de meses, média mensal e pico de novos clientes.
-- `vendas-formatters.ts`: compacta números e moedas em `mil`, `mi` e `bi`.
+- `vendas-formatters.ts`: compacta números e moedas em `mil`, `M` e `bi`.
 - `kpi-card.utils.ts`: resolve direção de tendência e pontos de sparkline.
 - `clientes.tsx`: monta ponto de previsão no gráfico mensal quando há `predictedRevenue`.
 - `vendas.tsx`: exibe variação do resumo comercial e formata decimais.

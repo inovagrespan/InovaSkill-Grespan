@@ -9,8 +9,14 @@ function read(relativePath: string): string {
 describe("sales chart refinement", () => {
   it("mantem os graficos no mesmo sistema visual do dashboard", () => {
     const source = read("src/routes/vendas.tsx");
+    const towerSource = read("src/components/SalesControlTower.tsx");
 
-    expect(source).toContain("Evolução da receita");
+    expect(towerSource).toContain("Gastos × Faturamento");
+    expect(towerSource).toContain("<LineChart");
+    expect(towerSource).toContain('dataKey="expenses"');
+    expect(towerSource).toContain('dataKey="revenue"');
+    expect(towerSource).toContain('type="monotone"');
+    expect(towerSource).toContain("sales-financial-chart");
     expect(source).toContain("Ranking por empresa");
     expect(source).not.toContain("Modo do gráfico de receita");
     expect(source).toContain('SALES_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]"');
@@ -49,11 +55,14 @@ describe("sales chart refinement", () => {
 
   it("padroniza selects e evita ilhas escuras hardcoded nos graficos", () => {
     const routeSource = read("src/routes/vendas.tsx");
+    const towerSource = read("src/components/SalesControlTower.tsx");
 
     expect(routeSource).toContain("SALES_CHART_SELECT_CLASS_NAME");
-    expect(routeSource).toContain("h-9 rounded-[var(--dashboard-control-radius)] border border-[var(--sales-chart-select-border)] bg-[var(--sales-chart-select-bg)]");
-    expect(routeSource).toContain('value={companySortBy}');
-    expect(routeSource).toContain("DEFAULT_SUMMARY_GRANULARITY");
+    expect(routeSource).toContain("h-9 rounded-lg border border-border bg-surface");
+    expect(towerSource).toContain("SelectTrigger");
+    expect(towerSource).toContain('aria-label="Período do gráfico financeiro"');
+    expect(routeSource).toContain('value={rankingMetric}');
+    expect(routeSource).toContain('value={trendMetric}');
     expect(routeSource).not.toContain('value={summaryGranularity}');
     expect(routeSource).not.toContain("setSummaryGranularity");
     expect(routeSource).toContain("<div className={SALES_ANALYTICS_PANEL_CLASS_NAME}>");

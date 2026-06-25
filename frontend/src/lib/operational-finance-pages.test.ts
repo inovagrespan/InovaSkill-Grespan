@@ -83,6 +83,17 @@ describe("operational, finance and reports pages", () => {
     expect(helper).toContain("buildLogisticsForecast");
   });
 
+  it("compacta valores monetarios de logistica em mil e M nos indicadores", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
+
+    expect(source).toContain('import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";');
+    expect(source).toContain("function formatLogisticsCurrency(value: number): string");
+    expect(source).toContain("value: formatLogisticsCurrency(metrics.totalLogisticsCost)");
+    expect(source).toContain("value: formatLogisticsCurrency(metrics.costPerRoute)");
+    expect(source).toContain("formattedValue: formatMetricHistoryValue(metric, point.value)");
+    expect(source).not.toContain("currencyFormatter.format");
+  });
+
   it("constrói causas e evidências específicas para a árvore de investigação logística", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve(process.cwd(), "src/styles.css"), "utf8");
@@ -111,12 +122,21 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("LogisticsRegionMap");
     expect(source).toContain("demoLogisticsMapCustomers");
     expect(source).toContain("<AreaChart");
-    expect(source).toContain("<BarChart");
+    expect(source).not.toContain("<BarChart");
     expect(source).toContain("buildTrafficDelayRanking");
     expect(source).toContain("demoLogisticsMapRoutes");
     expect(source).toContain("<LogisticsRegionMap customers={demoLogisticsMapCustomers} routes={demoLogisticsMapRoutes} periodDays={periodDays} compact");
     expect(source).toContain("grid grid-cols-1 gap-4 xl:grid-cols-2");
     expect(source).toContain("Rotas com mais atrasos por congestionamento");
+    expect(source).toContain("maxTrafficDelayMinutes");
+    expect(source).toContain("INITIAL_TRAFFIC_DELAY_ROUTE_LIMIT = 4");
+    expect(source).toContain("visibleTrafficDelayRanking");
+    expect(source).toContain("trafficDelayRanking.slice(0, INITIAL_TRAFFIC_DELAY_ROUTE_LIMIT)");
+    expect(source).toContain("Exibir mais {hiddenTrafficDelayRouteCount} rotas");
+    expect(source).toContain("setShowAllTrafficDelayRoutes(true)");
+    expect(source).toContain("trafficSeverityClass(route.severity)");
+    expect(source).toContain("formatLogisticsDuration(route.delayMinutes)");
+    expect(source).toContain("route.congestionCount} registros");
     expect(styles).toContain(".logistics-map-headquarters");
     expect(styles).toContain(".logistics-map-popup");
     expect(styles).toContain(".logistics-city-chart-card");

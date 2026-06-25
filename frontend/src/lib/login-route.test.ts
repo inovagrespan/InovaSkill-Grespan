@@ -18,4 +18,12 @@ describe("login route", () => {
     expect(source).toContain("placeholder={DEFAULT_LOGIN_PASSWORD}");
     expect(source).not.toContain("admin123*#");
   });
+
+  it("exibe Conecta360 como marca do sistema desde o login", () => {
+    const source = readLoginRoute();
+
+    expect(source).toContain('import { BrandLogo } from "@/components/BrandLogo";');
+    expect(source).toContain("Acesso seguro ao Conecta360");
+    expect(source).not.toContain("Acesso seguro ao GRESPAN");
+  });
 });

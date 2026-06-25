@@ -158,10 +158,12 @@ describe("ai alerts api", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/alertas.tsx"), "utf8");
 
     expect(source).toContain("xl:grid-cols-[minmax(0,1fr)_auto]");
-    expect(source).toContain("lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]");
+    expect(source).toContain("xl:grid-cols-5");
+    expect(source).toContain("lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]");
+    expect(source).toContain("lg:grid-cols-[minmax(0,1fr)_minmax(150px,180px)_minmax(150px,180px)_32px]");
     expect(source).toContain("Filtros da fila");
     expect(source).toContain("focus-visible:ring-2");
     expect(source).toContain("border-l-2 border-primary/30");
-    expect(source).toContain("border-destructive/30 bg-destructive/5");
+    expect(source).toContain("hover:border-primary/40");
   });
 });

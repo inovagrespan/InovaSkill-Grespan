@@ -2,9 +2,9 @@
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "./vendas-formatters";
 
 describe("vendas KPI formatter", () => {
-  it("abrevia milhares e milhoes", () => {
+  it("abrevia milhares e milhoes usando M para milhao", () => {
     expect(formatKpiCompactNumber(20_000)).toBe("20 mil");
-    expect(formatKpiCompactNumber(19_000_000)).toBe("19 mi");
+    expect(formatKpiCompactNumber(19_000_000)).toBe("19 M");
   });
 
   it("mantem numero base para valores pequenos", () => {
@@ -12,6 +12,6 @@ describe("vendas KPI formatter", () => {
   });
 
   it("formata moeda compacta", () => {
-    expect(formatKpiCompactCurrency(19_500_000)).toBe("R$ 19,5 mi");
+    expect(formatKpiCompactCurrency(19_500_000)).toBe("R$ 19,5 M");
   });
 });

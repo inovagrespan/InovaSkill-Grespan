@@ -54,6 +54,10 @@ function createCongestionIcon(severity: string): L.DivIcon {
   });
 }
 
+function routePopup(route: LogisticsMapRoute): string {
+  return `<div class="logistics-map-popup"><strong>${escapeHtml(route.name)}</strong><span>${escapeHtml(route.cities.join(" → "))}</span><hr/><span><b>Trajeto estimado</b></span><span>Baseado nas cidades atendidas e pontos de congestionamento monitorados.</span></div>`;
+}
+
 export function LogisticsRegionMap({ customers, routes, periodDays, compact = false }: LogisticsRegionMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -88,9 +92,19 @@ export function LogisticsRegionMap({ customers, routes, periodDays, compact = fa
 
     const visibleRoutes = routes.filter((route) => city === ALL_FILTER || route.cities.includes(city));
     for (const route of visibleRoutes) {
-      const polyline = L.polyline(route.path.map((point) => [point.lat, point.lng]), { color: route.color, weight: 4, opacity: 0.78, dashArray: "10 7", lineJoin: "round" });
-      polyline.bindTooltip(`${escapeHtml(route.name)} · ${escapeHtml(route.cities.join(" → "))}`, { sticky: true });
-      layer.addLayer(polyline);
+      const path = route.path.map((point) => [point.lat, point.lng] as [number, number]);
+      const line = L.polyline(path, {
+        color: route.color,
+        weight: 2.5,
+        opacity: 0.72,
+        dashArray: "8 8",
+        lineCap: "round",
+        lineJoin: "round",
+      });
+      line.bindTooltip(route.name, { sticky: true });
+      line.bindPopup(routePopup(route), { maxWidth: 310 });
+      layer.addLayer(line);
+
       for (const point of route.congestionPoints) {
         const delay = point.delayMinutesByPeriod[periodDays];
         const occurrences = point.occurrencesByPeriod[periodDays];
@@ -128,8 +142,7 @@ export function LogisticsRegionMap({ customers, routes, periodDays, compact = fa
         <div className={compact ? "flex flex-wrap gap-2 sm:col-span-2" : "flex flex-wrap gap-2 xl:justify-end"}><Button variant="outline" onClick={recenterHeadquarters}><LocateFixed className="mr-2 size-4" />Centralizar matriz</Button><Button variant="outline" onClick={showAllCustomers}><Users className="mr-2 size-4" />Mostrar clientes</Button></div>
       </div>
       <div className="relative overflow-hidden rounded-xl border border-border shadow-sm"><div ref={containerRef} className={compact ? "h-[390px] min-h-[360px] w-full md:h-[430px]" : "h-[500px] min-h-[420px] w-full md:h-[560px]"} /><div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border bg-background/95 px-3 py-2 text-xs font-medium shadow-sm backdrop-blur">{filtered.length} clientes visíveis</div></div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Legenda:</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-emerald-600" />Cliente normal</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-amber-500" />Cliente em atenção</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-red-600" />Cliente crítico</span><span className="inline-flex items-center gap-1.5"><TrafficCone className="size-3.5 text-red-600" />Congestionamento</span><span className="inline-flex items-center gap-1.5"><i className="h-0.5 w-5 bg-blue-600" />Trajeto estimado</span></div>
-      <p className="text-[11px] text-muted-foreground">Trajetos operacionais estimados para demonstração. A rota viária exata deverá usar telemetria ou integração com o roteirizador da transportadora.</p>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Legenda:</span><span className="inline-flex items-center gap-1.5"><i className="size-6 border-t-2 border-dashed border-primary" />Trajeto estimado</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-emerald-600" />Cliente normal</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-amber-500" />Cliente em atenção</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-red-600" />Cliente crítico</span><span className="inline-flex items-center gap-1.5"><TrafficCone className="size-3.5 text-red-600" />Congestionamento</span></div>
     </div>
   );
 }

@@ -6,7 +6,7 @@
   }
 
   if (abs >= 1_000_000) {
-    return `${formatWithOneDecimal(value / 1_000_000)} mi`;
+    return `${formatWithOneDecimal(value / 1_000_000)} M`;
   }
 
   if (abs >= 1_000) {

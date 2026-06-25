@@ -19,7 +19,7 @@ import {
   Truck,
   WalletCards,
 } from "lucide-react";
-import { useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,8 +45,9 @@ import {
   type LogisticsRootCause,
 } from "@/lib/logistics-dashboard";
 import { cn } from "@/lib/utils";
-import { buildTrafficDelayRanking, demoLogisticsMapCustomers, demoLogisticsMapRoutes } from "@/lib/logistics-map-data";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";
+import { buildTrafficDelayRanking, demoLogisticsMapCustomers, demoLogisticsMapRoutes, type LogisticsTrafficSeverity } from "@/lib/logistics-map-data";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 export const Route = createFileRoute("/logistica/")({ component: LogisticaPage });
 
@@ -114,9 +115,13 @@ const ATTENTION_TRANSIT_MINUTES = 240;
 const HEALTHY_DAMAGE_RATE_PERCENT = 1;
 const ATTENTION_DAMAGE_RATE_PERCENT = 2;
 const PERCENT_DECIMAL_PLACES = 1;
+const INITIAL_TRAFFIC_DELAY_ROUTE_LIMIT = 4;
 
-const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const numberFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+
+function formatLogisticsCurrency(value: number): string {
+  return formatKpiCompactCurrency(value);
+}
 
 const periodLabels: Record<LogisticsPeriodDays, string> = {
   1: "Hoje",
@@ -220,6 +225,12 @@ function occupancyToneClass(tone: "healthy" | "attention" | "critical" | "neutra
   return "border-border bg-background text-foreground";
 }
 
+function trafficSeverityClass(severity: LogisticsTrafficSeverity): string {
+  if (severity === "Crítico") return "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300";
+  if (severity === "Intenso") return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300";
+  return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300";
+}
+
 function statusPresentation(status: MetricStatus): { label: string; className: string; dotClassName: string } {
   if (status === "healthy") return { label: "Saudável", className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300", dotClassName: "bg-emerald-500" };
   if (status === "attention") return { label: "Atenção", className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300", dotClassName: "bg-amber-500" };
@@ -258,8 +269,8 @@ function buildExecutiveCards(metrics: LogisticsKpis, changes: ReturnType<typeof 
     { id: "occupancy", area: "Operação", title: "Taxa de Ocupação", value: formatPercent(metrics.occupancyRatePercent), rawValue: metrics.occupancyRatePercent, status: occupancyStatus(metrics.occupancyRatePercent), change: changes.occupancyRatePercent, lowerIsBetter: false, insight: changePhrase("A ocupação", changes.occupancyRatePercent, false), icon: Gauge, description: "Capacidade dos veículos utilizada pelas cargas.", meaning: "Indica se a frota está sendo bem aproveitada e revela rotas subutilizadas ou próximas do limite.", formula: "(Peso carregado ÷ capacidade total dos veículos) × 100", calculation: "O peso carregado de todas as viagens foi comparado à soma da capacidade disponível dos veículos.", dataUsed: ["Peso carregado", "Capacidade do veículo", "Veículo", "Rota", "Número de paradas"], factors: ["Consolidação insuficiente de entregas", "Distribuição desigual entre veículos", "Restrições de janela dos clientes"], recommendations: ["Consolidar rotas com baixa ocupação", "Readequar o tipo de veículo à demanda", "Revisar frequência de entregas"], detailMetric: "occupancy-load" },
     { id: "loading", area: "Operação", title: "Tempo de Carregamento", value: formatLogisticsDuration(metrics.averageLoadingMinutes), rawValue: metrics.averageLoadingMinutes, status: lowerIsBetterStatus(metrics.averageLoadingMinutes, 50, 60), change: changes.averageLoadingMinutes, lowerIsBetter: true, insight: changePhrase("O tempo de carregamento", changes.averageLoadingMinutes, true), icon: Timer, description: "Tempo médio necessário para liberar uma carga.", meaning: "Mede a eficiência do pátio desde o início da carga até a liberação do veículo.", formula: "Horário final do carregamento − horário inicial", calculation: "O sistema calculou a duração de cada carregamento e obteve a média das viagens do período.", dataUsed: ["Início do carregamento", "Fim do carregamento", "Veículo", "Equipe", "Tipo de carga"], factors: ["Fila no pátio", "Separação incompleta", "Carga mista de congelados e equipamentos"], recommendations: ["Pré-separar cargas antes da doca", "Balancear equipes nos horários de pico", "Criar janela específica para maquinários"], detailMetric: "loading" },
     { id: "transit", area: "Transporte", title: "Tempo de Trânsito", value: formatLogisticsDuration(metrics.averageTransitMinutes), rawValue: metrics.averageTransitMinutes, status: transitStatus(metrics.averageTransitMinutes), change: changes.averageTransitMinutes, lowerIsBetter: true, insight: changePhrase("O tempo de trânsito", changes.averageTransitMinutes, true), icon: Clock, description: "Tempo médio entre saída e entrega.", meaning: "Revela a duração real das viagens e o risco de atraso por rota, veículo ou transportadora.", formula: "Horário de entrega − horário de saída", calculation: "A duração das viagens concluídas foi somada e dividida pela quantidade de viagens analisadas.", dataUsed: ["Horário de saída", "Horário de entrega", "Rota", "Veículo", "Transportadora"], factors: ["Congestionamento", "Excesso de paradas", "Janelas restritas de recebimento"], recommendations: ["Replanejar sequenciamento das rotas críticas", "Antecipar saídas em horários de pico", "Negociar janelas com clientes recorrentes"], detailMetric: "route-time" },
-    { id: "total-cost", area: "Custos", title: "Custo Logístico Total", value: currencyFormatter.format(metrics.totalLogisticsCost), rawValue: metrics.totalLogisticsCost, status: costStatus(changes.totalLogisticsCost), change: changes.totalLogisticsCost, lowerIsBetter: true, insight: changePhrase("O custo logístico", changes.totalLogisticsCost, true), icon: WalletCards, description: "Custo consolidado da operação logística.", meaning: "Consolida o valor gasto para armazenar, preparar e transportar os pedidos no período.", formula: "Transporte + combustível + manutenção + pedágio + armazenagem + operação", calculation: "O sistema somou os custos registrados em todas as viagens do período selecionado.", dataUsed: ["Custo de transporte", "Combustível", "Manutenção", "Pedágio", "Armazenagem", "Operação"], factors: ["Rotas longas ou ociosas", "Aumento do tempo de trânsito", "Devoluções e reentregas"], recommendations: ["Atacar as rotas de maior participação", "Reduzir viagens com baixa ocupação", "Monitorar custo de reentrega"], detailMetric: "route-cost" },
-    { id: "route-cost", area: "Custos", title: "Custo Logístico por Rota", value: currencyFormatter.format(metrics.costPerRoute), rawValue: metrics.costPerRoute, status: costStatus(changes.costPerRoute), change: changes.costPerRoute, lowerIsBetter: true, insight: changePhrase("O custo por rota", changes.costPerRoute, true), icon: RouteIcon, description: "Custo médio das rotas realizadas.", meaning: "Permite comparar eficiência financeira entre rotas e identificar trajetos que consomem margem.", formula: "Custo logístico total ÷ quantidade de rotas distintas", calculation: `O custo de ${currencyFormatter.format(metrics.totalLogisticsCost)} foi dividido por ${metrics.routeCount} rotas distintas.`, dataUsed: ["Custo da viagem", "Rota", "Entregas", "Peso transportado", "Veículo"], factors: ["Baixa ocupação", "Distância e pedágios", "Atrasos e reentregas"], recommendations: ["Consolidar rotas de alto custo", "Comparar custo com faturamento atendido", "Rever veículo e transportadora"], detailMetric: "route-cost" },
+    { id: "total-cost", area: "Custos", title: "Custo Logístico Total", value: formatLogisticsCurrency(metrics.totalLogisticsCost), rawValue: metrics.totalLogisticsCost, status: costStatus(changes.totalLogisticsCost), change: changes.totalLogisticsCost, lowerIsBetter: true, insight: changePhrase("O custo logístico", changes.totalLogisticsCost, true), icon: WalletCards, description: "Custo consolidado da operação logística.", meaning: "Consolida o valor gasto para armazenar, preparar e transportar os pedidos no período.", formula: "Transporte + combustível + manutenção + pedágio + armazenagem + operação", calculation: "O sistema somou os custos registrados em todas as viagens do período selecionado.", dataUsed: ["Custo de transporte", "Combustível", "Manutenção", "Pedágio", "Armazenagem", "Operação"], factors: ["Rotas longas ou ociosas", "Aumento do tempo de trânsito", "Devoluções e reentregas"], recommendations: ["Atacar as rotas de maior participação", "Reduzir viagens com baixa ocupação", "Monitorar custo de reentrega"], detailMetric: "route-cost" },
+    { id: "route-cost", area: "Custos", title: "Custo Logístico por Rota", value: formatLogisticsCurrency(metrics.costPerRoute), rawValue: metrics.costPerRoute, status: costStatus(changes.costPerRoute), change: changes.costPerRoute, lowerIsBetter: true, insight: changePhrase("O custo por rota", changes.costPerRoute, true), icon: RouteIcon, description: "Custo médio das rotas realizadas.", meaning: "Permite comparar eficiência financeira entre rotas e identificar trajetos que consomem margem.", formula: "Custo logístico total ÷ quantidade de rotas distintas", calculation: `O custo de ${formatLogisticsCurrency(metrics.totalLogisticsCost)} foi dividido por ${metrics.routeCount} rotas distintas.`, dataUsed: ["Custo da viagem", "Rota", "Entregas", "Peso transportado", "Veículo"], factors: ["Baixa ocupação", "Distância e pedágios", "Atrasos e reentregas"], recommendations: ["Consolidar rotas de alto custo", "Comparar custo com faturamento atendido", "Rever veículo e transportadora"], detailMetric: "route-cost" },
     { id: "inventory-accuracy", area: "Estoque", title: "Acuracidade de Estoque", value: formatPercent(metrics.inventoryAccuracyPercent), rawValue: metrics.inventoryAccuracyPercent, status: higherIsBetterStatus(metrics.inventoryAccuracyPercent, 98, 95), change: changes.inventoryAccuracyPercent, lowerIsBetter: false, insight: changePhrase("A acuracidade", changes.inventoryAccuracyPercent, false), icon: ShieldCheck, description: "Aderência entre saldo sistêmico e contagem física.", meaning: "Indica a confiabilidade do estoque usado para prometer pedidos e planejar reposições.", formula: "[1 − (divergência absoluta ÷ estoque sistêmico)] × 100", calculation: "O sistema comparou a última contagem física de cada SKU com o saldo registrado e consolidou as diferenças.", dataUsed: ["Estoque sistêmico", "Estoque contado", "SKU", "Centro de distribuição", "Data da contagem"], factors: ["Movimentações sem baixa", "Erros de contagem", "Perdas de produtos congelados"], recommendations: ["Realizar inventário cíclico dos SKUs divergentes", "Bloquear movimentações sem confirmação", "Auditar perdas e ajustes manuais"], detailMetric: "inventory-accuracy" },
     { id: "stockout", area: "Estoque", title: "Rupturas de Estoque", value: `${metrics.stockoutSkuCount} SKUs`, rawValue: metrics.stockoutSkuCount, status: stockoutStatus(metrics.stockoutSkuCount), change: changes.stockoutSkuCount, lowerIsBetter: true, insight: changePhrase("A ruptura", changes.stockoutSkuCount, true), icon: PackageX, description: "Produtos cuja disponibilidade não cobre a demanda.", meaning: "Mostra quantos produtos podem impedir o atendimento integral dos pedidos.", formula: "Contagem de SKUs com saldo disponível menor que a demanda", calculation: "O sistema usou a posição mais recente de cada SKU e marcou como ruptura quando a demanda superou o saldo disponível.", dataUsed: ["Saldo disponível", "Demanda", "SKU", "Clientes afetados", "Centro de distribuição"], factors: ["Previsão de demanda insuficiente", "Acuracidade baixa", "Reposição atrasada"], recommendations: ["Priorizar compra dos SKUs críticos", "Revisar estoque de segurança", "Realocar saldo entre centros"], detailMetric: "affected-products" },
     { id: "occurrences", area: "Qualidade", title: "Índice de Ocorrências", value: formatPercent(metrics.damageRatePercent), rawValue: metrics.damageRatePercent, status: occurrenceStatus(metrics.damageRatePercent), change: changes.damageRatePercent, lowerIsBetter: true, insight: changePhrase("O índice de ocorrências", changes.damageRatePercent, true), icon: AlertTriangle, description: "Incidência de avarias sobre o volume expedido.", meaning: "Aponta problemas como danos, descongelamento, atraso, divergência e ausência do cliente.", formula: "(Unidades com ocorrência ÷ unidades expedidas) × 100", calculation: "Na base disponível, o sistema consolidou as unidades avariadas e comparou com o volume expedido.", dataUsed: ["Unidades expedidas", "Avarias", "Motivo", "Produto", "Rota", "Cliente"], factors: ["Embalagem inadequada", "Movimentação incorreta", "Variação de temperatura"], recommendations: ["Reforçar padrão de acondicionamento", "Treinar equipes de movimentação", "Monitorar temperatura por rota"], detailMetric: "damage" },
@@ -317,7 +328,7 @@ function buildInvestigationFactors(
 
   if (metric === "returns") {
     const returns = occurrenceDetails.filter((item) => item.type === "Devolução");
-    return [{ id: "return-customer", title: "Cliente com devolução recorrente", summary: `${returns[0]?.customer ?? "Atacado União"} concentra o maior impacto financeiro das devoluções.`, cause: "customer_returns", evidence: returns.map((item, index) => ({ id: `return-${index}`, title: item.customer, subtitle: `${item.product} · ${item.reason}`, fields: [{ label: "Produto", value: item.product }, { label: "Região", value: item.region }, { label: "Impacto", value: currencyFormatter.format(item.financialImpact) }, { label: "Data", value: "23/06/2026" }], recommendationContext: { subject: "devoluções", customer: item.customer, product: item.product } })) }];
+    return [{ id: "return-customer", title: "Cliente com devolução recorrente", summary: `${returns[0]?.customer ?? "Atacado União"} concentra o maior impacto financeiro das devoluções.`, cause: "customer_returns", evidence: returns.map((item, index) => ({ id: `return-${index}`, title: item.customer, subtitle: `${item.product} · ${item.reason}`, fields: [{ label: "Produto", value: item.product }, { label: "Região", value: item.region }, { label: "Impacto", value: formatLogisticsCurrency(item.financialImpact) }, { label: "Data", value: "23/06/2026" }], recommendationContext: { subject: "devoluções", customer: item.customer, product: item.product } })) }];
   }
   if (metric === "occupancy") return [
     { id: "underused-route", title: "Ocupação por rota", summary: `${lowOccupancyRoutes[0]?.routeName ?? "Rota sem dados"} apresenta a menor utilização da capacidade disponível.`, cause: "low_occupancy", evidence: lowOccupancyRoutes.slice(0, 4).map((route) => routeEvidence(route, "baixa ocupação", true)) },
@@ -336,7 +347,7 @@ function buildInvestigationFactors(
   ];
   if (metric === "occurrences") {
     const damages = occurrenceDetails.filter((item) => item.type === "Avaria");
-    return [{ id: "vehicle-damage", title: "Avarias concentradas por veículo", summary: `${damages.length} ocorrências estão associadas à movimentação ou conservação da carga.`, cause: "vehicle_damage", evidence: damages.map((item, index) => ({ id: `damage-${index}`, title: item.product, subtitle: `${item.reason} · ${item.region}`, fields: [{ label: "Cliente", value: item.customer }, { label: "Veículo", value: `Truck 3/4 - 0${index + 5}` }, { label: "Região", value: item.region }, { label: "Impacto", value: currencyFormatter.format(item.financialImpact) }], recommendationContext: { subject: "avaria", vehicle: `Truck 3/4 - 0${index + 5}`, product: item.product } })) }];
+    return [{ id: "vehicle-damage", title: "Avarias concentradas por veículo", summary: `${damages.length} ocorrências estão associadas à movimentação ou conservação da carga.`, cause: "vehicle_damage", evidence: damages.map((item, index) => ({ id: `damage-${index}`, title: item.product, subtitle: `${item.reason} · ${item.region}`, fields: [{ label: "Cliente", value: item.customer }, { label: "Veículo", value: `Truck 3/4 - 0${index + 5}` }, { label: "Região", value: item.region }, { label: "Impacto", value: formatLogisticsCurrency(item.financialImpact) }], recommendationContext: { subject: "avaria", vehicle: `Truck 3/4 - 0${index + 5}`, product: item.product } })) }];
   }
   if (metric === "fill-rate") return [{ id: "fill-stockout", title: "Cortes causados por indisponibilidade", summary: `${shortages.length} SKUs reduziram o atendimento integral dos pedidos.`, cause: "demand_forecast", evidence: shortages.slice(0, 3).map(inventoryEvidence) }];
   return [];
@@ -347,12 +358,22 @@ function LogisticaPage() {
   const [selectedMetric, setSelectedMetric] = useState<ExecutiveMetricId | null>(null);
   const [selectedFactor, setSelectedFactor] = useState<InvestigationFactor | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<InvestigationEvidence | null>(null);
+  const [showAllTrafficDelayRoutes, setShowAllTrafficDelayRoutes] = useState(false);
 
   const comparison = useMemo(() => compareLogisticsPeriods(demoLogisticsDashboardSource, periodDays, LOGISTICS_REFERENCE_DATE), [periodDays]);
   const filteredSource = useMemo(() => filterLogisticsDashboardSource(demoLogisticsDashboardSource, periodDays, LOGISTICS_REFERENCE_DATE), [periodDays]);
   const routeSummaries = useMemo(() => summarizeLogisticsRoutes(filteredSource.routes), [filteredSource.routes]);
   const inventory = useMemo(() => selectLatestInventoryBySku(filteredSource.inventory), [filteredSource.inventory]);
   const trafficDelayRanking = useMemo(() => buildTrafficDelayRanking(demoLogisticsMapRoutes, periodDays), [periodDays]);
+  const visibleTrafficDelayRanking = useMemo(
+    () => showAllTrafficDelayRoutes ? trafficDelayRanking : trafficDelayRanking.slice(0, INITIAL_TRAFFIC_DELAY_ROUTE_LIMIT),
+    [showAllTrafficDelayRoutes, trafficDelayRanking],
+  );
+  const hiddenTrafficDelayRouteCount = Math.max(0, trafficDelayRanking.length - visibleTrafficDelayRanking.length);
+  const maxTrafficDelayMinutes = useMemo(
+    () => Math.max(1, ...trafficDelayRanking.map((route) => route.delayMinutes)),
+    [trafficDelayRanking],
+  );
   const metrics = comparison.current;
   const executiveCards = buildExecutiveCards(metrics, comparison.changes);
   const selectedCard = executiveCards.find((card) => card.id === selectedMetric) ?? null;
@@ -361,6 +382,10 @@ function LogisticaPage() {
     () => buildInvestigationFactors(selectedMetric, filteredSource.routes, inventory),
     [selectedMetric, filteredSource.routes, inventory],
   );
+
+  useEffect(() => {
+    setShowAllTrafficDelayRoutes(false);
+  }, [periodDays]);
 
   function openMetric(metricId: ExecutiveMetricId) {
     setSelectedMetric(metricId);
@@ -408,16 +433,42 @@ function LogisticaPage() {
             <CardDescription>Minutos perdidos por rota no período selecionado, considerando apenas ocorrências de trânsito.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[560px] min-h-[430px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trafficDelayRanking} layout="vertical" margin={{ left: 10, right: 28, top: 4, bottom: 4 }}>
-                  <CartesianGrid horizontal={false} stroke="var(--logistics-city-chart-grid)" strokeDasharray="3 3" />
-                  <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: "var(--logistics-city-chart-axis)", fontSize: 11 }} />
-                  <YAxis type="category" dataKey="routeName" width={72} axisLine={false} tickLine={false} tick={{ fill: "var(--logistics-city-chart-axis)", fontSize: 11 }} />
-                  <Tooltip formatter={(value, _name, item) => [`${formatLogisticsDuration(Number(value))} · ${item.payload.congestionCount} registros`, "Atraso por trânsito"]} labelFormatter={(_label, payload) => payload[0]?.payload?.cities ?? "Rota"} contentStyle={{ background: "var(--logistics-city-chart-tooltip-bg)", borderColor: "var(--logistics-city-chart-tooltip-border)", borderRadius: 8, color: "var(--logistics-city-chart-text)" }} />
-                  <Bar dataKey="delayMinutes" fill="var(--logistics-city-chart-bar)" radius={[0, 6, 6, 0]} maxBarSize={24} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="space-y-3">
+              {visibleTrafficDelayRanking.map((route) => {
+                const delayPercent = Math.min(100, Math.max(0, (route.delayMinutes / maxTrafficDelayMinutes) * 100));
+                return (
+                  <article key={route.routeId} className="rounded-lg border bg-background p-4 text-left transition-colors hover:border-primary/40">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">{route.routeName}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{route.cities}</p>
+                      </div>
+                      <Badge variant="outline" className={trafficSeverityClass(route.severity)}>
+                        {route.severity}
+                      </Badge>
+                    </div>
+                    <div className="mt-4">
+                      <div className="h-2 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${delayPercent}%` }} />
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>{formatLogisticsDuration(route.delayMinutes)} de atraso</span>
+                        <span>{route.congestionCount} registros</span>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+              {hiddenTrafficDelayRouteCount > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowAllTrafficDelayRoutes(true)}
+                >
+                  Exibir mais {hiddenTrafficDelayRouteCount} rotas
+                </Button>
+              ) : null}
             </div>
           </CardContent>
         </Card>
@@ -469,7 +520,7 @@ type MetricHistoryPoint = { label: string; value: number; formattedValue: string
 
 function formatMetricHistoryValue(metric: ExecutiveMetricId, value: number): string {
   if (metric === "loading" || metric === "transit") return formatLogisticsDuration(value);
-  if (metric === "total-cost" || metric === "route-cost") return currencyFormatter.format(value);
+  if (metric === "total-cost" || metric === "route-cost") return formatLogisticsCurrency(value);
   if (metric === "stockout") return `${value} SKUs`;
   return formatPercent(value);
 }
@@ -541,12 +592,12 @@ function InvestigationContent(props: InvestigationContentProps) {
   if (metric === "route-cost") {
     const mostExpensiveRoute = routeSummaries[0]?.routeName ?? "Sem rota";
     return <InvestigationLayout summaries={[
-      { title: "Custo total", value: currencyFormatter.format(metrics.totalLogisticsCost), detail: "Soma do período" },
-      { title: "Custo médio", value: currencyFormatter.format(metrics.costPerRoute), detail: `Maior impacto: ${mostExpensiveRoute}` },
+      { title: "Custo total", value: formatLogisticsCurrency(metrics.totalLogisticsCost), detail: "Soma do período" },
+      { title: "Custo médio", value: formatLogisticsCurrency(metrics.costPerRoute), detail: `Maior impacto: ${mostExpensiveRoute}` },
     ]} title="Participação no custo total">
       {[...routeSummaries].sort((left, right) => right.logisticsCost - left.logisticsCost).map((route) => {
         const share = metrics.totalLogisticsCost > 0 ? (route.logisticsCost / metrics.totalLogisticsCost) * 100 : 0;
-        return <InvestigationRow key={route.routeId} title={route.routeName} subtitle={`${formatPercent(share)} do custo · ${route.vehicleType}`} value={currencyFormatter.format(route.logisticsCost)} />;
+        return <InvestigationRow key={route.routeId} title={route.routeName} subtitle={`${formatPercent(share)} do custo · ${route.vehicleType}`} value={formatLogisticsCurrency(route.logisticsCost)} />;
       })}
     </InvestigationLayout>;
   }
@@ -579,7 +630,7 @@ function InvestigationContent(props: InvestigationContentProps) {
       { title: "Produtos afetados", value: `${affected.length} SKUs`, detail: "Saldo menor que a demanda" },
       { title: "Déficit estimado", value: `${totalShortage} un`, detail: "Demanda ainda não atendida" },
     ]} title="Produto → cliente → valor perdido">
-      {affected.map((item, index) => { const shortage = item.demandUnits - item.availableUnits; const lostValue = shortage * (index + 1) * 18; return <InvestigationRow key={item.sku} title={item.productName} subtitle={`${index % 2 ? "Rede Primavera" : "Padaria Avenida"} · ${shortage} un faltantes`} value={currencyFormatter.format(lostValue)} critical />; })}
+      {affected.map((item, index) => { const shortage = item.demandUnits - item.availableUnits; const lostValue = shortage * (index + 1) * 18; return <InvestigationRow key={item.sku} title={item.productName} subtitle={`${index % 2 ? "Rede Primavera" : "Padaria Avenida"} · ${shortage} un faltantes`} value={formatLogisticsCurrency(lostValue)} critical />; })}
     </InvestigationLayout>;
   }
 
@@ -618,9 +669,9 @@ function InvestigationContent(props: InvestigationContentProps) {
     const criticalRoutes = routes.filter((route) => route.transitMinutes > ATTENTION_TRANSIT_MINUTES || route.loadedKg / route.capacityKg < 0.7);
     return <InvestigationLayout summaries={[
       { title: "Rotas críticas", value: String(criticalRoutes.length), detail: "Atraso ou baixa ocupação" },
-      { title: "Custo exposto", value: currencyFormatter.format(criticalRoutes.reduce((total, route) => total + route.logisticsCost, 0)), detail: "Custo das viagens críticas" },
+      { title: "Custo exposto", value: formatLogisticsCurrency(criticalRoutes.reduce((total, route) => total + route.logisticsCost, 0)), detail: "Custo das viagens críticas" },
     ]} title="Priorização de rotas">
-      {criticalRoutes.map((route) => <InvestigationRow key={`${route.date}-${route.routeId}`} title={route.routeName} subtitle={`${formatLogisticsDuration(route.transitMinutes)} · ${formatPercent((route.loadedKg / route.capacityKg) * 100)} ocupado`} value={currencyFormatter.format(route.logisticsCost)} critical />)}
+      {criticalRoutes.map((route) => <InvestigationRow key={`${route.date}-${route.routeId}`} title={route.routeName} subtitle={`${formatLogisticsDuration(route.transitMinutes)} · ${formatPercent((route.loadedKg / route.capacityKg) * 100)} ocupado`} value={formatLogisticsCurrency(route.logisticsCost)} critical />)}
     </InvestigationLayout>;
   }
 
@@ -629,9 +680,9 @@ function InvestigationContent(props: InvestigationContentProps) {
     const records = occurrenceDetails.filter((item) => item.type === type);
     return <InvestigationLayout summaries={[
       { title: type === "Avaria" ? "Damage Rate" : "Taxa de devoluções", value: type === "Avaria" ? formatPercent(metrics.damageRatePercent) : formatPercent(metrics.returnRatePercent), detail: "Sobre unidades expedidas" },
-      { title: "Impacto financeiro", value: currencyFormatter.format(records.reduce((total, item) => total + item.financialImpact, 0)), detail: `${records.length} registros analisados` },
+      { title: "Impacto financeiro", value: formatLogisticsCurrency(records.reduce((total, item) => total + item.financialImpact, 0)), detail: `${records.length} registros analisados` },
     ]} title="Produto → cliente → região → impacto">
-      {records.map((item) => <InvestigationRow key={`${item.customer}-${item.reason}`} title={item.product} subtitle={`${item.customer} · ${item.region} · ${item.reason}`} value={currencyFormatter.format(item.financialImpact)} critical />)}
+      {records.map((item) => <InvestigationRow key={`${item.customer}-${item.reason}`} title={item.product} subtitle={`${item.customer} · ${item.region} · ${item.reason}`} value={formatLogisticsCurrency(item.financialImpact)} critical />)}
     </InvestigationLayout>;
   }
 
@@ -639,9 +690,9 @@ function InvestigationContent(props: InvestigationContentProps) {
   const groupedOccurrences = groupOccurrences(groupingKey);
   return <InvestigationLayout summaries={[
     { title: metric === "reasons" ? "Motivos distintos" : "Regiões afetadas", value: String(groupedOccurrences.length), detail: "Concentração das ocorrências" },
-    { title: "Impacto total", value: currencyFormatter.format(occurrenceDetails.reduce((total, item) => total + item.financialImpact, 0)), detail: "Avarias e devoluções" },
+    { title: "Impacto total", value: formatLogisticsCurrency(occurrenceDetails.reduce((total, item) => total + item.financialImpact, 0)), detail: "Avarias e devoluções" },
   ]} title={metric === "reasons" ? "Ocorrências por motivo" : "Ocorrências por região"}>
-    {groupedOccurrences.map((item) => <InvestigationRow key={item.label} title={item.label} subtitle={`${item.count} ocorrências · ${formatPercent(item.sharePercent)} do total`} value={currencyFormatter.format(item.financialImpact)} />)}
+    {groupedOccurrences.map((item) => <InvestigationRow key={item.label} title={item.label} subtitle={`${item.count} ocorrências · ${formatPercent(item.sharePercent)} do total`} value={formatLogisticsCurrency(item.financialImpact)} />)}
   </InvestigationLayout>;
 }
 

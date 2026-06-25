@@ -13,11 +13,8 @@ describe("notification center", () => {
     const notificationSource = readSource("src/components/NotificationCenter.tsx");
 
     expect(rootSource).toContain("NotificationCenter");
-    expect(rootSource).toContain("fixed right-0 top-0");
-    expect(rootSource).toContain("transition-[left]");
-    expect(rootSource).toContain('sidebarCollapsed ? "left-0 md:left-[76px]" : "left-0 md:left-[264px]"');
-    expect(rootSource).toContain('canRenderPrivateApp && "pt-[57px]"');
-    expect(rootSource).toContain("justify-end");
+    expect(rootSource).toContain('canRenderPrivateApp && "pt-0"');
+    expect(notificationSource).toContain("fixed right-4 top-3 z-50 md:right-6");
 
     expect(sidebarSource).not.toContain("NotificationCenter");
     expect(sidebarSource).not.toContain("fetchNotifications");

@@ -18,7 +18,6 @@ describe("sidebar navigation", () => {
       "Vendas",
       "Logística",
       "Produção",
-      "Processamento",
       "Administrativo",
       "Reuniões",
     ]);
@@ -70,5 +69,13 @@ describe("sidebar navigation", () => {
     expect(source).toContain('collapsed ? "size-10 p-0"');
     expect(source).not.toContain("fetchNotifications");
     expect(source).not.toContain("Central de atenção");
+  });
+
+  it("usa Conecta360 como marca principal depois do login", () => {
+    const source = readSidebar();
+
+    expect(source).toContain('import { BrandLogo } from "@/components/BrandLogo";');
+    expect(source).toContain('aria-label="Conecta360"');
+    expect(source).toContain("renderBrandHeader");
   });
 });
