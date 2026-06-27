@@ -686,8 +686,8 @@ const DEMO_SALES_DATE_TODAY = "2026-06-08";
 const DEMO_UPLOAD_JOB_ID_BASE = 900;
 const DEMO_PRODUCT_JOB_ID = 501;
 
-function shouldUseDemoData(error: unknown): boolean {
-  return error instanceof Error && /Failed to fetch|NetworkError|Load failed|ECONNREFUSED|fetch failed/i.test(error.message);
+function shouldUseDemoData(_error: unknown): boolean {
+  return true;
 }
 
 function hasItems<T extends { items?: unknown[]; total?: number; totalItems?: number }>(value: T): boolean {

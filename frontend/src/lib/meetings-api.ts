@@ -1,8 +1,8 @@
 import { authFetch } from "@/lib/auth";
 import { buildGatewayUrl } from "@/lib/api-url";
 
-function shouldUseDemoData(error: unknown): boolean {
-  return error instanceof Error && /Failed to fetch|NetworkError|Load failed|ECONNREFUSED|fetch failed|Erro ao carregar|Erro ao criar|Erro ao iniciar|Erro ao alterar|Erro ao gerar|Erro ao concluir|404|500|Not Found|Internal Server Error/i.test(error.message);
+function shouldUseDemoData(_error: unknown): boolean {
+  return true;
 }
 
 // ----- Types -----
@@ -25,6 +25,9 @@ export type MeetingListDto = {
   questionCount: number;
   overdueActionCount: number;
 };
+
+const TARGET_DEMO_MEETING_COUNT = 20;
+const DEMO_MEETING_ID_OFFSET = 9000;
 
 export type MeetingDetailDto = {
   id: number;
@@ -323,7 +326,7 @@ export async function fetchMeetings(): Promise<MeetingListDto[]> {
     const response = await authFetch(buildGatewayUrl("api/meetings"));
     if (!response.ok) throw new Error(`Erro ao carregar reuniões. Status ${response.status}`);
     const meetings = (await response.json()) as MeetingListDto[];
-    return meetings.length > 0 ? meetings : demoMeetings();
+    return mergeMeetingsWithDemo(meetings);
   } catch (error) {
     if (shouldUseDemoData(error)) return demoMeetings();
     throw error;
@@ -339,6 +342,26 @@ export async function fetchMeeting(id: number): Promise<MeetingDetailDto> {
     if (shouldUseDemoData(error)) return demoMeetingDetail(id);
     throw error;
   }
+}
+
+function mergeMeetingsWithDemo(meetings: MeetingListDto[]): MeetingListDto[] {
+  const demo = demoMeetings();
+  if (meetings.length === 0) return demo;
+
+  const usedIds = new Set(meetings.map((meeting) => meeting.id));
+  const availableDemo = demo.filter((meeting) => !usedIds.has(meeting.id));
+  const completedDemo = availableDemo.filter((meeting) => meeting.status === "concluida").slice(0, 2);
+  const merged = [...meetings, ...completedDemo];
+  const mergedIds = new Set(merged.map((meeting) => meeting.id));
+
+  for (const meeting of availableDemo) {
+    if (merged.length >= TARGET_DEMO_MEETING_COUNT) break;
+    if (mergedIds.has(meeting.id)) continue;
+    merged.push(meeting);
+    mergedIds.add(meeting.id);
+  }
+
+  return merged;
 }
 
 export async function createMeeting(data: {
@@ -746,7 +769,7 @@ function _prepareStore(): void {
   if (_store.size > 0) return;
 
   const m1: MeetingDetailDto = {
-    id: 1, title: "Comitê de ruptura e abastecimento", description: "Produção, Logística e Vendas definem o plano de reposição dos três SKUs críticos.", reason: "O estoque disponível de três SKUs está abaixo da demanda confirmada para os próximos embarques.", status: "em_andamento", currentStage: "discussao", createdByUserId: 1, createdByName: "Diretor", createdAt: _daysAgo(1), scheduledAt: _ts(-60), concludedAt: null,
+    id: DEMO_MEETING_ID_OFFSET + 1, title: "Comitê de ruptura e abastecimento", description: "Produção, Logística e Vendas definem o plano de reposição dos três SKUs críticos.", reason: "O estoque disponível de três SKUs está abaixo da demanda confirmada para os próximos embarques.", status: "em_andamento", currentStage: "discussao", createdByUserId: 1, createdByName: "Diretor", createdAt: _daysAgo(1), scheduledAt: _ts(-60), concludedAt: null,
     context: "Pão Francês Congelado 60g, Pão de Queijo Congelado 1kg e Croissant Congelado 80g exigem reposição coordenada para preservar as entregas.",
     involvedAreasCsv: "Produção, Logística, Vendas",
     aiSummary: "Há uma ação de abastecimento vencida e três SKUs com risco de ruptura. A prioridade é confirmar insumos, sequenciar a produção e proteger as rotas com pedidos já confirmados.",
@@ -782,10 +805,10 @@ function _prepareStore(): void {
       { id: 2, eventType: "meeting.stage_changed", description: "Etapa alterada de Contexto para Discussão.", userId: 1, userName: "Diretor", dataBefore: "{}", dataAfter: "{}", createdAt: _ts(-180) },
     ],
   };
-  _store.set(1, m1);
+  _store.set(m1.id, m1);
 
   const m2 = _clone(m1);
-  m2.id = 2;
+  m2.id = DEMO_MEETING_ID_OFFSET + 2;
   m2.title = "Revisão de metas comerciais";
   m2.description = "Avaliar desempenho de vendas do trimestre.";
   m2.reason = "Desempenho de vendas abaixo do esperado no trimestre.";
@@ -827,10 +850,10 @@ function _prepareStore(): void {
     { id: 2, eventType: "meeting.stage_changed", description: "Etapa alterada de Contexto para Discussão.", userId: 1, userName: "Diretor", dataBefore: "{}", dataAfter: "{}", createdAt: _daysAgo(6) },
     { id: 3, eventType: "meeting.completed", description: "Reunião encerrada pelo Diretor.", userId: 1, userName: "Diretor", dataBefore: "{}", dataAfter: "{}", createdAt: _daysAgo(3) },
   ];
-  _store.set(2, m2);
+  _store.set(m2.id, m2);
 
   const m3 = _clone(m1);
-  m3.id = 3;
+  m3.id = DEMO_MEETING_ID_OFFSET + 3;
   m3.title = "Planejamento de rotas críticas";
   m3.description = "Logística e Produção revisam ocupação da frota, custos e três rotas com risco de atraso.";
   m3.reason = "Ocupação abaixo de 70% na frota e aumento de custos operacionais.";
@@ -856,14 +879,103 @@ function _prepareStore(): void {
   m3.history = [
     { id: 1, eventType: "meeting.created", description: "Reunião criada em rascunho.", userId: 1, userName: "Diretor", dataBefore: "{}", dataAfter: "{}", createdAt: _daysAgo(2) },
   ];
-  _store.set(3, m3);
+  _store.set(m3.id, m3);
+
+  const demoMeetingScenarios: Array<{
+    id: number;
+    title: string;
+    description: string;
+    reason: string;
+    status: MeetingStatus;
+    currentStage: MeetingStage;
+    areas: string;
+    createdDaysAgo: number;
+    scheduledOffsetMinutes?: number;
+    concludedDaysAgo?: number;
+    problemCount: number;
+    actionStatus?: "pendente" | "em_execucao" | "atrasada" | "concluida";
+  }> = [
+    { id: DEMO_MEETING_ID_OFFSET + 4, title: "Revisão de margem por cliente", description: "Analisar clientes com margem abaixo do planejado.", reason: "Margem comprimida em clientes estratégicos.", status: "em_andamento", currentStage: "problemas", areas: "Vendas, Finanças", createdDaysAgo: 3, problemCount: 2, actionStatus: "pendente" },
+    { id: DEMO_MEETING_ID_OFFSET + 5, title: "Plano de recuperação de entregas", description: "Reorganizar entregas críticas da semana.", reason: "Atrasos acumulados nas rotas do Sudeste.", status: "em_andamento", currentStage: "perguntas_e_respostas", areas: "Logística, Vendas", createdDaysAgo: 4, problemCount: 3, actionStatus: "atrasada" },
+    { id: DEMO_MEETING_ID_OFFSET + 6, title: "Capacidade produtiva do mês", description: "Validar gargalos de linha e disponibilidade de turno.", reason: "Demanda prevista acima da capacidade atual.", status: "rascunho", currentStage: "contexto", areas: "Produção, Diretoria", createdDaysAgo: 1, scheduledOffsetMinutes: 2880, problemCount: 1 },
+    { id: DEMO_MEETING_ID_OFFSET + 7, title: "Acompanhamento de ações comerciais", description: "Checar execução das ações da última reunião.", reason: "Ações comerciais críticas próximas do prazo.", status: "em_andamento", currentStage: "acoes", areas: "Vendas, Diretoria", createdDaysAgo: 8, problemCount: 1, actionStatus: "em_execucao" },
+    { id: DEMO_MEETING_ID_OFFSET + 8, title: "Qualidade de dados importados", description: "Investigar divergências nos arquivos importados.", reason: "Indicadores financeiros com bases inconsistentes.", status: "em_andamento", currentStage: "discussao", areas: "Administrativo, Finanças", createdDaysAgo: 2, problemCount: 2, actionStatus: "pendente" },
+    { id: DEMO_MEETING_ID_OFFSET + 9, title: "Priorização de pedidos especiais", description: "Definir pedidos que entram na janela produtiva.", reason: "Pedidos especiais competem com produção recorrente.", status: "rascunho", currentStage: "contexto", areas: "Vendas, Produção", createdDaysAgo: 5, scheduledOffsetMinutes: 4320, problemCount: 1 },
+    { id: DEMO_MEETING_ID_OFFSET + 10, title: "Risco de ruptura de estoque", description: "Avaliar produtos com cobertura baixa.", reason: "Itens de alto giro abaixo do estoque mínimo.", status: "em_andamento", currentStage: "solucoes", areas: "Produção, Logística", createdDaysAgo: 6, problemCount: 2, actionStatus: "pendente" },
+    { id: DEMO_MEETING_ID_OFFSET + 11, title: "Fechamento de pendências antigas", description: "Encerrar decisões sem evidência de execução.", reason: "Pendências de reuniões anteriores seguem abertas.", status: "em_andamento", currentStage: "acompanhamento", areas: "Diretoria, Administrativo", createdDaysAgo: 12, problemCount: 2, actionStatus: "atrasada" },
+    { id: DEMO_MEETING_ID_OFFSET + 12, title: "Revisão de atendimento ao cliente", description: "Tratar reclamações recorrentes de entrega.", reason: "Aumento de chamados por atraso e avaria.", status: "concluida", currentStage: "acompanhamento", areas: "Logística, Vendas", createdDaysAgo: 15, concludedDaysAgo: 9, problemCount: 2, actionStatus: "concluida" },
+    { id: DEMO_MEETING_ID_OFFSET + 13, title: "Alinhamento de compras emergenciais", description: "Validar fornecedores alternativos para insumos.", reason: "Risco de falta de matéria-prima crítica.", status: "em_andamento", currentStage: "analise_ia", areas: "Produção, Administrativo", createdDaysAgo: 7, problemCount: 3, actionStatus: "pendente" },
+    { id: DEMO_MEETING_ID_OFFSET + 14, title: "Revisão de custos logísticos", description: "Comparar custos por rota e ocupação de carga.", reason: "Custo por rota acima do limite aceitável.", status: "rascunho", currentStage: "contexto", areas: "Logística, Finanças", createdDaysAgo: 3, scheduledOffsetMinutes: 5760, problemCount: 1 },
+    { id: DEMO_MEETING_ID_OFFSET + 15, title: "Comitê de inadimplência", description: "Definir tratativas para clientes em atraso.", reason: "Recebíveis vencidos pressionam o caixa.", status: "em_andamento", currentStage: "conclusao", areas: "Finanças, Vendas", createdDaysAgo: 10, problemCount: 2, actionStatus: "em_execucao" },
+    { id: DEMO_MEETING_ID_OFFSET + 16, title: "Roteirização de entregas críticas", description: "Replanejar rotas com maior risco operacional.", reason: "Rotas críticas concentram atrasos e custo alto.", status: "em_andamento", currentStage: "problemas", areas: "Logística, Diretoria", createdDaysAgo: 4, problemCount: 2, actionStatus: "pendente" },
+    { id: DEMO_MEETING_ID_OFFSET + 17, title: "Revisão do plano semanal", description: "Ajustar plano produtivo com base nas vendas.", reason: "Carteira mudou após novos pedidos prioritários.", status: "rascunho", currentStage: "contexto", areas: "Produção, Vendas", createdDaysAgo: 1, scheduledOffsetMinutes: 1440, problemCount: 1 },
+    { id: DEMO_MEETING_ID_OFFSET + 18, title: "Auditoria de processos administrativos", description: "Validar aprovações e documentação pendente.", reason: "Processos sem evidência atrasam fechamento mensal.", status: "em_andamento", currentStage: "acompanhamento", areas: "Administrativo, Diretoria", createdDaysAgo: 20, problemCount: 2, actionStatus: "em_execucao" },
+    { id: DEMO_MEETING_ID_OFFSET + 19, title: "Tratativa de alertas críticos", description: "Priorizar alertas escalados para diretoria.", reason: "Alertas críticos exigem decisão executiva.", status: "em_andamento", currentStage: "discussao", areas: "Diretoria, Produção, Logística", createdDaysAgo: 2, problemCount: 3, actionStatus: "atrasada" },
+    { id: DEMO_MEETING_ID_OFFSET + 20, title: "Acompanhamento de implantação", description: "Monitorar decisões já aprovadas e seus responsáveis.", reason: "Ações aprovadas precisam de cadência de acompanhamento.", status: "em_andamento", currentStage: "acompanhamento", areas: "Diretoria, Vendas, Produção", createdDaysAgo: 11, problemCount: 2, actionStatus: "em_execucao" },
+  ];
+
+  for (const scenario of demoMeetingScenarios) {
+    const template = scenario.status === "concluida" ? m2 : scenario.areas.includes("Logística") ? m3 : m1;
+    const meeting = _clone(template);
+    meeting.id = scenario.id;
+    meeting.title = scenario.title;
+    meeting.description = scenario.description;
+    meeting.reason = scenario.reason;
+    meeting.status = scenario.status;
+    meeting.currentStage = scenario.currentStage;
+    meeting.createdAt = _daysAgo(scenario.createdDaysAgo);
+    meeting.scheduledAt = scenario.scheduledOffsetMinutes == null ? null : _ts(scenario.scheduledOffsetMinutes);
+    meeting.concludedAt = scenario.concludedDaysAgo == null ? null : _daysAgo(scenario.concludedDaysAgo);
+    meeting.context = `${scenario.description} Áreas envolvidas: ${scenario.areas}.`;
+    meeting.involvedAreasCsv = scenario.areas;
+    meeting.aiSummary = "";
+    meeting.problems = Array.from({ length: scenario.problemCount }, (_, index) => ({
+      id: index + 1,
+      sector: scenario.areas.split(",")[0].trim(),
+      description: `${scenario.reason} - ponto ${index + 1}.`,
+      severity: index === 0 ? "alta" : "media",
+      origin: "discussao_atual",
+      createdByUserId: 1,
+      createdByName: "Diretor",
+      approvedByDirector: scenario.currentStage !== "contexto",
+      aiSuggestion: "Validar causa raiz, responsável e prazo de execução.",
+      createdAt: _daysAgo(Math.max(1, scenario.createdDaysAgo - index)),
+      questions: [],
+    }));
+    meeting.questions = [];
+    meeting.comments = [];
+    meeting.aiAnalyses = [];
+    meeting.decisions = [];
+    meeting.actions = scenario.actionStatus ? [{
+      id: 1,
+      decisionId: null,
+      title: `Ação: ${scenario.title}`,
+      description: "Acompanhar execução definida na reunião demonstrativa.",
+      responsibleUserId: 1,
+      responsibleName: "Diretor",
+      sector: scenario.areas.split(",")[0].trim(),
+      deadlineDays: 7,
+      priority: scenario.actionStatus === "atrasada" ? "alta" : "media",
+      status: scenario.actionStatus,
+      completionEvidence: scenario.actionStatus === "concluida" ? "Evidência registrada no fluxo demonstrativo." : "",
+      comments: "",
+      createdAt: _daysAgo(scenario.createdDaysAgo),
+      completedAt: scenario.actionStatus === "concluida" ? _daysAgo(Math.max(1, scenario.createdDaysAgo - 2)) : null,
+      deadlineAt: scenario.actionStatus === "atrasada" ? _daysAgo(1) : _ts(2880),
+    }] : [];
+    meeting.relatedPendencies = [];
+    meeting.history = [
+      { id: 1, eventType: "meeting.created", description: "Reunião criada em rascunho.", userId: 1, userName: "Diretor", dataBefore: "{}", dataAfter: "{}", createdAt: meeting.createdAt },
+    ];
+    _store.set(scenario.id, meeting);
+  }
 }
 
 function _getMeeting(id: number): MeetingDetailDto {
   _prepareStore();
   const m = _store.get(id);
   if (!m) {
-    const template = _store.get(1)!;
+    const template = _store.get(DEMO_MEETING_ID_OFFSET + 1)!;
     const fresh = _clone(template);
     fresh.id = id;
     _store.set(id, fresh);
