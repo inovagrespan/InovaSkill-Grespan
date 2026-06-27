@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 describe("operational, finance and reports pages", () => {
   it("transforma o dashboard em torre de controle com períodos, previsões e cards clicáveis", () => {
-    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/index.tsx"), "utf8");
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/dashboard.tsx"), "utf8");
     const helper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/control-tower-dashboard.ts"), "utf8");
 
     expect(source).toContain("Torre de Controle Inteligente");
@@ -47,11 +47,13 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("formatChange(card.change)");
     expect(source).toContain("statusPresentation(card.status)");
     expect(source).not.toContain("{card.area}");
-    expect(source).toContain("grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-4");
+    expect(source).toContain("relative flex h-full flex-col p-5");
+    expect(source).toContain("min-h-11 pr-12");
     expect(source).toContain("flex min-h-10 min-w-0 items-center text-balance");
-    expect(source).toContain("translate-y-1.5");
+    expect(source).toContain("absolute right-5 top-5");
     expect(source).not.toContain(">Investigar <");
     expect(source).toContain("DialogContent");
+    expect(source).toContain("max-w-4xl");
     expect(source).toContain("Nível 2 · Entender o problema");
     expect(source).toContain("O que aconteceu");
     expect(source).toContain("Por que está neste status");
@@ -213,7 +215,9 @@ describe("operational, finance and reports pages", () => {
 
     expect(source).toContain('createFileRoute("/produtos")');
     expect(source).toContain("Produção");
-    expect(source).toContain("Dados demonstrativos");
+    expect(source).not.toContain("Dados demonstrativos");
+    expect(source).not.toContain("Base simulada");
+    expect(source).not.toContain("Todos os KPIs abaixo");
     expect(source).toContain("Eficiência de Produção");
     expect(source).toContain("Cumprimento do Plano");
     expect(source).toContain("Índice de Refugo");
@@ -292,7 +296,7 @@ describe("operational, finance and reports pages", () => {
 
   it("remove a aba de RH da navegação e do dashboard", () => {
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
-    const dashboard = fs.readFileSync(path.resolve(process.cwd(), "src/routes/index.tsx"), "utf8");
+    const dashboard = fs.readFileSync(path.resolve(process.cwd(), "src/routes/dashboard.tsx"), "utf8");
 
     expect(sidebar).not.toContain('to: "/rh"');
     expect(sidebar).not.toContain("RH Atual");

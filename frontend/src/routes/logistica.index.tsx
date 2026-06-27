@@ -245,10 +245,10 @@ function ExecutiveMetricCard({ card, onSelect }: { card: ExecutiveCard; onSelect
   return (
     <button type="button" onClick={onSelect} className="h-full text-left">
       <Card className="h-full cursor-pointer hover:border-primary/40">
-        <CardContent className="flex h-full flex-col p-5">
-          <div className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+        <CardContent className="relative flex h-full flex-col p-5">
+          <div className="min-h-11 pr-12">
             <h2 className="flex min-h-10 min-w-0 items-center text-balance text-sm font-semibold leading-snug">{card.title}</h2>
-            <span className="inline-flex size-9 shrink-0 translate-y-1.5 items-center justify-center self-center rounded-full border border-primary/10 bg-primary/10 text-primary"><card.icon className="size-4" /></span>
+            <span className="absolute right-5 top-5 inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/10 bg-primary/10 text-primary"><card.icon className="size-4" /></span>
           </div>
           <p className="mt-4 text-3xl font-display tracking-tight">{card.value}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -477,7 +477,7 @@ function LogisticaPage() {
       <p className="text-center text-xs text-muted-foreground">A API atual ainda não expõe todos os eventos logísticos necessários; por isso a tela usa uma amostra realista da operação Grespan sem exibir estados vazios.</p>
 
       <Dialog open={selectedCard != null && selectedFactor == null} onOpenChange={(open) => !open && selectedFactor == null && setSelectedMetric(null)}>
-        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-2xl overflow-y-auto p-5 sm:p-6">
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-4xl overflow-y-auto p-5 sm:p-6">
           {selectedCard && (
             <>
               <DialogHeader className="pr-8 text-left">
@@ -498,7 +498,7 @@ function LogisticaPage() {
       </Dialog>
 
       <Dialog open={selectedFactor != null} onOpenChange={(open) => { if (!open) { setSelectedFactor(null); setSelectedEvidence(null); } }}>
-        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-2xl overflow-y-auto p-5 sm:p-6">
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-4xl overflow-y-auto p-5 sm:p-6">
           {selectedFactor && selectedCard && (
             <>
               <DialogHeader className="pr-8 text-left"><div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{selectedCard.title}</span><ChevronRight className="size-3" /><span>{selectedFactor.title}</span></div><DialogTitle>Nível 3 · Investigação</DialogTitle><DialogDescription>{selectedFactor.summary}</DialogDescription></DialogHeader>

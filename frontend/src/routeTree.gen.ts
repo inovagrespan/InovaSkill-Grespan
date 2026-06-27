@@ -19,9 +19,9 @@ import { Route as PendenciasRouteImport } from './routes/pendencias'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as LandingRouteImport } from './routes/landing'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as FinancasRouteImport } from './routes/financas'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ClientesImpactoRouteImport } from './routes/clientes-impacto'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as AlertasRouteImport } from './routes/alertas'
@@ -85,11 +85,6 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LandingRoute = LandingRouteImport.update({
-  id: '/landing',
-  path: '/landing',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ImportacoesRoute = ImportacoesRouteImport.update({
   id: '/importacoes',
   path: '/importacoes',
@@ -98,6 +93,11 @@ const ImportacoesRoute = ImportacoesRouteImport.update({
 const FinancasRoute = FinancasRouteImport.update({
   id: '/financas',
   path: '/financas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientesImpactoRoute = ClientesImpactoRouteImport.update({
@@ -168,9 +168,9 @@ export interface FileRoutesByFullPath {
   '/alertas': typeof AlertasRoute
   '/clientes': typeof ClientesRouteWithChildren
   '/clientes-impacto': typeof ClientesImpactoRoute
+  '/dashboard': typeof DashboardRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
-  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
@@ -195,8 +195,8 @@ export interface FileRoutesByTo {
   '/alertas': typeof AlertasRoute
   '/clientes': typeof ClientesRouteWithChildren
   '/clientes-impacto': typeof ClientesImpactoRoute
+  '/dashboard': typeof DashboardRoute
   '/financas': typeof FinancasRoute
-  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/notificacoes': typeof NotificacoesRoute
   '/pendencias': typeof PendenciasRoute
@@ -220,9 +220,9 @@ export interface FileRoutesById {
   '/alertas': typeof AlertasRoute
   '/clientes': typeof ClientesRouteWithChildren
   '/clientes-impacto': typeof ClientesImpactoRoute
+  '/dashboard': typeof DashboardRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
-  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
@@ -249,9 +249,9 @@ export interface FileRouteTypes {
     | '/alertas'
     | '/clientes'
     | '/clientes-impacto'
+    | '/dashboard'
     | '/financas'
     | '/importacoes'
-    | '/landing'
     | '/login'
     | '/logistica'
     | '/notificacoes'
@@ -276,8 +276,8 @@ export interface FileRouteTypes {
     | '/alertas'
     | '/clientes'
     | '/clientes-impacto'
+    | '/dashboard'
     | '/financas'
-    | '/landing'
     | '/login'
     | '/notificacoes'
     | '/pendencias'
@@ -300,9 +300,9 @@ export interface FileRouteTypes {
     | '/alertas'
     | '/clientes'
     | '/clientes-impacto'
+    | '/dashboard'
     | '/financas'
     | '/importacoes'
-    | '/landing'
     | '/login'
     | '/logistica'
     | '/notificacoes'
@@ -328,9 +328,9 @@ export interface RootRouteChildren {
   AlertasRoute: typeof AlertasRoute
   ClientesRoute: typeof ClientesRouteWithChildren
   ClientesImpactoRoute: typeof ClientesImpactoRoute
+  DashboardRoute: typeof DashboardRoute
   FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
-  LandingRoute: typeof LandingRoute
   LoginRoute: typeof LoginRoute
   LogisticaRoute: typeof LogisticaRouteWithChildren
   NotificacoesRoute: typeof NotificacoesRoute
@@ -415,13 +415,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/landing': {
-      id: '/landing'
-      path: '/landing'
-      fullPath: '/landing'
-      preLoaderRoute: typeof LandingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/importacoes': {
       id: '/importacoes'
       path: '/importacoes'
@@ -434,6 +427,13 @@ declare module '@tanstack/react-router' {
       path: '/financas'
       fullPath: '/financas'
       preLoaderRoute: typeof FinancasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clientes-impacto': {
@@ -583,9 +583,9 @@ const rootRouteChildren: RootRouteChildren = {
   AlertasRoute: AlertasRoute,
   ClientesRoute: ClientesRouteWithChildren,
   ClientesImpactoRoute: ClientesImpactoRoute,
+  DashboardRoute: DashboardRoute,
   FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
-  LandingRoute: LandingRoute,
   LoginRoute: LoginRoute,
   LogisticaRoute: LogisticaRouteWithChildren,
   NotificacoesRoute: NotificacoesRoute,

@@ -1,0 +1,5 @@
+C:\repos\InovaSkill-Grespan\.codex-temp\api-obj\Debug\net8.0\InovaSkill.Importer.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\repos\InovaSkill-Grespan\.codex-temp\api-obj\Debug\net8.0\InovaSkill.Importer.Domain.AssemblyInfoInputs.cache
+C:\repos\InovaSkill-Grespan\.codex-temp\api-obj\Debug\net8.0\InovaSkill.Importer.Domain.AssemblyInfo.cs
+C:\repos\InovaSkill-Grespan\.codex-temp\api-obj\Debug\net8.0\InovaSkill.Importer.Domain.csproj.CoreCompileInputs.cache
+C:\repos\InovaSkill-Grespan\.codex-temp\api-obj\Debug\net8.0\InovaSkill.Importer.Domain.sourcelink.json

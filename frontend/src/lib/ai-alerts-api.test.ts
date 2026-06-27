@@ -170,5 +170,9 @@ describe("ai alerts api", () => {
     expect(source).toContain("focus-visible:ring-2");
     expect(source).toContain("border-l-2 border-primary/30");
     expect(source).toContain("hover:border-primary/40");
+    expect(source).not.toContain("Smart Core / Alertas");
+    expect(source).not.toContain("Base operacional + dados demonstrativos");
+    expect(source).not.toContain("Fila inteligente");
+    expect(source).not.toContain("Priorize pelo risco e pelo prazo");
   });
 });

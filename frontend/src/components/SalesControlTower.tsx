@@ -19,8 +19,8 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -492,23 +492,20 @@ function SalesRevenueExpenseChart() {
   );
 
   return (
-    <Card className="sales-financial-chart overflow-hidden border-border/80 shadow-sm">
+    <Card className="sales-financial-chart overflow-hidden border-[var(--sales-financial-border)] shadow-sm">
       <CardContent className="p-4 sm:p-6">
-        <div className="flex flex-col gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 pt-1">
-            <h2 className="text-lg font-display font-semibold leading-tight tracking-tight text-[var(--sales-financial-title)] sm:text-xl">
+            <h2 className="text-sm font-display font-semibold leading-tight tracking-tight text-[var(--sales-financial-title)]">
               Gastos × Faturamento
             </h2>
-            <p className="mt-1.5 text-sm text-[var(--sales-financial-muted)]">
-              Evolução financeira do período selecionado
-            </p>
           </div>
           <Select
             value={period}
             onValueChange={(value) => setPeriod(value as SalesFinancialPeriod)}
           >
             <SelectTrigger
-              className="w-full bg-[var(--sales-financial-control)] sm:w-32"
+              className="h-8 w-full border-[var(--sales-financial-border)] bg-[var(--sales-financial-control)] text-xs text-[var(--sales-financial-title)] sm:w-28"
               aria-label="Período do gráfico financeiro"
             >
               <SelectValue />
@@ -524,7 +521,7 @@ function SalesRevenueExpenseChart() {
             </SelectContent>
           </Select>
         </div>
-        <div className="mt-4 flex flex-wrap gap-4 text-xs text-[var(--sales-financial-muted)]">
+        <div className="mt-3 flex flex-wrap gap-4 text-xs text-[var(--sales-financial-muted)]">
           <span className="inline-flex items-center gap-2">
             <i className="size-2.5 rounded-full bg-[var(--sales-financial-revenue)]" />
             Faturamento
@@ -534,10 +531,22 @@ function SalesRevenueExpenseChart() {
             Gastos
           </span>
         </div>
-        <div className="mt-3 h-64 w-full sm:h-72">
+        <div className="mt-2 h-64 w-full sm:h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ left: 0, right: 12, top: 12, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="var(--sales-financial-grid)" />
+            <ComposedChart data={data} margin={{ left: 0, right: 12, top: 12, bottom: 0 }}>
+              <defs>
+                <linearGradient id="sales-financial-revenue-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--sales-financial-revenue-fill)" stopOpacity={0.34} />
+                  <stop offset="55%" stopColor="var(--sales-financial-revenue-fill)" stopOpacity={0.14} />
+                  <stop offset="100%" stopColor="var(--sales-financial-revenue-fill)" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="sales-financial-expenses-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--sales-financial-expenses-fill)" stopOpacity={0.28} />
+                  <stop offset="70%" stopColor="var(--sales-financial-expenses-fill)" stopOpacity={0.08} />
+                  <stop offset="100%" stopColor="var(--sales-financial-expenses-fill)" stopOpacity={0.01} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} stroke="var(--sales-financial-grid)" strokeDasharray="3 8" />
               <XAxis
                 dataKey="label"
                 axisLine={false}
@@ -545,7 +554,7 @@ function SalesRevenueExpenseChart() {
                 tick={{ fill: "var(--sales-financial-axis)", fontSize: 11 }}
               />
               <YAxis
-                width={48}
+                width={52}
                 axisLine={false}
                 tickLine={false}
                 tickFormatter={compactCurrency}
@@ -565,23 +574,37 @@ function SalesRevenueExpenseChart() {
                 }}
                 cursor={{ stroke: "var(--sales-financial-cursor)", strokeWidth: 1.5 }}
               />
+              <Area
+                type="linear"
+                dataKey="expenses"
+                stroke="none"
+                fill="url(#sales-financial-expenses-fill)"
+                isAnimationActive={false}
+              />
+              <Area
+                type="linear"
+                dataKey="revenue"
+                stroke="none"
+                fill="url(#sales-financial-revenue-fill)"
+                isAnimationActive={false}
+              />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="expenses"
                 stroke="var(--sales-financial-expenses)"
-                strokeWidth={2.6}
-                dot={{ r: 3, fill: "var(--sales-financial-expenses)", strokeWidth: 0 }}
-                activeDot={{ r: 5 }}
+                strokeWidth={2.2}
+                dot={{ r: 2.5, fill: "var(--sales-financial-expenses)", strokeWidth: 0 }}
+                activeDot={{ r: 4 }}
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="revenue"
                 stroke="var(--sales-financial-revenue)"
-                strokeWidth={2.6}
-                dot={{ r: 3, fill: "var(--sales-financial-revenue)", strokeWidth: 0 }}
-                activeDot={{ r: 5 }}
+                strokeWidth={2.4}
+                dot={{ r: 2.5, fill: "var(--sales-financial-revenue)", strokeWidth: 0 }}
+                activeDot={{ r: 4 }}
               />
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </CardContent>
@@ -687,7 +710,7 @@ export function SalesControlTower() {
           ))}
         </div>
       </header>
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {cards.map((card) => {
           const Icon = card.icon;
           return (
@@ -702,12 +725,12 @@ export function SalesControlTower() {
               className="h-full text-left"
             >
               <Card className="h-full">
-                <CardContent className="flex h-full flex-col p-5">
-                  <div className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+                <CardContent className="relative flex h-full flex-col p-6 sm:p-7">
+                  <div className="min-h-11 pr-14">
                     <h2 className="flex min-h-10 items-center text-balance text-sm font-semibold leading-snug">
                       {card.title}
                     </h2>
-                    <span className="inline-flex size-9 items-center justify-center rounded-full border border-primary/10 bg-primary/10 text-primary">
+                    <span className="absolute right-6 top-6 inline-flex size-9 items-center justify-center rounded-full border border-primary/10 bg-primary/10 text-primary sm:right-7 sm:top-7">
                       <Icon className="size-4" />
                     </span>
                   </div>
@@ -738,7 +761,7 @@ export function SalesControlTower() {
         open={selected != null && factor == null}
         onOpenChange={(open) => !open && factor == null && setSelectedId(null)}
       >
-        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-2xl overflow-y-auto">
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-4xl overflow-y-auto">
           <>
             {selected && (
               <>
@@ -800,7 +823,7 @@ export function SalesControlTower() {
           }
         }}
       >
-        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-2xl overflow-y-auto">
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-4xl overflow-y-auto">
           {factor && selected && (
             <>
               <DialogHeader>

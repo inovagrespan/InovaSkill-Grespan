@@ -207,7 +207,7 @@ function ProcessamentosPage() {
   return (
     <div className="page-shell processing-page-shell">
       <header className="animate-soft-enter space-y-2">
-        <span className="page-header-kicker">Smart Core / Processamentos</span>
+        <span className="page-header-kicker">Processamentos</span>
         <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-4xl font-display tracking-tight">Central de Processamentos</h1>

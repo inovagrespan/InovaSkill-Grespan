@@ -44,7 +44,7 @@ function ReunioesPage() {
     <div className="page-shell">
       <header className="animate-soft-enter mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <span className="page-header-kicker">Smart Core / Reuniões</span>
+          <span className="page-header-kicker">Reuniões</span>
           <h1 className="mt-2 mb-2 text-4xl font-display tracking-tight">Reuniões</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Gerencie reuniões, acompanhe decisões e ações definidas.

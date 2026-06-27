@@ -11,13 +11,16 @@ describe("fake operational KPI pages", () => {
     const source = readRoute("administrativo.tsx");
 
     expect(source).toContain('createFileRoute("/administrativo")');
-    expect(source).toContain("Dados demonstrativos");
+    expect(source).not.toContain("Dados demonstrativos");
+    expect(source).not.toContain("Base simulada");
+    expect(source).not.toContain("Todos os KPIs abaixo");
     expect(source).toContain("Saldo de Caixa Projetado");
     expect(source).toContain('import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";');
     expect(source).toContain("value: formatKpiCompactCurrency(428000)");
     expect(source).toContain("Inadimplência Simulada");
     expect(source).toContain("Conformidade de Processos");
     expect(source).toContain("MetricDetailsDialog");
+    expect(source).toContain("max-w-4xl");
     expect(source).toContain('className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5"');
     expect(source).toContain('aria-label="Indicadores administrativos"');
     expect(source).toContain("Fórmula");
@@ -33,12 +36,16 @@ describe("fake operational KPI pages", () => {
     const source = readRoute("produtos.tsx");
 
     expect(source).toContain('createFileRoute("/produtos")');
-    expect(source).toContain("Smart Core / Produção");
-    expect(source).toContain("Dados demonstrativos");
+    expect(source).toContain("Produção");
+    expect(source).not.toContain("Smart Core / Produção");
+    expect(source).not.toContain("Dados demonstrativos");
+    expect(source).not.toContain("Base simulada");
+    expect(source).not.toContain("Todos os KPIs abaixo");
     expect(source).toContain("Eficiência de Produção");
     expect(source).toContain("Ordens em Atraso");
     expect(source).toContain("Capacidade Disponível");
     expect(source).toContain("MetricDetailsDialog");
+    expect(source).toContain("max-w-4xl");
     expect(source).toContain('className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5"');
     expect(source).toContain('aria-label="Indicadores de produção"');
     expect(source).toContain("Fórmula");

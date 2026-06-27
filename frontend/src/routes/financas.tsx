@@ -208,7 +208,7 @@ function FinancasPage() {
   return (
     <div className="page-shell space-y-6">
       <header className="animate-soft-enter">
-        <span className="page-header-kicker">Smart Core / Finanças</span>
+        <span className="page-header-kicker">Finanças</span>
         <h1 className="mt-2 text-4xl font-display tracking-tight">Finanças</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           Painel financeiro com filtros de cliente, período e métricas consolidadas a partir da base importada.

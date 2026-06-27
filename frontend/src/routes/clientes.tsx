@@ -764,7 +764,7 @@ function ClientesPage() {
   return (
     <div className="page-shell">
       <header className="animate-soft-enter">
-        <span className="page-header-kicker">Smart Core / Clientes</span>
+        <span className="page-header-kicker">Clientes</span>
         <h1 className="mt-2 text-3xl font-display font-semibold tracking-tight">Análise Financeira de Clientes</h1>
         <p className="mt-1 text-sm text-muted-foreground">Painel executivo com impacto, projeções e histórico detalhado.</p>
       </header>

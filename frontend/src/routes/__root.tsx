@@ -17,7 +17,7 @@ const KPI_CARD_BASE_WIDTH_PX = 248;
 const KPI_CARD_MIN_ZOOM_COMPENSATION = 1;
 const KPI_CARD_MAX_ZOOM_COMPENSATION = 3;
 const KPI_CARD_ZOOM_PRECISION = 4;
-const PUBLIC_ROUTES = new Set(["/login", "/landing"]);
+const PUBLIC_ROUTES = new Set(["/", "/login"]);
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.has(pathname);
@@ -37,7 +37,7 @@ function NotFoundComponent() {
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
           >
-            Voltar ao Dashboard
+            Voltar ao início
           </Link>
         </div>
       </div>
@@ -87,7 +87,7 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
   const isPublicPage = isPublicRoute(pathname);
   const [authenticated, setAuthenticated] = useState<boolean>(() => isAuthenticated());
   const canRenderPrivateApp = useMemo(
@@ -150,8 +150,7 @@ function RootComponent() {
       return;
     }
 
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    setTheme(prefersDark ? "dark" : "light");
+    setTheme("dark");
   }, []);
 
   useEffect(() => {

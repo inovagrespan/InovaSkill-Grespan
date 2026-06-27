@@ -102,16 +102,13 @@ function AlertasPage() {
     <div className="page-shell space-y-5">
       <header className="animate-soft-enter grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
         <div className="max-w-4xl">
-          <span className="page-header-kicker">Smart Core / Alertas</span>
+          <span className="page-header-kicker">Alertas</span>
           <h1 className="mt-2 text-3xl font-display tracking-tight text-balance md:text-4xl">Alertas gerados por IA</h1>
           <p className="mt-2 max-w-[78ch] text-sm text-muted-foreground text-pretty">
             Central executiva para acompanhar pendências geradas pela IA, entender causa provável e encaminhar a ação correta por área.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-          <Badge variant="outline" className="w-fit border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-            Base operacional + dados demonstrativos
-          </Badge>
           <Button variant="outline" onClick={() => void loadDashboard()} disabled={loading}>
             <RefreshCw className="size-4" />
             Atualizar
@@ -203,10 +200,10 @@ function AlertMetricCard({ metric }: { metric: AlertMetric }) {
   const Icon = metric.icon;
   return (
     <Card className="h-full border-border bg-surface">
-      <CardContent className="flex h-full flex-col p-5">
-        <div className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+      <CardContent className="relative flex h-full flex-col p-5">
+        <div className="min-h-11 pr-12">
           <h2 className="flex min-h-10 min-w-0 items-center text-balance text-sm font-semibold leading-snug">{metric.title}</h2>
-          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/10 bg-primary/10 text-primary">
+          <span className="absolute right-5 top-5 inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/10 bg-primary/10 text-primary">
             <Icon className="size-4" />
           </span>
         </div>

@@ -13,9 +13,9 @@ export type SalesFinancialPoint = {
   expenses: number;
 };
 
-const DAILY_POINT_COUNT = 7;
-const MONTHLY_POINT_COUNT = 7;
-const YEARLY_POINT_COUNT = 5;
+const DAILY_POINT_COUNT = 14;
+const MONTHLY_POINT_COUNT = 12;
+const YEARLY_POINT_COUNT = 6;
 const MILLISECONDS_PER_DAY = 86_400_000;
 export const SALES_FINANCIAL_REFERENCE_DATE = "2026-06-24";
 
@@ -87,21 +87,34 @@ export function buildSalesRevenueExpenseSeries(
 }
 
 export const DEMO_SALES_FINANCIAL_RECORDS: SalesFinancialRecord[] = [
-  { date: "2022-07-01", revenue: 8_140_000, expenses: 5_940_000 },
-  { date: "2023-07-01", revenue: 10_280_000, expenses: 7_710_000 },
-  { date: "2024-07-01", revenue: 8_760_000, expenses: 6_180_000 },
-  { date: "2025-01-15", revenue: 10_010_000, expenses: 6_730_000 },
-  { date: "2025-12-15", revenue: 1_080_000, expenses: 742_000 },
-  { date: "2026-01-15", revenue: 1_320_000, expenses: 920_000 },
-  { date: "2026-02-15", revenue: 940_000, expenses: 710_000 },
-  { date: "2026-03-15", revenue: 1_480_000, expenses: 1_020_000 },
-  { date: "2026-04-15", revenue: 1_110_000, expenses: 890_000 },
-  { date: "2026-05-15", revenue: 1_620_000, expenses: 980_000 },
-  { date: "2026-06-18", revenue: 164_000, expenses: 104_000 },
-  { date: "2026-06-19", revenue: 232_000, expenses: 158_000 },
-  { date: "2026-06-20", revenue: 128_000, expenses: 94_000 },
-  { date: "2026-06-21", revenue: 246_000, expenses: 151_000 },
-  { date: "2026-06-22", revenue: 149_000, expenses: 117_000 },
-  { date: "2026-06-23", revenue: 267_000, expenses: 169_000 },
-  { date: "2026-06-24", revenue: 129_000, expenses: 88_000 },
+  { date: "2021-07-01", revenue: 7_460_000, expenses: 6_180_000 },
+  { date: "2022-07-01", revenue: 8_140_000, expenses: 6_420_000 },
+  { date: "2023-07-01", revenue: 10_280_000, expenses: 8_940_000 },
+  { date: "2024-07-01", revenue: 8_760_000, expenses: 9_180_000 },
+  { date: "2025-01-15", revenue: 10_010_000, expenses: 7_860_000 },
+  { date: "2025-07-15", revenue: 920_000, expenses: 730_000 },
+  { date: "2025-08-15", revenue: 1_140_000, expenses: 860_000 },
+  { date: "2025-09-15", revenue: 980_000, expenses: 790_000 },
+  { date: "2025-10-15", revenue: 1_260_000, expenses: 910_000 },
+  { date: "2025-11-15", revenue: 1_010_000, expenses: 820_000 },
+  { date: "2025-12-15", revenue: 1_080_000, expenses: 845_000 },
+  { date: "2026-01-15", revenue: 520_000, expenses: 610_000 },
+  { date: "2026-02-15", revenue: 760_000, expenses: 690_000 },
+  { date: "2026-03-15", revenue: 910_000, expenses: 780_000 },
+  { date: "2026-04-15", revenue: 870_000, expenses: 940_000 },
+  { date: "2026-05-15", revenue: 1_180_000, expenses: 920_000 },
+  { date: "2026-06-11", revenue: 126_000, expenses: 94_000 },
+  { date: "2026-06-12", revenue: 172_000, expenses: 118_000 },
+  { date: "2026-06-13", revenue: 149_000, expenses: 111_000 },
+  { date: "2026-06-14", revenue: 203_000, expenses: 146_000 },
+  { date: "2026-06-15", revenue: 181_000, expenses: 138_000 },
+  { date: "2026-06-16", revenue: 224_000, expenses: 159_000 },
+  { date: "2026-06-17", revenue: 196_000, expenses: 143_000 },
+  { date: "2026-06-18", revenue: 118_000, expenses: 86_000 },
+  { date: "2026-06-19", revenue: 154_000, expenses: 121_000 },
+  { date: "2026-06-20", revenue: 97_000, expenses: 132_000 },
+  { date: "2026-06-21", revenue: 186_000, expenses: 148_000 },
+  { date: "2026-06-22", revenue: 142_000, expenses: 151_000 },
+  { date: "2026-06-23", revenue: 231_000, expenses: 172_000 },
+  { date: "2026-06-24", revenue: 168_000, expenses: 127_000 },
 ];

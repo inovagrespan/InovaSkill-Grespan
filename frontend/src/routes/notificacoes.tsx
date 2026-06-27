@@ -57,7 +57,7 @@ function NotificacoesPage() {
     <div className="page-shell">
       <header className="animate-soft-enter mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <span className="page-header-kicker">Smart Core / Notificações</span>
+          <span className="page-header-kicker">Notificações</span>
           <h1 className="mt-2 mb-2 flex items-center gap-3 text-4xl font-display tracking-tight">
             <BellRing className="size-8 text-primary" />
             Central de Notificações

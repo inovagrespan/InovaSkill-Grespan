@@ -5,7 +5,6 @@ import {
   ArrowUpRight,
   Banknote,
   BarChart3,
-  Calculator,
   CheckCircle2,
   ChevronRight,
   Clock,
@@ -326,31 +325,13 @@ function AdministrativoPage() {
     <div className="page-shell">
       <header className="animate-soft-enter mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <span className="page-header-kicker">Smart Core / Administrativo</span>
+          <span className="page-header-kicker">Administrativo</span>
           <h1 className="mt-2 mb-2 text-4xl font-display tracking-tight text-balance">Administrativo da Empresa</h1>
           <p className="max-w-[70ch] text-muted-foreground text-pretty">
             Painel executivo demonstrativo para rotina administrativa, caixa, conformidade e aprovações.
           </p>
         </div>
-        <Badge variant="outline" className="w-fit border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-          Dados demonstrativos
-        </Badge>
       </header>
-
-      <section className="mb-5 rounded-xl border border-border bg-surface p-5 animate-soft-enter">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Calculator className="size-5" />
-          </span>
-          <div>
-            <p className="text-[10px] font-mono uppercase tracking-widest text-primary">Base simulada</p>
-            <h2 className="mt-1 text-xl font-display">Indicadores administrativos</h2>
-            <p className="mt-1 max-w-[75ch] text-sm text-muted-foreground">
-              Todos os KPIs abaixo são falsos e servem para validar layout, narrativa, histórico e explicação de cálculo.
-            </p>
-          </div>
-        </div>
-      </section>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="Indicadores administrativos">
         {adminMetrics.map((card) => (
@@ -371,10 +352,10 @@ function ExecutiveMetricCard({ card, onSelect }: { card: AdminMetric; onSelect: 
   return (
     <button type="button" onClick={onSelect} className="h-full text-left">
       <Card className="h-full cursor-pointer hover:border-primary/40">
-        <CardContent className="flex h-full flex-col p-5">
-          <div className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+        <CardContent className="relative flex h-full flex-col p-5">
+          <div className="min-h-11 pr-12">
             <h2 className="flex min-h-10 min-w-0 items-center text-balance text-sm font-semibold leading-snug">{card.title}</h2>
-            <span className="inline-flex size-9 shrink-0 translate-y-1.5 items-center justify-center self-center rounded-full border border-primary/10 bg-primary/10 text-primary"><card.icon className="size-4" /></span>
+            <span className="absolute right-5 top-5 inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/10 bg-primary/10 text-primary"><card.icon className="size-4" /></span>
           </div>
           <p className="mt-4 text-3xl font-display tracking-tight">{card.value}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -392,7 +373,7 @@ function ExecutiveMetricCard({ card, onSelect }: { card: AdminMetric; onSelect: 
 function MetricDetailsDialog({ metric, onOpenChange }: { metric: AdminMetric | null; onOpenChange: (open: boolean) => void }) {
   return (
     <Dialog open={metric != null} onOpenChange={onOpenChange}>
-      <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-2xl overflow-y-auto p-5 sm:p-6">
+      <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-4xl overflow-y-auto p-5 sm:p-6">
         {metric && (
           <>
             <DialogHeader className="pr-8 text-left">

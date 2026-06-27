@@ -12,11 +12,12 @@ describe("sales chart refinement", () => {
     const towerSource = read("src/components/SalesControlTower.tsx");
 
     expect(towerSource).toContain("Gastos × Faturamento");
-    expect(towerSource).toContain("<LineChart");
+    expect(towerSource).toContain("<ComposedChart");
     expect(towerSource).toContain('dataKey="expenses"');
     expect(towerSource).toContain('dataKey="revenue"');
     expect(towerSource).toContain('type="monotone"');
     expect(towerSource).toContain("sales-financial-chart");
+    expect(towerSource).toContain("sales-financial-revenue-fill");
     expect(source).toContain("Ranking por empresa");
     expect(source).not.toContain("Modo do gráfico de receita");
     expect(source).toContain('SALES_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]"');
