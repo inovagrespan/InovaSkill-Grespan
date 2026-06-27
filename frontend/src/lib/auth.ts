@@ -280,5 +280,10 @@ export async function authFetch(
     redirectToLogin();
   }
 
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.startsWith("text/html")) {
+    throw new TypeError("Failed to fetch");
+  }
+
   return response;
 }
