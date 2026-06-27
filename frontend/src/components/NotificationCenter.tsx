@@ -85,7 +85,7 @@ export function NotificationCenter() {
   }
 
   return (
-    <div ref={containerRef} className="fixed right-4 top-3 z-50 md:right-6">
+    <div ref={containerRef} className="fixed right-[max(1rem,env(safe-area-inset-right))] top-3 z-[60]">
       <button
         type="button"
         onClick={toggleNotifications}

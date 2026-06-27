@@ -47,8 +47,9 @@ describe("sales control tower layered experience", () => {
   it("compacta valores monetarios dos indicadores usando M para milhao", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/components/SalesControlTower.tsx"), "utf8");
 
-    expect(source).toContain('import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";');
+    expect(source).toContain('import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";');
     expect(source).toContain("formatKpiCompactCurrency(metric.revenue)");
+    expect(source).toContain("formatKpiCompactNumber(metric.weightKg)");
     expect(source).toContain("formatKpiCompactCurrency(metric.bonusAmount)");
     expect(source).toContain("formatKpiCompactCurrency(metric.averageTicket)");
     expect(source).toContain("formatKpiCompactCurrency(metric.lifetimeValue)");

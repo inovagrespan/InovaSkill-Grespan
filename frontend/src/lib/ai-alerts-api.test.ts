@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { fetchAiAlertsDashboard, updateAiAlertStatus } from "@/lib/importer-api";
+import { getControlTowerScenario } from "@/lib/control-tower-dashboard";
 
 vi.mock("@/lib/auth", () => ({
   authFetch: vi.fn((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)),
@@ -113,7 +114,7 @@ describe("ai alerts api", () => {
     fetchMock.mockRestore();
   });
 
-  it("usa alertas demonstrativos quando a API responde sem registros", async () => {
+  it("usa alertas operacionais de contingência quando a API responde sem registros", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
       Summary: { Total: 0, Critical: 0, Late: 0, Escalated: 0, RequiresMeeting: 0, ByArea: [] },
       Alerts: [],
@@ -123,12 +124,16 @@ describe("ai alerts api", () => {
 
     expect(dashboard.alerts.length).toBeGreaterThan(0);
     expect(dashboard.summary.total).toBe(dashboard.alerts.length);
-    expect(dashboard.alerts.some((alert) => alert.title === "Risco de não atender demanda do cliente X")).toBe(true);
+    expect(dashboard.alerts.some((alert) => alert.title === "Risco de atraso no atendimento da Rede Primavera")).toBe(true);
     expect(dashboard.summary.byArea.length).toBeGreaterThan(0);
+    expect(dashboard.summary).toEqual(expect.objectContaining({ total: 6, critical: 2, late: 2, requiresMeeting: 4 }));
+    expect(getControlTowerScenario("today").cards.find((card) => card.module === "Alertas")?.value).toBe(`${dashboard.summary.critical} críticos`);
+    expect(getControlTowerScenario("next7").cards.find((card) => card.module === "Alertas")?.value).toBe(`${dashboard.summary.requiresMeeting} alertas`);
+    expect(getControlTowerScenario("next30").cards.find((card) => card.module === "Alertas")?.value).toBe(`${dashboard.summary.total} alertas`);
     fetchMock.mockRestore();
   });
 
-  it("filtra alertas demonstrativos pelo filtro selecionado quando a base real está vazia", async () => {
+  it("filtra alertas de contingência pelo filtro selecionado quando a base real está vazia", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
       Summary: { Total: 0 },
       Alerts: [],

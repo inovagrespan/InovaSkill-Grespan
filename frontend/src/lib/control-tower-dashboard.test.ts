@@ -15,12 +15,12 @@ describe("control tower dashboard", () => {
         expect(["yellow", "red"]).toContain(card.status);
         expect(card.description.length).toBeGreaterThan(20);
         expect(card.href).toContain("highlight=");
-        expect(["Vendas", "Produtos", "Finanças", "Logística"]).toContain(card.module);
+        expect(["Vendas", "Produtos", "Finanças", "Logística", "Alertas", "Reuniões"]).toContain(card.module);
       }
     }
   });
 
-  it("cobre riscos operacionais, comerciais, financeiros e logísticos nas previsões", () => {
+  it("cobre riscos operacionais, comerciais e logísticos nas previsões", () => {
     const next7 = getControlTowerScenario("next7").cards.map((card) => card.title);
     const next30 = getControlTowerScenario("next30").cards.map((card) => card.title);
 
@@ -28,14 +28,12 @@ describe("control tower dashboard", () => {
     expect(next7).toContain("Queda de demanda");
     expect(next7).toContain("Atrasos logísticos prováveis");
     expect(next30).toContain("Possível excesso de estoque");
-    expect(next30).toContain("Riscos financeiros");
-    expect(getControlTowerScenario("today").cards.map((card) => card.title)).toContain("Cliente crítico em risco");
   });
 
   it("prioriza cards vermelhos antes dos amarelos e verdes", () => {
     const sorted = sortControlTowerCardsByRisk(getControlTowerScenario("today").cards);
 
-    expect(sorted.map((card) => card.status)).toEqual(["red", "red", "yellow"]);
+    expect(sorted.map((card) => card.status)).toEqual(["red", "red", "yellow", "yellow", "yellow"]);
   });
 
   it("remove cards saudaveis para manter somente urgencias", () => {
@@ -44,7 +42,7 @@ describe("control tower dashboard", () => {
     }
   });
 
-  it("direciona avisos comerciais e financeiros para as abas atuais de clientes", () => {
+  it("direciona avisos comerciais para a aba atual de clientes", () => {
     const allCards = [
       ...getControlTowerScenario("today").cards,
       ...getControlTowerScenario("next7").cards,
@@ -52,7 +50,40 @@ describe("control tower dashboard", () => {
     ];
 
     expect(allCards.map((card) => card.href)).toContain("/clientes?aba=impacto&highlight=demand-drop-7d");
-    expect(allCards.map((card) => card.href)).toContain("/clientes?aba=impacto&highlight=critical-customer-risk-today");
-    expect(allCards.map((card) => card.href)).toContain("/clientes?aba=projecoes&highlight=finance-risk-30d");
+  });
+
+  it("não exibe KPIs de Finanças em nenhum período", () => {
+    for (const period of ["today", "next7", "next30"] as const) {
+      expect(getControlTowerScenario(period).cards.some((card) => card.module === "Finanças")).toBe(false);
+    }
+  });
+
+  it("exibe o KPI de conversão de Vendas com os dados da carteira comercial", () => {
+    const salesCard = getControlTowerScenario("today").cards.find((card) => card.id === "sales-conversion-today");
+
+    expect(salesCard).toEqual(expect.objectContaining({
+      module: "Vendas",
+      value: "24,8%",
+      status: "yellow",
+      href: "/vendas?highlight=sales-conversion-today",
+    }));
+    expect(salesCard?.description).toContain("meta de 32%");
+    expect(salesCard?.description).toContain("18 propostas");
+  });
+
+  it("exibe alertas e reuniões em todos os períodos com acesso aos módulos corretos", () => {
+    for (const period of ["today", "next7", "next30"] as const) {
+      const cards = getControlTowerScenario(period).cards;
+      const alertCard = cards.find((card) => card.module === "Alertas");
+      const meetingCard = cards.find((card) => card.module === "Reuniões");
+
+      expect(alertCard).toBeDefined();
+      expect(alertCard?.value).not.toBe("");
+      expect(alertCard?.href).toMatch(/^\/alertas\?highlight=/);
+      expect(meetingCard).toBeDefined();
+      expect(meetingCard?.value).not.toBe("");
+      expect(meetingCard?.href).toMatch(/^\/reunioes\?highlight=/);
+      expect(`${alertCard?.description} ${meetingCard?.description}`).not.toMatch(/demonstrativ|fictíci|simulad/i);
+    }
   });
 });

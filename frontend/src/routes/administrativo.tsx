@@ -20,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { canCurrentUserAccessAdministrativeArea } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";
 
 export const Route = createFileRoute("/administrativo")({
   beforeLoad: () => {
@@ -54,7 +55,6 @@ type AdminMetric = {
 };
 
 const percentFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
-const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 function formatPercent(value: number): string {
   return `${percentFormatter.format(value)}%`;
@@ -77,7 +77,7 @@ const adminMetrics: AdminMetric[] = [
     id: "cash-flow",
     area: "Financeiro",
     title: "Saldo de Caixa Projetado",
-    value: currencyFormatter.format(428000),
+    value: formatKpiCompactCurrency(428000),
     status: "healthy",
     change: 6.8,
     lowerIsBetter: false,
@@ -90,17 +90,17 @@ const adminMetrics: AdminMetric[] = [
     factors: ["Concentração de recebimentos no fim do mês", "Pagamentos de fornecedores congelados", "Folha concentrada na primeira semana"],
     recommendations: ["Antecipar recebíveis de maior valor", "Separar caixa mínimo operacional", "Negociar vencimentos críticos com fornecedores"],
     history: [
-      { label: "Jan", value: 315000, formattedValue: currencyFormatter.format(315000) },
-      { label: "Fev", value: 340000, formattedValue: currencyFormatter.format(340000) },
-      { label: "Mar", value: 366000, formattedValue: currencyFormatter.format(366000) },
-      { label: "Abr", value: 401000, formattedValue: currencyFormatter.format(401000) },
-      { label: "Mai", value: 398000, formattedValue: currencyFormatter.format(398000) },
-      { label: "Jun", value: 428000, formattedValue: currencyFormatter.format(428000) },
+      { label: "Jan", value: 315000, formattedValue: formatKpiCompactCurrency(315000) },
+      { label: "Fev", value: 340000, formattedValue: formatKpiCompactCurrency(340000) },
+      { label: "Mar", value: 366000, formattedValue: formatKpiCompactCurrency(366000) },
+      { label: "Abr", value: 401000, formattedValue: formatKpiCompactCurrency(401000) },
+      { label: "Mai", value: 398000, formattedValue: formatKpiCompactCurrency(398000) },
+      { label: "Jun", value: 428000, formattedValue: formatKpiCompactCurrency(428000) },
     ],
     investigation: [
       { title: "Recebimentos concentrados", detail: "43% das entradas fictícias vencem nos últimos cinco dias úteis.", value: "43%", critical: false },
-      { title: "Folha e encargos", detail: "Compromissos simulados de RH pressionam a primeira semana.", value: currencyFormatter.format(188000) },
-      { title: "Fornecedores críticos", detail: "Três fornecedores concentram obrigações de curto prazo.", value: currencyFormatter.format(231000) },
+      { title: "Folha e encargos", detail: "Compromissos simulados de RH pressionam a primeira semana.", value: formatKpiCompactCurrency(188000) },
+      { title: "Fornecedores críticos", detail: "Três fornecedores concentram obrigações de curto prazo.", value: formatKpiCompactCurrency(231000) },
     ],
   },
   {
@@ -128,7 +128,7 @@ const adminMetrics: AdminMetric[] = [
       { label: "Jun", value: 4.7, formattedValue: formatPercent(4.7) },
     ],
     investigation: [
-      { title: "Atacado interior", detail: "Maior concentração fictícia de títulos vencidos.", value: currencyFormatter.format(22000), critical: true },
+      { title: "Atacado interior", detail: "Maior concentração fictícia de títulos vencidos.", value: formatKpiCompactCurrency(22000), critical: true },
       { title: "Títulos em contestação", detail: "Notas com divergência comercial ainda sem tratativa.", value: "8 títulos" },
       { title: "Atraso médio", detail: "Tempo médio simulado após vencimento.", value: "11 dias" },
     ],
@@ -160,7 +160,7 @@ const adminMetrics: AdminMetric[] = [
     investigation: [
       { title: "Aprovações atrasadas", detail: "Pedidos internos fictícios ficaram sem aprovação final.", value: "6" },
       { title: "Notas sem conferência", detail: "Documentos aguardando validação administrativa.", value: "4" },
-      { title: "Multas evitadas", detail: "Valor estimado preservado por pagamentos no prazo.", value: currencyFormatter.format(12800) },
+      { title: "Multas evitadas", detail: "Valor estimado preservado por pagamentos no prazo.", value: formatKpiCompactCurrency(12800) },
     ],
   },
   {
@@ -279,7 +279,7 @@ const adminMetrics: AdminMetric[] = [
     ],
     investigation: [
       { title: "Terceiros", detail: "Conta fictícia com maior desvio.", value: formatPercent(7.9), critical: true },
-      { title: "Manutenção", detail: "Gastos corretivos sem previsão inicial.", value: currencyFormatter.format(14000) },
+      { title: "Manutenção", detail: "Gastos corretivos sem previsão inicial.", value: formatKpiCompactCurrency(14000) },
       { title: "Compras emergenciais", detail: "Pedidos fora do ciclo orçamentário.", value: "11" },
     ],
   },

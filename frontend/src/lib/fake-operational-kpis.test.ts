@@ -13,6 +13,8 @@ describe("fake operational KPI pages", () => {
     expect(source).toContain('createFileRoute("/administrativo")');
     expect(source).toContain("Dados demonstrativos");
     expect(source).toContain("Saldo de Caixa Projetado");
+    expect(source).toContain('import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";');
+    expect(source).toContain("value: formatKpiCompactCurrency(428000)");
     expect(source).toContain("Inadimplência Simulada");
     expect(source).toContain("Conformidade de Processos");
     expect(source).toContain("MetricDetailsDialog");

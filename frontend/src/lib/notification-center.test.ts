@@ -14,7 +14,7 @@ describe("notification center", () => {
 
     expect(rootSource).toContain("NotificationCenter");
     expect(rootSource).toContain('canRenderPrivateApp && "pt-0"');
-    expect(notificationSource).toContain("fixed right-4 top-3 z-50 md:right-6");
+    expect(notificationSource).toContain("fixed right-[max(1rem,env(safe-area-inset-right))] top-3 z-[60]");
 
     expect(sidebarSource).not.toContain("NotificationCenter");
     expect(sidebarSource).not.toContain("fetchNotifications");

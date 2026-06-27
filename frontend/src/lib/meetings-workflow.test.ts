@@ -34,4 +34,21 @@ describe("meetings workflow", () => {
     expect(api).toContain("approveMeetingProblem");
     expect(api).toContain("startMeeting");
   });
+
+  it("mantem o layout de reunioes estavel na visualizacao web", () => {
+    const index = read("src/routes/reunioes.index.tsx");
+    const detail = read("src/routes/reunioes.$id.tsx");
+
+    expect(detail).toContain("MEETING_DETAIL_GRID_CLASS_NAME");
+    expect(detail).toContain("xl:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]");
+    expect(detail).toContain("MEETING_STAGE_TRACK_CLASS_NAME");
+    expect(detail).toContain("flex min-w-max items-center gap-1 p-3");
+    expect(detail).toContain("min-w-0 space-y-4");
+    expect(detail).toContain("min-w-0 overflow-hidden rounded-xl");
+    expect(detail).toContain("grid grid-cols-1 gap-4 lg:grid-cols-3");
+
+    expect(index).toContain("grid min-w-0 grid-cols-1 gap-3");
+    expect(index).toContain("sm:grid-cols-[minmax(0,1fr)_auto]");
+    expect(index).toContain("flex min-w-0 flex-wrap items-center gap-3");
+  });
 });

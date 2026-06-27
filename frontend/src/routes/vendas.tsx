@@ -120,25 +120,7 @@ function formatDate(value: string): string {
 }
 
 function formatRevenueAxisTick(value: number): string {
-  const numericValue = Number(value);
-
-  if (numericValue === 0) {
-    return "0";
-  }
-
-  if (Math.abs(numericValue) >= 1_000_000_000) {
-    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(numericValue / 1_000_000_000)}B`;
-  }
-
-  if (Math.abs(numericValue) >= 1_000_000) {
-    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(numericValue / 1_000_000)}M`;
-  }
-
-  if (Math.abs(numericValue) >= 1_000) {
-    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(numericValue / 1_000)}k`;
-  }
-
-  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(numericValue);
+  return formatKpiCompactNumber(Number(value));
 }
 
 function toInputDate(value: Date): string {

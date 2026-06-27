@@ -25,6 +25,9 @@ export const Route = createFileRoute("/reunioes/$id")({
 });
 
 const STAGES = ["contexto", "discussao", "problemas", "perguntas_e_respostas", "analise_ia", "conclusao", "acoes", "acompanhamento"];
+const MEETING_DETAIL_GRID_CLASS_NAME = "grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,320px)]";
+const MEETING_STAGE_TRACK_CLASS_NAME = "flex min-w-max items-center gap-1 p-3";
+const MEETING_STAGE_ITEM_CLASS_NAME = "flex shrink-0 items-center gap-1 text-xs whitespace-nowrap";
 
 function MeetingDetailPage() {
   const { id } = Route.useParams();
@@ -131,17 +134,17 @@ function MeetingDetailPage() {
   return (
     <div className="page-shell">
         <header className="animate-soft-enter mb-6 space-y-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-display tracking-tight truncate">{meeting.title}</h1>
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <h1 className="min-w-0 max-w-full truncate text-3xl font-display tracking-tight">{meeting.title}</h1>
               <Badge variant={meeting.status === "concluida" ? "default" : meeting.status === "cancelada" ? "destructive" : "secondary"} className="shrink-0">
                 {formatMeetingStatus(meeting.status)}
               </Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">por {meeting.createdByName} &bull; {formatDate(meeting.createdAt)}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
             {isDirector && meeting.status === "rascunho" && (
               <Button size="sm" onClick={() => void handleStartMeeting()}>
                 <PlayCircle className="mr-2 size-4" /> Iniciar
@@ -180,14 +183,14 @@ function MeetingDetailPage() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_300px]">
-        <div className="space-y-4">
+      <div className={MEETING_DETAIL_GRID_CLASS_NAME}>
+        <div className="min-w-0 space-y-4">
           {/* Stage indicator */}
-          <div className="rounded-xl border border-border bg-surface">
+          <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface">
             <ScrollArea className="w-full">
-              <div className="flex items-center gap-1 p-3">
+              <div className={MEETING_STAGE_TRACK_CLASS_NAME}>
                 {STAGES.map((stage, index) => (
-                  <div key={stage} className={`flex items-center gap-1 text-xs whitespace-nowrap ${index <= currentStageIndex ? "text-primary font-semibold" : "text-muted-foreground"}`}>
+                  <div key={stage} className={`${MEETING_STAGE_ITEM_CLASS_NAME} ${index <= currentStageIndex ? "text-primary font-semibold" : "text-muted-foreground"}`}>
                     <span className={`inline-flex size-5 items-center justify-center rounded-full text-[10px] font-bold ${index <= currentStageIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                       {index + 1}
                     </span>
@@ -263,7 +266,7 @@ function MeetingDetailPage() {
         </div>
 
         {/* Right panel */}
-        <aside className="space-y-4">
+        <aside className="min-w-0 space-y-4">
           <div className="rounded-xl border border-border bg-surface p-4">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Users className="size-4 text-primary" /> Participantes</h3>
             <div className="space-y-2">
@@ -344,7 +347,7 @@ function MeetingDetailPage() {
 
 function StageContext({ meeting }: { meeting: MeetingDetailDto }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface p-5 space-y-4">
       <div className="flex items-center gap-2">
         <FileText className="size-5 text-primary" />
         <h2 className="text-xl font-display">Contexto</h2>
@@ -407,8 +410,8 @@ function StageDiscussion({ comments, commentText, onCommentTextChange, onAddComm
   const [problemDesc, setProblemDesc] = useState("");
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
-      <div className="flex items-center gap-2">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface p-5 space-y-4">
+      <div className="flex min-w-0 items-center gap-2">
         <MessageSquare className="size-5 text-primary" />
         <h2 className="text-xl font-display">Discussão</h2>
       </div>
@@ -510,13 +513,13 @@ function StageProblems({ problems, participants, meetingId, isDirector, onProble
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">{sector}</h3>
           <div className="space-y-3">
             {sectorProblems.map((p) => (
-              <div key={p.id} className="rounded-lg border border-border bg-background p-3">
-                <div className="flex items-start justify-between gap-3">
+              <div key={p.id} className="min-w-0 rounded-lg border border-border bg-background p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{p.description}</p>
+                    <p className="break-words text-sm font-medium">{p.description}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">Origem: {p.origin}</p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
                     <Badge variant={p.approvedByDirector ? "default" : "outline"}>{p.approvedByDirector ? "Aprovado" : "Pendente"}</Badge>
                     <Badge variant={p.severity === "critica" ? "destructive" : p.severity === "alta" ? "secondary" : "outline"}>{p.severity}</Badge>
                   </div>
@@ -524,8 +527,8 @@ function StageProblems({ problems, participants, meetingId, isDirector, onProble
                 {p.questions.length > 0 && (
                   <div className="mt-2 space-y-1">
                     {p.questions.map((q) => (
-                      <div key={q.id} className="flex items-center justify-between text-xs bg-muted/30 rounded p-2">
-                        <span className="truncate mr-2">{q.question}</span>
+                      <div key={q.id} className="flex min-w-0 items-center justify-between gap-2 text-xs bg-muted/30 rounded p-2">
+                        <span className="min-w-0 truncate">{q.question}</span>
                         <Badge variant="outline" className="shrink-0 text-[10px]">{q.status}</Badge>
                       </div>
                     ))}
@@ -591,7 +594,7 @@ function StageSolutions({ problems, meetingId, currentUserId, onAnswered }: {
   const pendingQuestions = problems.flatMap(p => p.questions.filter(q => q.status === "pendente" && q.responsibleUserId === currentUserId));
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface p-5 space-y-4">
       <div className="flex items-center gap-2">
         <MessageSquare className="size-5 text-primary" />
         <h2 className="text-xl font-display">Perguntas e respostas</h2>
@@ -603,13 +606,13 @@ function StageSolutions({ problems, meetingId, currentUserId, onAnswered }: {
       )}
       {problems.length === 0 && <p className="text-sm text-muted-foreground">Nenhum problema para responder.</p>}
       {problems.map((p) => (
-        <div key={p.id} className="space-y-3">
-          <h3 className="text-sm font-medium">{p.description}</h3>
+        <div key={p.id} className="min-w-0 space-y-3">
+          <h3 className="break-words text-sm font-medium">{p.description}</h3>
           {p.questions.length === 0 && <p className="text-xs text-muted-foreground ml-4">Nenhuma pergunta para este problema.</p>}
           {p.questions.map((q) => (
-            <div key={q.id} className="ml-4 rounded-lg border border-border bg-background p-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">{q.question}</p>
+            <div key={q.id} className="ml-0 rounded-lg border border-border bg-background p-3 sm:ml-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="min-w-0 break-words text-sm font-medium">{q.question}</p>
                 <Badge variant={q.status === "respondida" ? "default" : "outline"}>{q.status === "respondida" ? "Respondida" : "Pendente"}</Badge>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">Responsável: {q.responsibleName}</p>
@@ -744,8 +747,8 @@ function StageConclusion({ problems, participants, meetingId, onDecisionCreated 
 
       <div className="space-y-3">
         {problems.map((p) => (
-          <div key={p.id} className="rounded-lg border border-border bg-background p-3">
-            <div className="flex items-center justify-between">
+          <div key={p.id} className="min-w-0 rounded-lg border border-border bg-background p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{p.description}</p>
                 <p className="text-xs text-muted-foreground">{p.sector}</p>
@@ -779,7 +782,7 @@ function StageConclusion({ problems, participants, meetingId, onDecisionCreated 
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
               <label className="text-xs text-muted-foreground">Prazo (dias)</label>
               <input className="w-full rounded-lg border border-border bg-background p-2.5 text-sm mt-1" type="number" min={1} value={deadlineDays} onChange={(e) => setDeadlineDays(Number(e.target.value))} />
@@ -836,8 +839,8 @@ function StageActions({ actions, participants, meetingId, isDirector, currentUse
   }
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface p-5 space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <ListChecks className="size-5 text-primary" />
           <h2 className="text-xl font-display">Ações</h2>
@@ -858,7 +861,7 @@ function StageActions({ actions, participants, meetingId, isDirector, currentUse
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Input placeholder="Setor" value={sector} onChange={(e) => setSector(e.target.value)} />
             <div>
               <label className="text-xs text-muted-foreground">Prazo (dias)</label>
@@ -913,10 +916,10 @@ function ActionCard({ action, currentUserId, isDirector, onUpdated }: {
   const isDone = action.status === "concluida";
 
   return (
-    <div className={`rounded-lg border p-3 transition-colors ${isOverdue ? "border-red-300 bg-red-50/50 dark:bg-red-950/10" : isDone ? "border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/10" : "border-border bg-background"}`}>
-      <div className="flex items-center justify-between gap-3">
+    <div className={`min-w-0 rounded-lg border p-3 transition-colors ${isOverdue ? "border-red-300 bg-red-50/50 dark:bg-red-950/10" : isDone ? "border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/10" : "border-border bg-background"}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <p className={`text-sm font-medium truncate ${isDone ? "line-through text-muted-foreground" : ""}`}>{action.title}</p>
             <Badge variant={isOverdue ? "destructive" : isDone ? "default" : "outline"} className="shrink-0">{action.status}</Badge>
           </div>
@@ -938,21 +941,21 @@ function StageFollowUp({ actions, decisions }: { actions: MeetingActionDto[]; de
   const pending = actions.filter(a => a.status !== "atrasada" && a.status !== "concluida");
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface p-5 space-y-4">
       <div className="flex items-center gap-2">
         <ArrowRight className="size-5 text-primary" />
         <h2 className="text-xl font-display">Acompanhamento</h2>
       </div>
       <p className="text-sm text-muted-foreground">Ações definidas nesta reunião para acompanhamento futuro.</p>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {overdue.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-red-600 flex items-center gap-2 mb-2"><AlertTriangle className="size-4" /> Atrasadas ({overdue.length})</h3>
             <div className="space-y-2">
               {overdue.map(a => (
                 <div key={a.id} className="rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/10 p-2.5 text-sm">
-                  <p className="font-medium">{a.title}</p>
+                  <p className="break-words font-medium">{a.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{a.responsibleName}</p>
                 </div>
               ))}
@@ -965,7 +968,7 @@ function StageFollowUp({ actions, decisions }: { actions: MeetingActionDto[]; de
             <div className="space-y-2">
               {pending.map(a => (
                 <div key={a.id} className="rounded-lg border border-border bg-background p-2.5 text-sm">
-                  <p className="font-medium">{a.title}</p>
+                  <p className="break-words font-medium">{a.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{a.responsibleName} &bull; {a.deadlineDays}d</p>
                 </div>
               ))}
@@ -978,7 +981,7 @@ function StageFollowUp({ actions, decisions }: { actions: MeetingActionDto[]; de
             <div className="space-y-2">
               {completed.map(a => (
                 <div key={a.id} className="rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/10 p-2.5 text-sm">
-                  <p className="font-medium line-through text-muted-foreground">{a.title}</p>
+                  <p className="break-words font-medium line-through text-muted-foreground">{a.title}</p>
                 </div>
               ))}
             </div>

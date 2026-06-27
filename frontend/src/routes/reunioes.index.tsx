@@ -75,14 +75,14 @@ function ReunioesPage() {
               key={m.id}
               to="/reunioes/$id"
               params={{ id: String(m.id) }}
-              className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm"
+              className="grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border bg-surface p-4 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-semibold truncate">{m.title}</h3>
-                  <Badge variant={statusVariant[m.status] ?? "outline"}>{formatMeetingStatus(m.status)}</Badge>
+                <div className="flex min-w-0 flex-wrap items-center gap-3">
+                  <h3 className="min-w-0 max-w-full truncate font-semibold">{m.title}</h3>
+                  <Badge variant={statusVariant[m.status] ?? "outline"} className="shrink-0">{formatMeetingStatus(m.status)}</Badge>
                   {m.overdueActionCount > 0 && (
-                    <Badge variant="destructive" className="gap-1">
+                    <Badge variant="destructive" className="shrink-0 gap-1">
                       <AlertTriangle className="size-3" /> {m.overdueActionCount} atrasadas
                     </Badge>
                   )}

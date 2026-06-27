@@ -24,6 +24,7 @@ import {
 import { clampProgressPercent, stageStatusLabel } from "@/lib/importer-progress";
 import { canCurrentUserAccessProcessingArea } from "@/lib/auth";
 import { buildServiceUrl } from "@/lib/api-url";
+import { formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
 export const Route = createFileRoute("/processamentos")({
   beforeLoad: () => {
@@ -599,5 +600,5 @@ function formatInteger(value: number): string {
 }
 
 function formatCompact(value: number): string {
-  return new Intl.NumberFormat("pt-BR", { notation: "compact" }).format(value);
+  return formatKpiCompactNumber(value);
 }

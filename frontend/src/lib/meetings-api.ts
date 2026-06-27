@@ -746,10 +746,10 @@ function _prepareStore(): void {
   if (_store.size > 0) return;
 
   const m1: MeetingDetailDto = {
-    id: 1, title: "Simulação: risco de atraso na produção", description: "Reunião demonstrativa para testar etapas, perguntas, IA, decisões e ações.", reason: "Baixa produtividade identificada nos últimos relatórios.", status: "em_andamento", currentStage: "discussao", createdByUserId: 1, createdByName: "Diretor", createdAt: _daysAgo(1), scheduledAt: null, concludedAt: null,
-    context: "A produção está operando com 60% da capacidade devido à falta de insumos.",
+    id: 1, title: "Comitê de ruptura e abastecimento", description: "Produção, Logística e Vendas definem o plano de reposição dos três SKUs críticos.", reason: "O estoque disponível de três SKUs está abaixo da demanda confirmada para os próximos embarques.", status: "em_andamento", currentStage: "discussao", createdByUserId: 1, createdByName: "Diretor", createdAt: _daysAgo(1), scheduledAt: _ts(-60), concludedAt: null,
+    context: "Pão Francês Congelado 60g, Pão de Queijo Congelado 1kg e Croissant Congelado 80g exigem reposição coordenada para preservar as entregas.",
     involvedAreasCsv: "Produção, Logística, Vendas",
-    aiSummary: "Existem 2 pendências críticas relacionadas à Produção: ação atrasada sobre matéria-prima e decisão anterior sem evidência de execução.",
+    aiSummary: "Há uma ação de abastecimento vencida e três SKUs com risco de ruptura. A prioridade é confirmar insumos, sequenciar a produção e proteger as rotas com pedidos já confirmados.",
     cancellationReason: "",
     participants: [
       { id: 1, userId: 1, userName: "Diretor", userEmail: "diretor@empresa.com", userRole: "diretor", userSector: "Diretoria", roleInMeeting: "diretor", participationStatus: "confirmado", invitedAt: _daysAgo(1) },
@@ -762,15 +762,15 @@ function _prepareStore(): void {
       { id: 2, userId: 3, userName: "Gestor Logística", message: "O prazo do cliente está próximo. Precisamos saber se a entrega será mantida.", stage: "discussao", isImportant: true, createdAt: _ts(-90) },
     ],
     problems: [
-      { id: 1, sector: "Produção", description: "Produção está produzindo pouco devido à falta de matéria-prima.", severity: "alta", origin: "discussao_atual", createdByUserId: 1, createdByName: "Diretor", approvedByDirector: true, aiSuggestion: "Verificar fornecedores alternativos.", createdAt: _ts(-60), questions: [
-        { id: 1, problemId: 1, question: "Qual é a causa principal da baixa produção?", responsibleUserId: 2, responsibleName: "Gestor Produção", sector: "Produção", isRequired: true, status: "respondida", answerDeadline: null, createdAt: _ts(-50), answer: { id: 1, userId: 2, userName: "Gestor Produção", sector: "Produção", answer: "Falta de matéria-prima e parada de máquina no turno da tarde.", createdAt: _ts(-30) } },
-        { id: 2, problemId: 1, question: "O que pode ser feito para corrigir?", responsibleUserId: 2, responsibleName: "Gestor Produção", sector: "Produção", isRequired: true, status: "pendente", answerDeadline: null, createdAt: _ts(-40), answer: null },
+      { id: 1, sector: "Produção", description: "Três SKUs críticos não possuem cobertura suficiente para os pedidos confirmados.", severity: "alta", origin: "discussao_atual", createdByUserId: 1, createdByName: "Diretor", approvedByDirector: true, aiSuggestion: "Priorizar os SKUs pela data de embarque e confirmar insumos com Compras.", createdAt: _ts(-60), questions: [
+        { id: 1, problemId: 1, question: "Quais insumos limitam a reposição dos três SKUs?", responsibleUserId: 2, responsibleName: "Gestor Produção", sector: "Produção", isRequired: true, status: "respondida", answerDeadline: null, createdAt: _ts(-50), answer: { id: 1, userId: 2, userName: "Gestor Produção", sector: "Produção", answer: "A farinha especial e o queijo ainda dependem da confirmação dos fornecedores.", createdAt: _ts(-30) } },
+        { id: 2, problemId: 1, question: "Qual sequência de produção protege os embarques mais próximos?", responsibleUserId: 2, responsibleName: "Gestor Produção", sector: "Produção", isRequired: true, status: "pendente", answerDeadline: null, createdAt: _ts(-40), answer: null },
       ]},
       { id: 2, sector: "Logística", description: "Não há confirmação se os caminhões serão usados com boa ocupação.", severity: "media", origin: "discussao_atual", createdByUserId: 1, createdByName: "Diretor", approvedByDirector: true, aiSuggestion: "", createdAt: _ts(-55), questions: [] },
     ],
     questions: [],
     aiAnalyses: [
-      { id: 1, problemId: 1, problemDescription: "Produção está produzindo pouco devido à falta de matéria-prima.", proposedSolution: "Priorizar produto X e estender turno se houver matéria-prima.", makesSense: true, positivePoints: "Combina ação operacional com validação de causa.", negativePoints: "Não resolve se fornecedor não confirmar entrega.", risks: "Aumentar turno sem insumo gera custo sem produção.", expectedImpact: "Redução do atraso e melhor previsibilidade.", recommendation: "Confirmar matéria-prima antes de estender turno.", alternativeSolution: "Comprar lote emergencial ou terceirizar parte da demanda.", suggestedDecision: "Confirmar insumo, priorizar produto X e definir turno extra condicionado.", relatedPendencies: "Resposta do gestor de produção considerada.", createdAt: _ts(-10) },
+      { id: 1, problemId: 1, problemDescription: "Três SKUs críticos não possuem cobertura suficiente para os pedidos confirmados.", proposedSolution: "Confirmar os insumos e priorizar a produção pela data dos embarques.", makesSense: true, positivePoints: "Alinha abastecimento, produção e logística em uma única sequência operacional.", negativePoints: "Depende da confirmação dos fornecedores antes de liberar turno adicional.", risks: "Abrir turno sem insumo confirmado aumenta custo sem recuperar o nível de serviço.", expectedImpact: "Redução do risco de ruptura e maior previsibilidade das entregas.", recommendation: "Confirmar farinha especial e queijo antes de alterar a programação da fábrica.", alternativeSolution: "Comprar lote emergencial ou realocar estoque entre centros de distribuição.", suggestedDecision: "Confirmar insumos, priorizar os três SKUs críticos e reservar capacidade nas rotas dos pedidos confirmados.", relatedPendencies: "Resposta do gestor de Produção e ação de abastecimento vencida.", createdAt: _ts(-10) },
     ],
     decisions: [],
     actions: [
@@ -831,8 +831,8 @@ function _prepareStore(): void {
 
   const m3 = _clone(m1);
   m3.id = 3;
-  m3.title = "Problemas logísticos";
-  m3.description = "Ocupação de frota e rotas críticas.";
+  m3.title = "Planejamento de rotas críticas";
+  m3.description = "Logística e Produção revisam ocupação da frota, custos e três rotas com risco de atraso.";
   m3.reason = "Ocupação abaixo de 70% na frota e aumento de custos operacionais.";
   m3.status = "rascunho";
   m3.currentStage = "contexto";

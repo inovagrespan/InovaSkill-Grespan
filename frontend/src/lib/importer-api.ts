@@ -1875,7 +1875,7 @@ function demoAiAlertsDashboard(input: {
   const alerts: AiAlertItem[] = [
     {
       id: 9101,
-      title: "Risco de não atender demanda do cliente X",
+      title: "Risco de atraso no atendimento da Rede Primavera",
       description: "A IA identificou aumento incomum de demanda, estoque abaixo do necessário e atraso previsto de produção.",
       responsibleArea: "Produção",
       responsibleManager: "Gestor Produção",
@@ -2004,7 +2004,7 @@ function demoAiAlertsDashboard(input: {
     {
       id: 9105,
       title: "Capacidade produtiva insuficiente para pedido prioritário",
-      description: "Pedido de alto valor entrou na carteira com prazo curto e a capacidade simulada da linha principal está abaixo da necessidade.",
+      description: "Pedido de alto valor entrou na carteira com prazo curto e a capacidade disponível da linha principal está abaixo da necessidade.",
       responsibleArea: "Produção",
       responsibleManager: "Gestor Produção",
       involvedAreas: ["Vendas", "Logística"],

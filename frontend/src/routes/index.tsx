@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, ArrowRight, BarChart3, Boxes, CircleDollarSign, Truck } from "lucide-react";
+import { AlertTriangle, ArrowRight, BarChart3, BellRing, Boxes, CalendarCheck, CircleDollarSign, Truck } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   getControlTowerScenario,
@@ -22,6 +22,8 @@ const moduleIcons = {
   Produtos: Boxes,
   Finanças: CircleDollarSign,
   Logística: Truck,
+  Alertas: BellRing,
+  Reuniões: CalendarCheck,
 };
 
 function statusClassName(status: ControlTowerStatus): string {
@@ -48,7 +50,7 @@ function Dashboard() {
           <span className="page-header-kicker">Smart Core / Torre de Controle</span>
           <h1 className="mt-2 mb-2 text-4xl font-display tracking-tight text-balance">Torre de Controle Inteligente</h1>
           <p className="max-w-[68ch] text-muted-foreground text-pretty">
-            Situação atual e previsões de vendas, estoque, finanças e logística para priorizar decisões.
+            Situação atual e previsões de vendas, estoque, finanças, logística, alertas e reuniões para priorizar decisões.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

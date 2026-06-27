@@ -1,19 +1,20 @@
 ﻿export function formatKpiCompactNumber(value: number): string {
-  const abs = Math.abs(value ?? 0);
+  const normalizedValue = Number.isFinite(value) ? value : 0;
+  const abs = Math.abs(normalizedValue);
 
   if (abs >= 1_000_000_000) {
-    return `${formatWithOneDecimal(value / 1_000_000_000)} bi`;
+    return `${formatWithOneDecimal(normalizedValue / 1_000_000_000)} bi`;
   }
 
   if (abs >= 1_000_000) {
-    return `${formatWithOneDecimal(value / 1_000_000)} M`;
+    return `${formatWithOneDecimal(normalizedValue / 1_000_000)} M`;
   }
 
   if (abs >= 1_000) {
-    return `${formatWithOneDecimal(value / 1_000)} mil`;
+    return `${formatWithOneDecimal(normalizedValue / 1_000)} mil`;
   }
 
-  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(value ?? 0);
+  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(normalizedValue);
 }
 
 export function formatKpiCompactCurrency(value: number): string {

@@ -31,7 +31,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";
+import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import { cn } from "@/lib/utils";
 import {
   buildContextualSalesRecommendation,
@@ -88,7 +88,6 @@ const financialPeriodLabels: Record<SalesFinancialPeriod, string> = {
   yearly: "Anual",
 };
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 
 function percentage(value: number): string {
   return `${value.toFixed(1).replace(".", ",")}%`;
@@ -110,7 +109,7 @@ function buildCards(periodDays: SalesControlPeriodDays): SalesCard[] {
     {
       id: "sales-volume",
       title: "Volume de Vendas",
-      value: `${formatKpiCompactCurrency(metric.revenue)} · ${number.format(metric.weightKg)} kg`,
+      value: `${formatKpiCompactCurrency(metric.revenue)} · ${formatKpiCompactNumber(metric.weightKg)} kg`,
       status: "Normal",
       change: 8.4,
       lowerIsBetter: false,

@@ -202,10 +202,10 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
                 <BrandLogo markClassName="size-9" textClassName="text-lg" taglineClassName="hidden" />
               </SheetTitle>
             </SheetHeader>
-            <div className="flex h-full min-h-0 flex-col py-3">
-              <div className="mb-3 border-b border-border px-3 pb-3">{renderUserHeader(false)}</div>
+            <div className="flex h-dvh min-h-0 flex-col py-3">
+              <div className="sticky top-0 z-10 mb-3 shrink-0 border-b border-border bg-surface px-3 pb-3">{renderUserHeader(false)}</div>
               {renderNav(false, () => setMobileOpen(false))}
-              <div className="shrink-0 space-y-2 border-t border-border bg-surface px-3 pb-3 pt-3">
+              <div className="sticky bottom-0 z-10 shrink-0 space-y-2 border-t border-border bg-surface px-3 pb-3 pt-3">
                 <button onClick={onToggleTheme} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60">
                   {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
                   <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
@@ -222,13 +222,13 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-20 hidden border-r border-border bg-surface md:flex md:flex-col",
+          "fixed inset-y-0 left-0 z-40 hidden h-dvh border-r border-border bg-surface md:flex md:flex-col",
           "transition-[width] duration-200 ease-out motion-reduce:transition-none",
           collapsed ? "md:w-[76px]" : "md:w-[264px]",
         )}
         aria-label="Navegação principal"
       >
-        <div className={cn("mb-2 flex border-b border-border px-3 py-3.5", collapsed ? "flex-col items-center gap-2" : "items-center gap-2")}>
+        <div className={cn("sticky top-0 z-10 mb-2 flex shrink-0 border-b border-border bg-surface px-3 py-3.5", collapsed ? "flex-col items-center gap-2" : "items-center gap-2")}>
           {renderBrandHeader()}
           <div className={cn("flex shrink-0 items-center", collapsed ? "flex-col gap-2" : "gap-1")}>
             <button
@@ -245,7 +245,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
 
         {renderNav(collapsed)}
 
-        <div className={cn("shrink-0 border-t border-border bg-surface px-3 pb-3 pt-3", collapsed ? "flex flex-col items-center gap-2" : "space-y-2")}>
+        <div className={cn("sticky bottom-0 z-10 shrink-0 border-t border-border bg-surface px-3 pb-3 pt-3", collapsed ? "flex flex-col items-center gap-2" : "space-y-2")}>
           <button
             onClick={onToggleTheme}
             className={cn(

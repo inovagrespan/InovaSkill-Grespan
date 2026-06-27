@@ -12,7 +12,9 @@ describe("responsive layout behavior", () => {
 
     expect(sidebar).toContain("custom-scrollbar min-h-0 flex-1");
     expect(sidebar).toContain("overflow-y-auto overflow-x-hidden");
-    expect(sidebar).toContain("shrink-0 space-y-2 border-t");
+    expect(sidebar).toContain("fixed inset-y-0 left-0 z-40 hidden h-dvh");
+    expect(sidebar).toContain("sticky top-0 z-10 mb-2 flex shrink-0");
+    expect(sidebar).toContain("sticky bottom-0 z-10 shrink-0 border-t");
     expect(sidebar).toContain("Sair");
     expect(sidebar).toContain("Modo claro");
     expect(sidebar).toContain("Modo escuro");
