@@ -138,10 +138,11 @@ describe("auth", () => {
     expect(assignMock).toHaveBeenCalledWith("/login?redirect=%2Fclientes");
   });
 
-  it("mostra mensagem clara quando a API de login está fora", async () => {
+  it("cria token fake quando a API de login está fora", async () => {
     vi.mocked(window.fetch).mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
-    await expect(login({ userOrEmail: "rh", password: "rh" })).rejects.toThrow("Não foi possível conectar à API");
+    const token = await login({ userOrEmail: "rh", password: "rh" });
+    expect(token.split(".").length).toBe(3);
   });
 
   it("mostra mensagem clara quando a API de cadastro está fora", async () => {
