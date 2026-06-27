@@ -27,7 +27,7 @@ describe("sidebar navigation", () => {
   it("mantem a ordem visual solicitada no menu lateral", () => {
     const source = readSidebar();
 
-    expect(source).toContain('to: "/"');
+    expect(source).toContain('to: "/dashboard"');
     expect(source).toContain('label: "Dashboard"');
     expect(source).toContain('to: "/alertas"');
     expect(source).toContain('label: "Alertas"');
@@ -63,7 +63,11 @@ describe("sidebar navigation", () => {
     const source = readSidebar();
 
     expect(source).toContain("Expandir sidebar");
-    expect(source).toContain("ChevronRight");
+    expect(source).toContain("AnimatedMenuIcon");
+    expect(source).toContain("open ? \"translate-y-0 rotate-45\"");
+    expect(source).toContain("open ? \"translate-y-0 -rotate-45\"");
+    expect(source).toContain("aria-expanded={!collapsed}");
+    expect(source).toContain("flex size-10 shrink-0 items-center justify-center rounded-full");
     expect(source).not.toContain("collapsed && \"hidden\"");
     expect(source).toContain('collapsed ? "md:w-[76px]"');
     expect(source).toContain('collapsed ? "size-10 p-0"');
