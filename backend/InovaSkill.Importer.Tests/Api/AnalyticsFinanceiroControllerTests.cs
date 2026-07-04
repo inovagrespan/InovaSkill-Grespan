@@ -21,7 +21,7 @@ public sealed class AnalyticsFinanceiroControllerTests
             Transaction("NF-B-1", "C2", "Cliente em Queda", new DateTime(2026, 1, 12, 0, 0, 0, DateTimeKind.Utc), 900m),
             Transaction("NF-B-2", "C2", "Cliente em Queda", new DateTime(2026, 2, 12, 0, 0, 0, DateTimeKind.Utc), 800m),
             Transaction("NF-B-3", "C2", "Cliente em Queda", new DateTime(2026, 3, 12, 0, 0, 0, DateTimeKind.Utc), 700m),
-            Transaction("NF-B-4", "C2", "Cliente em Queda", new DateTime(2026, 6, 12, 0, 0, 0, DateTimeKind.Utc), 300m));
+            Transaction("NF-B-4", "C2", "Cliente em Queda", new DateTime(2026, 6, 12, 0, 0, 0, DateTimeKind.Utc), 300m, "VEN-018", "Rafael Mendes", "Rota Ribeirão Preto"));
         await db.SaveChangesAsync();
 
         var controller = new AnalyticsFinanceiroController(db);
@@ -43,7 +43,10 @@ public sealed class AnalyticsFinanceiroControllerTests
             item.GetProperty("clienteNome").GetString() == "Cliente Crescente");
         Assert.Contains(root.GetProperty("risco").EnumerateArray(), item =>
             item.GetProperty("clienteNome").GetString() == "Cliente em Queda" &&
-            item.GetProperty("tendencia").GetString() == "Queda");
+            item.GetProperty("tendencia").GetString() == "Queda" &&
+            item.GetProperty("fornecedorId").GetString() == "VEN-018" &&
+            item.GetProperty("fornecedorNome").GetString() == "Rafael Mendes" &&
+            item.GetProperty("rotaNome").GetString() == "Rota Ribeirão Preto");
     }
 
     [Fact]
@@ -97,7 +100,10 @@ public sealed class AnalyticsFinanceiroControllerTests
         string customerCode,
         string customerName,
         DateTime transactionDate,
-        decimal totalAmount)
+        decimal totalAmount,
+        string supplierCode = "",
+        string supplierName = "",
+        string routeName = "")
     {
         return new Domain.Entities.CommercialTransaction
         {
@@ -105,6 +111,9 @@ public sealed class AnalyticsFinanceiroControllerTests
             TransactionDate = transactionDate,
             CustomerCode = customerCode,
             CustomerName = customerName,
+            SupplierCode = supplierCode,
+            SupplierName = supplierName,
+            RouteName = routeName,
             ProductCode = "P1",
             ProductDescription = "Produto",
             Quantity = 1m,

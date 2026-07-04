@@ -70,4 +70,12 @@ describe("component states", () => {
     expect(chart).toContain("min-h-[220px]");
     expect(chart).toContain("w-full");
   });
+
+  it("mantém modais acima de mapas e desfoca o conteúdo ao fundo", () => {
+    const dialog = read("src/components/ui/dialog.tsx");
+
+    expect(dialog).toContain("z-[2000]");
+    expect(dialog).toContain("z-[2001]");
+    expect(dialog).toContain("backdrop-blur-[5px]");
+  });
 });

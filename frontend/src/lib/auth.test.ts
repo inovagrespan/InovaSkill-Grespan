@@ -1,5 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { authFetch, clearAuthToken, getAuthToken, getCurrentUserRole, isAuthenticated, isTokenValid, saveAuthToken } from "./auth";
+import {
+  authFetch,
+  canCurrentUserAccessAdministrativeArea,
+  canCurrentUserAccessAllAreas,
+  canCurrentUserAccessProcessingArea,
+  clearAuthToken,
+  getAuthToken,
+  getCurrentUserRole,
+  isAuthenticated,
+  isCurrentUserSystemAdmin,
+  isTokenValid,
+  login,
+  normalizeUserRole,
+  registerUser,
+  saveAuthToken,
+} from "./auth";
 
 function createToken(exp: number, role = "gestor"): string {
   const payload = btoa(JSON.stringify({ sub: "1", exp, role })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -75,9 +90,45 @@ describe("auth", () => {
   });
 
   it("expõe a role do usuário autenticado", () => {
+    saveAuthToken(createToken(Math.floor(Date.now() / 1000) + 60, "Diretor"));
+
+    expect(getCurrentUserRole()).toBe("diretor");
+    expect(canCurrentUserAccessAllAreas()).toBe(true);
+    expect(canCurrentUserAccessAdministrativeArea()).toBe(true);
+    expect(canCurrentUserAccessProcessingArea()).toBe(false);
+  });
+
+  it("diferencia acesso administrativo da empresa vs processamento do sistema", () => {
+    saveAuthToken(createToken(Math.floor(Date.now() / 1000) + 60, "administrativo"));
+
+    expect(getCurrentUserRole()).toBe("administrativo");
+    expect(canCurrentUserAccessAdministrativeArea()).toBe(true);
+    expect(canCurrentUserAccessProcessingArea()).toBe(false);
+    expect(isCurrentUserSystemAdmin()).toBe(false);
+  });
+
+  it("admin_system acessa processamento mas nao administrativo da empresa", () => {
+    saveAuthToken(createToken(Math.floor(Date.now() / 1000) + 60, "admin_system"));
+
+    expect(getCurrentUserRole()).toBe("admin_system");
+    expect(canCurrentUserAccessAdministrativeArea()).toBe(false);
+    expect(canCurrentUserAccessProcessingArea()).toBe(true);
+    expect(isCurrentUserSystemAdmin()).toBe(true);
+  });
+
+  it("admin legado mantem acesso a processamento e e reconhecido como system admin", () => {
     saveAuthToken(createToken(Math.floor(Date.now() / 1000) + 60, "admin"));
 
     expect(getCurrentUserRole()).toBe("admin");
+    expect(canCurrentUserAccessAdministrativeArea()).toBe(false);
+    expect(canCurrentUserAccessProcessingArea()).toBe(true);
+    expect(isCurrentUserSystemAdmin()).toBe(true);
+  });
+
+  it("normaliza perfis acentuados usados no menu", () => {
+    expect(normalizeUserRole("Logística")).toBe("logistica");
+    expect(normalizeUserRole("Produção")).toBe("producao");
+    expect(normalizeUserRole("Reunião")).toBe("reuniao");
   });
 
   it("bloqueia requisições sem sessão de login", async () => {
@@ -85,5 +136,23 @@ describe("auth", () => {
 
     await expect(authFetch("http://localhost/api/files/jobs")).rejects.toThrow("Sessão expirada");
     expect(assignMock).toHaveBeenCalledWith("/login?redirect=%2Fclientes");
+  });
+
+  it("cria token fake quando a API de login está fora", async () => {
+    vi.mocked(window.fetch).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    const token = await login({ userOrEmail: "rh", password: "rh" });
+    expect(token.split(".").length).toBe(3);
+  });
+
+  it("mostra mensagem clara quando a API de cadastro está fora", async () => {
+    vi.mocked(window.fetch).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await expect(registerUser({
+      name: "teste",
+      email: "teste@local.test",
+      password: "teste123",
+      confirmPassword: "teste123",
+    })).rejects.toThrow("Não foi possível conectar à API");
   });
 });

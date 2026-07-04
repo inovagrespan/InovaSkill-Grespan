@@ -67,7 +67,7 @@ function RelatoriosPage() {
     <div className="page-shell space-y-6">
       <header className="animate-soft-enter flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <span className="page-header-kicker">Smart Core / Relatórios</span>
+          <span className="page-header-kicker">Relatórios</span>
           <h1 className="mt-2 text-4xl font-display tracking-tight">Emissão de relatórios</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Selecione a área, escolha as métricas filtradas e imprima um resumo pronto para reuniões.

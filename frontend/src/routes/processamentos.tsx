@@ -22,12 +22,13 @@ import {
   type ProcessingMonitoringDashboard,
 } from "@/lib/importer-api";
 import { clampProgressPercent, stageStatusLabel } from "@/lib/importer-progress";
-import { isCurrentUserAdmin } from "@/lib/auth";
+import { canCurrentUserAccessProcessingArea } from "@/lib/auth";
 import { buildServiceUrl } from "@/lib/api-url";
+import { formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
 export const Route = createFileRoute("/processamentos")({
   beforeLoad: () => {
-    if (!isCurrentUserAdmin()) {
+    if (!canCurrentUserAccessProcessingArea()) {
       throw redirect({ to: "/" });
     }
   },
@@ -206,7 +207,7 @@ function ProcessamentosPage() {
   return (
     <div className="page-shell processing-page-shell">
       <header className="animate-soft-enter space-y-2">
-        <span className="page-header-kicker">Smart Core / Processamentos</span>
+        <span className="page-header-kicker">Processamentos</span>
         <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-4xl font-display tracking-tight">Central de Processamentos</h1>
@@ -599,5 +600,5 @@ function formatInteger(value: number): string {
 }
 
 function formatCompact(value: number): string {
-  return new Intl.NumberFormat("pt-BR", { notation: "compact" }).format(value);
+  return formatKpiCompactNumber(value);
 }

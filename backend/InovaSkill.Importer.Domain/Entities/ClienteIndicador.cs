@@ -20,7 +20,7 @@ public sealed class ClienteIndicador
     public int ScoreTicket { get; set; }
     public int ScoreRecencia { get; set; }
     public int ScorePotencial { get; set; }
-    public string Tendencia { get; set; } = string.Empty;
-    public string Classificacao { get; set; } = string.Empty;
-    public DateTime AtualizadoEm { get; set; }
+    public string Tendencia { get; set; } = "Estavel";
+    public string Classificacao { get; set; } = "C";
+    public DateTime AtualizadoEm { get; set; } = DateTime.UtcNow;
 }

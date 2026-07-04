@@ -1,4 +1,4 @@
-﻿using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace InovaSkill.Importer.Infrastructure.Persistence;
@@ -35,6 +35,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<PreProcessorTemplate> PreProcessorTemplates => Set<PreProcessorTemplate>();
     public DbSet<PreProcessorTemplateRule> PreProcessorTemplateRules => Set<PreProcessorTemplateRule>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -214,6 +215,9 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.DocumentNumber).HasMaxLength(64).IsRequired();
             e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
             e.Property(x => x.CustomerName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.SupplierCode).HasMaxLength(64).IsRequired();
+            e.Property(x => x.SupplierName).HasMaxLength(256).IsRequired();
+            e.Property(x => x.RouteName).HasMaxLength(256).IsRequired();
             e.Property(x => x.ProductCode).HasMaxLength(64).IsRequired();
             e.Property(x => x.ProductDescription).HasMaxLength(512).IsRequired();
             e.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
@@ -227,6 +231,8 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.HasIndex(x => x.SourceFileJobId);
             e.HasIndex(x => x.TransactionDate);
             e.HasIndex(x => x.CustomerName);
+            e.HasIndex(x => x.SupplierName);
+            e.HasIndex(x => x.RouteName);
             e.HasIndex(x => x.ProductCode);
             e.HasIndex(x => x.ProductDescription);
             e.HasIndex(x => x.City);
@@ -386,10 +392,12 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.TendenciaPrevista).HasMaxLength(64).IsRequired();
             e.Property(x => x.ErroMedioHistorico).HasColumnType("decimal(18,2)");
             e.Property(x => x.ConfiancaModelo).HasColumnType("decimal(9,2)");
+            e.Property(x => x.UltimaObservacao).IsRequired();
             e.Property(x => x.AtualizadoEm).IsRequired();
             e.HasIndex(x => x.ClienteId).IsUnique();
             e.HasIndex(x => x.TendenciaPrevista);
         });
+
 
         modelBuilder.Entity<ImportFileType>(e =>
         {
@@ -500,6 +508,23 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.CreatedAt).IsRequired();
             e.HasIndex(x => x.Email).IsUnique();
             e.HasIndex(x => x.Name).IsUnique();
+        });
+
+
+
+        modelBuilder.Entity<Notification>(e =>
+        {
+            e.ToTable("Notifications");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Message).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.Type).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Priority).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            e.Property(x => x.RelatedLink).HasMaxLength(1024).IsRequired();
+            e.Property(x => x.RelatedEntity).HasMaxLength(128).IsRequired();
+            e.HasIndex(x => new { x.UserId, x.Status, x.CreatedAt });
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
         });
     }
 }

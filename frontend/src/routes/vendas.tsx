@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { SalesControlTower } from "@/components/SalesControlTower";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FeedbackMessage } from "@/components/ui/feedback-message";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +49,8 @@ import {
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 type PeriodPreset = "today" | "week" | "month" | "quarter" | "year" | "custom";
+
+export const Route = createFileRoute("/vendas")({ component: SalesControlTower });
 type ViewMode = "invoices" | "items";
 type SalesCachedData = {
   items: Awaited<ReturnType<typeof fetchCommercialTransactions>>;
@@ -116,25 +120,7 @@ function formatDate(value: string): string {
 }
 
 function formatRevenueAxisTick(value: number): string {
-  const numericValue = Number(value);
-
-  if (numericValue === 0) {
-    return "0";
-  }
-
-  if (Math.abs(numericValue) >= 1_000_000_000) {
-    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(numericValue / 1_000_000_000)}B`;
-  }
-
-  if (Math.abs(numericValue) >= 1_000_000) {
-    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(numericValue / 1_000_000)}M`;
-  }
-
-  if (Math.abs(numericValue) >= 1_000) {
-    return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(numericValue / 1_000)}k`;
-  }
-
-  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(numericValue);
+  return formatKpiCompactNumber(Number(value));
 }
 
 function toInputDate(value: Date): string {

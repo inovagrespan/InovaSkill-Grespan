@@ -151,15 +151,15 @@ describe("processing monitoring", () => {
 
     expect(routeSource).toContain('createFileRoute("/processamentos")');
     expect(routeSource).toContain("beforeLoad");
-    expect(routeSource).toContain("isCurrentUserAdmin");
+    expect(routeSource).toContain("canCurrentUserAccessProcessingArea");
     expect(routeSource).toContain("processing-page-shell");
     expect(routeSource).toContain("Central de Processamentos");
     expect(routeSource).toContain("Resumo de vendas");
     expect(routeSource).toContain("Resumo de clientes");
     expect(routeSource).toContain("runProcessingManualAction");
     expect(sidebarSource).toContain('to: "/processamentos"');
-    expect(sidebarSource).toContain("adminOnly: true");
-    expect(sidebarSource).toContain("isCurrentUserAdmin()");
+    expect(sidebarSource).toContain('label: "Processamento"');
+    expect(sidebarSource).toContain('accessRoles: ["admin_system", "admin"]');
   });
 
   it("usa skeletons nos principais fluxos assincronos", () => {
@@ -175,7 +175,7 @@ describe("processing monitoring", () => {
     expect(vendas).toContain("Sem resultado");
     expect(vendas).toContain("periodOptions");
     expect(clientes).toContain("SkeletonModalContent");
-    expect(clientes).toContain("!loading && items.length === 0");
+    expect(clientes).toContain("Nenhum indicador encontrado.");
     expect(importacoes).toContain("jobsLoading && jobs.length === 0");
   });
 

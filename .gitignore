@@ -168,3 +168,7 @@ backend/**/uploads/
 # Frontend build outputs
 frontend/dist/
 frontend/.output/
+
+# Temp / artifact directories
+.codex-temp/
+backend/artifacts/

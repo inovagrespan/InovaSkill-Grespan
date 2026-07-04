@@ -1,17 +1,20 @@
-﻿import { Link, useRouterState } from "@tanstack/react-router";
-<<<<<<< HEAD
-<<<<<<< HEAD
-import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, Package, ReceiptText, ServerCog, Sun, TrendingUp, Truck, Users } from "lucide-react";
-=======
-import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, PackageSearch, ServerCog, Sun, TrendingUp, Truck, Users } from "lucide-react";
->>>>>>> 63b18f765086c6de4ac2dbaf716dcfa70e776cc1
-=======
-import { Activity, BarChart3, ChevronLeft, ChevronRight, FileUp, LayoutDashboard, LogOut, Menu, Moon, ServerCog, Sun, TrendingUp, Truck, Users } from "lucide-react";
->>>>>>> c385fa637e9bbed360da9a3fade107570986db4c
+import { Link, useRouterState } from "@tanstack/react-router";
+import {
+  FileUp,
+  LayoutDashboard,
+  LogOut,
+  Map,
+  Moon,
+  Route,
+  Settings,
+  Sun,
+  UserRound,
+} from "lucide-react";
 import { useState } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { BrandLogo } from "@/components/BrandLogo";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { isCurrentUserAdmin, logout } from "@/lib/auth";
+import { getCurrentUser, getCurrentUserRole, logout, normalizeUserRole } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 type AppSidebarProps = {
@@ -21,38 +24,68 @@ type AppSidebarProps = {
   onToggleTheme: () => void;
 };
 
+type SidebarAccessRole = "diretor" | "admin" | "admin_system";
+
+const roleLabels: Record<string, string> = {
+  admin: "Sistema",
+  admin_system: "Sistema",
+  diretor: "Diretor",
+  logistica: "Logística",
+  vendas: "Vendas",
+};
+
 const items = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-<<<<<<< HEAD
-  { to: "/vendas", label: "Vendas", icon: TrendingUp },
-<<<<<<< HEAD
-  { to: "/produtos", label: "Produtos", icon: Package },
-=======
-  { to: "/produtos", label: "Produtos", icon: PackageSearch },
->>>>>>> 63b18f765086c6de4ac2dbaf716dcfa70e776cc1
-  {
-    to: "/clientes",
-    label: "Finanças",
-    icon: Users,
-  },
-=======
-  { to: "/clientes", label: "Finanças", icon: Users },
->>>>>>> c385fa637e9bbed360da9a3fade107570986db4c
-  { to: "/processamentos", label: "Processamentos", icon: ServerCog, adminOnly: true },
-  { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
-  { to: "/logistica", label: "Logística", icon: Truck },
-  { to: "/importacoes", label: "Importações", icon: FileUp },
-  { to: "/simulacao", label: "Simulação", icon: Activity },
-];
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/rotas", label: "Rotas", icon: Route },
+  { to: "/mapa", label: "Mapa", icon: Map },
+  { to: "/importacoes/files", label: "Importações", icon: FileUp, accessRoles: ["diretor", "admin", "admin_system"] },
+  { to: "/processamentos", label: "Processamento", icon: Settings, accessRoles: ["admin_system", "admin"] },
+] as const;
+
+export function getVisibleSidebarItemsForRole(role: string | null) {
+  const normalizedRole = normalizeUserRole(role);
+  const canSeeAll = normalizedRole === "admin_system";
+
+  return items.filter((item) => {
+    if (!("accessRoles" in item)) return true;
+    if (normalizedRole === "diretor") return item.to !== "/processamentos";
+    return canSeeAll || item.accessRoles.includes(normalizedRole as SidebarAccessRole);
+  });
+}
+
+function formatUserRole(role: string | null): string {
+  return roleLabels[role ?? ""] ?? "Usuário";
+}
+
+function AnimatedMenuIcon({ open }: { open: boolean }) {
+  return (
+    <span aria-hidden="true" className="relative block size-5">
+      <span
+        className={cn(
+          "absolute left-0 top-1/2 h-0.5 w-5 rounded-full bg-current transition-transform duration-300 ease-out motion-reduce:transition-none",
+          open ? "translate-y-0 rotate-45" : "-translate-y-1 rotate-0",
+        )}
+      />
+      <span
+        className={cn(
+          "absolute left-0 top-1/2 h-0.5 w-5 rounded-full bg-current transition-transform duration-300 ease-out motion-reduce:transition-none",
+          open ? "translate-y-0 -rotate-45" : "translate-y-1 rotate-0",
+        )}
+      />
+    </span>
+  );
+}
 
 export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme }: AppSidebarProps) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
-  const visibleItems = items.filter((item) => !item.adminOnly || isCurrentUserAdmin());
+  const currentUser = getCurrentUser();
+  const currentRole = getCurrentUserRole();
+  const visibleItems = getVisibleSidebarItemsForRole(currentRole);
+  const userName = currentUser?.name?.trim() || currentUser?.email?.trim() || "User";
+  const userRoleLabel = formatUserRole(currentRole);
 
   function isItemActive(to: string): boolean {
-    if (to === "/") return pathname === "/";
-    if (to === "/importacoes") return pathname.startsWith("/importacoes");
     return pathname === to || pathname.startsWith(`${to}/`);
   }
 
@@ -76,10 +109,12 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
                   : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
               )}
             >
-              <span className={cn(
-                "inline-flex size-7 items-center justify-center rounded-md transition-colors shrink-0",
-                active ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground group-hover:text-foreground"
-              )}>
+              <span
+                className={cn(
+                  "inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+                  active ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground group-hover:text-foreground",
+                )}
+              >
                 <Icon className="size-4" />
               </span>
               <span
@@ -109,27 +144,83 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
     );
   }
 
+  function renderUserHeader(compact = collapsed) {
+    if (compact) {
+      return (
+        <Link
+          to="/dashboard"
+          aria-label={userName}
+          className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-primary/10 text-primary outline-none ring-primary/40 focus-visible:ring-2"
+        >
+          <UserRound className="size-4" />
+        </Link>
+      );
+    }
+
+    return (
+      <Link
+        to="/dashboard"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-md outline-none ring-primary/40 focus-visible:ring-2"
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-primary/10 text-primary">
+          <UserRound className="size-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold text-foreground">{userName}</span>
+          <span className="block truncate text-xs text-muted-foreground">{userRoleLabel}</span>
+        </span>
+      </Link>
+    );
+  }
+
+  function renderBrandHeader(compact = collapsed) {
+    return (
+      <Link
+        to="/dashboard"
+        aria-label="Conecta360"
+        className={cn(
+          "flex min-w-0 items-center rounded-md outline-none ring-primary/40 focus-visible:ring-2",
+          compact ? "justify-center" : "flex-1",
+        )}
+      >
+        <BrandLogo
+          compact={compact}
+          markClassName={compact ? "size-10" : "size-9"}
+          textClassName="text-lg"
+          taglineClassName="hidden"
+        />
+      </Link>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={120}>
       <div className="fixed left-3 top-3 z-30 md:hidden">
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>
-            <button type="button" aria-label="Abrir menu" className="inline-flex size-10 items-center justify-center rounded-md border border-border bg-surface text-foreground shadow-sm outline-none ring-primary/40 focus-visible:ring-2">
-              <Menu className="size-5" />
+            <button
+              type="button"
+              aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
+              className="inline-flex size-10 items-center justify-center rounded-xl bg-surface/60 text-foreground shadow-lg shadow-black/10 backdrop-blur-lg outline-none ring-primary/40 transition-all duration-200 hover:bg-surface/85 focus-visible:ring-2"
+            >
+              <AnimatedMenuIcon open={mobileOpen} />
             </button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-[280px] border-border bg-surface p-0">
-            <SheetHeader className="border-b border-border px-4 py-4 text-left">
-              <SheetTitle>Navegação</SheetTitle>
-            </SheetHeader>
-            <div className="flex h-full min-h-0 flex-col py-3">
+          <SheetContent side="left" hideClose className="w-[280px] border-r border-border bg-surface p-0">
+            <div className="flex h-dvh flex-col">
+              <div className="shrink-0 border-b border-border px-4 py-4">
+                <BrandLogo markClassName="size-9" textClassName="text-lg" taglineClassName="hidden" />
+              </div>
+              <div className="shrink-0 border-b border-border px-3 py-3">
+                {renderUserHeader(false)}
+              </div>
               {renderNav(false, () => setMobileOpen(false))}
-              <div className="shrink-0 border-t border-border bg-surface px-3 pt-3 pb-3 space-y-2">
-                <button onClick={onToggleTheme} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60">
+              <div className="shrink-0 space-y-2 border-t border-border px-3 pb-4 pt-3">
+                <button onClick={onToggleTheme} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/60">
                   {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
                   <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>
                 </button>
-                <button onClick={logout} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60">
+                <button onClick={logout} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/60">
                   <LogOut className="size-4" />
                   <span>Sair</span>
                 </button>
@@ -139,35 +230,54 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
         </Sheet>
       </div>
 
-      <aside className={cn(
-        "fixed inset-y-0 left-0 z-20 hidden border-r border-border bg-surface md:flex md:flex-col",
-        "transition-[width] duration-200 ease-out motion-reduce:transition-none",
-        collapsed ? "md:w-[72px]" : "md:w-[264px]",
-      )} aria-label="Navegação principal">
-        <div className={cn("mb-3 flex items-center border-b border-border px-3 py-4", collapsed ? "justify-center" : "justify-between")}>
-          <Link to="/" className={cn("flex items-center gap-2 rounded-md outline-none ring-primary/40 focus-visible:ring-2", collapsed && "justify-center")}>
-            <div className="flex size-8 items-center justify-center rounded-sm bg-primary font-display font-bold text-primary-foreground">N</div>
-            <span className={cn("font-display text-xl tracking-tight transition-all duration-200", collapsed ? "pointer-events-none w-0 -translate-x-1 opacity-0" : "w-auto translate-x-0 opacity-100")} aria-hidden={collapsed}>GRESPAN</span>
-          </Link>
-          <button onClick={onToggleCollapsed} className={cn("rounded-md p-1 text-muted-foreground hover:bg-muted/80", collapsed && "hidden")} aria-label="Recolher sidebar">
-            <ChevronLeft className="size-4" />
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 hidden h-dvh border-r border-border bg-surface md:flex md:flex-col",
+          "transition-[width] duration-300 ease-out motion-reduce:transition-none",
+          collapsed ? "md:w-[76px]" : "md:w-[264px]",
+        )}
+        aria-label="Navegação principal"
+      >
+        <div
+          className={cn(
+            "mb-3 mt-4 flex shrink-0 items-center gap-3 px-3 pb-4",
+            collapsed ? "justify-center" : "justify-between border-b border-border",
+          )}
+        >
+          {!collapsed ? renderUserHeader(false) : null}
+          <button
+            onClick={onToggleCollapsed}
+            className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground shadow-sm outline-none ring-primary/40 transition-colors duration-300 hover:bg-muted/70 hover:text-foreground focus-visible:ring-2"
+            aria-label={collapsed ? "Expandir sidebar" : "Recolher sidebar"}
+            aria-expanded={!collapsed}
+          >
+            <AnimatedMenuIcon open={!collapsed} />
           </button>
         </div>
 
         {renderNav(collapsed)}
 
-        <div className={cn("shrink-0 border-t border-border bg-surface px-3 pt-3 pb-3 space-y-2", collapsed && "flex flex-col items-center")}>
-          <button onClick={onToggleTheme} className={cn(
-            "inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60",
-            collapsed ? "w-10 h-10" : "w-full"
-          )}>
+        <div className={cn("sticky bottom-0 z-10 shrink-0 border-t border-border bg-surface px-3 pb-3 pt-3", collapsed ? "flex flex-col items-center gap-2" : "space-y-2")}>
+          {renderBrandHeader()}
+          <button
+            onClick={onToggleTheme}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-md border border-border bg-surface text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+              collapsed ? "size-10 p-0" : "h-10 w-full px-3",
+            )}
+            aria-label={theme === "dark" ? "Modo claro" : "Modo escuro"}
+          >
             {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             {!collapsed && <span>{theme === "dark" ? "Modo claro" : "Modo escuro"}</span>}
           </button>
-          <button onClick={logout} className={cn(
-            "inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60",
-            collapsed ? "w-10 h-10" : "w-full"
-          )}>
+          <button
+            onClick={logout}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-md border border-border bg-surface text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+              collapsed ? "size-10 p-0" : "h-10 w-full px-3",
+            )}
+            aria-label="Sair"
+          >
             <LogOut className="size-4" />
             {!collapsed && <span>Sair</span>}
           </button>

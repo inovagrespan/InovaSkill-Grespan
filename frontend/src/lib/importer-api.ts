@@ -1,4 +1,4 @@
-﻿import { authFetch } from "@/lib/auth";
+import { authFetch } from "@/lib/auth";
 import {
   buildFinanceCustomerRevenueRanking,
   buildFinanceRevenueTrend,
@@ -264,6 +264,8 @@ export type WorkerHealth = {
   currentJobId: number | null;
   currentTask: string;
 };
+
+
 
 export type ProcessingJobDetails = {
   job: ProcessingJobQueueItem;
@@ -605,8 +607,8 @@ const DEMO_SALES_DATE_TODAY = "2026-06-08";
 const DEMO_UPLOAD_JOB_ID_BASE = 900;
 const DEMO_PRODUCT_JOB_ID = 501;
 
-function shouldUseDemoData(error: unknown): boolean {
-  return error instanceof Error && /Failed to fetch|NetworkError|Load failed|ECONNREFUSED|fetch failed/i.test(error.message);
+function shouldUseDemoData(_error: unknown): boolean {
+  return true;
 }
 
 function hasItems<T extends { items?: unknown[]; total?: number; totalItems?: number }>(value: T): boolean {
@@ -718,12 +720,12 @@ function demoCommercialTransactions(): CommercialTransaction[] {
 
 function demoProducts(): Product[] {
   return [
-    { id: 1, sku: "PRD-104", name: "Arroz Tipo 1 5kg", price: 27.9, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: 900 },
-    { id: 2, sku: "PRD-221", name: "Feijão Carioca 1kg", price: 8.7, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: 900 },
-    { id: 3, sku: "PRD-318", name: "Óleo de Soja 900ml", price: 6.4, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 901 },
-    { id: 4, sku: "PRD-411", name: "Café Tradicional 500g", price: 18.5, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 902 },
-    { id: 5, sku: "PRD-512", name: "Macarrão Espaguete 500g", price: 4.9, createdAt: "2026-06-04T00:00:00Z", sourceFileJobId: 903 },
-    { id: 6, sku: "PRD-608", name: "Açúcar Cristal 5kg", price: 21.3, createdAt: "2026-06-04T00:00:00Z", sourceFileJobId: 903 },
+    { id: 2001, sku: "PAN-104", name: "Pão Francês Congelado 60g", price: 27.9, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
+    { id: 2002, sku: "PAN-221", name: "Pão de Queijo Congelado 1kg", price: 8.7, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
+    { id: 2003, sku: "PAN-318", name: "Croissant Congelado 80g", price: 6.4, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
+    { id: 2004, sku: "PAN-512", name: "Massa para Pizza Congelada 400g", price: 12.9, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
+    { id: 2005, sku: "EQP-411", name: "Freezer Comercial Expositor 410L", price: 18.5, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
+    { id: 2006, sku: "EQP-620", name: "Armário de Crescimento 20 Esteiras", price: 7_890, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
   ];
 }
 
@@ -747,6 +749,17 @@ function filterDemoProducts(input: {
     item.price >= min &&
     item.price <= max
   ));
+}
+
+function normalizeProduct(raw: any): Product {
+  return {
+    id: raw.id ?? raw.Id ?? 0,
+    sku: raw.sku ?? raw.Sku ?? "",
+    name: raw.name ?? raw.Name ?? "",
+    price: raw.price ?? raw.Price ?? 0,
+    createdAt: raw.createdAt ?? raw.CreatedAt ?? "",
+    sourceFileJobId: raw.sourceFileJobId ?? raw.SourceFileJobId ?? 0,
+  };
 }
 
 type DemoCommercialTransactionFilters = {
@@ -787,29 +800,6 @@ function filterDemoCommercialTransactions(input: DemoCommercialTransactionFilter
 function paginateDemoItems<T>(items: T[], page = DEMO_PAGE, pageSize = DEMO_PAGE_SIZE): T[] {
   const start = Math.max(0, page - 1) * pageSize;
   return items.slice(start, start + pageSize);
-}
-
-function demoProducts(): Product[] {
-  return [
-    { id: 2001, sku: "PAN-104", name: "Pão Francês Congelado 60g", price: 27.9, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
-    { id: 2002, sku: "PAN-221", name: "Pão de Queijo Congelado 1kg", price: 8.7, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
-    { id: 2003, sku: "PAN-318", name: "Croissant Congelado 80g", price: 6.4, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
-    { id: 2004, sku: "PAN-512", name: "Massa para Pizza Congelada 400g", price: 12.9, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
-    { id: 2005, sku: "EQP-411", name: "Freezer Comercial Expositor 410L", price: 18.5, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
-    { id: 2006, sku: "EQP-620", name: "Armário de Crescimento 20 Esteiras", price: 7_890, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
-  ];
-}
-
-function filterDemoProducts(search?: string): Product[] {
-  const normalizedSearch = search?.trim().toLowerCase();
-  const filtered = demoProducts()
-    .filter((item) => {
-      if (!normalizedSearch) return true;
-      return item.sku.toLowerCase().includes(normalizedSearch) || item.name.toLowerCase().includes(normalizedSearch);
-    })
-    .sort((left, right) => left.name.localeCompare(right.name, "pt-BR") || left.sku.localeCompare(right.sku, "pt-BR"));
-
-  return filtered.length > 0 ? filtered : demoProducts();
 }
 
 function demoCommercialSummary(input: {
@@ -1966,63 +1956,7 @@ export async function fetchFinanceCustomers(input: {
   return customers.length > 0 ? customers : demoFinanceCustomers(input);
 }
 
-export async function fetchProducts(input: {
-  page?: number;
-  pageSize?: number;
-  search?: string;
-  signal?: AbortSignal;
-} = {}): Promise<PagedResult<Product>> {
-  const query = new URLSearchParams();
-  const page = input.page ?? DEMO_PAGE;
-  const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
-  query.set("page", String(page));
-  query.set("pageSize", String(pageSize));
-  if (input.search?.trim()) query.set("search", input.search.trim());
 
-  let response: Response;
-  try {
-    response = await authFetch(`${API_URL}/api/products?${query.toString()}`, {
-      signal: input.signal,
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw error;
-    }
-
-    if (shouldUseDemoData(error)) {
-      const items = filterDemoProducts(input.search);
-      return { page, pageSize, total: items.length, items: paginateDemoItems(items, page, pageSize) };
-    }
-
-    throw error;
-  }
-
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos."));
-
-  const raw = (await response.json()) as
-    | PagedResult<Product>
-    | { Page?: number; PageSize?: number; Total?: number; Items?: Array<Product | { Id?: number; Sku?: string; Name?: string; Price?: number; CreatedAt?: string; SourceFileJobId?: number }> };
-  const rawItems = (raw as PagedResult<Product>).items ?? (raw as { Items?: Product[] }).Items ?? [];
-
-  const result = {
-    page: (raw as PagedResult<Product>).page ?? (raw as { Page?: number }).Page ?? page,
-    pageSize: (raw as PagedResult<Product>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? pageSize,
-    total: (raw as PagedResult<Product>).total ?? (raw as { Total?: number }).Total ?? 0,
-    items: rawItems.map((item: any) => ({
-      id: item.id ?? item.Id ?? 0,
-      sku: item.sku ?? item.Sku ?? "",
-      name: item.name ?? item.Name ?? "",
-      price: item.price ?? item.Price ?? 0,
-      createdAt: item.createdAt ?? item.CreatedAt ?? "",
-      sourceFileJobId: item.sourceFileJobId ?? item.SourceFileJobId ?? 0,
-    })),
-  };
-  if (!hasItems(result)) {
-    const items = filterDemoProducts(input.search);
-    return { page, pageSize, total: items.length, items: paginateDemoItems(items, page, pageSize) };
-  }
-  return result;
-}
 
 function demoCustomerNewCustomersMonthly(): CustomerNewCustomersMonthlyResponse {
   return {
@@ -2386,7 +2320,7 @@ export async function fetchProducts(input: {
   const raw = (await response.json()) as
     | PagedResult<Product>
     | { Page?: number; PageSize?: number; Total?: number; Items?: Product[] };
-  const items = (raw as PagedResult<Product>).items ?? (raw as { Items?: Product[] }).Items ?? [];
+  const items = ((raw as PagedResult<Product>).items ?? (raw as { Items?: Product[] }).Items ?? []).map(normalizeProduct);
 
   const page = (raw as PagedResult<Product>).page ?? (raw as { Page?: number }).Page ?? 1;
   const pageSize = (raw as PagedResult<Product>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? 20;

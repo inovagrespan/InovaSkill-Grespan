@@ -570,7 +570,8 @@ public sealed class ProcessingMonitoringController(
     private ActionResult? EnsureAdminAccess()
     {
         var role = User.FindFirstValue(ClaimTypes.Role) ?? User.FindFirstValue("role");
-        if (string.Equals(role, AppUserRoles.Admin, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(role, AppUserRoles.Admin, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(role, AppUserRoles.AdminSystem, StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
@@ -578,7 +579,7 @@ public sealed class ProcessingMonitoringController(
         return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
         {
             Title = "Acesso negado",
-            Detail = "A central de processamentos está disponível apenas para administradores.",
+            Detail = "A central de processamentos está disponível apenas para administradores do sistema.",
             Status = StatusCodes.Status403Forbidden
         });
     }

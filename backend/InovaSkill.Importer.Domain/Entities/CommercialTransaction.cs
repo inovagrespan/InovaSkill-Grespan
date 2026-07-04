@@ -7,6 +7,9 @@ public sealed class CommercialTransaction
     public DateTime TransactionDate { get; set; }
     public string CustomerCode { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
+    public string SupplierCode { get; set; } = string.Empty;
+    public string SupplierName { get; set; } = string.Empty;
+    public string RouteName { get; set; } = string.Empty;
     public string ProductCode { get; set; } = string.Empty;
     public string ProductDescription { get; set; } = string.Empty;
     public decimal Quantity { get; set; }

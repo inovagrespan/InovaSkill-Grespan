@@ -67,6 +67,28 @@ public sealed class AnalyticsFinanceiroController(ImportDbContext dbContext) : C
             nomesClientes.TryAdd(nome.CustomerCode, nome.CustomerName);
         }
 
+        var fornecedoresTransacoes = await dbContext.CommercialTransactions
+            .AsNoTracking()
+            .Where(x => x.CustomerCode != "" && (x.SupplierName != "" || x.SupplierCode != "" || x.RouteName != "" || x.City != ""))
+            .Select(x => new { x.CustomerCode, x.SupplierCode, x.SupplierName, x.RouteName, x.City, x.TransactionDate })
+            .ToListAsync(ct);
+        var fornecedoresClientes = fornecedoresTransacoes
+            .OrderByDescending(x => x.TransactionDate)
+            .GroupBy(x => x.CustomerCode, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var item = g.First();
+                    return new
+                    {
+                        FornecedorId = item.SupplierCode.Trim(),
+                        FornecedorNome = item.SupplierName.Trim(),
+                        RotaNome = string.IsNullOrWhiteSpace(item.RouteName) ? item.City.Trim() : item.RouteName.Trim()
+                    };
+                },
+                StringComparer.OrdinalIgnoreCase);
+
         if (indicadores.Count == 0)
             return Ok(new { risco = Array.Empty<object>(), crescimento = Array.Empty<object>(), resumo = new { }, alertas = Array.Empty<object>() });
 
@@ -80,6 +102,9 @@ public sealed class AnalyticsFinanceiroController(ImportDbContext dbContext) : C
             {
                 i.ClienteId,
                 clienteNome = nomesClientes.GetValueOrDefault(i.ClienteId) ?? i.ClienteId,
+                fornecedorId = fornecedoresClientes.GetValueOrDefault(i.ClienteId)?.FornecedorId ?? "",
+                fornecedorNome = fornecedoresClientes.GetValueOrDefault(i.ClienteId)?.FornecedorNome ?? "",
+                rotaNome = fornecedoresClientes.GetValueOrDefault(i.ClienteId)?.RotaNome ?? "",
                 i.Faturamento12M,
                 i.Faturamento6M,
                 i.Faturamento3M,
@@ -105,6 +130,9 @@ public sealed class AnalyticsFinanceiroController(ImportDbContext dbContext) : C
             {
                 i.ClienteId,
                 clienteNome = nomesClientes.GetValueOrDefault(i.ClienteId) ?? i.ClienteId,
+                fornecedorId = fornecedoresClientes.GetValueOrDefault(i.ClienteId)?.FornecedorId ?? "",
+                fornecedorNome = fornecedoresClientes.GetValueOrDefault(i.ClienteId)?.FornecedorNome ?? "",
+                rotaNome = fornecedoresClientes.GetValueOrDefault(i.ClienteId)?.RotaNome ?? "",
                 i.Faturamento12M,
                 i.Crescimento12M,
                 i.ScorePotencial,
@@ -142,6 +170,9 @@ public sealed class AnalyticsFinanceiroController(ImportDbContext dbContext) : C
             {
                 i.ClienteId,
                 clienteNome = nomesClientes.GetValueOrDefault(i.ClienteId) ?? i.ClienteId,
+                fornecedorId = fornecedoresClientes.GetValueOrDefault(i.ClienteId)?.FornecedorId ?? "",
+                fornecedorNome = fornecedoresClientes.GetValueOrDefault(i.ClienteId)?.FornecedorNome ?? "",
+                rotaNome = fornecedoresClientes.GetValueOrDefault(i.ClienteId)?.RotaNome ?? "",
                 i.ScorePotencial,
                 i.Crescimento12M,
                 i.Faturamento12M,
@@ -225,7 +256,7 @@ public sealed class AnalyticsFinanceiroController(ImportDbContext dbContext) : C
                     Math.Round(f.Previsao30Dias, 2),
                     Math.Round(f.Previsao30Dias - mediaMensal, 2),
                     f.TendenciaPrevista,
-                    f.ConfiancaModelo);
+                    f.ConfiancaModelo ?? 0);
             }).ToList()
             : BuildProjectionRowsFromIndicadores(indicadores, nomesClientes);
 

@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "../components/AppSidebar";
+import { NotificationCenter } from "../components/NotificationCenter";
 import { isAuthenticated, redirectToLogin } from "../lib/auth";
 import { cn } from "../lib/utils";
 
@@ -16,6 +17,11 @@ const KPI_CARD_BASE_WIDTH_PX = 248;
 const KPI_CARD_MIN_ZOOM_COMPENSATION = 1;
 const KPI_CARD_MAX_ZOOM_COMPENSATION = 3;
 const KPI_CARD_ZOOM_PRECISION = 4;
+const PUBLIC_ROUTES = new Set(["/", "/login"]);
+
+function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.has(pathname);
+}
 
 function NotFoundComponent() {
   return (
@@ -31,7 +37,7 @@ function NotFoundComponent() {
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
           >
-            Voltar ao Dashboard
+            Voltar ao início
           </Link>
         </div>
       </div>
@@ -63,7 +69,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   beforeLoad: ({ location }) => {
-    if (location.pathname === "/login") return;
+    if (isPublicRoute(location.pathname)) return;
 
     if (!isAuthenticated()) {
       throw redirect({
@@ -81,12 +87,12 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const isLoginRoute = pathname === "/login";
-  const [authenticated, setAuthenticated] = useState<boolean>(() => isAuthenticated());
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const isPublicPage = isPublicRoute(pathname);
+  const authenticated = useMemo(() => isAuthenticated(), [pathname]);
   const canRenderPrivateApp = useMemo(
-    () => !isLoginRoute && authenticated,
-    [authenticated, isLoginRoute],
+    () => !isPublicPage && authenticated,
+    [authenticated, isPublicPage],
   );
 
   useEffect(() => {
@@ -124,14 +130,10 @@ function RootComponent() {
   }, []);
 
   useEffect(() => {
-    setAuthenticated(isAuthenticated());
-  }, [pathname]);
-
-  useEffect(() => {
-    if (!isLoginRoute && !authenticated) {
+    if (!isPublicPage && !authenticated) {
       redirectToLogin();
     }
-  }, [authenticated, isLoginRoute]);
+  }, [authenticated, isPublicPage]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("app.sidebar.collapsed");
@@ -144,8 +146,7 @@ function RootComponent() {
       return;
     }
 
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    setTheme(prefersDark ? "dark" : "light");
+    setTheme("dark");
   }, []);
 
   useEffect(() => {
@@ -168,13 +169,15 @@ function RootComponent() {
             onToggleTheme={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
           />
         ) : null}
+        {canRenderPrivateApp ? <NotificationCenter /> : null}
         <main
           className={cn(
             "min-h-screen transition-[margin] duration-200 ease-out motion-reduce:transition-none",
-            canRenderPrivateApp && (sidebarCollapsed ? "md:ml-[72px]" : "md:ml-[264px]"),
+            canRenderPrivateApp && (sidebarCollapsed ? "md:ml-[76px]" : "md:ml-[264px]"),
+            canRenderPrivateApp && "pt-0",
           )}
         >
-          {isLoginRoute || authenticated ? <Outlet /> : null}
+          {isPublicPage || authenticated ? <Outlet /> : null}
         </main>
       </div>
     </QueryClientProvider>

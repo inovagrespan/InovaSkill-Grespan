@@ -22,7 +22,7 @@ function Simulacao() {
   return (
     <div className="page-shell">
       <header className="mb-8">
-        <span className="page-header-kicker">Smart Core / Simulação</span>
+        <span className="page-header-kicker">Simulação</span>
         <h1 className="mt-2 text-4xl font-display tracking-tight">Simulador de Demanda</h1>
       </header>
 

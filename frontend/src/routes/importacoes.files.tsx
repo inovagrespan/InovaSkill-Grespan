@@ -208,7 +208,7 @@ function ImportacoesPage() {
   return (
     <div className="page-shell">
       <header className="animate-soft-enter">
-        <span className="page-header-kicker">Smart Core / Importações</span>
+        <span className="page-header-kicker">Importações</span>
         <h1 className="mt-2 text-4xl font-display tracking-tight">Importação de Arquivos</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           Envie arquivos, acompanhe o processamento em tempo real e revise erros com contexto. O backend identifica o

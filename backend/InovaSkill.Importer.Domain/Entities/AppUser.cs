@@ -13,5 +13,9 @@ public sealed class AppUser
 public static class AppUserRoles
 {
     public const string Admin = "admin";
+    public const string AdminSystem = "admin_system";
     public const string Gestor = "gestor";
+    public const string Vendas = "vendas";
+    public const string Logistica = "logistica";
+    public const string Diretor = "diretor";
 }

@@ -235,6 +235,11 @@
 
 .page-shell {
   @apply p-6 md:p-10 xl:p-12 space-y-6;
+  min-height: 100vh;
+  background:
+    radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47, 0.05), transparent 38%),
+    radial-gradient(800px circle at 100% 100%, rgba(17, 24, 39, 0.04), transparent 36%),
+    transparent;
 }
 
 .processing-page-shell {
@@ -374,6 +379,38 @@
   --sales-chart-select-border: #1d2a44;
 }
 
+.sales-financial-chart {
+  --sales-financial-title: #020617;
+  --sales-financial-muted: #64748b;
+  --sales-financial-axis: #667085;
+  --sales-financial-grid: rgba(100, 116, 139, 0.14);
+  --sales-financial-revenue: #ff3158;
+  --sales-financial-revenue-fill: #ff3158;
+  --sales-financial-expenses: #f59e0b;
+  --sales-financial-expenses-fill: #f97316;
+  --sales-financial-cursor: rgba(255, 63, 95, 0.2);
+  --sales-financial-control: rgba(255, 255, 255, 0.9);
+  --sales-financial-tooltip: #ffffff;
+  --sales-financial-tooltip-border: #d7dde8;
+  --sales-financial-border: rgba(100, 116, 139, 0.2);
+}
+
+.dark .sales-financial-chart {
+  --sales-financial-title: #f8fafc;
+  --sales-financial-muted: #98a4b8;
+  --sales-financial-axis: #98a4b8;
+  --sales-financial-grid: rgba(148, 163, 184, 0.08);
+  --sales-financial-revenue: #ff3158;
+  --sales-financial-revenue-fill: #ff3158;
+  --sales-financial-expenses: #f59e0b;
+  --sales-financial-expenses-fill: #f97316;
+  --sales-financial-cursor: rgba(148, 163, 184, 0.2);
+  --sales-financial-control: rgba(9, 14, 27, 0.86);
+  --sales-financial-tooltip: rgba(10, 15, 28, 0.98);
+  --sales-financial-tooltip-border: rgba(71, 85, 105, 0.5);
+  --sales-financial-border: rgba(71, 85, 105, 0.28);
+}
+
 .delivery-map-marker {
   background: transparent;
   border: 0;
@@ -387,6 +424,167 @@
   border-radius: 999px;
 }
 
+.logistics-map-headquarters {
+  background: transparent;
+  border: 0;
+}
+
+.logistics-map-headquarters span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 5px 16px rgba(37, 99, 235, 0.4);
+}
+
+.logistics-map-customer-icon {
+  background: transparent;
+  border: 0;
+}
+
+.logistics-map-pin {
+  position: relative;
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin: 2px;
+  transform: rotate(-45deg);
+  border: 3px solid #ffffff;
+  border-radius: 50% 50% 50% 0;
+  box-shadow: 0 5px 12px rgba(15, 23, 42, 0.32);
+}
+
+.logistics-map-pin i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.logistics-map-pin--normal {
+  background: #16a34a;
+}
+
+.logistics-map-pin--attention {
+  background: #f59e0b;
+}
+
+.logistics-map-pin--critical {
+  background: #dc2626;
+}
+
+.logistics-map-congestion-icon {
+  background: transparent;
+  border: 0;
+}
+
+.logistics-map-congestion {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 3px solid #fff;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2), 0 5px 14px rgba(15, 23, 42, 0.38);
+}
+
+.logistics-map-congestion--moderate { background: #f59e0b; }
+.logistics-map-congestion--intense { background: #ea580c; }
+.logistics-map-congestion--critical { background: #dc2626; animation: logistics-congestion-pulse 1.8s ease-out infinite; }
+
+@keyframes logistics-congestion-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2), 0 5px 14px rgba(15, 23, 42, 0.38); }
+  50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.05), 0 5px 14px rgba(15, 23, 42, 0.38); }
+}
+
+.logistics-map-popup {
+  display: grid;
+  min-width: 220px;
+  gap: 5px;
+  color: #172033;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.logistics-map-popup strong {
+  font-size: 14px;
+}
+
+.logistics-map-popup hr {
+  width: 100%;
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.logistics-city-chart-card {
+  --logistics-city-chart-bar: #be2434;
+  --logistics-city-chart-grid: rgba(100, 116, 139, 0.16);
+  --logistics-city-chart-axis: #64748b;
+  --logistics-city-chart-text: #172033;
+  --logistics-city-chart-tooltip-bg: rgba(255, 255, 255, 0.98);
+  --logistics-city-chart-tooltip-border: rgba(148, 163, 184, 0.35);
+}
+
+.logistics-modal-chart {
+  --logistics-modal-chart-title: #172033;
+  --logistics-modal-chart-muted: #64748b;
+  --logistics-modal-chart-axis: #64748b;
+  --logistics-modal-chart-grid: rgba(100, 116, 139, 0.16);
+  --logistics-modal-chart-line: #be2434;
+  --logistics-modal-chart-tooltip-bg: rgba(255, 255, 255, 0.98);
+  --logistics-modal-chart-tooltip-border: rgba(148, 163, 184, 0.35);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.dark .logistics-modal-chart {
+  --logistics-modal-chart-title: #f8fafc;
+  --logistics-modal-chart-muted: #98a4b8;
+  --logistics-modal-chart-axis: #98a4b8;
+  --logistics-modal-chart-grid: rgba(148, 163, 184, 0.1);
+  --logistics-modal-chart-line: #e02f45;
+  --logistics-modal-chart-tooltip-bg: rgba(15, 20, 30, 0.98);
+  --logistics-modal-chart-tooltip-border: rgba(71, 85, 105, 0.5);
+  background: linear-gradient(180deg, rgba(17, 22, 32, 0.98), rgba(12, 17, 26, 0.98));
+  border-color: rgba(51, 65, 85, 0.55);
+}
+
+.dark .logistics-city-chart-card {
+  --logistics-city-chart-bar: #e02f45;
+  --logistics-city-chart-grid: rgba(148, 163, 184, 0.11);
+  --logistics-city-chart-axis: #98a4b8;
+  --logistics-city-chart-text: #e5e7eb;
+  --logistics-city-chart-tooltip-bg: rgba(15, 20, 30, 0.98);
+  --logistics-city-chart-tooltip-border: rgba(71, 85, 105, 0.5);
+}
+
+.dark .leaflet-control-zoom a,
+.dark .leaflet-popup-content-wrapper,
+.dark .leaflet-popup-tip {
+  background: #111827;
+  color: #e5e7eb;
+}
+
+.dark .logistics-map-popup {
+  color: #e5e7eb;
+}
+
+.dark .logistics-map-popup hr {
+  border-color: #334155;
+}
+
 .dark .app-background {
   background:
     radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47, 0.16), transparent 36%),
@@ -394,9 +592,19 @@
     var(--background-app);
 }
 
+.dark .page-shell {
+  background:
+    radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47, 0.16), transparent 36%),
+    radial-gradient(800px circle at 100% 100%, rgba(7, 10, 16, 0.45), transparent 35%),
+    transparent;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
+  }
+  html {
+    scroll-behavior: smooth;
   }
   html, body {
     background-color: var(--color-background);

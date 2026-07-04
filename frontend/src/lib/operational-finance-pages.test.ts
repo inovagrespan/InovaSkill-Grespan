@@ -1,85 +1,171 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("operational, finance and reports pages", () => {
-  it("transforma o dashboard em torre de controle com períodos, previsões e cards clicáveis", () => {
-    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/index.tsx"), "utf8");
-    const helper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/control-tower-dashboard.ts"), "utf8");
+  it("usa o dashboard como painel principal das métricas logísticas", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/dashboard.tsx"), "utf8");
 
-    expect(source).toContain("Torre de Controle Inteligente");
-    expect(source).toContain("periodOptions");
-    expect(source).toContain("Hoje");
-    expect(source).toContain("Próximos 7 dias");
-    expect(source).toContain("Próximos 30 dias");
-    expect(source).toContain("sortControlTowerCardsByRisk");
-    expect(source).toContain("statusLabel");
-    expect(source).toContain("href={card.href}");
-    expect(helper).toContain("Produtos com risco de ruptura");
-    expect(helper).toContain("Necessidade de reposição");
-    expect(helper).toContain("Queda de demanda");
-    expect(helper).toContain("Possível excesso de estoque");
-    expect(helper).toContain("Previsão de faturamento");
-    expect(helper).toContain("Atrasos logísticos prováveis");
-    expect(helper).toContain("Riscos financeiros");
-    expect(helper).toContain("/clientes?aba=nota-fiscal&highlight=");
-    expect(helper).toContain("/clientes?aba=impacto&highlight=");
-    expect(helper).toContain("/produtos?highlight=");
-    expect(helper).toContain("/clientes?aba=projecoes&highlight=");
-    expect(helper).toContain("/logistica?highlight=");
+    expect(source).toContain('createFileRoute("/dashboard")');
+    expect(source).toContain("LogisticsDashboardMetrics");
+    expect(source).not.toContain("Torre de Controle Inteligente");
+    expect(source).not.toContain("sortControlTowerCardsByRisk");
   });
 
-  it("exibe métricas de controle e estoque na tela de logística", () => {
-    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.tsx"), "utf8");
+  it("exibe dez KPIs mínimos e navegação progressiva em quatro níveis", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
+    const helper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/logistics-dashboard.ts"), "utf8");
+
+    expect(source).toContain("Dashboard logístico");
+    expect(source).toContain('title: "Taxa de Devoluções"');
+    expect(source).toContain('title: "Taxa de Ocupação"');
+    expect(source).toContain('title: "Tempo de Carregamento"');
+    expect(source).toContain('title: "Tempo de Trânsito"');
+    expect(source).toContain('title: "Custo Logístico Total"');
+    expect(source).toContain('title: "Custo Logístico por Rota"');
+    expect(source).toContain('title: "Acuracidade de Estoque"');
+    expect(source).toContain('title: "Rupturas de Estoque"');
+    expect(source).toContain('title: "Índice de Ocorrências"');
+    expect(source).toContain('title: "Nível de Atendimento / Fill Rate"');
+    expect(source).toContain("formatChange(card.change)");
+    expect(source).toContain("statusPresentation(card.status)");
+    expect(source).not.toContain("{card.area}");
+    expect(source).toContain("relative flex h-full flex-col p-5");
+    expect(source).toContain("min-h-11 pr-12");
+    expect(source).toContain("flex min-h-10 min-w-0 items-center text-balance");
+    expect(source).toContain("absolute right-5 top-5");
+    expect(source).not.toContain(">Investigar <");
+    expect(source).toContain("DialogContent");
+    expect(source).toContain("max-w-4xl");
+    expect(source).toContain("Nível 2 · Entender o problema");
+    expect(source).toContain("O que aconteceu");
+    expect(source).toContain("Por que está neste status");
+    expect(source).toContain("Principais fatores que impactaram o resultado");
+    expect(source.match(/<DialogContent/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(source).not.toContain("SheetContent");
+    expect(source).toContain("Nível 3 · Investigação");
+    expect(source).toContain("Evidências relacionadas ao problema");
+    expect(source).toContain("Nível 4 · Tomada de decisão");
+    expect(source).toContain("Ação recomendada");
+    expect(source).toContain("buildContextualLogisticsRecommendation");
+    expect(source).toContain("<MetricHistoryChart history={metricHistory} periodDays={periodDays}");
+    expect(source).toContain("Hoje, por horário");
+    expect(source).toContain("Linha temporal: {timelineLabel}");
+    expect(source).toContain("logisticsMetricTrendGradient");
+    expect(source).toContain("Evolução do indicador");
+    expect(source).toContain("buildDemoLogisticsMetricHistory");
+    expect(source).toContain("pães congelados e equipamentos de panificação");
+    expect(source).toContain("Movimentação de equipamentos alugados");
+    expect(source).not.toContain("TabsList");
+    expect(source).not.toContain('to="/logistica/mapa"');
+    expect(source).not.toContain('to="/logistica/rotas"');
+    expect(source).not.toContain("Clientes, rotas e trânsito");
+    expect(source).not.toContain("Rotas com mais atrasos por congestionamento");
+    expect(source).toContain("Base demonstrativa");
+    expect(helper).toContain("calculateLogisticsKpis");
+    expect(helper).toContain("filterLogisticsDashboardSource");
+    expect(helper).toContain("selectLatestInventoryBySku");
+    expect(helper).toContain("compareLogisticsPeriods");
+    expect(helper).toContain("buildLogisticsForecast");
+  });
+
+  it("move o quadro de rotas para a pagina dedicada de rotas", () => {
+    const route = fs.readFileSync(path.resolve(process.cwd(), "src/routes/rotas.tsx"), "utf8");
+    const board = fs.readFileSync(path.resolve(process.cwd(), "src/components/logistics-routes-board.tsx"), "utf8");
+
+    expect(route).toContain('createFileRoute("/rotas")');
+    expect(route).toContain("<LogisticsRoutesBoard />");
+    expect(route).toContain("Rotas");
+    expect(board).toContain("Clientes, rotas e trânsito");
+    expect(board).toContain("Rotas com mais atrasos por congestionamento");
+    expect(board).toContain("LogisticsRegionMap");
+    expect(board).toContain("buildTrafficDelayRanking");
+  });
+
+  it("cria o mapa principal com as rotas desenhadas", () => {
+    const route = fs.readFileSync(path.resolve(process.cwd(), "src/routes/mapa.tsx"), "utf8");
+
+    expect(route).toContain('createFileRoute("/mapa")');
+    expect(route).toContain("LogisticsRegionMap");
+    expect(route).toContain("demoLogisticsMapCustomers");
+    expect(route).toContain("demoLogisticsMapRoutes");
+    expect(route).toContain("Mapa de rotas");
+  });
+
+  it("compacta valores monetarios de logistica em mil e M nos indicadores", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
+
+    expect(source).toContain('import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";');
+    expect(source).toContain("function formatLogisticsCurrency(value: number): string");
+    expect(source).toContain("value: formatLogisticsCurrency(metrics.totalLogisticsCost)");
+    expect(source).toContain("value: formatLogisticsCurrency(metrics.costPerRoute)");
+    expect(source).toContain("formattedValue: formatMetricHistoryValue(metric, point.value)");
+    expect(source).not.toContain("currencyFormatter.format");
+  });
+
+  it("marca metricas logisticas nao liberadas como em breve sem exibir dados", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
+
+    expect(source).toContain('const LOGISTICS_METRIC_UNDER_DEVELOPMENT = "em breve";');
+    expect(source).toContain('new Set(["occupancy", "stockout"])');
+    expect(source).toContain("resolveExecutiveMetricValue(card.id, card.value)");
+    expect(source).toContain("const released = isReleasedLogisticsMetric(card.id)");
+    expect(source).toContain("onClick={released ? onSelect : undefined}");
+    expect(source).toContain("{released && (");
+    expect(source).toContain('title: "Taxa de Ocupação", value: formatPercent(metrics.occupancyRatePercent)');
+    expect(source).toContain('title: "Rupturas de Estoque", value: `${metrics.stockoutSkuCount} SKUs`');
+  });
+
+  it("constrói causas e evidências específicas para a árvore de investigação logística", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
+    const board = fs.readFileSync(path.resolve(process.cwd(), "src/components/logistics-routes-board.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(source).toContain("Controle e Estoque");
-    expect(source).toContain("Ocupação de caminhão por rota");
-    expect(source).toContain("Ruptura de estoque");
-    expect(source).toContain("routeOccupancy");
-    expect(source).toContain("stockBreaks");
-    expect(source).toContain("react-leaflet");
-    expect(source).toContain("leaflet/dist/leaflet.css");
-    expect(source).toContain("MapContainer");
-    expect(source).toContain("TileLayer");
-    expect(source).toContain("Marker");
-    expect(source).not.toContain("Polyline");
-    expect(source).toContain("CircleMarker");
-    expect(source).toContain("openstreetmap.org");
-    expect(source).toContain("Mapa interativo de entregas");
-    expect(source).toContain("deliveryFilterOptions");
-    expect(source).toContain("Hoje");
-    expect(source).toContain("Próximos 7 dias");
-    expect(source).toContain("Próximos 30 dias");
-    expect(source).toContain("Entregas atrasadas");
-    expect(source).toContain("deliveryMapPoints");
-    expect(source).not.toContain("plannedRoutes");
-    expect(source).not.toContain("corridor");
-    expect(source).toContain("deliveryVolumeRegions");
-    expect(source).toContain("Padaria Avenida Marília");
-    expect(source).toContain("Supermercado Confiança Bauru");
-    expect(source).toContain("Atacado União Ourinhos");
-    expect(source).toContain("Status: {delivery.statusLabel}");
-    expect(source).toContain("Previsão: {delivery.expectedDelivery}");
-    expect(source).toContain("Valor: {formatCurrency(delivery.orderValue)}");
-    expect(source).toContain('status === "delayed"');
-    expect(source).toContain('status === "attention"');
-    expect(source).toContain("#dc2626");
-    expect(source).toContain("#f59e0b");
-    expect(source).toContain("#16a34a");
-    expect(source).toContain("filterDeliveries");
-    expect(source).toContain("filteredRoutes");
-    expect(source).toContain("routeStatusClassName");
-    expect(source).toContain('normalizedStatus === "critico"');
-    expect(source).toContain("text-red-600");
-    expect(source).toContain('normalizedStatus === "no limite"');
-    expect(source).toContain("text-orange-600");
-    expect(source).toContain('normalizedStatus === "saudavel"');
-    expect(source).toContain("text-blue-600");
-    expect(source).toContain('normalizedStatus === "folga"');
-    expect(source).toContain("text-green-600");
-    expect(source).toContain("getModuleHighlightFromLocation");
-    expect(styles).toContain(".delivery-map-marker");
+    expect(source).toContain("buildInvestigationFactors");
+    expect(source).toContain('cause: "customer_returns"');
+    expect(source).toContain('cause: "low_occupancy"');
+    expect(source).toContain('cause: "loading_bottleneck"');
+    expect(source).toContain('cause: "congestion"');
+    expect(source).toContain('cause: "route_cost"');
+    expect(source).toContain('cause: "inventory_divergence"');
+    expect(source).toContain('cause: "demand_forecast"');
+    expect(source).toContain('cause: "sales_spike"');
+    expect(source).toContain('cause: "vehicle_damage"');
+    expect(source).toContain("Motorista");
+    expect(source).toContain("Veículo");
+    expect(source).toContain("Pedido");
+    expect(source).toContain("Filial");
+    expect(source).toContain("recommendationContext");
+    expect(source).toContain("routeOccupancyPresentation");
+    expect(source).toContain("No limite");
+    expect(source).toContain("Saudável");
+    expect(source).toContain("Folga");
+    expect(source).toContain("de ocupação");
+    expect(source).not.toContain("Distribuição regional dos clientes");
+    expect(source).not.toContain("LogisticsRegionMap");
+    expect(source).not.toContain("demoLogisticsMapCustomers");
+    expect(source).toContain("<AreaChart");
+    expect(source).not.toContain("<BarChart ");
+    expect(board).toContain("buildTrafficDelayRanking");
+    expect(board).toContain("demoLogisticsMapRoutes");
+    expect(board).toContain("<LogisticsRegionMap customers={demoLogisticsMapCustomers} routes={demoLogisticsMapRoutes} periodDays={periodDays} compact");
+    expect(board).toContain("grid grid-cols-1 gap-4 xl:grid-cols-2");
+    expect(board).toContain("Rotas com mais atrasos por congestionamento");
+    expect(board).toContain("maxTrafficDelayMinutes");
+    expect(board).toContain("INITIAL_TRAFFIC_DELAY_ROUTE_LIMIT = 4");
+    expect(board).toContain("visibleTrafficDelayRanking");
+    expect(board).toContain("trafficDelayRanking.slice(0, INITIAL_TRAFFIC_DELAY_ROUTE_LIMIT)");
+    expect(board).toContain("Exibir mais {hiddenTrafficDelayRouteCount} rotas");
+    expect(board).toContain("setShowAllTrafficDelayRoutes(true)");
+    expect(board).toContain("trafficSeverityClass(route.severity)");
+    expect(board).toContain("formatLogisticsDuration(route.delayMinutes)");
+    expect(board).toContain("route.congestionCount} registros");
+    expect(styles).toContain(".logistics-map-headquarters");
+    expect(styles).toContain(".logistics-map-popup");
+    expect(styles).toContain(".logistics-city-chart-card");
+    expect(styles).toContain(".dark .logistics-city-chart-card");
+    expect(styles).toContain(".logistics-modal-chart");
+    expect(styles).toContain(".dark .logistics-modal-chart");
   });
 
   it("mantem rota de finanças com filtros, métricas e paginação vindas da API", () => {
@@ -119,14 +205,9 @@ describe("operational, finance and reports pages", () => {
     expect(styles).toContain(".finance-chart-card");
     expect(styles).toContain(".dark .finance-chart-card");
     expect(sidebar).not.toContain('to: "/financas"');
-    expect(sidebar).toContain('label: "Finanças"');
+    expect(sidebar).not.toContain('label: "Finanças"');
   });
 
-<<<<<<< HEAD
-  it("cria aba de produtos para visualizar produtos cadastrados", () => {
-    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/produtos.tsx"), "utf8");
-    const api = fs.readFileSync(path.resolve(process.cwd(), "src/lib/importer-api.ts"), "utf8");
-=======
   it("mescla clientes e finanças com métricas financeiras no topo e lista de clientes abaixo", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
@@ -142,52 +223,36 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("financeCustomerRankingData");
     expect(source).toContain("RevenueAreaChart");
     expect(source).toContain("<CardTitle>Clientes</CardTitle>");
-    expect(source).toContain("Clique em um cliente para abrir a tela de detalhes.");
-    expect(source).toContain("onClick={() => openDetails(item.customerCode)}");
-    expect(sidebar).toContain('to: "/clientes"');
-    expect(sidebar).toContain('label: "Finanças"');
+    expect(source).toContain("onClick={() => openDetails(item.ClienteId ?? item.customerCode ?? item.clienteId)}");
+    expect(sidebar).not.toContain('to: "/clientes"');
+    expect(sidebar).not.toContain('label: "Finanças"');
     expect(sidebar).not.toContain('label: "Clientes"');
     expect(sidebar).not.toContain('to: "/financas"');
   });
 
-  it("cria aba de produtos para consultar produtos cadastrados", () => {
+  it("mantem a pagina de produtos fora da estrutura da sidebar", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/produtos.tsx"), "utf8");
->>>>>>> 63b18f765086c6de4ac2dbaf716dcfa70e776cc1
+    const api = fs.readFileSync(path.resolve(process.cwd(), "src/lib/importer-api.ts"), "utf8");
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
 
     expect(source).toContain('createFileRoute("/produtos")');
     expect(source).toContain("Produtos cadastrados");
-<<<<<<< HEAD
     expect(source).toContain("Buscar por SKU ou nome");
     expect(source).toContain("fetchProducts");
     expect(api).toContain("/api/products");
     expect(api).toContain("demoProducts");
     expect(api).toContain("filterDemoProducts");
-    expect(sidebar).toContain('to: "/produtos"');
-    expect(sidebar).toContain('label: "Produtos"');
-  });
-
-  it("exibe médias semanal e mensal na tela de vendas", () => {
-=======
-    expect(source).toContain("SKU ou descrição do produto");
-    expect(source).toContain("fetchProducts");
-    expect(source).toContain("useDebouncedValue(search, PRODUCT_SEARCH_DEBOUNCE_MS)");
-    expect(source).toContain("PRODUCT_SEARCH_DEBOUNCE_MS = 300");
-    expect(source).toContain("new AbortController()");
-    expect(source).toContain("Nenhum produto encontrado.");
-    expect(source).toContain("Página {page} de {totalPages}");
-    expect(source).toContain("getModuleHighlightFromLocation");
-    expect(source).toContain("Indicador destacado pela Torre de Controle");
-    expect(sidebar).toContain('to: "/produtos"');
-    expect(sidebar).toContain('label: "Produtos"');
-    expect(sidebar).toContain("PackageSearch");
+    expect(sidebar).not.toContain('to: "/produtos"');
+    expect(sidebar).not.toContain('label: "Produtos"');
   });
 
   it("exibe kpis operacionais de nota fiscal na tela de vendas", () => {
->>>>>>> 63b18f765086c6de4ac2dbaf716dcfa70e776cc1
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/vendas.tsx"), "utf8");
+    const salesTower = fs.readFileSync(path.resolve(process.cwd(), "src/components/SalesControlTower.tsx"), "utf8");
     const dashboardHelper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/sales-dashboard.ts"), "utf8");
 
+    expect(source).toContain('createFileRoute("/vendas")({ component: SalesControlTower })');
+    expect(salesTower).toContain("Torre Comercial");
     expect(source).toContain("Notas fiscais");
     expect(source).toContain("Valor das notas");
     expect(source).toContain("Peso movimentado");
@@ -197,8 +262,6 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("AreaChart");
     expect(source).toContain("linearGradient");
     expect(source).toContain("SALES_CHART_CARD_CLASS_NAME");
-    expect(source).toContain("getModuleHighlightFromLocation");
-    expect(source).toContain("Indicador destacado pela Torre de Controle");
     expect(dashboardHelper).toContain("formatSalesTimelineLabel");
     expect(dashboardHelper).toContain("buildSalesTrendData");
     expect(dashboardHelper).toContain("buildSalesRankingData");
@@ -238,14 +301,14 @@ describe("operational, finance and reports pages", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
 
     expect(source).toContain("<TableHead>Cliente</TableHead>");
-    expect(source).toContain("<TableHead>Faturamento</TableHead>");
+    expect(source).toContain("<TableHead className=\"text-right\">Fat. 12M</TableHead>");
     expect(source).toContain("DialogTitle>Detalhes do Cliente");
     expect(source).toContain("loadCustomerDetails");
   });
 
   it("remove a aba de RH da navegação e do dashboard", () => {
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
-    const dashboard = fs.readFileSync(path.resolve(process.cwd(), "src/routes/index.tsx"), "utf8");
+    const dashboard = fs.readFileSync(path.resolve(process.cwd(), "src/routes/dashboard.tsx"), "utf8");
 
     expect(sidebar).not.toContain('to: "/rh"');
     expect(sidebar).not.toContain("RH Atual");
@@ -263,4 +326,3 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("window.print");
   });
 });
-
