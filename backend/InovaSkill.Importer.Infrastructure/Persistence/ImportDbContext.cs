@@ -36,101 +36,99 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<PreProcessorTemplateRule> PreProcessorTemplateRules => Set<PreProcessorTemplateRule>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<DataSource> DataSources => Set<DataSource>();
+    public DbSet<RouteImport> RouteImports => Set<RouteImport>();
+    public DbSet<RouteImportError> RouteImportErrors => Set<RouteImportError>();
+    public DbSet<JobExecution> JobExecutions => Set<JobExecution>();
+    public DbSet<VehicleType> VehicleTypes => Set<VehicleType>();
+    public DbSet<Route> Routes => Set<Route>();
+    public DbSet<RouteEntry> RouteEntries => Set<RouteEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Job>(e =>
+        modelBuilder.Entity<AppUser>(entity =>
         {
-            e.ToTable("Jobs");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Type).HasMaxLength(128).IsRequired();
-            e.Property(x => x.CurrentStep).HasMaxLength(128).IsRequired();
-            e.Property(x => x.CreatedAt).IsRequired();
-            e.Property(x => x.UserId).HasMaxLength(128);
-            e.Property(x => x.PayloadJson).HasColumnType("jsonb").IsRequired();
-            e.Property(x => x.ResultJson).HasColumnType("jsonb");
-            e.Property(x => x.Error).HasMaxLength(4000).IsRequired();
-            e.Property(x => x.LockedBy).HasMaxLength(128).IsRequired();
-            e.HasIndex(x => new { x.Status, x.CreatedAt });
-            e.HasIndex(x => new { x.Type, x.Status, x.CreatedAt });
-            e.HasIndex(x => x.LockedAt);
+            entity.ToTable("app_users");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Role).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.PasswordHash).HasMaxLength(1024).IsRequired();
+            entity.HasIndex(x => x.Name).IsUnique();
+            entity.HasIndex(x => x.Email).IsUnique();
         });
 
-        modelBuilder.Entity<FileJob>(e =>
+        modelBuilder.Entity<DataSource>(entity =>
         {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.FilePath).HasMaxLength(1024).IsRequired();
-            e.Property(x => x.OriginalFileName).HasMaxLength(512).IsRequired();
-            e.Property(x => x.NormalizedFilePath).HasMaxLength(1024).IsRequired();
-            e.Property(x => x.ImportFileTypeCode).HasMaxLength(64);
-            e.Property(x => x.CreatedAt).IsRequired();
-            e.Property(x => x.LastHeartbeatAt).IsRequired();
-            e.Property(x => x.StartedAt);
-            e.Property(x => x.FinishedAt);
-            e.Property(x => x.LockedBy).HasMaxLength(128).IsRequired();
-            e.Property(x => x.LockedAt);
-            e.Property(x => x.CurrentStep).HasMaxLength(128).IsRequired();
-            e.HasIndex(x => new { x.Status, x.CreatedAt });
-            e.HasIndex(x => new { x.Status, x.LastHeartbeatAt });
-            e.HasIndex(x => x.LockedAt);
+            entity.ToTable("data_sources");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Type).HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => x.Code).IsUnique();
         });
 
-        modelBuilder.Entity<ImportError>(e =>
+        modelBuilder.Entity<RouteImport>(entity =>
         {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Stage).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Column).HasMaxLength(128).IsRequired();
-            e.Property(x => x.Message).HasMaxLength(1024).IsRequired();
-            e.Property(x => x.RecordIdentifier).HasMaxLength(256).IsRequired();
-            e.HasIndex(x => x.FileJobId);
-            e.HasIndex(x => new { x.FileJobId, x.Stage });
+            entity.ToTable("imports");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FileName).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.FilePath).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.FailureMessage).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.Status, x.CreatedAt });
+            entity.HasOne(x => x.DataSource).WithMany(x => x.Imports)
+                .HasForeignKey(x => x.DataSourceId).OnDelete(DeleteBehavior.Restrict);
         });
 
-        modelBuilder.Entity<ProcessingStepExecution>(e =>
+        modelBuilder.Entity<RouteImportError>(entity =>
         {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Step).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Status).HasMaxLength(32).IsRequired();
-            e.HasIndex(x => x.FileJobId);
-            e.HasIndex(x => new { x.Step, x.StartedAt });
+            entity.ToTable("import_errors");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SheetName).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Field).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.RawValue).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.Message).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            entity.Property(x => x.CorrectedValue).HasMaxLength(512);
+            entity.HasIndex(x => new { x.ImportId, x.Status });
+            entity.HasIndex(x => new { x.ImportId, x.SheetName, x.RowNumber, x.Field });
+            entity.HasOne(x => x.Import).WithMany(x => x.Errors)
+                .HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<ProcessingJobLog>(e =>
+        modelBuilder.Entity<JobExecution>(entity =>
         {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Stage).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Level).HasMaxLength(32).IsRequired();
-            e.Property(x => x.Message).HasMaxLength(1024).IsRequired();
-            e.HasIndex(x => new { x.FileJobId, x.Timestamp });
+            entity.ToTable("job_executions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.JobType).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.ErrorMessage).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.Status, x.CreatedAt });
+            entity.HasOne(x => x.Import).WithMany(x => x.JobExecutions)
+                .HasForeignKey(x => x.RelatedEntityId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<ProcessingJobEventLog>(e =>
+        modelBuilder.Entity<VehicleType>(entity =>
         {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.EventType).HasMaxLength(128).IsRequired();
-            e.Property(x => x.Status).HasMaxLength(32).IsRequired();
-            e.Property(x => x.ErrorMessage).HasMaxLength(1024).IsRequired();
-            e.HasIndex(x => new { x.FileJobId, x.EventType, x.CorrelationId });
-            e.HasIndex(x => new { x.Status, x.CreatedAt });
+            entity.ToTable("vehicle_types");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.CapacityKg).HasPrecision(12, 2);
+            entity.HasIndex(x => x.Name).IsUnique();
         });
 
-        modelBuilder.Entity<WorkerHeartbeat>(e =>
+        modelBuilder.Entity<Route>(entity =>
         {
-            e.HasKey(x => x.WorkerId);
-            e.Property(x => x.WorkerId).HasMaxLength(128).IsRequired();
-            e.Property(x => x.CurrentTask).HasMaxLength(128).IsRequired();
-            e.HasIndex(x => x.LastSeenAt);
-        });
-
-        modelBuilder.Entity<Customer>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Name).HasMaxLength(256).IsRequired();
-            e.Property(x => x.Email).HasMaxLength(256).IsRequired();
-            e.HasIndex(x => x.CustomerCode).IsUnique();
-            e.HasIndex(x => x.Email);
-            e.HasIndex(x => x.SourceFileJobId);
+            entity.ToTable("routes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Weekday).HasMaxLength(16).IsRequired();
+            entity.HasIndex(x => new { x.ImportId, x.Weekday, x.Name });
+            entity.HasOne(x => x.Import).WithMany(x => x.Routes)
+                .HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.VehicleType).WithMany(x => x.Routes)
+                .HasForeignKey(x => x.VehicleTypeId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Product>(e =>
@@ -525,6 +523,18 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             e.Property(x => x.RelatedEntity).HasMaxLength(128).IsRequired();
             e.HasIndex(x => new { x.UserId, x.Status, x.CreatedAt });
             e.HasIndex(x => new { x.UserId, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<RouteEntry>(entity =>
+        {
+            entity.ToTable("route_entries");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.AveragePerDay).HasPrecision(18, 2);
+            entity.Property(x => x.Note).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.RouteId, x.Sequence });
+            entity.HasOne(x => x.Route).WithMany(x => x.Entries)
+                .HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

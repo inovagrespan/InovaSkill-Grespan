@@ -9,7 +9,7 @@ public sealed class DefaultUserSeeder(ImportDbContext db, PasswordHasher<AppUser
 {
     public static readonly IReadOnlyList<SeedUser> DefaultUsers =
     [
-        new("rh", "rh@local.test", "rh", AppUserRoles.Admin),
+        new("admin", "admin@local.test", "admin", AppUserRoles.Admin),
         new("admin_system", "admin_system@local.test", "admin_system", AppUserRoles.AdminSystem),
         new("vendas", "vendas@local.test", "vendas", AppUserRoles.Vendas),
         new("logistica", "logistica@local.test", "logistica", AppUserRoles.Logistica),
@@ -18,11 +18,6 @@ public sealed class DefaultUserSeeder(ImportDbContext db, PasswordHasher<AppUser
 
     public async Task EnsureDefaultUsersAsync(CancellationToken cancellationToken = default)
     {
-        if (await RenameLegacyAdminUserAsync(cancellationToken))
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-
         foreach (var seed in DefaultUsers)
         {
             var normalizedName = seed.Name.ToLowerInvariant();
@@ -59,28 +54,6 @@ public sealed class DefaultUserSeeder(ImportDbContext db, PasswordHasher<AppUser
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<bool> RenameLegacyAdminUserAsync(CancellationToken cancellationToken)
-    {
-        var rhExists = await db.AppUsers.AnyAsync(x => x.Name.ToLower() == "rh" || x.Email == "rh@local.test", cancellationToken);
-        if (rhExists)
-        {
-            return false;
-        }
-
-        var legacyAdmin = await db.AppUsers.FirstOrDefaultAsync(
-            x => x.Name.ToLower() == "admin" || x.Email == "admin@local.test",
-            cancellationToken);
-        if (legacyAdmin is null)
-        {
-            return false;
-        }
-
-        legacyAdmin.Name = "rh";
-        legacyAdmin.Email = "rh@local.test";
-        legacyAdmin.Role = AppUserRoles.Admin;
-        legacyAdmin.PasswordHash = passwordHasher.HashPassword(legacyAdmin, "rh");
-        return true;
-    }
 }
 
 public sealed record SeedUser(string Name, string Email, string Password, string Role);

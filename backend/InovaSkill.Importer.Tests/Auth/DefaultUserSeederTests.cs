@@ -9,7 +9,7 @@ namespace InovaSkill.Importer.Tests.Auth;
 public sealed class DefaultUserSeederTests
 {
     [Fact]
-    public async Task EnsureDefaultUsersAsync_CreatesAreaManagersDirectorAndRhAdminWithMatchingPasswords()
+    public async Task EnsureDefaultUsersAsync_CreatesUsersExpectedByFrontend()
     {
         await using var db = CreateDbContext();
         var passwordHasher = new PasswordHasher<AppUser>();
@@ -41,28 +41,29 @@ public sealed class DefaultUserSeederTests
 
         await new DefaultUserSeeder(db, passwordHasher).EnsureDefaultUsersAsync();
 
-        Assert.False(await db.AppUsers.AnyAsync(x => x.Name == "admin" || x.Email == "admin@local.test"));
-        AssertSeededUser(db, passwordHasher, "rh", "rh", AppUserRoles.Admin);
+        var user = db.AppUsers.Single(x => x.Name == "diretor");
+        Assert.Equal("diretor@local.test", user.Email);
+        Assert.Equal(AppUserRoles.Diretor, user.Role);
+        Assert.NotEqual(
+            PasswordVerificationResult.Failed,
+            passwordHasher.VerifyHashedPassword(user, user.PasswordHash, "diretor"));
+        Assert.Equal(7, db.AppUsers.Count());
     }
 
-    private static ImportDbContext CreateDbContext()
+    [Fact]
+    public async Task EnsureDefaultUsersAsync_IsIdempotent()
     {
-        return new ImportDbContext(new DbContextOptionsBuilder<ImportDbContext>()
+        await using var db = CreateDbContext();
+        var seeder = new DefaultUserSeeder(db, new PasswordHasher<AppUser>());
+
+        await seeder.EnsureDefaultUsersAsync();
+        await seeder.EnsureDefaultUsersAsync();
+
+        Assert.Equal(7, db.AppUsers.Count());
+    }
+
+    private static ImportDbContext CreateDbContext() =>
+        new(new DbContextOptionsBuilder<ImportDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
-    }
-
-    private static void AssertSeededUser(
-        ImportDbContext db,
-        PasswordHasher<AppUser> passwordHasher,
-        string userName,
-        string password,
-        string expectedRole)
-    {
-        var user = db.AppUsers.Single(x => x.Name == userName);
-
-        Assert.Equal($"{userName}@local.test", user.Email);
-        Assert.Equal(expectedRole, user.Role);
-        Assert.NotEqual(PasswordVerificationResult.Failed, passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password));
-    }
 }

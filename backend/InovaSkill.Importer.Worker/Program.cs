@@ -1,30 +1,26 @@
-using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
-using InovaSkill.Importer.Infrastructure.Persistence;
-using InovaSkill.Importer.Infrastructure.Persistence.Bootstrap;
-using InovaSkill.Importer.Infrastructure.Processing;
-using InovaSkill.Importer.Worker;
+using InovaSkill.Importer.Infrastructure.RouteImports;
+using Wolverine;
+using Wolverine.ErrorHandling;
+using Wolverine.Redis;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddImportInfrastructure(builder.Configuration);
-builder.Services.AddScoped<IFileJobProgressNotifier, RedisFileJobProgressNotifier>();
-builder.Services.AddHostedService<RedisQueueWorkerService>();
-builder.Services.AddHostedService<QueuedJobWorkerService>();
 
-var host = builder.Build();
-
-using (var scope = host.Services.CreateScope())
+var redisConnection = builder.Configuration.GetConnectionString("Redis")
+    ?? throw new InvalidOperationException("ConnectionStrings:Redis não foi configurada.");
+builder.UseWolverine(options =>
 {
-    var db = scope.ServiceProvider.GetRequiredService<ImportDbContext>();
-    try
-    {
-        await db.Database.EnsureCreatedAsync();
-        await DbSchemaBootstrapper.EnsureProgressColumnsAsync(db);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[WARN] DB bootstrap failed in worker startup: {ex.Message}");
-    }
-}
+    options.ServiceName = "InovaSkill.Importer.Worker";
+    options.Discovery.IncludeAssembly(typeof(ProcessImportHandler).Assembly);
+    options.UseRedisTransport(redisConnection).AutoProvision();
+    options.ListenToRedisStream("route-imports", "route-import-workers")
+        .ProcessInline()
+        .StartFromBeginning();
+    options.Policies.OnException<Exception>().ScheduleRetry(
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(30),
+        TimeSpan.FromMinutes(2));
+});
 
-await host.RunAsync();
+await builder.Build().RunAsync();
