@@ -1341,28 +1341,32 @@ function demoCustomerCommercialHealth(customerId: string): CustomerCommercialHea
 async function parseApiError(response: Response, fallbackMessage: string): Promise<string> {
   try {
     const contentType = response.headers.get("content-type") ?? "";
-    if (contentType.includes("application/json")) {
-      const payload = (await response.json()) as {
-        detail?: string;
-        Detail?: string;
-        title?: string;
-        Title?: string;
-        message?: string;
-        Message?: string;
-      };
-
+    if (contentType.includes("json")) {
+      const payload = (await response.json()) as Record<string, unknown>;
       return (
-        payload.detail ??
-        payload.Detail ??
-        payload.message ??
-        payload.Message ??
-        payload.title ??
-        payload.Title ??
+        (payload.detail as string) ??
+        (payload.Detail as string) ??
+        (payload.message as string) ??
+        (payload.Message as string) ??
+        (payload.title as string) ??
+        (payload.Title as string) ??
         fallbackMessage
       );
     }
 
     const text = (await response.text()).trim();
+    if (text.startsWith("{") || text.startsWith("[")) {
+      try {
+        const payload = JSON.parse(text) as Record<string, unknown>;
+        return (
+          (payload.detail as string) ??
+          (payload.Detail as string) ??
+          (payload.title as string) ??
+          (payload.Title as string) ??
+          fallbackMessage
+        );
+      } catch { return fallbackMessage; }
+    }
     return text || fallbackMessage;
   } catch {
     return fallbackMessage;
@@ -2588,8 +2592,7 @@ export async function fetchCustomerAnalyticsSummary(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de clientes."));
-  const summary = (await response.json()) as CustomerAnalyticsSummary;
-  return summary.activeCustomers > 0 || summary.totalRevenue > 0 || summary.totalOrders > 0 ? summary : demoCustomerSummary();
+  return (await response.json()) as CustomerAnalyticsSummary;
 }
 
 export async function fetchCustomerRanking(input: {
@@ -2625,8 +2628,7 @@ export async function fetchCustomerRanking(input: {
     throw error;
   }
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar ranking de clientes."));
-  const ranking = (await response.json()) as CustomerRankingResponse;
-  return ranking.items.length > 0 || ranking.totalItems > 0 ? ranking : demoCustomerRanking(input);
+  return (await response.json()) as CustomerRankingResponse;
 }
 
 export async function fetchCustomerNewCustomersMonthly(input: {

@@ -1,0 +1,4 @@
+﻿api=9164
+worker=9652
+frontend=already-running
+stamp=20260617-205939

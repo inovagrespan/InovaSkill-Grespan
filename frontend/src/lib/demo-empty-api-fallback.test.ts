@@ -27,7 +27,7 @@ describe("demo fallback for empty API responses", () => {
     expect(result.items.map((item) => item.name)).toContain("Pão Francês Congelado 60g");
   });
 
-  it("preenche dashboard financeiro com ranking, série e métricas demo quando a API retorna vazia", async () => {
+  it("preenche dashboard financeiro com ranking, série, tabela e métricas demo quando a API retorna vazia", async () => {
     authFetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
       customers: [],
       summary: { totalRevenue: 0, totalOrders: 0, totalQuantity: 0, averageTicket: 0 },
@@ -46,6 +46,13 @@ describe("demo fallback for empty API responses", () => {
     expect(result.revenueTrend.length).toBeGreaterThan(0);
     expect(result.customerRanking.map((item) => item.customer)).toContain("Padaria São Bento");
     expect(result.items.length).toBeGreaterThan(0);
+    expect(result.items[0]).toEqual(expect.objectContaining({
+      customer: expect.any(String),
+      date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      revenue: expect.any(Number),
+      orders: expect.any(Number),
+      quantity: expect.any(Number),
+    }));
   });
 
   it("preenche resumo de vendas com dados demo quando a API retorna ranking vazio", async () => {

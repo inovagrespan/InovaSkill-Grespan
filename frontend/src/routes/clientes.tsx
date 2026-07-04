@@ -1,6 +1,8 @@
 ﻿import { FormEvent, useEffect, useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FeedbackMessage } from "@/components/ui/feedback-message";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,8 +14,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SkeletonChart, SkeletonMetricCard, SkeletonModalContent, SkeletonTable } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowDownRight, ArrowUpRight, Building2, CalendarClock, DollarSign, MapPin, Receipt, TrendingUp, UserRound, Users } from "lucide-react";
-import { Area, AreaChart, Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { InsightCard } from "@/components/ui/insight-card";
+import { ArrowDownRight, ArrowUpRight, Building2, CalendarClock, DollarSign, MapPin, Receipt, TrendingUp, UserRound, Users, AlertTriangle, Target, BarChart3 } from "lucide-react";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import {
   fetchCustomerAnalyticsSummary,
   fetchFinanceDashboard,
@@ -42,22 +45,48 @@ import {
 } from "@/lib/customer-details";
 import { computeNewCustomersInsights } from "@/lib/customer-new-customers";
 import { buildCustomerPeriodTrend } from "@/lib/customer-period-insights";
+import {
+  fetchCustomerFinanceImpact,
+  formatImpactActionPercent,
+  getImpactCustomerName,
+  sortImpactListByAttention,
+} from "@/lib/customer-finance-impact";
+import { calculateProjectedMarginPercent, calculateSimulatedProjectedCost, fetchCustomerFinanceProjections } from "@/lib/customer-finance-projections";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
+import { authFetch } from "@/lib/auth";
+import { buildServiceUrl } from "@/lib/api-url";
+import { VendasPage } from "@/routes/vendas";
 
 export const Route = createFileRoute("/clientes")({
   validateSearch: (search: Record<string, unknown>) => ({
     cliente: typeof search.cliente === "string" ? search.cliente : undefined,
+    aba: isClientesTab(search.aba) ? search.aba : undefined,
   }),
   component: ClientesPage,
 });
+
+type ClientesTab = "impacto" | "projecoes" | "clientes" | "nota-fiscal";
+
+function isClientesTab(value: unknown): value is ClientesTab {
+  return value === "impacto" || value === "projecoes" || value === "clientes" || value === "nota-fiscal";
+}
 
 const CLIENT_REVENUE_CHART_LIMIT = 8;
 const DEMO_PREVIOUS_REVENUE_FACTOR = 0.92;
 const REVENUE_CHART_STROKE = "#f43f5e";
 const REVENUE_CHART_GRID = "rgba(148, 163, 184, 0.12)";
 const FINANCE_PAGE_SIZE = 20;
+const IMPACT_KPI_CARD_CLASS_NAME = "p-3";
 const HISTORY_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "historical";
 const CURRENT_FILTERS_ANALYSIS_SCOPE: CustomerIndividualAnalysisScope = "current";
+type CustomerDetailsPeriod = "all" | "1m" | "3m" | "12m";
+
+const DETAILS_PERIOD_OPTIONS: Array<{ value: CustomerDetailsPeriod; label: string }> = [
+  { value: "all", label: "Período inteiro" },
+  { value: "12m", label: "Último ano" },
+  { value: "3m", label: "Últimos 3 meses" },
+  { value: "1m", label: "Último mês" },
+];
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value ?? 0);
@@ -174,11 +203,41 @@ function makeDemoFinanceDashboard(): FinanceDashboardResponse {
   };
 }
 
+type PeriodPreset = "today" | "week" | "month" | "quarter" | "year" | "custom";
+
+const periodOptions: Array<{ value: PeriodPreset; label: string }> = [
+  { value: "today", label: "Hoje" },
+  { value: "week", label: "Semana" },
+  { value: "month", label: "Mês" },
+  { value: "quarter", label: "Trimestre" },
+  { value: "year", label: "Ano" },
+  { value: "custom", label: "Personalizado" },
+];
+
 function toInputDate(value: Date): string {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function startOfWeek(date: Date): Date {
+  const copy = new Date(date);
+  const diff = (copy.getDay() + 6) % 7;
+  copy.setDate(copy.getDate() - diff);
+  return copy;
+}
+
+function resolvePeriod(preset: PeriodPreset): { dateFrom: string; dateTo: string } {
+  const now = new Date();
+  if (preset === "today") return { dateFrom: toInputDate(now), dateTo: toInputDate(now) };
+  if (preset === "week") return { dateFrom: toInputDate(startOfWeek(now)), dateTo: toInputDate(now) };
+  if (preset === "quarter") {
+    const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+    return { dateFrom: toInputDate(new Date(now.getFullYear(), quarterStartMonth, 1)), dateTo: toInputDate(now) };
+  }
+  if (preset === "year") return { dateFrom: toInputDate(new Date(now.getFullYear(), 0, 1)), dateTo: toInputDate(now) };
+  return { dateFrom: toInputDate(new Date(now.getFullYear(), now.getMonth(), 1)), dateTo: toInputDate(now) };
 }
 
 function filterDemoCustomers(customerFilter: string): CustomerRankingItem[] {
@@ -202,6 +261,20 @@ function sortDemoCustomers(
   if (sortBy === "weight") return sorted.sort((a, b) => b.weight - a.weight);
   if (sortBy === "ticket") return sorted.sort((a, b) => b.averageTicket - a.averageTicket);
   return sorted.sort((a, b) => b.revenue - a.revenue);
+}
+
+function buildRiskCustomerActionSuggestions(customer: any): string[] {
+  const customerName = getImpactCustomerName(customer);
+  const riskLevel = customer.nivelRisco ?? customer.NivelRisco ?? "risco";
+  const declinePeriod = customer.mesesQueda ?? customer.MesesQueda ?? "período recente";
+  const monthlyImpact = formatCurrency(customer.impactoFinanceiro ?? customer.ImpactoFinanceiro ?? 0);
+
+  return [
+    `Priorizar contato comercial com ${customerName} em até 24 horas para entender a causa da queda.`,
+    `Revisar pedidos, frequência e mix dos últimos meses, pois o cliente está em nível ${riskLevel} e acumula ${declinePeriod}.`,
+    `Montar uma oferta de recuperação com condição comercial controlada, limitada ao impacto estimado de ${monthlyImpact}/mês.`,
+    "Agendar acompanhamento semanal até estabilizar faturamento, frequência de compra e margem.",
+  ];
 }
 
 function RevenueAreaChart({
@@ -230,9 +303,76 @@ function RevenueAreaChart({
   );
 }
 
+function ReceitaVsCustoChart({ data }: { data: Array<{ label: string; receita: number; custo: number }> }) {
+  return (
+    <ChartContainer config={{ receita: { label: "Receita", color: "#059669" }, custo: { label: "Custo", color: "#B91C1C" } }} className="h-[260px] min-h-[260px] w-full text-[11px]">
+      <AreaChart data={data} margin={{ left: 6, right: 12, top: 14, bottom: 8 }}>
+        <defs>
+          <linearGradient id="receita-gradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#059669" stopOpacity={0.45} />
+            <stop offset="92%" stopColor="#059669" stopOpacity={0.04} />
+          </linearGradient>
+          <linearGradient id="custo-gradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#B91C1C" stopOpacity={0.35} />
+            <stop offset="92%" stopColor="#B91C1C" stopOpacity={0.03} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} stroke={REVENUE_CHART_GRID} />
+        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "#8b95a7", fontSize: 11 }} minTickGap={16} />
+        <YAxis width={72} axisLine={false} tickLine={false} tick={{ fill: "#8b95a7", fontSize: 11 }} tickFormatter={(value) => formatKpiCompactCurrency(Number(value))} />
+        <ChartTooltip content={<ChartTooltipContent className="border-slate-700 bg-slate-950 text-slate-100" formatter={(value, name) => [`${formatCurrency(Number(value))}`, name === "custo" ? "Custo" : "Receita"]} />} />
+        <Area dataKey="receita" name="receita" type="monotone" stroke="#059669" strokeWidth={2.6} fill="url(#receita-gradient)" dot={{ r: 3, fill: "#059669", strokeWidth: 0 }} activeDot={{ r: 5, fill: "#059669", stroke: "#fee2e2", strokeWidth: 2 }} />
+        <Area dataKey="custo" name="custo" type="monotone" stroke="#B91C1C" strokeWidth={2} fill="url(#custo-gradient)" strokeDasharray="6 4" dot={false} />
+      </AreaChart>
+    </ChartContainer>
+  );
+}
+
+function RankingBarChart({ data }: { data: Array<{ label: string; value: number }> }) {
+  return (
+    <ChartContainer config={{ value: { label: "Faturamento", color: REVENUE_CHART_STROKE } }} className="h-[260px] min-h-[260px] w-full text-[11px]">
+      <BarChart data={data} margin={{ left: 6, right: 12, top: 14, bottom: 18 }}>
+        <defs>
+          <linearGradient id="ranking-bar-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={REVENUE_CHART_STROKE} stopOpacity={0.92} />
+            <stop offset="100%" stopColor={REVENUE_CHART_STROKE} stopOpacity={0.72} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} stroke={REVENUE_CHART_GRID} strokeDasharray="3 6" />
+        <XAxis
+          dataKey="label"
+          axisLine={false}
+          tickLine={false}
+          tick={{ fill: "#8b95a7", fontSize: 10 }}
+          interval={0}
+          height={50}
+          angle={-20}
+          textAnchor="end"
+          tickFormatter={(value) => String(value).length > 14 ? `${String(value).slice(0, 14)}...` : String(value)}
+        />
+        <YAxis
+          width={72}
+          axisLine={false}
+          tickLine={false}
+          tick={{ fill: "#8b95a7", fontSize: 11 }}
+          tickFormatter={(value) => formatKpiCompactCurrency(Number(value))}
+        />
+        <ChartTooltip content={<ChartTooltipContent className="border-slate-700 bg-slate-950 text-slate-100" formatter={(value) => formatCurrency(Number(value))} />} />
+        <Bar dataKey="value" name="Faturamento" fill="url(#ranking-bar-fill)" radius={[6, 6, 0, 0]} maxBarSize={48} />
+      </BarChart>
+    </ChartContainer>
+  );
+}
+
+function formatProjectionConfidence(value: number | null | undefined): string {
+  if (value == null) return "—";
+  const normalized = value > 1 ? value : value * 100;
+  return `${normalized.toFixed(0)}%`;
+}
+
 function ClientesPage() {
   const navigate = useNavigate({ from: "/clientes" });
-  const { cliente } = Route.useSearch();
+  const { cliente, aba } = Route.useSearch();
   const [summary, setSummary] = useState<CustomerAnalyticsSummary | null>(null);
   const [items, setItems] = useState<CustomerRankingItem[]>([]);
   const [financeDashboard, setFinanceDashboard] = useState<FinanceDashboardResponse | null>(null);
@@ -242,8 +382,18 @@ function ClientesPage() {
   const [sortBy, setSortBy] = useState<"revenue" | "growth" | "drop" | "quantity" | "weight" | "ticket">("revenue");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [activeTab, setActiveTab] = useState<ClientesTab>(aba ?? "impacto");
+  const [impactoData, setImpactoData] = useState<any>(null);
+  const [impactoLoading, setImpactoLoading] = useState(false);
+  const [riskActionCustomer, setRiskActionCustomer] = useState<any | null>(null);
+  const [projecoesData, setProjecoesData] = useState<any>(null);
+  const [projecoesLoading, setProjecoesLoading] = useState(false);
+  const [historicoData, setHistoricoData] = useState<any>(null);
+  const [historicoLoading, setHistoricoLoading] = useState(false);
+  const [historicoSortBy, setHistoricoSortBy] = useState("revenue");
 
-  const [dateFrom, setDateFrom] = useState(() => toInputDate(new Date(Date.now() - 1000 * 60 * 60 * 24 * 30)));
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("quarter");
+  const [dateFrom, setDateFrom] = useState(() => resolvePeriod("quarter").dateFrom);
   const [dateTo, setDateTo] = useState(() => toInputDate(new Date()));
   const [customer, setCustomer] = useState("");
   const [city, setCity] = useState("");
@@ -255,6 +405,7 @@ function ClientesPage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsMessage, setDetailsMessage] = useState("");
+  const [detailsPeriod, setDetailsPeriod] = useState<CustomerDetailsPeriod>("12m");
   const [details, setDetails] = useState<CustomerDetailSummary | null>(null);
   const [timeline, setTimeline] = useState<CustomerTimelineResponse | null>(null);
   const [insights, setInsights] = useState<CustomerInsightsResponse | null>(null);
@@ -287,6 +438,14 @@ function ClientesPage() {
       value: item.revenue,
     })),
     [financeDashboard?.customerRanking],
+  );
+  const projecoesReceitaCustoData = useMemo(
+    () => (financeDashboard?.revenueTrend ?? []).map((item, index) => ({
+      label: item.label,
+      receita: item.revenue,
+      custo: calculateSimulatedProjectedCost(item.revenue, index),
+    })),
+    [financeDashboard?.revenueTrend],
   );
   const timelineChartData = useMemo(
     () => {
@@ -335,57 +494,103 @@ function ClientesPage() {
   async function load(targetPage: number) {
     setLoading(true);
     setMessage("");
-    const demoRanking = sortDemoCustomers(filterDemoCustomers(customer), sortBy);
-    const demoFinanceDashboard = makeDemoFinanceDashboard();
+    const errors: string[] = [];
+
+    const results = await Promise.allSettled([
+      fetchCustomerAnalyticsSummary({ dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
+      fetchCustomerRanking({ page: targetPage, pageSize, sortBy, dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
+      fetchFinanceDashboard({
+        customer,
+        dateFrom,
+        dateTo,
+        allTime: false,
+        revenueGranularity: "monthly",
+        page: 1,
+        pageSize: FINANCE_PAGE_SIZE,
+      }),
+    ]);
+
+    if (results[0].status === "fulfilled") {
+      setSummary(results[0].value);
+    } else {
+      errors.push(`Resumo: ${(results[0].reason as Error)?.message ?? "erro desconhecido"}`);
+    }
+
+    if (results[1].status === "fulfilled") {
+      const ranking = results[1].value;
+      setItems(ranking.items);
+      setPage(ranking.page);
+      setTotalItems(ranking.totalItems);
+    } else {
+      errors.push(`Ranking: ${(results[1].reason as Error)?.message ?? "erro desconhecido"}`);
+    }
+
+    if (results[2].status === "fulfilled") {
+      setFinanceDashboard(results[2].value);
+    } else {
+      errors.push(`Dashboard Financeiro: ${(results[2].reason as Error)?.message ?? "erro desconhecido"}`);
+    }
+
+    if (errors.length > 0) {
+      setMessage("Alguns blocos não carregaram: " + errors.join("; "));
+    }
+
+    setLoading(false);
+  }
+
+  async function loadImpacto() {
+    setImpactoLoading(true);
     try {
-      const [summaryData, rankingData, financeData] = await Promise.all([
-        fetchCustomerAnalyticsSummary({ dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
-        fetchCustomerRanking({ page: targetPage, pageSize, sortBy, dateFrom, dateTo, customer, city, productGroup, productCode, transactionType }),
-        fetchFinanceDashboard({
-          customer,
-          dateFrom,
-          dateTo,
-          revenueGranularity: "monthly",
-          page: 1,
-          pageSize: FINANCE_PAGE_SIZE,
-        }),
-      ]);
-      if (summaryData.activeCustomers === 0 || rankingData.items.length === 0) {
-        setSummary(DEMO_CUSTOMER_SUMMARY);
-        setItems(demoRanking);
-        setFinanceDashboard(demoFinanceDashboard);
-        setPage(targetPage);
-        setTotalItems(demoRanking.length);
-        return;
-      }
-      setSummary(summaryData);
-      setItems(rankingData.items);
-      setFinanceDashboard(financeData.summary.totalRevenue === 0 ? demoFinanceDashboard : financeData);
-      setPage(rankingData.page);
-      setTotalItems(rankingData.totalItems);
-    } catch (error) {
-      setSummary(DEMO_CUSTOMER_SUMMARY);
-      setItems(demoRanking);
-      setFinanceDashboard(demoFinanceDashboard);
-      setPage(targetPage);
-      setTotalItems(demoRanking.length);
-      setMessage("");
+      setImpactoData(await fetchCustomerFinanceImpact());
+    } catch {
+      setImpactoData(null);
     } finally {
-      setLoading(false);
+      setImpactoLoading(false);
     }
   }
 
-  async function loadCustomerDetails(customerId: string, targetHistoryPage = 1, scope = analysisScope, metric = timelineMetric) {
+  async function loadProjecoes() {
+    setProjecoesLoading(true);
+    try {
+      setProjecoesData(await fetchCustomerFinanceProjections());
+    } catch {
+      setProjecoesData(null);
+    } finally {
+      setProjecoesLoading(false);
+    }
+  }
+
+  async function loadHistorico(pagina = 1, sort = "revenue") {
+    setHistoricoLoading(true);
+    try {
+      const base = buildServiceUrl("api/analytics-financeiro");
+      const r = await authFetch(`${base}/historico?pagina=${pagina}&tamanho=20&sortBy=${sort}`);
+      if (r.ok) setHistoricoData(await r.json());
+    } catch { /* */ } finally { setHistoricoLoading(false); }
+  }
+
+  function resolveDetailsDateRange(period: CustomerDetailsPeriod): { dateFrom?: string; dateTo?: string } {
+    const hoje = new Date();
+    const dataFim = toInputDate(hoje);
+    if (period === "all") return { dateTo: dataFim };
+    const dias = period === "1m" ? 30 : period === "3m" ? 90 : 365;
+    const inicio = new Date(hoje);
+    inicio.setDate(inicio.getDate() - dias);
+    return { dateFrom: toInputDate(inicio), dateTo: dataFim };
+  }
+
+  async function loadCustomerDetails(customerId: string, targetHistoryPage = 1, scope = analysisScope, metric = timelineMetric, period = detailsPeriod) {
     setDetailsLoading(true);
     setDetailsMessage("");
+    const dateRange = resolveDetailsDateRange(period);
     try {
       const [analysisData, insightsData] = await Promise.allSettled([
         fetchCustomerIndividualAnalysis({
           customerId,
           scope,
           metric,
-          dateFrom: scope === CURRENT_FILTERS_ANALYSIS_SCOPE ? dateFrom : undefined,
-          dateTo: scope === CURRENT_FILTERS_ANALYSIS_SCOPE ? dateTo : undefined,
+          dateFrom: dateRange.dateFrom,
+          dateTo: dateRange.dateTo,
         }),
         fetchCustomerInsights({ customerId, movingAverageWindowMonths: 3 }),
       ]);
@@ -429,17 +634,22 @@ function ClientesPage() {
 
   useEffect(() => {
     void load(1);
-  }, [sortBy]);
+    if (activeTab === "impacto" && !impactoData && !impactoLoading) void loadImpacto();
+    if (activeTab === "projecoes" && !projecoesData && !projecoesLoading) void loadProjecoes();
+  }, [sortBy, dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (!aba || aba === activeTab) return;
+    setActiveTab(aba);
+    if (aba === "impacto" && !impactoData && !impactoLoading) void loadImpacto();
+    if (aba === "projecoes" && !projecoesData && !projecoesLoading) void loadProjecoes();
+    if (aba === "clientes" && !historicoData && !historicoLoading) void loadHistorico(1, historicoSortBy);
+  }, [aba]);
 
   useEffect(() => {
     if (!selectedCustomerId || !detailsOpen) return;
-    void loadCustomerDetails(selectedCustomerId, 1, analysisScope, timelineMetric);
-  }, [analysisScope, timelineMetric]);
-
-  useEffect(() => {
-    if (!selectedCustomerId || !detailsOpen || analysisScope !== CURRENT_FILTERS_ANALYSIS_SCOPE) return;
-    void loadCustomerDetails(selectedCustomerId, 1, analysisScope, timelineMetric);
-  }, [analysisScope, dateFrom, dateTo, selectedCustomerId, detailsOpen, timelineMetric]);
+    void loadCustomerDetails(selectedCustomerId, 1, analysisScope, timelineMetric, detailsPeriod);
+  }, [analysisScope, timelineMetric, detailsPeriod]);
 
   useEffect(() => {
     if (!detailsOpen && !newCustomersOpen) return;
@@ -462,6 +672,14 @@ function ClientesPage() {
     setDetailsOpen(true);
     void loadCustomerDetails(cliente, 1, analysisScope);
   }, [cliente]);
+
+  function applyPeriod(preset: PeriodPreset) {
+    setPeriodPreset(preset);
+    if (preset === "custom") return;
+    const next = resolvePeriod(preset);
+    setDateFrom(next.dateFrom);
+    setDateTo(next.dateTo);
+  }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -517,70 +735,341 @@ function ClientesPage() {
     <div className="page-shell">
       <header className="animate-soft-enter">
         <span className="page-header-kicker">Smart Core / Clientes</span>
-        <h1 className="mt-2 text-4xl font-display tracking-tight">Análise Financeira de Clientes</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Visão detalhada do comportamento de compra por cliente.</p>
+        <h1 className="mt-2 text-3xl font-display font-semibold tracking-tight">Análise Financeira de Clientes</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Painel executivo com impacto, projeções e histórico detalhado.</p>
       </header>
 
-      {message && (
-        <Alert variant="destructive" className="animate-soft-enter">
-          <AlertDescription>{message}</AlertDescription>
-        </Alert>
+      <FeedbackMessage message={message} type="error" onDismiss={() => setMessage("")} />
+
+      <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1 animate-soft-enter">
+        {(["impacto", "projecoes", "clientes", "nota-fiscal"] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => {
+              setActiveTab(tab);
+              void navigate({
+                to: "/clientes",
+                search: (prev) => ({ ...prev, aba: tab }),
+                replace: true,
+              });
+              if (tab === "impacto" && !impactoData && !impactoLoading) void loadImpacto();
+              if (tab === "projecoes" && !projecoesData && !projecoesLoading) void loadProjecoes();
+              if (tab === "clientes" && !historicoData && !historicoLoading) void loadHistorico(1, historicoSortBy);
+            }}
+            className={cn(
+              "px-4 py-2 text-sm font-medium rounded-md transition-all",
+              activeTab === tab ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {tab === "impacto" && "Impacto"}
+            {tab === "projecoes" && "Projeções"}
+            {tab === "clientes" && "Clientes"}
+            {tab === "nota-fiscal" && "Nota Fiscal"}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "impacto" && (
+        <div className="space-y-4 animate-soft-enter">
+          {impactoLoading ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[1,2,3,4].map(i => <SkeletonMetricCard key={i} />)}
+            </div>
+          ) : impactoData ? (
+            <>
+              {/* Resumo Executivo */}
+              <section className="metric-row">
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Maior cliente" value={impactoData.resumo?.maiorClienteNome ?? impactoData.resumo?.maiorCliente ?? "—"} icon={DollarSign} periodLabel={impactoData.resumo?.maiorFaturamento ? formatCurrency(impactoData.resumo.maiorFaturamento) : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Maior crescimento" value={impactoData.resumo?.maiorCrescimentoNome ?? "—"} icon={TrendingUp} periodLabel={impactoData.resumo?.maiorCrescimentoPct ? `+${impactoData.resumo.maiorCrescimentoPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Maior queda" value={impactoData.resumo?.maiorQuedaNome ?? "—"} icon={ArrowDownRight} periodLabel={impactoData.resumo?.maiorQuedaPct ? `${impactoData.resumo.maiorQuedaPct.toFixed(1)}%` : ""} showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Mais consistente" value={impactoData.resumo?.consistenteNome ?? "—"} icon={Target} periodLabel="" showPercentageChange={false} loading={false} />
+                <KpiCard className={IMPACT_KPI_CARD_CLASS_NAME} title="Maior potencial" value={impactoData.resumo?.maiorPotencialNome ?? "—"} icon={Target} periodLabel={impactoData.resumo?.maiorPotencialScore ? `Score ${impactoData.resumo.maiorPotencialScore}` : ""} showPercentageChange={false} loading={false} />
+              </section>
+
+              {/* Alertas */}
+              {impactoData.alertas?.length > 0 && (
+                <section className="space-y-2">
+                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Alertas</h2>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {impactoData.alertas.map((a: any, i: number) => (
+                      <InsightCard key={i} type={a.severidade === "Crítico" ? "alert" : a.severidade === "Alto" ? "alert" : "info"}>
+                        <span className="font-semibold">{a.severidade}</span>: {a.mensagem}
+                      </InsightCard>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Risco e Crescimento lado a lado */}
+              <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3">
+                    <CardTitle className="text-sm font-semibold text-[#B91C1C]">Clientes em Risco</CardTitle>
+                    {impactoData.risco?.length > 0 && (
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <Link to="/clientes-impacto" search={{ tipo: "risco" }}>Ver todos</Link>
+                      </Button>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {impactoData.risco?.length > 0 ? sortImpactListByAttention(impactoData.risco, "risco").slice(0, 6).map((c: any) => (
+                      <div key={c.clienteId ?? c.ClienteId ?? getImpactCustomerName(c)} className="flex items-center justify-between gap-3 text-sm py-1.5 border-b border-border/30 last:border-0">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{getImpactCustomerName(c)}</p>
+                          <p className="text-xs text-muted-foreground">{c.nivelRisco} · {c.mesesQueda}</p>
+                        </div>
+                        <div className="text-right ml-3 shrink-0">
+                          <p className="text-[#B91C1C] font-medium">{formatImpactActionPercent(c, "risco")}</p>
+                          <p className="text-xs text-muted-foreground">{formatCurrency(c.impactoFinanceiro)}/mês</p>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setRiskActionCustomer(c)}>
+                          <AlertTriangle className="size-4 text-red-600" />
+                          Ações
+                        </Button>
+                      </div>
+                    )) : <p className="text-sm text-muted-foreground">Nenhum cliente em risco identificado.</p>}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3">
+                    <CardTitle className="text-sm font-semibold text-[#059669]">Maiores Crescimentos</CardTitle>
+                    {impactoData.crescimento?.length > 0 && (
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <Link to="/clientes-impacto" search={{ tipo: "crescimento" }}>Ver todos</Link>
+                      </Button>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {impactoData.crescimento?.length > 0 ? sortImpactListByAttention(impactoData.crescimento, "crescimento").slice(0, 6).map((c: any) => (
+                      <div key={c.clienteId ?? c.ClienteId ?? getImpactCustomerName(c)} className="flex items-center justify-between text-sm py-1.5 border-b border-border/30 last:border-0">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{getImpactCustomerName(c)}</p>
+                          <p className="text-xs text-muted-foreground">{c.potencialFuturo}</p>
+                        </div>
+                        <div className="text-right ml-3 shrink-0">
+                          <p className="text-[#059669] font-medium">{formatImpactActionPercent(c, "crescimento", true)}</p>
+                          <p className="text-xs text-muted-foreground">{formatCurrency(c.valorGerado)} gerado</p>
+                        </div>
+                      </div>
+                    )) : <p className="text-sm text-muted-foreground">Nenhum cliente com crescimento expressivo.</p>}
+                  </CardContent>
+                </Card>
+              </section>
+
+              {/* Oportunidades */}
+              {impactoData.oportunidades?.length > 0 && (
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3">
+                    <CardTitle className="text-sm font-semibold text-[#059669]">Oportunidades</CardTitle>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <Link to="/clientes-impacto" search={{ tipo: "oportunidades" }}>Ver todos</Link>
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {sortImpactListByAttention(impactoData.oportunidades, "oportunidades").slice(0, 6).map((c: any) => (
+                        <div key={c.clienteId ?? c.ClienteId ?? getImpactCustomerName(c)} className="rounded-lg border p-3 space-y-1">
+                          <p className="font-medium text-sm">{getImpactCustomerName(c)}</p>
+                          <p className="text-xs text-muted-foreground">{c.potencial} · Score {c.scorePotencial}</p>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-[#059669]">{formatImpactActionPercent(c, "oportunidades", true)}</span>
+                            <span>{formatCurrency(c.faturamento12M)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground py-8 text-center">Carregue os dados para ver o painel de impacto.</p>
+          )}
+        </div>
       )}
 
-      <Card className="animate-soft-enter">
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            <div className="space-y-1">
-              <Label>Data inicial</Label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Data final</Label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Cliente</Label>
-              <Input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Código ou nome" />
-            </div>
-            <div className="space-y-1">
-              <Label>Cidade</Label>
-              <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Cidade" />
-            </div>
-            <div className="space-y-1">
-              <Label>Grupo</Label>
-              <Input value={productGroup} onChange={(e) => setProductGroup(e.target.value)} placeholder="Grupo do produto" />
-            </div>
-            <div className="space-y-1">
-              <Label>Produto</Label>
-              <Input value={productCode} onChange={(e) => setProductCode(e.target.value)} placeholder="Código do produto" />
-            </div>
-            <div className="space-y-1">
-              <Label>Tipo de operação</Label>
-              <Input value={transactionType} onChange={(e) => setTransactionType(e.target.value)} placeholder="Tipo" />
-            </div>
-            <div className="flex items-end justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => { setCustomer(""); setCity(""); setProductGroup(""); setProductCode(""); setTransactionType(""); }}>
-                Limpar
-              </Button>
-              <Button type="submit">Filtrar</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      {activeTab === "projecoes" && (
+        <div className="space-y-4 animate-soft-enter">
+          {projecoesLoading ? (
+            <div className="metric-row">{[1,2,3,4].map(i => <SkeletonMetricCard key={i} />)}</div>
+          ) : projecoesData ? (
+            <>
+              <section className="metric-row">
+                <KpiCard
+                  title="Faturamento mensal atual"
+                  value={formatKpiCompactCurrency(projecoesData.projecoes?.faturamentoMensalAtual ?? 0)}
+                  valueTooltip={formatCurrency(projecoesData.projecoes?.faturamentoMensalAtual ?? 0)}
+                  showPercentageChange={false}
+                  icon={DollarSign}
+                  periodLabel="Média dos últimos 12 meses"
+                  loading={false}
+                />
+                <KpiCard
+                  title="Próximo mês"
+                  value={formatKpiCompactCurrency(projecoesData.projecoes?.proximoMes ?? 0)}
+                  valueTooltip={formatCurrency(projecoesData.projecoes?.proximoMes ?? 0)}
+                  showPercentageChange={false}
+                  icon={TrendingUp}
+                  periodLabel="Projeção para os próximos 30 dias"
+                  loading={false}
+                />
+                <KpiCard
+                  title="Próximos 3 meses"
+                  value={formatKpiCompactCurrency(projecoesData.projecoes?.proximos3Meses ?? 0)}
+                  valueTooltip={formatCurrency(projecoesData.projecoes?.proximos3Meses ?? 0)}
+                  showPercentageChange={false}
+                  icon={BarChart3}
+                  periodLabel="Projeção acumulada para 90 dias"
+                  loading={false}
+                />
+                <KpiCard
+                  title="Próximos 12 meses"
+                  value={formatKpiCompactCurrency(projecoesData.projecoes?.proximos12Meses ?? 0)}
+                  valueTooltip={formatCurrency(projecoesData.projecoes?.proximos12Meses ?? 0)}
+                  showPercentageChange={false}
+                  icon={Target}
+                  periodLabel="Projeção acumulada para 360 dias"
+                  loading={false}
+                />
+              </section>
 
-      <section className="metric-row">
-        {loading ? (
-          <>
-            <SkeletonMetricCard />
-            <SkeletonMetricCard />
-            <SkeletonMetricCard />
-            <SkeletonMetricCard />
-          </>
-        ) : (
-          <>
+              <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <Card>
+                  <CardHeader><CardTitle className="text-sm font-semibold">Cenários</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">
+                    {[
+                      { label: "Conservador", margem: projecoesData.cenarioConservador?.margem ?? -15, cor: "#D97706" },
+                      { label: "Realista", margem: projecoesData.cenarioRealista?.margem ?? 0, cor: "#2563EB" },
+                      { label: "Otimista", margem: projecoesData.cenarioOtimista?.margem ?? 15, cor: "#059669" },
+                    ].map(cenario => {
+                      const base = projecoesData.projecoes?.proximos3Meses ?? 0;
+                      const valor = base * (1 + cenario.margem / 100);
+                      return (
+                        <div key={cenario.label} className="flex items-center justify-between text-sm py-2 border-b border-border/30 last:border-0">
+                          <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cenario.cor }} />{cenario.label}</span>
+                          <span className="font-medium tabular-nums">{formatCurrency(valor)}</span>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader><CardTitle className="text-sm font-semibold">Tendências</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">
+                    {projecoesData.tendencias?.map((t: any) => (
+                      <div key={t.label} className="flex items-center justify-between text-sm py-1.5 border-b border-border/30 last:border-0">
+                        <span>{t.label}</span>
+                        <div className="text-right">
+                          <p className="font-medium">{t.total} cliente(s)</p>
+                          {t.faturamento > 0 && <p className="text-xs text-muted-foreground">{formatCurrency(t.faturamento)}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </section>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold">Receita vs Custo</CardTitle>
+                    <span className="text-xs text-muted-foreground">Custo simulado até integração</span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {projecoesReceitaCustoData.length === 0 ? (
+                    <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-slate-800 text-sm text-slate-400">Sem dados de faturamento para o período.</div>
+                  ) : (
+                    <ReceitaVsCustoChart data={projecoesReceitaCustoData} />
+                  )}
+                </CardContent>
+              </Card>
+
+              {projecoesData.evolucaoClientes?.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-semibold">Evolução por cliente</CardTitle>
+                      <span className="text-xs text-muted-foreground">{projecoesData.evolucaoClientes.length} cliente(s) com previsão</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto custom-scrollbar">
+                      <Table className="min-w-[860px]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Cliente</TableHead>
+                            <TableHead className="text-right">Valor atual (3M)</TableHead>
+                            <TableHead className="text-right">Projetado (30d)</TableHead>
+                            <TableHead className="text-right">Custo simulado</TableHead>
+                            <TableHead className="text-right">Margem proj.</TableHead>
+                            <TableHead className="text-right">Diferença</TableHead>
+                            <TableHead>Tendência</TableHead>
+                            <TableHead className="text-right">Confiança</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(projecoesData.evolucaoClientes ?? []).map((evo: any, index: number) => {
+                            const projectedRevenue = evo.valorProjetado ?? 0;
+                            const projectedCost = evo.custoProjetado ?? calculateSimulatedProjectedCost(projectedRevenue, index);
+                            const projectedMargin = evo.margemProjetadaPercentual ?? calculateProjectedMarginPercent(projectedRevenue, projectedCost);
+
+                            return (
+                              <TableRow key={evo.ClienteId ?? evo.clienteId}>
+                                <TableCell className="font-medium">{evo.clienteNome ?? evo.ClienteId ?? evo.clienteId}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatCurrency(evo.valorAtual ?? 0)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatCurrency(projectedRevenue)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatCurrency(projectedCost)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatDecimal(projectedMargin)}%</TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {(evo.diferenca ?? 0) >= 0 ? (
+                                    <span className="text-green-600 font-semibold">+{formatCurrency(evo.diferenca)}</span>
+                                  ) : (
+                                    <span className="text-red-600 font-semibold">{formatCurrency(evo.diferenca)}</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className={cn("w-fit whitespace-nowrap border-0 font-semibold", (evo.tendenciaPrevista ?? evo.TendenciaPrevista ?? "") === "Crescimento" ? "bg-green-600 text-white" : (evo.tendenciaPrevista ?? evo.TendenciaPrevista ?? "") === "Queda" ? "bg-red-600 text-white" : "bg-blue-600 text-white")}>
+                                    {evo.tendenciaPrevista ?? evo.TendenciaPrevista ?? "—"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">{formatProjectionConfidence(evo.confiancaModelo ?? evo.ConfiancaModelo)}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground py-8 text-center">Carregue os dados para ver as projeções.</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === "clientes" && (
+      <div className="space-y-4 animate-soft-enter">
+        <section className="flex flex-wrap gap-2 rounded-xl border border-border/80 bg-surface/95 p-3 shadow-xs">
+          {periodOptions.map((option) => (
+            <Button
+              key={option.value}
+              type="button"
+              size="sm"
+              variant={periodPreset === option.value ? "default" : "outline"}
+              onClick={() => applyPeriod(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </section>
+
+        {!historicoLoading && financeDashboard && (
+          <section className="metric-row">
             <KpiCard
               title="Faturamento total"
               value={formatKpiCompactCurrency(financeMetrics.totalRevenue)}
@@ -588,6 +1077,7 @@ function ClientesPage() {
               showPercentageChange={false}
               icon={DollarSign}
               periodLabel="Métrica financeira consolidada pelos filtros"
+              loading={false}
             />
             <KpiCard
               title="Ticket médio"
@@ -596,6 +1086,7 @@ function ClientesPage() {
               showPercentageChange={false}
               icon={Receipt}
               periodLabel="Faturamento dividido pelos pedidos"
+              loading={false}
             />
             <KpiCard
               title="Pedidos"
@@ -604,6 +1095,7 @@ function ClientesPage() {
               showPercentageChange={false}
               icon={Users}
               periodLabel="Documentos financeiros do período"
+              loading={false}
             />
             <KpiCard
               title="Quantidade"
@@ -612,116 +1104,203 @@ function ClientesPage() {
               showPercentageChange={false}
               icon={TrendingUp}
               periodLabel="Quantidade comprada na base filtrada"
+              loading={false}
             />
-          </>
+          </section>
         )}
-      </section>
+        {!historicoLoading && financeDashboard && (
+          <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <Card className="overflow-hidden border-border bg-surface text-foreground shadow-sm dark:border-[#182033] dark:bg-[#070b14] dark:text-slate-100 dark:shadow-lg">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Evolução da Receita</CardTitle>
+                <p className="text-xs text-muted-foreground">Faturamento financeiro consolidado pelos filtros.</p>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {financeRevenueTrendData.length === 0 ? (
+                  <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-slate-800 text-sm text-slate-400">Sem resultado para gerar gráfico de faturamento.</div>
+                ) : (
+                  <RevenueAreaChart data={financeRevenueTrendData} gradientId="clientes-finance-revenue-gradient" />
+                )}
+              </CardContent>
+            </Card>
 
-      <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <Card className="overflow-hidden border-border bg-surface text-foreground shadow-sm dark:border-[#182033] dark:bg-[#070b14] dark:text-slate-100 dark:shadow-lg">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Evolução da Receita</CardTitle>
-            <p className="text-xs text-muted-foreground">Faturamento financeiro consolidado pelos filtros.</p>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {loading ? (
-              <SkeletonChart className="h-[260px] bg-slate-900/80" />
-            ) : financeRevenueTrendData.length === 0 ? (
-              <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-slate-800 text-sm text-slate-400">Sem resultado para gerar gráfico de faturamento.</div>
-            ) : (
-              <RevenueAreaChart data={financeRevenueTrendData} gradientId="clientes-finance-revenue-gradient" />
-            )}
-          </CardContent>
-        </Card>
+            <Card className="overflow-hidden border-border bg-surface text-foreground shadow-sm dark:border-[#182033] dark:bg-[#070b14] dark:text-slate-100 dark:shadow-lg">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Ranking por empresa</CardTitle>
+                <p className="text-xs text-muted-foreground">Clientes com maior faturamento financeiro no período.</p>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {financeCustomerRankingData.length === 0 ? (
+                  <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-slate-800 text-sm text-slate-400">Sem empresas para o ranking atual.</div>
+                ) : (
+                  <RankingBarChart data={financeCustomerRankingData} />
+                )}
+              </CardContent>
+            </Card>
+          </section>
+        )}
 
-        <Card className="overflow-hidden border-border bg-surface text-foreground shadow-sm dark:border-[#182033] dark:bg-[#070b14] dark:text-slate-100 dark:shadow-lg">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-foreground dark:text-slate-100">Ranking por empresa</CardTitle>
-            <p className="text-xs text-muted-foreground">Clientes com maior faturamento financeiro no período.</p>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {loading ? (
-              <SkeletonChart className="h-[260px] bg-slate-900/80" />
-            ) : financeCustomerRankingData.length === 0 ? (
-              <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-slate-800 text-sm text-slate-400">Sem empresas para o ranking atual.</div>
-            ) : (
-              <RevenueAreaChart data={financeCustomerRankingData} gradientId="clientes-finance-ranking-gradient" />
-            )}
-          </CardContent>
-        </Card>
-      </section>
-
-      <Card className="animate-soft-enter">
-        <CardHeader>
-          <CardTitle>Clientes</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm font-medium">Clique em um cliente para abrir a tela de detalhes.</p>
-            <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}>
-              <option value="revenue">Maior faturamento</option>
-              <option value="growth">Melhor tendência</option>
-              <option value="drop">Pior tendência</option>
-              <option value="quantity">Maior volume</option>
-              <option value="ticket">Maior ticket médio</option>
-            </select>
+        {historicoLoading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[1,2,3,4].map(i => <SkeletonMetricCard key={i} />)}
           </div>
+        ) : historicoData ? (
+          <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Clientes</CardTitle>
+                  <select
+                    className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+                    value={historicoSortBy}
+                    onChange={(e) => {
+                      const newSort = e.target.value;
+                      setHistoricoSortBy(newSort);
+                      void loadHistorico(1, newSort);
+                    }}
+                  >
+                    <option value="revenue">Maior faturamento</option>
+                    <option value="growth">Melhor crescimento</option>
+                    <option value="drop">Pior crescimento</option>
+                    <option value="ticket">Maior ticket médio</option>
+                    <option value="quantity">Maior volume</option>
+                    <option value="score">Maior score potencial</option>
+                  </select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto custom-scrollbar">
+                  <Table className="min-w-[1000px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead className="text-right">Fat. 12M</TableHead>
+                        <TableHead className="text-right">Fat. 6M</TableHead>
+                        <TableHead className="text-right">Fat. 3M</TableHead>
+                        <TableHead className="text-right">Cresc. 12M</TableHead>
+                        <TableHead className="text-right">Ticket médio</TableHead>
+                        <TableHead className="text-right">Freq. compra</TableHead>
+                        <TableHead className="text-right">Score pot.</TableHead>
+                        <TableHead>Tendência</TableHead>
+                        <TableHead>Classif.</TableHead>
+                        <TableHead>Risco</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(historicoData.items ?? []).length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={12} className="py-8 text-center text-muted-foreground">Nenhum indicador encontrado.</TableCell>
+                        </TableRow>
+                      )}
+                      {(historicoData.items ?? []).map((item: any) => (
+                        <TableRow
+                          key={item.ClienteId ?? item.clienteId}
+                          className="cursor-pointer"
+                          onClick={() => openDetails(item.ClienteId ?? item.customerCode ?? item.clienteId)}
+                        >
+                          <TableCell className="text-muted-foreground font-mono text-xs">{item.ClienteId ?? item.clienteId}</TableCell>
+                          <TableCell className="font-medium">{item.ClienteNome ?? item.clienteNome ?? ""}</TableCell>
+                          <TableCell className="text-right tabular-nums" title={formatCurrency(item.Faturamento12M ?? item.faturamento12M ?? 0)}>{formatKpiCompactCurrency(item.Faturamento12M ?? item.faturamento12M ?? 0)}</TableCell>
+                          <TableCell className="text-right tabular-nums" title={formatCurrency(item.Faturamento6M ?? item.faturamento6M ?? 0)}>{formatKpiCompactCurrency(item.Faturamento6M ?? item.faturamento6M ?? 0)}</TableCell>
+                          <TableCell className="text-right tabular-nums" title={formatCurrency(item.Faturamento3M ?? item.faturamento3M ?? 0)}>{formatKpiCompactCurrency(item.Faturamento3M ?? item.faturamento3M ?? 0)}</TableCell>
+                          <TableCell className="text-right tabular-nums" title={(item.Crescimento12M ?? item.crescimento12M) != null ? formatVariationPercent(item.Crescimento12M ?? item.crescimento12M ?? 0) : "—"}>
+                            {(item.Crescimento12M ?? item.crescimento12M) != null ? (
+                              <span className={cn("font-semibold", (item.Crescimento12M ?? item.crescimento12M ?? 0) >= 0 ? "text-green-600" : "text-red-600")}>
+                            {formatVariationPercent(item.Crescimento12M ?? item.crescimento12M ?? 0)}
+                          </span>
+                            ) : "—"}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums" title={formatCurrency(item.TicketMedioGeral ?? item.ticketMedioGeral ?? 0)}>{formatKpiCompactCurrency(item.TicketMedioGeral ?? item.ticketMedioGeral ?? 0)}</TableCell>
+                          <TableCell className="text-right tabular-nums" title={`${formatDecimal(item.FrequenciaCompra ?? item.frequenciaCompra ?? 0)} compras/mês`}>{formatDecimal(item.FrequenciaCompra ?? item.frequenciaCompra ?? 0)}</TableCell>
+                          <TableCell className="text-right tabular-nums" title={`Score ${item.ScorePotencial ?? item.scorePotencial ?? 0}`}>{item.ScorePotencial ?? item.scorePotencial ?? 0}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn("w-fit whitespace-nowrap border-0 font-semibold", (item.Tendencia ?? item.tendencia ?? "") === "Crescimento" ? "bg-green-600 text-white" : (item.Tendencia ?? item.tendencia ?? "") === "Queda" ? "bg-red-600 text-white" : "bg-blue-600 text-white")}>
+                              {item.Tendencia ?? item.tendencia ?? "—"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell><span className="text-sm">{item.Classificacao ?? item.classificacao ?? "—"}</span></TableCell>
+                          <TableCell>
+                            <span className={cn(
+                              "text-sm font-medium",
+                              item.nivelRisco === "Crítico" ? "text-red-600" :
+                              item.nivelRisco === "Alto" ? "text-orange-500" :
+                              item.nivelRisco === "Médio" ? "text-yellow-600" :
+                              "text-green-600"
+                            )}>
+                              {item.nivelRisco ?? "—"}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
 
-          {loading ? (
-            <SkeletonTable rows={8} columns={7} />
-          ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Faturamento</TableHead>
-                <TableHead>Quantidade</TableHead>
-                <TableHead>Peso</TableHead>
-                <TableHead>Pedidos</TableHead>
-                <TableHead>Ticket médio</TableHead>
-                <TableHead>Leitura do período</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {!loading && items.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Sem dados para os filtros selecionados.</TableCell>
-                </TableRow>
-              )}
-              {items.map((item) => (
-                <TableRow key={`${item.customerCode}-${item.customerName}`} className="cursor-pointer" onClick={() => openDetails(item.customerCode)}>
-                  <TableCell>{item.customerName}</TableCell>
-                  <TableCell>{formatCurrency(item.revenue)}</TableCell>
-                  <TableCell>{formatDecimal(item.quantity)}</TableCell>
-                  <TableCell>{formatDecimal(item.weight)}</TableCell>
-                  <TableCell>{item.orders}</TableCell>
-                  <TableCell>{formatCurrency(item.averageTicket)}</TableCell>
-                  <TableCell>
-                    {(() => {
-                      const trend = resolveRankingTrend(item.variationPercent);
-                      return (
-                        <div className="space-y-1">
-                          <Badge variant={trend.badgeVariant} className="w-fit">{trend.label}</Badge>
-                          <p className={`text-xs ${trend.textClassName}`}>
-                            {item.variationPercent == null ? "Sem comparação anterior" : `${formatVariationPercent(item.variationPercent)} vs. período anterior`}
-                          </p>
-                        </div>
-                      );
-                    })()}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          )}
+                <div className="flex items-center justify-end gap-2 mt-4">
+                  <Button
+                    variant="outline" size="sm"
+                    disabled={historicoData.pagina <= 1}
+                    onClick={() => void loadHistorico((historicoData.pagina ?? 1) - 1, historicoSortBy)}
+                  >Anterior</Button>
+                  <span className="text-xs text-muted-foreground">
+                    Página {historicoData.pagina ?? 1} de {Math.max(1, Math.ceil((historicoData.total ?? 0) / (historicoData.tamanho ?? 20)))}
+                  </span>
+                  <Button
+                    variant="outline" size="sm"
+                    disabled={(historicoData.pagina ?? 1) >= Math.ceil((historicoData.total ?? 0) / (historicoData.tamanho ?? 20))}
+                    onClick={() => void loadHistorico((historicoData.pagina ?? 1) + 1, historicoSortBy)}
+                  >Próxima</Button>
+                </div>
+              </CardContent>
+            </Card>
+        ) : (
+          <p className="text-sm text-muted-foreground py-8 text-center">Carregue os dados para ver o histórico de indicadores.</p>
+        )}
+      </div>
+      )}
 
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => void load(page - 1)}>Anterior</Button>
-            <span className="text-xs text-muted-foreground">Página {page} de {totalPages}</span>
-            <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => void load(page + 1)}>Próxima</Button>
-          </div>
-        </CardContent>
-      </Card>
+      {activeTab === "nota-fiscal" && (
+        <div className="animate-soft-enter space-y-4">
+          <VendasPage embedded />
+        </div>
+      )}
+
+      <Dialog open={Boolean(riskActionCustomer)} onOpenChange={(open) => !open && setRiskActionCustomer(null)}>
+        <DialogContent className="custom-scrollbar max-h-[85vh] w-[95vw] max-w-2xl overflow-y-auto p-5 pt-8 pr-10 sm:p-6 sm:pt-9 sm:pr-12">
+          <DialogHeader>
+            <DialogTitle>Sugestões de ações</DialogTitle>
+            <DialogDescription>
+              Plano recomendado para sanar o risco de {riskActionCustomer ? getImpactCustomerName(riskActionCustomer) : "cliente"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {riskActionCustomer ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border/70 bg-muted/25 p-3">
+                <p className="text-sm font-semibold">{getImpactCustomerName(riskActionCustomer)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {riskActionCustomer.nivelRisco ?? riskActionCustomer.NivelRisco ?? "Risco"} · {riskActionCustomer.mesesQueda ?? riskActionCustomer.MesesQueda ?? "período recente"} · {formatCurrency(riskActionCustomer.impactoFinanceiro ?? riskActionCustomer.ImpactoFinanceiro ?? 0)}/mês
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {buildRiskCustomerActionSuggestions(riskActionCustomer).map((suggestion, index) => (
+                  <div key={suggestion} className="flex gap-3 rounded-lg border border-border/70 bg-surface p-3 text-sm">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      {index + 1}
+                    </span>
+                    <p>{suggestion}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end">
+                <Button type="button" onClick={() => setRiskActionCustomer(null)}>Entendi</Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={detailsOpen} onOpenChange={handleDetailsOpenChange}>
         <DialogContent className="custom-scrollbar max-h-[90vh] w-[95vw] max-w-6xl overflow-y-auto border-border/80 bg-surface p-4 pt-6 sm:p-6 sm:pt-7 [&>button]:right-3 [&>button]:top-3 [&>button]:inline-flex [&>button]:h-9 [&>button]:w-9 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-md [&>button]:border [&>button]:border-border/70 [&>button]:bg-surface [&>button]:opacity-100 [&>button_svg]:h-4.5 [&>button_svg]:w-4.5 sm:[&>button]:right-4 sm:[&>button]:top-4">
@@ -792,29 +1371,27 @@ function ClientesPage() {
               <section className="space-y-3">
                 <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4">
                   <div className="space-y-1">
-                    <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Escopo da análise</h4>
+                    <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Período da análise</h4>
                     <p className="text-sm text-muted-foreground">
-                      {analysisScope === HISTORY_ANALYSIS_SCOPE
-                        ? "Histórico do cliente nos últimos 12 meses, ignorando os demais filtros operacionais."
-                        : "Mesmo recorte aplicado hoje na tela principal."}
+                      {detailsPeriod === "all" ? "Todo o histórico disponível do cliente." :
+                       detailsPeriod === "12m" ? "Últimos 12 meses de compras." :
+                       detailsPeriod === "3m" ? "Últimos 3 meses de compras." :
+                       "Últimos 30 dias de compras."}
                     </p>
                   </div>
-                  <RadioGroup value={analysisScope} onValueChange={(value) => setAnalysisScope(value as CustomerIndividualAnalysisScope)} className="gap-3">
-                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/70 p-3">
-                      <RadioGroupItem value={HISTORY_ANALYSIS_SCOPE} id="analysis-scope-history" className="mt-0.5" />
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">Histórico do cliente</p>
-                        <p className="text-xs text-muted-foreground">Cliente + últimos 12 meses, com agrupamento automático.</p>
-                      </div>
-                    </label>
-                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/70 p-3">
-                      <RadioGroupItem value={CURRENT_FILTERS_ANALYSIS_SCOPE} id="analysis-scope-current" className="mt-0.5" />
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">Respeitar filtros atuais</p>
-                        <p className="text-xs text-muted-foreground">Mantém o recorte operacional atual da página.</p>
-                      </div>
-                    </label>
-                  </RadioGroup>
+                  <div className="flex flex-wrap gap-2">
+                    {DETAILS_PERIOD_OPTIONS.map(opt => (
+                      <Button
+                        key={opt.value}
+                        type="button"
+                        size="sm"
+                        variant={detailsPeriod === opt.value ? "default" : "outline"}
+                        onClick={() => setDetailsPeriod(opt.value)}
+                      >
+                        {opt.label}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 px-0.5">
@@ -825,7 +1402,6 @@ function ClientesPage() {
                   <KpiCard className="border-primary/25 bg-gradient-to-b from-surface to-muted/35" title="Faturamento total" value={formatKpiCompactCurrency(details.totalRevenue)} valueTooltip={formatCurrency(details.totalRevenue)} showPercentageChange={false} icon={DollarSign} periodLabel={analysisScope === HISTORY_ANALYSIS_SCOPE ? "Faturamento acumulado nos últimos 12 meses" : "Faturamento acumulado no período selecionado"} />
                   <KpiCard className="border-primary/20 bg-gradient-to-b from-surface to-muted/30" title="Ticket médio" value={formatNullableCurrency(details.averageTicket, formatKpiCompactCurrency)} valueTooltip={formatNullableCurrencyTooltip(details.averageTicket, formatCurrency)} showPercentageChange={false} icon={Receipt} periodLabel="Faturamento total dividido pelo total de pedidos" />
                   <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Média mensal" value={formatNullableCurrency(details.averageRevenueMonthly, formatKpiCompactCurrency)} valueTooltip={formatNullableCurrencyTooltip(details.averageRevenueMonthly, formatCurrency)} showPercentageChange={false} icon={CalendarClock} periodLabel="Média das receitas por meses com compra no período" />
-                  <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Média semanal" value={formatNullableCurrency(details.averageRevenueWeekly, formatKpiCompactCurrency)} valueTooltip={formatNullableCurrencyTooltip(details.averageRevenueWeekly, formatCurrency)} showPercentageChange={false} icon={CalendarClock} periodLabel="Média das receitas por semanas com compra no período" />
                 </div>
               </section>
 
@@ -835,9 +1411,9 @@ function ClientesPage() {
                   <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Indicadores operacionais</h4>
                 </div>
                 <div className="metric-row">
-                  <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Quantidade total" value={formatKpiCompactNumber(details.totalQuantity)} valueTooltip={formatDecimal(details.totalQuantity)} showPercentageChange={false} icon={TrendingUp} periodLabel="Soma das quantidades no período filtrado" />
-                  <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Peso total" value={formatKpiCompactNumber(details.totalWeight)} valueTooltip={formatDecimal(details.totalWeight)} showPercentageChange={false} icon={TrendingUp} periodLabel="Peso acumulado das compras no período" />
-                  <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Total de pedidos" value={formatKpiCompactNumber(details.totalOrders)} valueTooltip={String(details.totalOrders)} showPercentageChange={false} icon={UserRound} periodLabel="Pedidos distintos por documento no período" />
+                  <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Quantidade total" value={`${formatKpiCompactNumber(details.totalQuantity)}`} valueTooltip={`${formatDecimal(details.totalQuantity)} unidades`} showPercentageChange={false} icon={TrendingUp} periodLabel="Soma das quantidades no período filtrado" />
+                  <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Peso total" value={`${formatKpiCompactNumber(details.totalWeight)} kg`} valueTooltip={`${formatDecimal(details.totalWeight)} kg`} showPercentageChange={false} icon={TrendingUp} periodLabel="Peso acumulado das compras no período" />
+                  <KpiCard className="border-border/80 bg-gradient-to-b from-surface to-muted/25" title="Total de pedidos" value={formatKpiCompactNumber(details.totalOrders)} valueTooltip={`${String(details.totalOrders)} pedidos`} showPercentageChange={false} icon={UserRound} periodLabel="Pedidos distintos por documento no período" />
                   <KpiCard className="border-primary/20 bg-gradient-to-b from-surface to-muted/30" title="Frequência média" value={formatPurchaseFrequency(details.averageDaysBetweenPurchases).value} valueTooltip={formatPurchaseFrequency(details.averageDaysBetweenPurchases).tooltip} showPercentageChange={false} icon={CalendarClock} periodLabel={`Compra em média a cada ${formatPurchaseFrequency(details.averageDaysBetweenPurchases).value}`} />
                 </div>
               </section>
@@ -910,35 +1486,26 @@ function ClientesPage() {
                           icon={ArrowUpRight}
                           periodLabel={`Média das oscilações entre um ${describeTimelineGranularity(timeline.granularity)} e o seguinte.`}
                         />
-                        <KpiCard
-                          className="border-border/80 bg-gradient-to-b from-surface to-muted/25"
-                          title="Primeiro vs último ponto"
-                          value={formatVariationPercent(periodTrendSummary.totalChangePercent)}
-                          valueTooltip={
-                            periodTrendSummary.totalChangePercent == null
-                              ? "Sem base para comparar início e fim do período"
-                              : formatVariationPercent(periodTrendSummary.totalChangePercent)
-                          }
-                          showPercentageChange={false}
-                          icon={ArrowDownRight}
-                          periodLabel="Leitura direta da mudança entre o começo e o fim do período exibido."
-                        />
                       </div>
                       <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
                         {analysisNarrative}
                       </div>
                     </div>
                   )}
-                  <ChartContainer config={{ value: { label: "Histórico", color: "var(--primary)" }, forecast: { label: "Previsão", color: "hsl(var(--chart-4))" } }} className="h-[320px] min-h-[320px] w-full pb-1 sm:h-[340px] sm:min-h-[340px]">
-                    <LineChart data={timelineChartData} margin={{ left: 8, right: 12, top: 10, bottom: 20 }}>
-                      <CartesianGrid vertical={false} />
-                      <XAxis dataKey="periodStart" tickFormatter={(value) => formatMonthYear(String(value))} minTickGap={24} />
-                      <YAxis width={86} tickFormatter={(value) => formatTimelineMetricValue(Number(value), timelineMetric)} />
-                      <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => new Date(String(value)).toLocaleDateString("pt-BR")} formatter={(value) => formatTimelineMetricValue(Number(value), timelineMetric)} />} />
-                      <Line dataKey="chartValue" name="Histórico" type="monotone" stroke="var(--color-value)" strokeWidth={2.4} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
-                      <Line dataKey="predictedValue" name="Previsão" type="monotone" stroke="var(--color-forecast)" strokeWidth={2.4} dot={{ r: 3 }} strokeDasharray="6 6" connectNulls />
-                    </LineChart>
-                  </ChartContainer>
+                  <div className="overflow-x-auto custom-scrollbar -mx-1 px-1">
+                    <div className="min-w-[500px]">
+                    <ChartContainer config={{ value: { label: "Histórico", color: "var(--primary)" }, forecast: { label: "Previsão", color: "hsl(var(--chart-4))" } }} className="h-[320px] min-h-[320px] w-full pb-1 sm:h-[340px] sm:min-h-[340px]">
+                      <LineChart data={timelineChartData} margin={{ left: 8, right: 12, top: 10, bottom: 20 }}>
+                        <CartesianGrid vertical={false} />
+                        <XAxis dataKey="periodStart" tickFormatter={(value) => formatMonthYear(String(value))} minTickGap={24} />
+                        <YAxis width={86} tickFormatter={(value) => formatTimelineMetricValue(Number(value), timelineMetric)} />
+                        <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => new Date(String(value)).toLocaleDateString("pt-BR")} formatter={(value) => formatTimelineMetricValue(Number(value), timelineMetric)} />} />
+                        <Line dataKey="chartValue" name="Histórico" type="monotone" stroke="var(--color-value)" strokeWidth={2.4} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                        <Line dataKey="predictedValue" name="Previsão" type="monotone" stroke="var(--color-forecast)" strokeWidth={2.4} dot={{ r: 3 }} strokeDasharray="6 6" connectNulls />
+                      </LineChart>
+                    </ChartContainer>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -971,10 +1538,10 @@ function ClientesPage() {
                           <TableCell>{formatDate(item.date)}</TableCell>
                           <TableCell>{item.document}</TableCell>
                           <TableCell>{item.product}</TableCell>
-                          <TableCell>{formatDecimal(item.quantity)}</TableCell>
+                          <TableCell>{formatDecimal(item.quantity)} un</TableCell>
                           <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
                           <TableCell>{formatCurrency(item.total)}</TableCell>
-                          <TableCell>{formatDecimal(item.weight)}</TableCell>
+                          <TableCell>{formatDecimal(item.weight)} kg</TableCell>
                           <TableCell>{item.operationType}</TableCell>
                         </TableRow>
                       ))}

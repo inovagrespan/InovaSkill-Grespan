@@ -3,14 +3,83 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("operational, finance and reports pages", () => {
+  it("transforma o dashboard em torre de controle com períodos, previsões e cards clicáveis", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/index.tsx"), "utf8");
+    const helper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/control-tower-dashboard.ts"), "utf8");
+
+    expect(source).toContain("Torre de Controle Inteligente");
+    expect(source).toContain("periodOptions");
+    expect(source).toContain("Hoje");
+    expect(source).toContain("Próximos 7 dias");
+    expect(source).toContain("Próximos 30 dias");
+    expect(source).toContain("sortControlTowerCardsByRisk");
+    expect(source).toContain("statusLabel");
+    expect(source).toContain("href={card.href}");
+    expect(helper).toContain("Produtos com risco de ruptura");
+    expect(helper).toContain("Necessidade de reposição");
+    expect(helper).toContain("Queda de demanda");
+    expect(helper).toContain("Possível excesso de estoque");
+    expect(helper).toContain("Previsão de faturamento");
+    expect(helper).toContain("Atrasos logísticos prováveis");
+    expect(helper).toContain("Riscos financeiros");
+    expect(helper).toContain("/clientes?aba=nota-fiscal&highlight=");
+    expect(helper).toContain("/clientes?aba=impacto&highlight=");
+    expect(helper).toContain("/produtos?highlight=");
+    expect(helper).toContain("/clientes?aba=projecoes&highlight=");
+    expect(helper).toContain("/logistica?highlight=");
+  });
+
   it("exibe métricas de controle e estoque na tela de logística", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.tsx"), "utf8");
+    const styles = fs.readFileSync(path.resolve(process.cwd(), "src/styles.css"), "utf8");
 
     expect(source).toContain("Controle e Estoque");
     expect(source).toContain("Ocupação de caminhão por rota");
     expect(source).toContain("Ruptura de estoque");
     expect(source).toContain("routeOccupancy");
     expect(source).toContain("stockBreaks");
+    expect(source).toContain("react-leaflet");
+    expect(source).toContain("leaflet/dist/leaflet.css");
+    expect(source).toContain("MapContainer");
+    expect(source).toContain("TileLayer");
+    expect(source).toContain("Marker");
+    expect(source).not.toContain("Polyline");
+    expect(source).toContain("CircleMarker");
+    expect(source).toContain("openstreetmap.org");
+    expect(source).toContain("Mapa interativo de entregas");
+    expect(source).toContain("deliveryFilterOptions");
+    expect(source).toContain("Hoje");
+    expect(source).toContain("Próximos 7 dias");
+    expect(source).toContain("Próximos 30 dias");
+    expect(source).toContain("Entregas atrasadas");
+    expect(source).toContain("deliveryMapPoints");
+    expect(source).not.toContain("plannedRoutes");
+    expect(source).not.toContain("corridor");
+    expect(source).toContain("deliveryVolumeRegions");
+    expect(source).toContain("Padaria Avenida Marília");
+    expect(source).toContain("Supermercado Confiança Bauru");
+    expect(source).toContain("Atacado União Ourinhos");
+    expect(source).toContain("Status: {delivery.statusLabel}");
+    expect(source).toContain("Previsão: {delivery.expectedDelivery}");
+    expect(source).toContain("Valor: {formatCurrency(delivery.orderValue)}");
+    expect(source).toContain('status === "delayed"');
+    expect(source).toContain('status === "attention"');
+    expect(source).toContain("#dc2626");
+    expect(source).toContain("#f59e0b");
+    expect(source).toContain("#16a34a");
+    expect(source).toContain("filterDeliveries");
+    expect(source).toContain("filteredRoutes");
+    expect(source).toContain("routeStatusClassName");
+    expect(source).toContain('normalizedStatus === "critico"');
+    expect(source).toContain("text-red-600");
+    expect(source).toContain('normalizedStatus === "no limite"');
+    expect(source).toContain("text-orange-600");
+    expect(source).toContain('normalizedStatus === "saudavel"');
+    expect(source).toContain("text-blue-600");
+    expect(source).toContain('normalizedStatus === "folga"');
+    expect(source).toContain("text-green-600");
+    expect(source).toContain("getModuleHighlightFromLocation");
+    expect(styles).toContain(".delivery-map-marker");
   });
 
   it("mantem rota de finanças com filtros, métricas e paginação vindas da API", () => {
@@ -44,6 +113,8 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("revenueGranularityOptions");
     expect(source).toContain("AreaChart");
     expect(source).toContain("Base financeira filtrada");
+    expect(source).toContain("getModuleHighlightFromLocation");
+    expect(source).toContain("Indicador destacado pela Torre de Controle");
     expect(source).not.toContain("financeDemoTransactions");
     expect(styles).toContain(".finance-chart-card");
     expect(styles).toContain(".dark .finance-chart-card");
@@ -105,6 +176,8 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("new AbortController()");
     expect(source).toContain("Nenhum produto encontrado.");
     expect(source).toContain("Página {page} de {totalPages}");
+    expect(source).toContain("getModuleHighlightFromLocation");
+    expect(source).toContain("Indicador destacado pela Torre de Controle");
     expect(sidebar).toContain('to: "/produtos"');
     expect(sidebar).toContain('label: "Produtos"');
     expect(sidebar).toContain("PackageSearch");
@@ -124,6 +197,8 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("AreaChart");
     expect(source).toContain("linearGradient");
     expect(source).toContain("SALES_CHART_CARD_CLASS_NAME");
+    expect(source).toContain("getModuleHighlightFromLocation");
+    expect(source).toContain("Indicador destacado pela Torre de Controle");
     expect(dashboardHelper).toContain("formatSalesTimelineLabel");
     expect(dashboardHelper).toContain("buildSalesTrendData");
     expect(dashboardHelper).toContain("buildSalesRankingData");

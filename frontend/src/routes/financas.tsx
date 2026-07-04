@@ -21,6 +21,7 @@ import {
   type FinanceRevenueGranularity,
   type FinanceRevenueTrendPoint,
 } from "@/lib/importer-api";
+import { getModuleHighlightFromLocation } from "@/lib/control-tower-dashboard";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
@@ -63,6 +64,7 @@ function formatDate(value: string): string {
 }
 
 function FinancasPage() {
+  const moduleHighlight = getModuleHighlightFromLocation();
   const [customer, setCustomer] = useState("");
   const [dateFrom, setDateFrom] = useState(DEFAULT_DATE_FROM);
   const [dateTo, setDateTo] = useState(DEFAULT_DATE_TO);
@@ -217,6 +219,11 @@ function FinancasPage() {
         <Alert variant="destructive">
           <AlertTriangle className="size-4" />
           <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      )}
+      {moduleHighlight && (
+        <Alert>
+          <AlertDescription>Indicador destacado pela Torre de Controle: {moduleHighlight}</AlertDescription>
         </Alert>
       )}
 

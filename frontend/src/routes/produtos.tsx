@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchProducts, type Product } from "@/lib/importer-api";
+import { getModuleHighlightFromLocation } from "@/lib/control-tower-dashboard";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { ChevronLeft, ChevronRight, PackageSearch, Search } from "lucide-react";
 >>>>>>> 63b18f765086c6de4ac2dbaf716dcfa70e776cc1
@@ -126,6 +127,7 @@ function ProdutosPage() {
 }
 
 function ProdutosPage() {
+  const moduleHighlight = getModuleHighlightFromLocation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [products, setProducts] = useState<Product[]>([]);
@@ -213,6 +215,11 @@ function ProdutosPage() {
       {message && (
         <Alert variant="destructive" className="animate-soft-enter">
           <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      )}
+      {moduleHighlight && (
+        <Alert className="animate-soft-enter">
+          <AlertDescription>Indicador destacado pela Torre de Controle: {moduleHighlight}</AlertDescription>
         </Alert>
       )}
 
