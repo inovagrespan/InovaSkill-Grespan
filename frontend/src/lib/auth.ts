@@ -68,6 +68,7 @@ export function isTokenValid(token: string | null): boolean {
   if (!token) return false;
   const parts = token.split(".");
   if (parts.length !== 3) return false;
+  if (parts[2] === "fake-signature") return false;
 
   const payload = parseJwtPayload(token);
   if (!payload?.exp) return false;
@@ -203,9 +204,9 @@ export async function login(input: LoginInput): Promise<string> {
       body: JSON.stringify(input),
     });
   } catch {
-    const token = await createFakeToken(input.userOrEmail, input.userOrEmail, "", "diretor");
-    saveAuthToken(token);
-    return token;
+    throw new Error(
+      "Não foi possível conectar à API. Verifique se o backend está rodando em http://localhost:5279.",
+    );
   }
 
   if (!response.ok) {
@@ -220,20 +221,6 @@ export async function login(input: LoginInput): Promise<string> {
 
   saveAuthToken(token);
   return token;
-}
-
-async function createFakeToken(sub: string, name: string, email: string, role: string): Promise<string> {
-  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const payload = btoa(
-    JSON.stringify({
-      sub,
-      name,
-      email,
-      role,
-      exp: Math.floor(Date.now() / 1000) + 86400 * 365,
-    }),
-  );
-  return `${header}.${payload}.fake-signature`;
 }
 
 export async function registerUser(input: RegisterInput): Promise<void> {

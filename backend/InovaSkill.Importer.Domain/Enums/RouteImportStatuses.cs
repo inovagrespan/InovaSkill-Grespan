@@ -23,3 +23,26 @@ public enum JobExecutionStatus
     Completed,
     Failed
 }
+
+public enum DataSourceImportMode
+{
+    Snapshot,
+    Append,
+    Upsert
+}
+
+public enum FiscalMovementCategory
+{
+    Unknown,
+    Sale,
+    Return,
+    Bonus,
+    Loan,
+    Exchange
+}
+
+public enum RouteOccupancyStatus
+{
+    Calculated,
+    MissingCapacity
+}

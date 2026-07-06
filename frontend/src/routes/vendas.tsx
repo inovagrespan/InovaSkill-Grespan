@@ -34,7 +34,7 @@ import {
   fetchCommercialTransactions,
 } from "@/lib/importer-api";
 import { resolveSalesTimelineGranularity } from "@/lib/sales-timeline";
-import { useDebouncedValue } from "@/lib/use-debounced-value";
+import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 import {
   ChevronDown,
@@ -77,7 +77,6 @@ type PersistedSalesState = {
   page: number;
 };
 
-const FILTER_DEBOUNCE_MS = 300;
 const SEARCH_MIN_LENGTH = 2;
 const DEFAULT_PAGE_SIZE = 20;
 const DEFAULT_SUMMARY_PAGE_SIZE = 20;
@@ -286,8 +285,8 @@ export function VendasPage({ embedded }: { embedded?: boolean } = {}) {
   const requestIdRef = useRef(0);
   const cacheRef = useRef(new Map<string, SalesCachedData>());
 
-  const debouncedDocumentNumber = useDebouncedValue(documentNumberInput, FILTER_DEBOUNCE_MS);
-  const debouncedProductCode = useDebouncedValue(productCodeInput, FILTER_DEBOUNCE_MS);
+  const debouncedDocumentNumber = useDebouncedValue(documentNumberInput, TEXT_SEARCH_DEBOUNCE_MS);
+  const debouncedProductCode = useDebouncedValue(productCodeInput, TEXT_SEARCH_DEBOUNCE_MS);
   const documentNumber = normalizeSalesSearchFilter(debouncedDocumentNumber);
   const productCode = normalizeSalesSearchFilter(debouncedProductCode);
 

@@ -6,6 +6,7 @@ import { CITY_COORDS, REGIONS, findCity } from "@/lib/brazil-cities-coords";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { MapPin, Search, X } from "lucide-react";
+import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -33,6 +34,7 @@ export function CustomerMap({ customers, className }: CustomerMapProps) {
   const markersLayer = useRef<L.LayerGroup | null>(null);
   const [selectedRegion, setSelectedRegion] = useState("Todas");
   const [searchCity, setSearchCity] = useState("");
+  const debouncedSearchCity = useDebouncedValue(searchCity, TEXT_SEARCH_DEBOUNCE_MS);
 
   const enriched = useMemo(() => {
     const cityGroups: Record<string, number> = {};
@@ -68,12 +70,12 @@ export function CustomerMap({ customers, className }: CustomerMapProps) {
         return coords?.region === selectedRegion;
       });
     }
-    if (searchCity.trim()) {
-      const q = searchCity.trim().toLowerCase();
+    if (debouncedSearchCity.trim()) {
+      const q = debouncedSearchCity.trim().toLowerCase();
       list = list.filter(c => c.city.toLowerCase().includes(q));
     }
     return list;
-  }, [enriched, selectedRegion, searchCity]);
+  }, [enriched, selectedRegion, debouncedSearchCity]);
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;

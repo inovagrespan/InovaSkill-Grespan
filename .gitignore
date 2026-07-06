@@ -163,6 +163,7 @@ Thumbs.db
 uploads/
 backend/uploads/
 backend/**/uploads/
+route-imports/
 .dev-logs/
 
 # Frontend build outputs

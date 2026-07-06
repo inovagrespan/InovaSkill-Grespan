@@ -4,7 +4,7 @@ namespace InovaSkill.Importer.Api.Auth;
 
 public sealed class JwtAuthMiddleware(RequestDelegate next)
 {
-    private static readonly PathString[] PublicPaths = ["/login", "/register"];
+    private static readonly PathString[] PublicPaths = ["/login", "/register", "/api/login", "/api/register"];
 
     public async Task InvokeAsync(HttpContext context, JwtTokenService tokenService)
     {

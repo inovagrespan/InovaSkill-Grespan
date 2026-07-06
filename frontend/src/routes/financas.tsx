@@ -22,7 +22,7 @@ import {
   type FinanceRevenueTrendPoint,
 } from "@/lib/importer-api";
 import { getModuleHighlightFromLocation } from "@/lib/control-tower-dashboard";
-import { useDebouncedValue } from "@/lib/use-debounced-value";
+import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
 export const Route = createFileRoute("/financas")({
@@ -32,7 +32,6 @@ export const Route = createFileRoute("/financas")({
 const DEFAULT_DATE_FROM = "2026-01-01";
 const DEFAULT_DATE_TO = "2026-06-30";
 const DEFAULT_PAGE_SIZE = 20;
-const CUSTOMER_SEARCH_DEBOUNCE_MS = 300;
 const CUSTOMER_SEARCH_LIMIT = 20;
 const MIN_CUSTOMER_SEARCH_LENGTH = 2;
 const FINANCE_CHART_HEIGHT_CLASS_NAME = "h-[var(--dashboard-chart-height)] min-h-[var(--dashboard-chart-height)]";
@@ -81,7 +80,7 @@ function FinancasPage() {
   const [customerSearchMessage, setCustomerSearchMessage] = useState("");
   const customerSearchRequestId = useRef(0);
   const customerSearchValue = useRef(customerSearch);
-  const debouncedCustomerSearch = useDebouncedValue(customerSearch, CUSTOMER_SEARCH_DEBOUNCE_MS);
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch, TEXT_SEARCH_DEBOUNCE_MS);
 
   useEffect(() => {
     setPage(1);

@@ -14,36 +14,40 @@ namespace InovaSkill.Importer.Api.Controllers;
 public sealed class RouteImportsController(
     ImportDbContext dbContext,
     IImportFileStorage fileStorage,
+    IImportLifecycleService importLifecycle,
     IMessageBus messageBus) : ControllerBase
 {
-    private const long MaximumFileSizeBytes = 50 * 1024 * 1024;
+    private const long MaximumFileSizeBytes = 500 * 1024 * 1024;
     private const int DefaultPageSize = 20;
     private const int MaximumPageSize = 100;
 
     [HttpPost]
     [RequestSizeLimit(MaximumFileSizeBytes)]
-    public async Task<ActionResult> Upload(IFormFile file, CancellationToken cancellationToken)
+    public async Task<ActionResult> Upload(
+        IFormFile file,
+        [FromForm] string sourceCode = RouteImportCodes.DataSource,
+        CancellationToken cancellationToken = default)
     {
         if (file.Length == 0 || !string.Equals(Path.GetExtension(file.FileName), ".xlsx", StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest(new { message = "Selecione um arquivo XLSX válido." });
         }
+        if (!string.Equals(sourceCode, RouteImportCodes.DataSource, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(sourceCode, CustomerImportCodes.DataSource, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(sourceCode, FiscalImportCodes.DataSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "Fonte de dados inválida." });
+        }
 
-        var dataSource = await EnsureDataSourceAsync(cancellationToken);
+        var dataSource = await EnsureDataSourceAsync(sourceCode, cancellationToken);
         await using var content = file.OpenReadStream();
         var storageKey = await fileStorage.SaveAsync(content, file.FileName, cancellationToken);
-        var now = DateTime.UtcNow;
-        var import = new RouteImport
-        {
-            Id = Guid.NewGuid(),
-            DataSourceId = dataSource.Id,
-            FileName = Path.GetFileName(file.FileName),
-            FilePath = storageKey,
-            Status = RouteImportStatus.Queued,
-            CreatedAt = now
-        };
-        var job = CreateJob(import.Id, now);
-        dbContext.RouteImports.Add(import);
+        var import = await importLifecycle.CreateAsync(
+            dataSource.Id,
+            Path.GetFileName(file.FileName),
+            storageKey,
+            cancellationToken);
+        var job = CreateJob(import.Id, import.CreatedAt);
         dbContext.JobExecutions.Add(job);
         await dbContext.SaveChangesAsync(cancellationToken);
         await messageBus.PublishAsync(new ProcessImport(import.Id, job.Id));
@@ -62,7 +66,23 @@ public sealed class RouteImportsController(
         var query = dbContext.RouteImports.AsNoTracking().OrderByDescending(x => x.CreatedAt);
         var total = await query.CountAsync(cancellationToken);
         var items = await query.Skip((page - 1) * pageSize).Take(pageSize)
-            .Select(x => ToImportDto(x))
+            .Select(item => new
+            {
+                item.Id,
+                item.FileName,
+                sourceCode = item.DataSource!.Code,
+                sourceName = item.DataSource.Name,
+                item.Version,
+                isCurrent = item.DataSource!.CurrentImportId == item.Id,
+                status = item.Status.ToString(),
+                item.CreatedAt,
+                item.TotalRows,
+                item.ImportedRows,
+                item.ErrorCount,
+                durationSeconds = item.StartedAt.HasValue && item.FinishedAt.HasValue
+                    ? (double?)(item.FinishedAt.Value - item.StartedAt.Value).TotalSeconds
+                    : null
+            })
             .ToListAsync(cancellationToken);
         return Ok(new { page, pageSize, total, items });
     }
@@ -76,6 +96,7 @@ public sealed class RouteImportsController(
             {
                 x.Id,
                 x.FileName,
+                x.Version,
                 source = x.DataSource!.Name,
                 status = x.Status.ToString(),
                 x.CreatedAt,
@@ -122,7 +143,7 @@ public sealed class RouteImportsController(
     {
         var error = await dbContext.RouteImportErrors.SingleOrDefaultAsync(x => x.Id == errorId, cancellationToken);
         if (error is null) return NotFound();
-        if (!IsValidCorrection(error.Field, request.CorrectedValue))
+        if (!await IsValidCorrectionAsync(error.Field, request.CorrectedValue, cancellationToken))
         {
             return BadRequest(new { message = "O valor corrigido não é válido para o campo." });
         }
@@ -161,23 +182,30 @@ public sealed class RouteImportsController(
         return Accepted(new { importId = import.Id, jobExecutionId = job.Id, status = "QUEUED" });
     }
 
-    private async Task<DataSource> EnsureDataSourceAsync(CancellationToken cancellationToken)
+    private async Task<DataSource> EnsureDataSourceAsync(string sourceCode, CancellationToken cancellationToken)
     {
+        var isCustomers = string.Equals(sourceCode, CustomerImportCodes.DataSource, StringComparison.OrdinalIgnoreCase);
+        var isFiscal = string.Equals(sourceCode, FiscalImportCodes.DataSource, StringComparison.OrdinalIgnoreCase);
+        var code = isCustomers ? CustomerImportCodes.DataSource : isFiscal ? FiscalImportCodes.DataSource : RouteImportCodes.DataSource;
         var existing = await dbContext.DataSources
-            .SingleOrDefaultAsync(x => x.Code == RouteImportCodes.DataSource, cancellationToken);
+            .SingleOrDefaultAsync(x => x.Code == code, cancellationToken);
         if (existing is not null) return existing;
         var now = DateTime.UtcNow;
         var dataSource = new DataSource
         {
             Id = Guid.NewGuid(),
-            Code = RouteImportCodes.DataSource,
-            Name = RouteImportCodes.DataSourceName,
-            Type = RouteImportCodes.DataSourceType,
+            Code = code,
+            ProcessorKey = isCustomers ? CustomerImportCodes.ProcessorKey : isFiscal ? FiscalImportCodes.ProcessorKey : RouteImportCodes.ProcessorKey,
+            Name = isCustomers ? CustomerImportCodes.DataSourceName : isFiscal ? FiscalImportCodes.DataSourceName : RouteImportCodes.DataSourceName,
+            Type = isCustomers ? CustomerImportCodes.DataSourceType : isFiscal ? FiscalImportCodes.DataSourceType : RouteImportCodes.DataSourceType,
+            ImportMode = isFiscal ? DataSourceImportMode.Upsert : DataSourceImportMode.Snapshot,
+            NextImportVersion = RouteImportCodes.InitialVersion,
             Active = true,
             CreatedAt = now,
             UpdatedAt = now
         };
         dbContext.DataSources.Add(dataSource);
+        await dbContext.SaveChangesAsync(cancellationToken);
         return dataSource;
     }
 
@@ -190,20 +218,7 @@ public sealed class RouteImportsController(
         CreatedAt = now
     };
 
-    private static object ToImportDto(RouteImport item) => new
-    {
-        item.Id,
-        item.FileName,
-        status = item.Status.ToString(),
-        item.CreatedAt,
-        item.TotalRows,
-        item.ImportedRows,
-        item.ErrorCount,
-        durationSeconds = item.StartedAt.HasValue && item.FinishedAt.HasValue
-            ? (double?)(item.FinishedAt.Value - item.StartedAt.Value).TotalSeconds : null
-    };
-
-    private static bool IsValidCorrection(string field, string value)
+    private async Task<bool> IsValidCorrectionAsync(string field, string value, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(value)) return false;
         return field switch
@@ -212,7 +227,8 @@ public sealed class RouteImportsController(
                 && deliveries >= 0,
             "average_per_day" => decimal.TryParse(value, NumberStyles.Number, CultureInfo.GetCultureInfo("pt-BR"), out var average)
                 && average >= 0,
-            "vehicle_type" => value is "Truck" or "Toco" or "Acelo",
+            "vehicle_type" => await dbContext.VehicleTypes.AnyAsync(
+                x => x.Name == value.Trim(), cancellationToken),
             _ => false
         };
     }

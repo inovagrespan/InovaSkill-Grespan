@@ -1,5 +1,6 @@
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
 using InovaSkill.Importer.Infrastructure.RouteImports;
+using InovaSkill.Importer.Application.RouteImports;
 using Wolverine;
 using Wolverine.ErrorHandling;
 using Wolverine.Redis;
@@ -12,6 +13,7 @@ var redisConnection = builder.Configuration.GetConnectionString("Redis")
 builder.UseWolverine(options =>
 {
     options.ServiceName = "InovaSkill.Importer.Worker";
+    options.DefaultExecutionTimeout = TimeSpan.FromMinutes(RouteImportCodes.WorkerExecutionTimeoutMinutes);
     options.Discovery.IncludeAssembly(typeof(ProcessImportHandler).Assembly);
     options.UseRedisTransport(redisConnection).AutoProvision();
     options.ListenToRedisStream("route-imports", "route-import-workers")

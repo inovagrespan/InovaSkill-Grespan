@@ -20,6 +20,12 @@ describe("api url", () => {
     expect(buildGatewayUrl("login")).toBe("/api/login");
   });
 
+  it("usa o endpoint local da API com o prefixo correto em desenvolvimento", async () => {
+    const { buildGatewayUrl } = await import("./api-url");
+
+    expect(buildGatewayUrl("login")).toBe("http://localhost:5279/api/login");
+  });
+
   it("mantem os hubs fora do /api duplicado em producao", async () => {
     vi.stubEnv("VITE_API_URL", "/api");
     const { buildServiceUrl } = await import("./api-url");

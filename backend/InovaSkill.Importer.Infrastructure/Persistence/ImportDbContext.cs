@@ -5,35 +5,6 @@ namespace InovaSkill.Importer.Infrastructure.Persistence;
 
 public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) : DbContext(options)
 {
-    public DbSet<Job> Jobs => Set<Job>();
-    public DbSet<FileJob> FileJobs => Set<FileJob>();
-    public DbSet<ImportError> ImportErrors => Set<ImportError>();
-    public DbSet<ProcessingStepExecution> ProcessingStepExecutions => Set<ProcessingStepExecution>();
-    public DbSet<ProcessingJobLog> ProcessingJobLogs => Set<ProcessingJobLog>();
-    public DbSet<ProcessingJobEventLog> ProcessingJobEventLogs => Set<ProcessingJobEventLog>();
-    public DbSet<WorkerHeartbeat> WorkerHeartbeats => Set<WorkerHeartbeat>();
-    public DbSet<Customer> Customers => Set<Customer>();
-    public DbSet<Product> Products => Set<Product>();
-    public DbSet<RoutePlanningImport> RoutePlanningImports => Set<RoutePlanningImport>();
-    public DbSet<RoutePlan> RoutePlans => Set<RoutePlan>();
-    public DbSet<RouteStop> RouteStops => Set<RouteStop>();
-    public DbSet<TruckCapacityProfile> TruckCapacityProfiles => Set<TruckCapacityProfile>();
-    public DbSet<Order> Orders => Set<Order>();
-    public DbSet<CommercialTransaction> CommercialTransactions => Set<CommercialTransaction>();
-    public DbSet<SalesSummaryDaily> SalesSummariesDaily => Set<SalesSummaryDaily>();
-    public DbSet<SalesSummaryWeekly> SalesSummariesWeekly => Set<SalesSummaryWeekly>();
-    public DbSet<CustomerSummaryDaily> CustomerSummariesDaily => Set<CustomerSummaryDaily>();
-    public DbSet<CustomerSummaryWeekly> CustomerSummariesWeekly => Set<CustomerSummaryWeekly>();
-    public DbSet<CustomerSummaryMonthly> CustomerSummariesMonthly => Set<CustomerSummaryMonthly>();
-    public DbSet<ClienteIndicador> ClienteIndicadores => Set<ClienteIndicador>();
-    public DbSet<ClienteForecast> ClienteForecasts => Set<ClienteForecast>();
-    public DbSet<ImportFileType> ImportFileTypes => Set<ImportFileType>();
-    public DbSet<ImportTemplate> ImportTemplates => Set<ImportTemplate>();
-    public DbSet<ImportColumnMapping> ImportColumnMappings => Set<ImportColumnMapping>();
-    public DbSet<TransformRule> TransformRules => Set<TransformRule>();
-    public DbSet<ColumnMappingTransformRule> ColumnMappingTransformRules => Set<ColumnMappingTransformRule>();
-    public DbSet<PreProcessorTemplate> PreProcessorTemplates => Set<PreProcessorTemplate>();
-    public DbSet<PreProcessorTemplateRule> PreProcessorTemplateRules => Set<PreProcessorTemplateRule>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<DataSource> DataSources => Set<DataSource>();
@@ -43,6 +14,12 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<VehicleType> VehicleTypes => Set<VehicleType>();
     public DbSet<Route> Routes => Set<Route>();
     public DbSet<RouteEntry> RouteEntries => Set<RouteEntry>();
+    public DbSet<Municipality> Municipalities => Set<Municipality>();
+    public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<CustomerSnapshot> CustomerSnapshots => Set<CustomerSnapshot>();
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
+    public DbSet<FiscalDocumentItem> FiscalDocumentItems => Set<FiscalDocumentItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -63,9 +40,15 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.ToTable("data_sources");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Code).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.ProcessorKey).HasMaxLength(128).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Type).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.ImportMode).HasConversion<string>().HasMaxLength(16);
             entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasOne(x => x.CurrentImport).WithMany()
+                .HasForeignKey(x => x.CurrentImportId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.LastSuccessfulImport).WithMany()
+                .HasForeignKey(x => x.LastSuccessfulImportId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<RouteImport>(entity =>
@@ -77,6 +60,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
             entity.Property(x => x.FailureMessage).HasMaxLength(1024);
             entity.HasIndex(x => new { x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.DataSourceId, x.Version }).IsUnique();
             entity.HasOne(x => x.DataSource).WithMany(x => x.Imports)
                 .HasForeignKey(x => x.DataSourceId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -115,6 +99,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(64).IsRequired();
             entity.Property(x => x.CapacityKg).HasPrecision(12, 2);
+            entity.Property(x => x.CapacityVolumeM3).HasPrecision(12, 3);
             entity.HasIndex(x => x.Name).IsUnique();
         });
 
@@ -124,405 +109,19 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Weekday).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.TotalWeightKg).HasPrecision(18, 3);
+            entity.Property(x => x.TotalVolumeM3).HasPrecision(18, 3);
+            entity.Property(x => x.WeightOccupancy).HasPrecision(12, 6);
+            entity.Property(x => x.VolumeOccupancy).HasPrecision(12, 6);
+            entity.Property(x => x.PalletOccupancy).HasPrecision(12, 6);
+            entity.Property(x => x.OverallOccupancy).HasPrecision(12, 6);
+            entity.Property(x => x.OccupancyStatus).HasConversion<string>().HasMaxLength(32);
             entity.HasIndex(x => new { x.ImportId, x.Weekday, x.Name });
+            entity.HasIndex(x => new { x.ImportId, x.OverallOccupancy });
             entity.HasOne(x => x.Import).WithMany(x => x.Routes)
                 .HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.VehicleType).WithMany(x => x.Routes)
                 .HasForeignKey(x => x.VehicleTypeId).OnDelete(DeleteBehavior.Restrict);
-        });
-
-        modelBuilder.Entity<Product>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Sku).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Name).HasMaxLength(256).IsRequired();
-            e.Property(x => x.Price).HasColumnType("decimal(18,2)");
-            e.HasIndex(x => x.Sku).IsUnique();
-            e.HasIndex(x => x.Name);
-            e.HasIndex(x => x.SourceFileJobId);
-        });
-
-        modelBuilder.Entity<RoutePlanningImport>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.SourceFileJobId).IsRequired();
-            e.Property(x => x.SourceFileName).HasMaxLength(512).IsRequired();
-            e.Property(x => x.ImportedAt).IsRequired();
-            e.HasIndex(x => x.SourceFileJobId).IsUnique();
-            e.HasIndex(x => x.ImportedAt);
-        });
-
-        modelBuilder.Entity<RoutePlan>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.SheetName).HasMaxLength(128).IsRequired();
-            e.Property(x => x.WeekdayLabel).HasMaxLength(64).IsRequired();
-            e.Property(x => x.RouteName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.VehicleType).HasMaxLength(64).IsRequired();
-            e.Property(x => x.VehicleCapacityKg).HasColumnType("decimal(18,2)");
-            e.Property(x => x.TotalAverageLoadKg).HasColumnType("decimal(18,3)");
-            e.Property(x => x.OccupancyPercent).HasColumnType("decimal(9,2)");
-            e.HasIndex(x => new { x.RoutePlanningImportId, x.WeekdayOrder, x.RouteOrder });
-            e.HasIndex(x => new { x.WeekdayOrder, x.RouteName });
-            e.HasOne(x => x.RoutePlanningImport)
-                .WithMany(x => x.Routes)
-                .HasForeignKey(x => x.RoutePlanningImportId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<RouteStop>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.DestinationName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.DeliveriesRaw).HasMaxLength(64).IsRequired();
-            e.Property(x => x.AverageLoadKg).HasColumnType("decimal(18,3)");
-            e.Property(x => x.Note).HasMaxLength(2000).IsRequired();
-            e.HasIndex(x => new { x.RoutePlanId, x.StopOrder });
-            e.HasIndex(x => x.DestinationName);
-            e.HasOne(x => x.RoutePlan)
-                .WithMany(x => x.Stops)
-                .HasForeignKey(x => x.RoutePlanId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<TruckCapacityProfile>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.VehicleType).HasMaxLength(64).IsRequired();
-            e.Property(x => x.CapacityKg).HasColumnType("decimal(18,2)");
-            e.HasIndex(x => new { x.RoutePlanningImportId, x.VehicleType }).IsUnique();
-            e.HasOne(x => x.RoutePlanningImport)
-                .WithMany(x => x.TruckCapacities)
-                .HasForeignKey(x => x.RoutePlanningImportId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<Order>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.OrderNumber).HasMaxLength(64).IsRequired();
-            e.Property(x => x.CustomerEmail).HasMaxLength(256).IsRequired();
-            e.Property(x => x.ProductSku).HasMaxLength(64).IsRequired();
-            e.HasIndex(x => new { x.OrderNumber, x.CustomerEmail, x.ProductSku, x.OrderedAt }).IsUnique();
-            e.HasIndex(x => x.SourceFileJobId);
-        });
-
-        modelBuilder.Entity<CommercialTransaction>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.DocumentNumber).HasMaxLength(64).IsRequired();
-            e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
-            e.Property(x => x.CustomerName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.SupplierCode).HasMaxLength(64).IsRequired();
-            e.Property(x => x.SupplierName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.RouteName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.ProductCode).HasMaxLength(64).IsRequired();
-            e.Property(x => x.ProductDescription).HasMaxLength(512).IsRequired();
-            e.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
-            e.Property(x => x.UnitPrice).HasColumnType("decimal(18,2)");
-            e.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
-            e.Property(x => x.TransactionType).HasMaxLength(128).IsRequired();
-            e.Property(x => x.City).HasMaxLength(256).IsRequired();
-            e.Property(x => x.ProductGroup).HasMaxLength(128).IsRequired();
-            e.Property(x => x.GrossWeightKg).HasColumnType("decimal(18,3)");
-            e.HasIndex(x => x.DocumentNumber);
-            e.HasIndex(x => x.SourceFileJobId);
-            e.HasIndex(x => x.TransactionDate);
-            e.HasIndex(x => x.CustomerName);
-            e.HasIndex(x => x.SupplierName);
-            e.HasIndex(x => x.RouteName);
-            e.HasIndex(x => x.ProductCode);
-            e.HasIndex(x => x.ProductDescription);
-            e.HasIndex(x => x.City);
-            e.HasIndex(x => new { x.SourceFileJobId, x.TransactionDate });
-            e.HasIndex(x => new
-            {
-                x.DocumentNumber,
-                x.TransactionDate,
-                x.CustomerCode,
-                x.ProductCode,
-                x.TransactionType,
-                x.City,
-                x.ProductGroup,
-                x.Quantity,
-                x.UnitPrice,
-                x.GrossWeightKg
-            }).IsUnique();
-        });
-
-        modelBuilder.Entity<SalesSummaryDaily>(e =>
-        {
-            e.ToTable("SalesSummariesDaily");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.ReferenceDate).IsRequired();
-            e.Property(x => x.City).HasMaxLength(256).IsRequired();
-            e.Property(x => x.ProductGroup).HasMaxLength(128).IsRequired();
-            e.Property(x => x.TransactionType).HasMaxLength(128).IsRequired();
-            e.Property(x => x.TotalQuantity).HasColumnType("decimal(18,3)");
-            e.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
-            e.Property(x => x.TotalGrossWeightKg).HasColumnType("decimal(18,3)");
-            e.Property(x => x.ProcessedAt).IsRequired();
-            e.HasIndex(x => x.SourceFileJobId);
-            e.HasIndex(x => x.ReferenceDate);
-            e.HasIndex(x => new { x.ReferenceDate, x.City, x.ProductGroup, x.TransactionType });
-            e.HasIndex(x => new { x.SourceFileJobId, x.ReferenceDate, x.City, x.ProductGroup, x.TransactionType })
-                .IsUnique();
-        });
-
-        modelBuilder.Entity<SalesSummaryWeekly>(e =>
-        {
-            e.ToTable("SalesSummariesWeekly");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.WeekStartDate).IsRequired();
-            e.Property(x => x.City).HasMaxLength(256).IsRequired();
-            e.Property(x => x.ProductGroup).HasMaxLength(128).IsRequired();
-            e.Property(x => x.TransactionType).HasMaxLength(128).IsRequired();
-            e.Property(x => x.TotalQuantity).HasColumnType("decimal(18,3)");
-            e.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
-            e.Property(x => x.TotalGrossWeightKg).HasColumnType("decimal(18,3)");
-            e.Property(x => x.ProcessedAt).IsRequired();
-            e.HasIndex(x => x.SourceFileJobId);
-            e.HasIndex(x => x.WeekStartDate);
-            e.HasIndex(x => new { x.WeekStartDate, x.City, x.ProductGroup, x.TransactionType });
-            e.HasIndex(x => new { x.SourceFileJobId, x.WeekStartDate, x.City, x.ProductGroup, x.TransactionType })
-                .IsUnique();
-        });
-
-        modelBuilder.Entity<CustomerSummaryDaily>(e =>
-        {
-            e.ToTable("CustomerSummariesDaily");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.ReferenceDate).IsRequired();
-            e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
-            e.Property(x => x.CustomerName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.City).HasMaxLength(256).IsRequired();
-            e.Property(x => x.ProductGroup).HasMaxLength(128).IsRequired();
-            e.Property(x => x.TransactionType).HasMaxLength(128).IsRequired();
-            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
-            e.Property(x => x.Weight).HasColumnType("decimal(18,3)");
-            e.Property(x => x.ProcessedAt).IsRequired();
-            e.HasIndex(x => x.SourceFileJobId);
-            e.HasIndex(x => x.ReferenceDate);
-            e.HasIndex(x => x.CustomerName);
-            e.HasIndex(x => new { x.ReferenceDate, x.CustomerName });
-            e.HasIndex(x => new { x.SourceFileJobId, x.ReferenceDate, x.CustomerCode, x.City, x.ProductGroup, x.TransactionType })
-                .IsUnique();
-        });
-
-        modelBuilder.Entity<CustomerSummaryWeekly>(e =>
-        {
-            e.ToTable("CustomerSummariesWeekly");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.WeekStartDate).IsRequired();
-            e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
-            e.Property(x => x.CustomerName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.City).HasMaxLength(256).IsRequired();
-            e.Property(x => x.ProductGroup).HasMaxLength(128).IsRequired();
-            e.Property(x => x.TransactionType).HasMaxLength(128).IsRequired();
-            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
-            e.Property(x => x.Weight).HasColumnType("decimal(18,3)");
-            e.Property(x => x.ProcessedAt).IsRequired();
-            e.HasIndex(x => x.SourceFileJobId);
-            e.HasIndex(x => x.WeekStartDate);
-            e.HasIndex(x => x.CustomerName);
-            e.HasIndex(x => new { x.WeekStartDate, x.CustomerName });
-            e.HasIndex(x => new { x.SourceFileJobId, x.WeekStartDate, x.CustomerCode, x.City, x.ProductGroup, x.TransactionType })
-                .IsUnique();
-        });
-
-        modelBuilder.Entity<CustomerSummaryMonthly>(e =>
-        {
-            e.ToTable("CustomerSummariesMonthly");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.MonthStartDate).IsRequired();
-            e.Property(x => x.CustomerCode).HasMaxLength(64).IsRequired();
-            e.Property(x => x.CustomerName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.City).HasMaxLength(256).IsRequired();
-            e.Property(x => x.ProductGroup).HasMaxLength(128).IsRequired();
-            e.Property(x => x.TransactionType).HasMaxLength(128).IsRequired();
-            e.Property(x => x.Revenue).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Quantity).HasColumnType("decimal(18,3)");
-            e.Property(x => x.Weight).HasColumnType("decimal(18,3)");
-            e.Property(x => x.ProcessedAt).IsRequired();
-            e.HasIndex(x => x.SourceFileJobId);
-            e.HasIndex(x => x.MonthStartDate);
-            e.HasIndex(x => x.CustomerName);
-            e.HasIndex(x => new { x.MonthStartDate, x.CustomerName });
-            e.HasIndex(x => new { x.SourceFileJobId, x.MonthStartDate, x.CustomerCode, x.City, x.ProductGroup, x.TransactionType })
-                .IsUnique();
-        });
-
-        modelBuilder.Entity<ClienteIndicador>(e =>
-        {
-            e.ToTable("ClienteIndicadores");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.ClienteId).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Faturamento3M).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Faturamento6M).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Faturamento12M).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Crescimento3M).HasColumnType("decimal(9,2)");
-            e.Property(x => x.Crescimento6M).HasColumnType("decimal(9,2)");
-            e.Property(x => x.Crescimento12M).HasColumnType("decimal(9,2)");
-            e.Property(x => x.MediaMovel3M).HasColumnType("decimal(18,2)");
-            e.Property(x => x.MediaMovel6M).HasColumnType("decimal(18,2)");
-            e.Property(x => x.MediaMovel12M).HasColumnType("decimal(18,2)");
-            e.Property(x => x.FrequenciaCompra).HasColumnType("decimal(18,2)");
-            e.Property(x => x.TicketMedioGeral).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Tendencia).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Classificacao).HasMaxLength(16).IsRequired();
-            e.Property(x => x.AtualizadoEm).IsRequired();
-            e.HasIndex(x => x.ClienteId).IsUnique();
-            e.HasIndex(x => x.ScorePotencial);
-            e.HasIndex(x => x.Tendencia);
-            e.HasIndex(x => x.Classificacao);
-        });
-
-        modelBuilder.Entity<ClienteForecast>(e =>
-        {
-            e.ToTable("ClienteForecasts");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.ClienteId).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Previsao30Dias).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Previsao60Dias).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Previsao90Dias).HasColumnType("decimal(18,2)");
-            e.Property(x => x.TendenciaPrevista).HasMaxLength(64).IsRequired();
-            e.Property(x => x.ErroMedioHistorico).HasColumnType("decimal(18,2)");
-            e.Property(x => x.ConfiancaModelo).HasColumnType("decimal(9,2)");
-            e.Property(x => x.UltimaObservacao).IsRequired();
-            e.Property(x => x.AtualizadoEm).IsRequired();
-            e.HasIndex(x => x.ClienteId).IsUnique();
-            e.HasIndex(x => x.TendenciaPrevista);
-        });
-
-
-        modelBuilder.Entity<ImportFileType>(e =>
-        {
-            e.ToTable("ImportFileTypes");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Code).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Name).HasMaxLength(256).IsRequired();
-            e.Property(x => x.Description).HasMaxLength(2000).IsRequired();
-            e.Property(x => x.AllowedExtensions).HasMaxLength(256).IsRequired();
-            e.HasIndex(x => x.Code).IsUnique();
-            e.HasIndex(x => x.IsActive);
-        });
-
-        modelBuilder.Entity<ImportTemplate>(e =>
-        {
-            e.ToTable("ImportTemplatesV2");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Name).HasMaxLength(256).IsRequired();
-            e.Property(x => x.Description).HasMaxLength(2000).IsRequired();
-            e.Property(x => x.FileNamePattern).HasMaxLength(256).IsRequired();
-            e.Property(x => x.RequiredHeadersCsv).HasMaxLength(2048).IsRequired();
-            e.HasIndex(x => x.IsActive);
-            e.HasIndex(x => x.ImportFileTypeId);
-            e.HasOne(x => x.ImportFileType)
-                .WithMany(x => x.ImportTemplates)
-                .HasForeignKey(x => x.ImportFileTypeId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        modelBuilder.Entity<ImportColumnMapping>(e =>
-        {
-            e.ToTable("ImportColumnMappings");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.SourceColumnName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.TargetFieldName).HasMaxLength(256).IsRequired();
-            e.Property(x => x.DefaultValue).HasMaxLength(4000);
-            e.HasIndex(x => new { x.ImportTemplateId, x.TargetFieldName });
-            e.HasOne(x => x.ImportTemplate)
-                .WithMany(x => x.ColumnMappings)
-                .HasForeignKey(x => x.ImportTemplateId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<TransformRule>(e =>
-        {
-            e.ToTable("TransformRules");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Code).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Name).HasMaxLength(128).IsRequired();
-            e.Property(x => x.Description).HasMaxLength(2000).IsRequired();
-            e.HasIndex(x => x.Code).IsUnique();
-        });
-
-        modelBuilder.Entity<ColumnMappingTransformRule>(e =>
-        {
-            e.ToTable("ColumnMappingTransformRules");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Order).IsRequired();
-            e.Property(x => x.ParametersJson).HasColumnType("jsonb");
-            e.HasIndex(x => new { x.ImportColumnMappingId, x.Order });
-            e.HasOne(x => x.ImportColumnMapping)
-                .WithMany(x => x.TransformRules)
-                .HasForeignKey(x => x.ImportColumnMappingId)
-                .OnDelete(DeleteBehavior.Cascade);
-            e.HasOne(x => x.TransformRule)
-                .WithMany(x => x.ColumnMappings)
-                .HasForeignKey(x => x.TransformRuleId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        modelBuilder.Entity<PreProcessorTemplate>(e =>
-        {
-            e.ToTable("ImportTemplates");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Code).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Name).HasMaxLength(256).IsRequired();
-            e.Property(x => x.FileNamePattern).HasMaxLength(256).IsRequired();
-            e.Property(x => x.RequiredHeadersCsv).HasMaxLength(2048).IsRequired();
-            e.Property(x => x.ColumnMappingsJson).HasMaxLength(4000).IsRequired();
-            e.Property(x => x.ValidationRulesJson).HasMaxLength(4000).IsRequired();
-            e.HasIndex(x => x.Code).IsUnique();
-            e.HasIndex(x => new { x.IsActive, x.FileType });
-        });
-
-        modelBuilder.Entity<PreProcessorTemplateRule>(e =>
-        {
-            e.ToTable("ImportTemplateRules");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.PreProcessorTemplateId).HasColumnName("ImportTemplateId");
-            e.Property(x => x.Name).HasMaxLength(128).IsRequired();
-            e.Property(x => x.RuleType).HasMaxLength(64).IsRequired();
-            e.Property(x => x.ConfigJson).HasMaxLength(4000).IsRequired();
-            e.HasIndex(x => new { x.PreProcessorTemplateId, x.SortOrder });
-            e.HasOne(x => x.PreProcessorTemplate)
-                .WithMany(x => x.Rules)
-                .HasForeignKey(x => x.PreProcessorTemplateId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<AppUser>(e =>
-        {
-            e.ToTable("AppUsers");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Name).HasMaxLength(256).IsRequired();
-            e.Property(x => x.Email).HasMaxLength(256).IsRequired();
-            e.Property(x => x.Role).HasMaxLength(64).IsRequired();
-            e.Property(x => x.PasswordHash).HasMaxLength(1024).IsRequired();
-            e.Property(x => x.CreatedAt).IsRequired();
-            e.HasIndex(x => x.Email).IsUnique();
-            e.HasIndex(x => x.Name).IsUnique();
-        });
-
-
-
-        modelBuilder.Entity<Notification>(e =>
-        {
-            e.ToTable("Notifications");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Title).HasMaxLength(256).IsRequired();
-            e.Property(x => x.Message).HasMaxLength(2000).IsRequired();
-            e.Property(x => x.Type).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Priority).HasMaxLength(32).IsRequired();
-            e.Property(x => x.Status).HasMaxLength(32).IsRequired();
-            e.Property(x => x.RelatedLink).HasMaxLength(1024).IsRequired();
-            e.Property(x => x.RelatedEntity).HasMaxLength(128).IsRequired();
-            e.HasIndex(x => new { x.UserId, x.Status, x.CreatedAt });
-            e.HasIndex(x => new { x.UserId, x.CreatedAt });
         });
 
         modelBuilder.Entity<RouteEntry>(entity =>
@@ -530,11 +129,134 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.ToTable("route_entries");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.AveragePerDay).HasPrecision(18, 2);
+            entity.Property(x => x.AveragePerDay).HasPrecision(18, 3);
             entity.Property(x => x.Note).HasMaxLength(2000);
             entity.HasIndex(x => new { x.RouteId, x.Sequence });
             entity.HasOne(x => x.Route).WithMany(x => x.Entries)
                 .HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Municipality).WithMany()
+                .HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Municipality>(entity =>
+        {
+            entity.ToTable("municipalities");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.StateCode).HasMaxLength(2).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.NormalizedName).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.IbgeCode).HasMaxLength(7);
+            entity.HasIndex(x => new { x.StateCode, x.NormalizedName }).IsUnique();
+        });
+
+        modelBuilder.Entity<Customer>(entity =>
+        {
+            entity.ToTable("customers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.BranchCode).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.ExternalCode).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => new { x.DataSourceId, x.BranchCode, x.ExternalCode }).IsUnique();
+            entity.HasIndex(x => new { x.DataSourceId, x.ExternalCode, x.BranchCode });
+            entity.HasOne(x => x.DataSource).WithMany().HasForeignKey(x => x.DataSourceId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomerSnapshot>(entity =>
+        {
+            entity.ToTable("customer_snapshots");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DocumentNumber).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.DocumentType).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.LegalName).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.TradeName).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.CustomerType).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => new { x.ImportId, x.CustomerId }).IsUnique();
+            entity.HasIndex(x => new { x.ImportId, x.MunicipalityId });
+            entity.HasIndex(x => new { x.ImportId, x.CustomerType });
+            entity.HasOne(x => x.Import).WithMany().HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Customer).WithMany(x => x.Snapshots).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Product>(entity =>
+        {
+            entity.ToTable("products");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ExternalCode).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(512).IsRequired();
+            entity.HasIndex(x => new { x.DataSourceId, x.ExternalCode }).IsUnique();
+            entity.HasOne(x => x.DataSource).WithMany().HasForeignKey(x => x.DataSourceId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FiscalDocument>(entity =>
+        {
+            entity.ToTable("fiscal_documents");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DocumentNumber).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Series).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.DocumentType).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.MovementType).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.CustomerCodeAtIssue).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.BranchCodeAtIssue).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.CustomerNameAtIssue).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.CityNameAtIssue).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.StateCodeAtIssue).HasMaxLength(2).IsRequired();
+            entity.Property(x => x.OperationCode).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.OperationDescription).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.MovementCategory).HasConversion<string>().HasMaxLength(16);
+            entity.Property(x => x.OriginalDocumentNumber).HasMaxLength(128);
+            entity.HasIndex(x => new
+            {
+                x.DataSourceId, x.DocumentType, x.DocumentNumber, x.Series, x.IssueDate,
+                x.CustomerCodeAtIssue, x.BranchCodeAtIssue
+            }).IsUnique();
+            entity.HasIndex(x => new { x.CustomerId, x.IssueDate, x.MovementCategory });
+            entity.HasIndex(x => new { x.IssueDate, x.MovementCategory });
+            entity.HasIndex(x => x.DocumentNumber);
+            entity.HasOne(x => x.DataSource).WithMany().HasForeignKey(x => x.DataSourceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.FirstSeenImport).WithMany().HasForeignKey(x => x.FirstSeenImportId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.LastSeenImport).WithMany().HasForeignKey(x => x.LastSeenImportId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FiscalDocumentItem>(entity =>
+        {
+            entity.ToTable("fiscal_document_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ItemNumber).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.ProductCode).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.ProductDescription).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.ProductGroupCode).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.ProductGroupDescription).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Quantity).HasPrecision(18, 6);
+            entity.Property(x => x.GrossWeightKg).HasPrecision(18, 3);
+            entity.Property(x => x.UnitValue).HasPrecision(18, 6);
+            entity.Property(x => x.SourceTotalValue).HasPrecision(18, 2);
+            entity.Property(x => x.Expenses).HasPrecision(18, 2);
+            entity.Property(x => x.Ipi).HasPrecision(18, 2);
+            entity.Property(x => x.Icms).HasPrecision(18, 2);
+            entity.Property(x => x.Iss).HasPrecision(18, 2);
+            entity.HasIndex(x => new { x.FiscalDocumentId, x.ItemNumber }).IsUnique();
+            entity.HasIndex(x => x.ProductId);
+            entity.HasOne(x => x.FiscalDocument).WithMany(x => x.Items)
+                .HasForeignKey(x => x.FiscalDocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("Notifications");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Message).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.Type).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Priority).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.RelatedLink).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.RelatedEntity).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => new { x.UserId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.UserId, x.CreatedAt });
         });
     }
 }

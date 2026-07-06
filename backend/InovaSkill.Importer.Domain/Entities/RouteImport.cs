@@ -7,6 +7,7 @@ public sealed class RouteImport
     public Guid Id { get; set; }
     public Guid DataSourceId { get; set; }
     public DataSource? DataSource { get; set; }
+    public long Version { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;
     public RouteImportStatus Status { get; set; }

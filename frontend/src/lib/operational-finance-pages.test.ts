@@ -69,17 +69,23 @@ describe("operational, finance and reports pages", () => {
     expect(helper).toContain("buildLogisticsForecast");
   });
 
-  it("move o quadro de rotas para a pagina dedicada de rotas", () => {
+  it("exibe rotas importadas na pagina dedicada de rotas", () => {
     const route = fs.readFileSync(path.resolve(process.cwd(), "src/routes/rotas.tsx"), "utf8");
-    const board = fs.readFileSync(path.resolve(process.cwd(), "src/components/logistics-routes-board.tsx"), "utf8");
+    const legacyRoute = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.rotas.tsx"), "utf8");
+    const dateFilter = fs.readFileSync(path.resolve(process.cwd(), "src/components/RouteSnapshotDateSelect.tsx"), "utf8");
 
     expect(route).toContain('createFileRoute("/rotas")');
-    expect(route).toContain("<LogisticsRoutesBoard />");
     expect(route).toContain("Rotas");
-    expect(board).toContain("Clientes, rotas e trânsito");
-    expect(board).toContain("Rotas com mais atrasos por congestionamento");
-    expect(board).toContain("LogisticsRegionMap");
-    expect(board).toContain("buildTrafficDelayRanking");
+    expect(route).toContain("fetchImportedRoutes");
+    expect(route).toContain("Detalhes da Rota");
+    expect(route).toContain("getCurrentLocalDate");
+    expect(dateFilter).toContain("Data de referência");
+    expect(dateFilter).toContain('type="date"');
+    expect(route).toContain("Filtrar por criticidade");
+    expect(route).toContain('<SelectItem value="critical">Crítico</SelectItem>');
+    expect(route).toContain("occupancyLevel:");
+    expect(route).not.toContain("Importado de:");
+    expect(legacyRoute).not.toContain("Importado de:");
   });
 
   it("cria o mapa principal com as rotas desenhadas", () => {
@@ -180,8 +186,8 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("Tempo total");
     expect(source).toContain("fetchFinanceDashboard");
     expect(source).toContain("fetchFinanceCustomers");
-    expect(source).toContain("useDebouncedValue(customerSearch, CUSTOMER_SEARCH_DEBOUNCE_MS)");
-    expect(source).toContain("CUSTOMER_SEARCH_DEBOUNCE_MS = 300");
+    expect(source).toContain("useDebouncedValue(customerSearch, TEXT_SEARCH_DEBOUNCE_MS)");
+    expect(source).toContain('import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue }');
     expect(source).toContain("new AbortController()");
     expect(source).toContain("customerSearchRequestId");
     expect(source).toContain("Buscando clientes...");
@@ -208,25 +214,18 @@ describe("operational, finance and reports pages", () => {
     expect(sidebar).not.toContain('label: "Finanças"');
   });
 
-  it("mescla clientes e finanças com métricas financeiras no topo e lista de clientes abaixo", () => {
+  it("mantém clientes como listagem cadastral simples", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
 
-    expect(source).toContain("fetchFinanceDashboard");
-    expect(source).toContain("Análise Financeira de Clientes");
-    expect(source).not.toContain("Análise de Clientes");
-    expect(source).toContain("financeMetrics.totalRevenue");
-    expect(source).toContain("Métrica financeira consolidada pelos filtros");
-    expect(source).toContain("Evolução da Receita");
-    expect(source).toContain("Ranking por empresa");
-    expect(source).toContain("financeRevenueTrendData");
-    expect(source).toContain("financeCustomerRankingData");
-    expect(source).toContain("RevenueAreaChart");
-    expect(source).toContain("<CardTitle>Clientes</CardTitle>");
-    expect(source).toContain("onClick={() => openDetails(item.ClienteId ?? item.customerCode ?? item.clienteId)}");
-    expect(sidebar).not.toContain('to: "/clientes"');
+    expect(source).toContain("fetchCurrentCustomers");
+    expect(source).toContain("Buscar por código, nome, documento ou cidade");
+    expect(source).toContain('<TableHead className="w-24">Código</TableHead>');
+    expect(source).not.toContain("KpiCard");
+    expect(source).not.toContain("AreaChart");
+    expect(source).toContain("CustomerConsumptionDialog");
+    expect(sidebar).toContain('to: "/clientes"');
     expect(sidebar).not.toContain('label: "Finanças"');
-    expect(sidebar).not.toContain('label: "Clientes"');
     expect(sidebar).not.toContain('to: "/financas"');
   });
 
@@ -289,21 +288,13 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("<CardTitle className=\"text-base text-foreground\">Ranking por empresa</CardTitle>");
   });
 
-  it("exibe dados fictícios na tela de clientes quando não há base real", () => {
+  it("não mantém métricas, dados fictícios ou detalhes na tela de clientes", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
 
-    expect(source).toContain("DEMO_CUSTOMER_SUMMARY");
-    expect(source).toContain("DEMO_CUSTOMER_RANKING");
-    expect(source).toContain("sortDemoCustomers");
-  });
-
-  it("mantém clientes como lista operacional com detalhe em modal", () => {
-    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
-
-    expect(source).toContain("<TableHead>Cliente</TableHead>");
-    expect(source).toContain("<TableHead className=\"text-right\">Fat. 12M</TableHead>");
-    expect(source).toContain("DialogTitle>Detalhes do Cliente");
-    expect(source).toContain("loadCustomerDetails");
+    expect(source).not.toContain("DEMO_CUSTOMER");
+    expect(source).not.toContain("Métrica");
+    expect(source).not.toContain("Ranking");
+    expect(source).not.toContain("DialogTitle");
   });
 
   it("remove a aba de RH da navegação e do dashboard", () => {

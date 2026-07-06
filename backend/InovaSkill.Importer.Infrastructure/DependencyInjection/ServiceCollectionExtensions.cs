@@ -19,7 +19,12 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<ImportDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<IImportFileStorage, LocalImportFileStorage>();
         services.AddScoped<RoutesSpreadsheetParser>();
+        services.AddScoped<CustomersSpreadsheetParser>();
+        services.AddScoped<FiscalMovementsSpreadsheetParser>();
+        services.AddScoped<IImportLifecycleService, ImportLifecycleService>();
         services.AddScoped<IDataSourceProcessor, RoutesByCityProcessor>();
+        services.AddScoped<IDataSourceProcessor, CustomersProcessor>();
+        services.AddScoped<IDataSourceProcessor, FiscalMovementsProcessor>();
         return services;
     }
 }

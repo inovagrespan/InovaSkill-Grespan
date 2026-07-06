@@ -32,6 +32,48 @@
       retries: 10
     restart: unless-stopped
 
+  api:
+    container_name: inovaskill-api
+    build:
+      context: ./backend
+      dockerfile: InovaSkill.Importer.Api/Dockerfile
+    ports:
+      - "5279:8080"
+    environment:
+      ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
+      ConnectionStrings__Redis: redis:6379
+      Storage__ImportsPath: /data/route-imports
+    volumes:
+      - route_imports_data:/data/route-imports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+
+  worker:
+    container_name: inovaskill-worker
+    build:
+      context: ./backend
+      dockerfile: InovaSkill.Importer.Worker/Dockerfile
+    environment:
+      ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
+      ConnectionStrings__Redis: redis:6379
+      Storage__ImportsPath: /data/route-imports
+    volumes:
+      - route_imports_data:/data/route-imports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
+
   frontend:
     container_name: inovaskill-frontend
     build:
@@ -41,6 +83,8 @@
         VITE_API_URL: /api
     ports:
       - "80:80"
+    depends_on:
+      - api
     restart: unless-stopped
     mem_limit: 256m
     cpus: 0.50
@@ -48,3 +92,4 @@
 volumes:
   postgres_data:
   redis_data:
+  route_imports_data:

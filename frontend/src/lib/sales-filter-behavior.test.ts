@@ -11,10 +11,10 @@ describe("sales filter behavior", () => {
     const routeSource = read("src/routes/vendas.tsx");
     const apiSource = read("src/lib/importer-api.ts");
 
-    expect(routeSource).toContain("FILTER_DEBOUNCE_MS = 300");
+    expect(routeSource).toContain("TEXT_SEARCH_DEBOUNCE_MS");
     expect(routeSource).toContain("SEARCH_MIN_LENGTH = 2");
-    expect(routeSource).toContain("useDebouncedValue(documentNumberInput, FILTER_DEBOUNCE_MS)");
-    expect(routeSource).toContain("useDebouncedValue(productCodeInput, FILTER_DEBOUNCE_MS)");
+    expect(routeSource).toContain("useDebouncedValue(documentNumberInput, TEXT_SEARCH_DEBOUNCE_MS)");
+    expect(routeSource).toContain("useDebouncedValue(productCodeInput, TEXT_SEARCH_DEBOUNCE_MS)");
     expect(routeSource).toContain("new AbortController()");
     expect(routeSource).toContain("requestIdRef");
     expect(routeSource).toContain("signal?.aborted");

@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace InovaSkill.Importer.Api.Controllers;
 
 [ApiController]
+[Route("api")]
 public sealed class AuthController(
     ImportDbContext dbContext,
     PasswordHasher<AppUser> passwordHasher,

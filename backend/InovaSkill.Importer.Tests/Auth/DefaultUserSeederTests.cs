@@ -17,7 +17,7 @@ public sealed class DefaultUserSeederTests
 
         await seeder.EnsureDefaultUsersAsync();
 
-        AssertSeededUser(db, passwordHasher, "rh", "rh", AppUserRoles.Admin);
+        AssertSeededUser(db, passwordHasher, "admin", "admin", AppUserRoles.Admin);
         AssertSeededUser(db, passwordHasher, "admin_system", "admin_system", AppUserRoles.AdminSystem);
         AssertSeededUser(db, passwordHasher, "vendas", "vendas", AppUserRoles.Vendas);
         AssertSeededUser(db, passwordHasher, "logistica", "logistica", AppUserRoles.Logistica);
@@ -25,7 +25,7 @@ public sealed class DefaultUserSeederTests
     }
 
     [Fact]
-    public async Task EnsureDefaultUsersAsync_RenamesLegacyAdminToRh()
+    public async Task EnsureDefaultUsersAsync_PreservesLegacyAdminAndCreatesOtherUsers()
     {
         await using var db = CreateDbContext();
         var passwordHasher = new PasswordHasher<AppUser>();
@@ -47,7 +47,7 @@ public sealed class DefaultUserSeederTests
         Assert.NotEqual(
             PasswordVerificationResult.Failed,
             passwordHasher.VerifyHashedPassword(user, user.PasswordHash, "diretor"));
-        Assert.Equal(7, db.AppUsers.Count());
+        Assert.Equal(5, db.AppUsers.Count());
     }
 
     [Fact]
@@ -59,11 +59,25 @@ public sealed class DefaultUserSeederTests
         await seeder.EnsureDefaultUsersAsync();
         await seeder.EnsureDefaultUsersAsync();
 
-        Assert.Equal(7, db.AppUsers.Count());
+        Assert.Equal(5, db.AppUsers.Count());
     }
 
     private static ImportDbContext CreateDbContext() =>
         new(new DbContextOptionsBuilder<ImportDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
+
+    private static void AssertSeededUser(
+        ImportDbContext db,
+        PasswordHasher<AppUser> passwordHasher,
+        string name,
+        string password,
+        string role)
+    {
+        var user = db.AppUsers.Single(item => item.Name == name);
+        Assert.Equal(role, user.Role);
+        Assert.NotEqual(
+            PasswordVerificationResult.Failed,
+            passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password));
+    }
 }

@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   FileUp,
+  FileText,
   LayoutDashboard,
   LogOut,
   Map,
@@ -8,7 +9,9 @@ import {
   Route,
   Settings,
   Sun,
+  Truck,
   UserRound,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -37,7 +40,10 @@ const roleLabels: Record<string, string> = {
 const items = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/rotas", label: "Rotas", icon: Route },
+  { to: "/veiculos/tipos", label: "Tipos de Veículo", icon: Truck },
   { to: "/mapa", label: "Mapa", icon: Map },
+  { to: "/clientes", label: "Clientes", icon: Users },
+  { to: "/notas-fiscais", label: "Notas Fiscais", icon: FileText },
   { to: "/importacoes/files", label: "Importações", icon: FileUp, accessRoles: ["diretor", "admin", "admin_system"] },
   { to: "/processamentos", label: "Processamento", icon: Settings, accessRoles: ["admin_system", "admin"] },
 ] as const;

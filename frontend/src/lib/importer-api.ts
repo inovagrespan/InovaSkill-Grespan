@@ -2797,3 +2797,410 @@ export async function fetchCustomerCommercialHealth(input: {
   return report.evolution.length > 0 || report.products.length > 0 || report.timeline.length > 0 ? report : demoCustomerCommercialHealth(input.customerId);
 }
 
+// ─── Tipos da API real de RouteImports ─────────────────────────────────
+
+export type ImportStatusEnum = "Queued" | "Processing" | "NeedsReview" | "Completed" | "Failed";
+
+export type ImportItem = {
+  id: string;
+  fileName: string;
+  version: number;
+  isCurrent: boolean;
+  status: ImportStatusEnum;
+  createdAt: string;
+  totalRows: number | null;
+  importedRows: number | null;
+  errorCount: number;
+  durationSeconds: number | null;
+  sourceCode: string;
+  sourceName: string;
+};
+
+export type ImportDetail = {
+  id: string;
+  fileName: string;
+  version: number;
+  source: string;
+  status: string;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationSeconds: number | null;
+  totalRows: number | null;
+  importedRows: number | null;
+  errorCount: number;
+  failureMessage: string | null;
+};
+
+export type ImportErrorItem = {
+  id: string;
+  sheetName: string;
+  rowNumber: number;
+  field: string;
+  rawValue: string;
+  message: string;
+  status: "Pending" | "Resolved";
+  correctedValue: string | null;
+  resolvedAt: string | null;
+};
+
+// ─── Tipos da API real de Admin Jobs ────────────────────────────────────
+
+export type AdminJobStatusEnum = "Queued" | "Processing" | "Retrying" | "Completed" | "Failed";
+
+export type AdminJobSummary = {
+  queuedNow: number;
+  processingNow: number;
+  completedLast24Hours: number;
+  failedLast24Hours: number;
+  successRatePercent: number;
+  averageProcessingSeconds: number;
+};
+
+export type AdminJobItem = {
+  id: string;
+  jobType: string;
+  status: AdminJobStatusEnum;
+  importId: string;
+  importFileName: string;
+  attempts: number;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationSeconds: number | null;
+  errorMessage: string | null;
+};
+
+// ─── API functions reais ────────────────────────────────────────────────
+
+export async function uploadImport(file: File, sourceCode = "ROUTES_BY_CITY"): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("sourceCode", sourceCode);
+
+  const response = await authFetch(`${API_URL}/api/route-imports`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (response.status === 413) {
+    throw new Error("Arquivo muito grande. O limite é 500 MB.");
+  }
+  if (!response.ok) {
+    throw new Error(await parseApiError(response, `Falha ao enviar '${file.name}'.`));
+  }
+
+  const data = (await response.json()) as { importId: string };
+  return data.importId;
+}
+
+export type CurrentCustomerItem = {
+  id: string;
+  externalCode: string;
+  branchCode: string;
+  documentNumber: string;
+  documentType: "CPF" | "CNPJ" | "UNKNOWN";
+  legalName: string;
+  tradeName: string;
+  customerType: string;
+  stateCode: string;
+  municipalityName: string;
+};
+
+export async function fetchCurrentCustomers(
+  page = 1,
+  pageSize = 25,
+  search = "",
+): Promise<PagedResult<CurrentCustomerItem>> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (search.trim()) params.set("search", search.trim());
+  const response = await authFetch(`${API_URL}/api/customers?${params}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar clientes."));
+  return (await response.json()) as PagedResult<CurrentCustomerItem>;
+}
+
+export type FiscalDocumentListItem = {
+  id: string; issueDate: string; documentNumber: string; series: string; customerId: string | null;
+  customerNameAtIssue: string; customerCodeAtIssue: string; branchCodeAtIssue: string;
+  cityNameAtIssue: string; stateCodeAtIssue: string; operationCategory: string;
+  operationDescription: string; itemCount: number; grossWeightKg: number;
+};
+export type FiscalDocumentDetails = FiscalDocumentListItem & {
+  documentType: string; movementType: string; operationCode: string;
+  originalDocumentNumber: string | null; totalQuantity: number; calculatedTotalAmount: number;
+  items: Array<{ id: string; itemNumber: string; productCode: string; productDescription: string;
+    productGroupCode: string; productGroupDescription: string; quantity: number; grossWeightKg: number;
+    unitValue: number | null; calculatedAmount: number }>;
+};
+export type CustomerConsumptionSummary = {
+  customer: CurrentCustomerItem;
+  metrics: { salesWeightLast30Days: number; salesWeightPrevious30Days: number;
+    variationPercentage: number | null; variationStatus: string;
+    averageMonthlySalesWeight90Days: number; averageMonthlySalesWeight12Months: number;
+    saleDocumentsLast30Days: number; averageSalesWeightPerDocument12Months: number;
+    averageMonthlyCalculatedSalesAmount12Months: number; returnWeight12Months: number;
+    bonusWeight12Months: number; lastPurchaseDate: string | null };
+  monthlyTimeline: Array<{ month: string; salesWeightKg: number; salesDocumentCount: number;
+    averageSalesWeightPerDocumentKg: number; calculatedSalesAmount: number;
+    returnWeightKg: number; bonusWeightKg: number }>;
+  recentMovements: FiscalDocumentListItem[];
+};
+export type CustomerProjectionPoint = {
+  month: string;
+  forecast: number;
+  lowerBound: number;
+  upperBound: number;
+};
+export type CustomerProjectionSeries = {
+  historicalMonthlyAverage: number;
+  monthlyChange: number;
+  monthlyChangePercentage: number | null;
+  rSquared: number;
+  normalizedRmsePercentage: number;
+  activeMonths: number;
+  quality: "HIGH" | "MODERATE" | "LOW" | "INSUFFICIENT";
+  forecast: CustomerProjectionPoint[];
+};
+export type CustomerProjectionResponse = {
+  available: boolean;
+  reason?: string;
+  sourceCoverageDate?: string;
+  baseStartMonth?: string;
+  baseEndMonth?: string;
+  historical?: Array<{ month: string; salesWeightKg: number; calculatedSalesAmount: number }>;
+  weight?: CustomerProjectionSeries;
+  revenue?: CustomerProjectionSeries;
+  methodology?: {
+    model: "LINEAR_REGRESSION";
+    historicalMonths: number;
+    forecastMonths: number;
+    confidenceLevel: number;
+    partialSourceMonthExcluded: boolean;
+  };
+};
+
+export async function fetchFiscalDocuments(page = 1, pageSize = 25, search = "", operationCategory = "") {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (search.trim()) params.set("search", search.trim());
+  if (operationCategory) params.set("operationCategory", operationCategory);
+  const response = await authFetch(`${API_URL}/api/fiscal-documents?${params}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar notas fiscais."));
+  return (await response.json()) as PagedResult<FiscalDocumentListItem>;
+}
+export async function fetchFiscalDocument(id: string): Promise<FiscalDocumentDetails> {
+  const response = await authFetch(`${API_URL}/api/fiscal-documents/${id}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a nota fiscal."));
+  return (await response.json()) as FiscalDocumentDetails;
+}
+export async function fetchCustomerConsumptionSummary(id: string): Promise<CustomerConsumptionSummary> {
+  const response = await authFetch(`${API_URL}/api/customers/${id}/consumption-summary`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar o consumo do cliente."));
+  return (await response.json()) as CustomerConsumptionSummary;
+}
+export async function fetchCustomerProjection(id: string): Promise<CustomerProjectionResponse> {
+  const response = await authFetch(`${API_URL}/api/customers/${id}/projection`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao calcular a projeção do cliente."));
+  return (await response.json()) as CustomerProjectionResponse;
+}
+
+export async function fetchImports(page = 1, pageSize = 20): Promise<PagedResult<ImportItem>> {
+  const response = await authFetch(`${API_URL}/api/route-imports?page=${page}&pageSize=${pageSize}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar importações."));
+  const raw = (await response.json()) as {
+    page: number; pageSize: number; total: number; items: ImportItem[];
+  };
+  return { page: raw.page, pageSize: raw.pageSize, total: raw.total, items: raw.items };
+}
+
+export async function fetchImportErrors(importId: string): Promise<ImportErrorItem[]> {
+  const response = await authFetch(`${API_URL}/api/route-imports/${importId}/errors`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar erros."));
+  return (await response.json()) as ImportErrorItem[];
+}
+
+export async function resolveImportError(errorId: string, correctedValue: string): Promise<void> {
+  const response = await authFetch(`${API_URL}/api/import-errors/${errorId}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ correctedValue }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao resolver erro."));
+}
+
+export async function reprocessImport(importId: string): Promise<void> {
+  const response = await authFetch(`${API_URL}/api/route-imports/${importId}/reprocess`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    const msg = await parseApiError(response, "Falha ao reprocessar.");
+    throw new Error(msg);
+  }
+}
+
+// ─── Vehicle Types ──────────────────────────────────────────────────────
+
+export type VehicleTypeItem = {
+  id: string;
+  name: string;
+  capacityKg: number | null;
+  routeCount: number;
+};
+
+export async function fetchVehicleTypes(): Promise<VehicleTypeItem[]> {
+  const response = await authFetch(`${API_URL}/api/vehicle-types`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar tipos de veículo."));
+  return (await response.json()) as VehicleTypeItem[];
+}
+
+export async function createVehicleType(name: string, capacityKg: number): Promise<VehicleTypeItem> {
+  const response = await authFetch(`${API_URL}/api/vehicle-types`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, capacityKg }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao criar tipo de veículo."));
+  return (await response.json()) as VehicleTypeItem;
+}
+
+export async function updateVehicleType(id: string, name: string, capacityKg: number): Promise<VehicleTypeItem> {
+  const response = await authFetch(`${API_URL}/api/vehicle-types/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, capacityKg }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao atualizar tipo de veículo."));
+  return (await response.json()) as VehicleTypeItem;
+}
+
+export async function deleteVehicleType(id: string): Promise<void> {
+  const response = await authFetch(`${API_URL}/api/vehicle-types/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao excluir tipo de veículo."));
+}
+
+// ─── Imported Routes ─────────────────────────────────────────────────────
+
+export type ImportedRouteItem = {
+  id: string;
+  name: string;
+  weekday: string;
+  vehicleTypeId: string;
+  vehicleType: string;
+  vehicleCapacityKg: number | null;
+  totalWeightKg: number;
+  totalVolumeM3: number | null;
+  totalPallets: number | null;
+  weightOccupancy: number | null;
+  volumeOccupancy: number | null;
+  palletOccupancy: number | null;
+  overallOccupancy: number | null;
+  occupancyStatus: "Calculated" | "MissingCapacity";
+  importId: string;
+  importVersion: number;
+  importFileName: string;
+  entryCount: number;
+  totalDeliveries: number;
+  createdAt: string;
+};
+
+export type ImportedRouteDetail = ImportedRouteItem & {
+  entries: {
+    id: string;
+    sequence: number;
+    name: string;
+    deliveries: number;
+    averagePerDay: number;
+    note: string | null;
+  }[];
+};
+
+export async function fetchImportedRoutes(
+  page = 1,
+  pageSize = 20,
+  filters?: { weekday?: string; search?: string; date?: string; occupancyLevel?: string },
+): Promise<PagedResult<ImportedRouteItem>> {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (filters?.weekday) params.set("weekday", filters.weekday);
+  if (filters?.search) params.set("search", filters.search);
+  if (filters?.date) params.set("date", filters.date);
+  if (filters?.occupancyLevel) params.set("occupancyLevel", filters.occupancyLevel);
+
+  const response = await authFetch(`${API_URL}/api/routes?${params.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar rotas."));
+  const raw = (await response.json()) as {
+    page: number; pageSize: number; total: number; items: ImportedRouteItem[];
+  };
+  return { page: raw.page, pageSize: raw.pageSize, total: raw.total, items: raw.items };
+}
+
+export async function fetchImportedRoutesByImport(
+  importId: string,
+  page = 1,
+  pageSize = 20,
+  filters?: { weekday?: string; search?: string },
+): Promise<PagedResult<ImportedRouteItem>> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  if (filters?.weekday) params.set("weekday", filters.weekday);
+  if (filters?.search) params.set("search", filters.search);
+  const response = await authFetch(
+    `${API_URL}/api/route-imports/${encodeURIComponent(importId)}/routes?${params.toString()}`,
+  );
+  if (!response.ok) {
+    throw new Error(await parseApiError(response, "Falha ao carregar o histórico de rotas."));
+  }
+  const raw = (await response.json()) as {
+    page: number; pageSize: number; total: number; items: ImportedRouteItem[];
+  };
+  return { page: raw.page, pageSize: raw.pageSize, total: raw.total, items: raw.items };
+}
+
+export async function fetchImportedRouteDetail(id: string): Promise<ImportedRouteDetail> {
+  const response = await authFetch(`${API_URL}/api/routes/${id}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes da rota."));
+  return (await response.json()) as ImportedRouteDetail;
+}
+
+export async function fetchAdminJobsSummary(): Promise<AdminJobSummary> {
+  const response = await authFetch(`${API_URL}/api/admin/jobs/summary`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de jobs."));
+  return (await response.json()) as AdminJobSummary;
+}
+
+export async function fetchAdminJobs(
+  page = 1,
+  pageSize = 20,
+  filters?: { status?: string; type?: string },
+): Promise<PagedResult<AdminJobItem>> {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.type) params.set("type", filters.type);
+
+  const response = await authFetch(`${API_URL}/api/admin/jobs?${params.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar jobs."));
+  const raw = (await response.json()) as {
+    page: number; pageSize: number; total: number; items: AdminJobItem[];
+  };
+  return { page: raw.page, pageSize: raw.pageSize, total: raw.total, items: raw.items };
+}
+
+export async function fetchAdminJobDetail(jobId: string): Promise<AdminJobItem> {
+  const response = await authFetch(`${API_URL}/api/admin/jobs/${jobId}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes do job."));
+  return (await response.json()) as AdminJobItem;
+}
+
+export async function retryAdminJob(jobId: string): Promise<void> {
+  const response = await authFetch(`${API_URL}/api/admin/jobs/${jobId}/retry`, { method: "POST" });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao reenviar job."));
+}
+
+export async function cancelAdminJob(jobId: string): Promise<void> {
+  const response = await authFetch(`${API_URL}/api/admin/jobs/${jobId}/cancel`, { method: "POST" });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao cancelar job."));
+}

@@ -22,3 +22,10 @@ export function buildSparklinePoints(data: number[]): string {
     .join(" ");
 }
 
+export function resolveKpiValueSizeClass(value: string): string {
+  const visualLength = Array.from(value.trim()).length;
+  if (visualLength <= 8) return "text-3xl";
+  if (visualLength <= 16) return "text-2xl";
+  if (visualLength <= 19) return "text-xl";
+  return "text-lg";
+}

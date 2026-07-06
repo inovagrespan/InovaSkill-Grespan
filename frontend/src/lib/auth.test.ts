@@ -64,6 +64,15 @@ describe("auth", () => {
     expect(isTokenValid(token)).toBe(true);
   });
 
+  it("invalida sessões simuladas antigas", () => {
+    const unsignedParts = createToken(Math.floor(Date.now() / 1000) + 60)
+      .split(".")
+      .slice(0, 2)
+      .join(".");
+
+    expect(isTokenValid(`${unsignedParts}.fake-signature`)).toBe(false);
+  });
+
   it("não autentica apenas com token salvo, sem sessão de login", () => {
     localStorageMap.set("inovaskill.auth.token", createToken(Math.floor(Date.now() / 1000) + 60));
 
@@ -138,11 +147,12 @@ describe("auth", () => {
     expect(assignMock).toHaveBeenCalledWith("/login?redirect=%2Fclientes");
   });
 
-  it("cria token fake quando a API de login está fora", async () => {
+  it("não cria sessão falsa quando a API de login está fora", async () => {
     vi.mocked(window.fetch).mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
-    const token = await login({ userOrEmail: "rh", password: "rh" });
-    expect(token.split(".").length).toBe(3);
+    await expect(login({ userOrEmail: "rh", password: "rh" }))
+      .rejects.toThrow("Não foi possível conectar à API");
+    expect(localStorageMap.has("inovaskill.auth.token")).toBe(false);
   });
 
   it("mostra mensagem clara quando a API de cadastro está fora", async () => {

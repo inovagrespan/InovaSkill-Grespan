@@ -8,6 +8,14 @@ vi.mock("@/lib/importer-progress", () => ({
 }));
 
 describe("processing monitoring", () => {
+  it("atualiza automaticamente a central para refletir a conclusão do worker", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/processamentos.tsx"), "utf8");
+
+    expect(source).toContain("PROCESSING_REFRESH_INTERVAL_MS = 5_000");
+    expect(source).toContain("window.setInterval");
+    expect(source).toContain("window.clearInterval");
+    expect(source).toContain("loadData(pageRef.current)");
+  });
   const localStorageMap = new Map<string, string>();
   const sessionStorageMap = new Map<string, string>();
 
@@ -152,11 +160,11 @@ describe("processing monitoring", () => {
     expect(routeSource).toContain('createFileRoute("/processamentos")');
     expect(routeSource).toContain("beforeLoad");
     expect(routeSource).toContain("canCurrentUserAccessProcessingArea");
-    expect(routeSource).toContain("processing-page-shell");
     expect(routeSource).toContain("Central de Processamentos");
-    expect(routeSource).toContain("Resumo de vendas");
-    expect(routeSource).toContain("Resumo de clientes");
-    expect(routeSource).toContain("runProcessingManualAction");
+    expect(routeSource).toContain("Job");
+    expect(routeSource).toContain("fetchAdminJobsSummary");
+    expect(routeSource).toContain("fetchAdminJobs");
+    expect(routeSource).toContain("retryAdminJob");
     expect(sidebarSource).toContain('to: "/processamentos"');
     expect(sidebarSource).toContain('label: "Processamento"');
     expect(sidebarSource).toContain('accessRoles: ["admin_system", "admin"]');
@@ -169,21 +177,22 @@ describe("processing monitoring", () => {
     const importacoes = fs.readFileSync(path.resolve(process.cwd(), "src/routes/importacoes.files.tsx"), "utf8");
 
     expect(processamentos).toContain("SkeletonTable");
-    expect(processamentos).toContain("SkeletonChart");
+    expect(processamentos).toContain("SkeletonMetricCard");
     expect(vendas).toContain("SkeletonMetricCard");
     expect(vendas).toContain("Filtros avançados");
     expect(vendas).toContain("Sem resultado");
     expect(vendas).toContain("periodOptions");
-    expect(clientes).toContain("SkeletonModalContent");
-    expect(clientes).toContain("Nenhum indicador encontrado.");
-    expect(importacoes).toContain("jobsLoading && jobs.length === 0");
+    expect(clientes).toContain("SkeletonTable");
+    expect(clientes).toContain("Nenhum cliente importado.");
+    expect(importacoes).toContain("importsLoading && imports.length === 0");
   });
 
-  it("assina atualizacoes em tempo real na central de processamentos", () => {
+  it("atualiza lista de jobs manualmente com botao Atualizar", () => {
     const processamentos = fs.readFileSync(path.resolve(process.cwd(), "src/routes/processamentos.tsx"), "utf8");
 
-    expect(processamentos).toContain("subscribeToFileJobUpdates");
-    expect(processamentos).toContain("const interval = setInterval(() => void loadDashboard(), 15000);");
-    expect(processamentos).toContain("void loadJobDetails(jobId);");
+    expect(processamentos).toContain("Atualizar");
+    expect(processamentos).toContain("fetchAdminJobsSummary");
+    expect(processamentos).toContain("Promise.all");
+    expect(processamentos).toContain("statusFilter");
   });
 });

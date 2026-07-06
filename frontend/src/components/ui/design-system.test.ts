@@ -31,7 +31,11 @@ describe("design system tokens", () => {
   it("define estilo de scrollbar customizado", () => {
     const css = read("src/styles.css");
 
-    expect(css).toContain(".custom-scrollbar");
+    expect(css).toContain("--scrollbar-thumb:");
+    expect(css).toContain("--scrollbar-thumb-hover:");
+    expect(css).toContain("*::-webkit-scrollbar");
+    expect(css).toContain("*::-webkit-scrollbar-thumb:active");
+    expect(css).toContain("*::-webkit-scrollbar-corner");
     expect(css).toContain("scrollbar-width: thin;");
     expect(css).toContain("::-webkit-scrollbar-thumb");
   });

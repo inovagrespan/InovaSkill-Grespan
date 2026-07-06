@@ -7,7 +7,8 @@ namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
 public sealed class ProcessImportHandler(
     ImportDbContext dbContext,
-    IEnumerable<IDataSourceProcessor> processors)
+    IEnumerable<IDataSourceProcessor> processors,
+    IImportLifecycleService importLifecycle)
 {
     private const int MaximumAttempts = 4;
 
@@ -18,6 +19,10 @@ public sealed class ProcessImportHandler(
         var import = await dbContext.RouteImports
             .Include(x => x.DataSource)
             .SingleAsync(x => x.Id == message.ImportId, cancellationToken);
+        if (import.Status is RouteImportStatus.Completed or RouteImportStatus.Failed)
+        {
+            return;
+        }
 
         job.Attempts++;
         job.StartedAt ??= DateTime.UtcNow;
@@ -28,18 +33,24 @@ public sealed class ProcessImportHandler(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var processor = processors.SingleOrDefault(x =>
-            string.Equals(x.SourceCode, import.DataSource!.Code, StringComparison.OrdinalIgnoreCase))
-            ?? throw new StructuralImportException($"Não existe processador para a fonte '{import.DataSource!.Code}'.");
+            string.Equals(x.SourceCode, import.DataSource!.ProcessorKey, StringComparison.OrdinalIgnoreCase))
+            ?? throw new StructuralImportException(
+                $"Não existe processador para a chave '{import.DataSource!.ProcessorKey}'.");
 
         try
         {
             await processor.ProcessAsync(import.Id, cancellationToken);
+            dbContext.ChangeTracker.Clear();
+            job = await dbContext.JobExecutions.SingleAsync(
+                x => x.Id == message.JobExecutionId, cancellationToken);
             job.Status = JobExecutionStatus.Completed;
             job.FinishedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
+            await importLifecycle.TryActivateAsync(import.Id, cancellationToken);
         }
         catch (StructuralImportException exception)
         {
+            (job, import) = await ReloadStateAsync(message, cancellationToken);
             import.Status = RouteImportStatus.Failed;
             import.FailureMessage = exception.Message;
             import.FinishedAt = DateTime.UtcNow;
@@ -50,6 +61,7 @@ public sealed class ProcessImportHandler(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            (job, import) = await ReloadStateAsync(message, cancellationToken);
             job.ErrorMessage = exception.Message;
             if (job.Attempts >= MaximumAttempts)
             {
@@ -66,5 +78,18 @@ public sealed class ProcessImportHandler(
             await dbContext.SaveChangesAsync(cancellationToken);
             throw;
         }
+    }
+
+    private async Task<(InovaSkill.Importer.Domain.Entities.JobExecution Job,
+        InovaSkill.Importer.Domain.Entities.RouteImport Import)> ReloadStateAsync(
+        ProcessImport message,
+        CancellationToken cancellationToken)
+    {
+        dbContext.ChangeTracker.Clear();
+        var job = await dbContext.JobExecutions.SingleAsync(
+            x => x.Id == message.JobExecutionId, cancellationToken);
+        var import = await dbContext.RouteImports.SingleAsync(
+            x => x.Id == message.ImportId, cancellationToken);
+        return (job, import);
     }
 }

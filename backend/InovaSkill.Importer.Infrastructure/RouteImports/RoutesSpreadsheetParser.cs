@@ -7,7 +7,10 @@ namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
 public sealed record SpreadsheetCorrection(string SheetName, int RowNumber, string Field, string Value);
 public sealed record ParsedRouteEntry(int Sequence, string Name, int Deliveries, decimal AveragePerDay, string? Note);
-public sealed record ParsedRoute(string Name, string Weekday, string VehicleType, decimal VehicleCapacityKg, IReadOnlyList<ParsedRouteEntry> Entries);
+public sealed record ParsedRoute(string Name, string Weekday, string VehicleType, IReadOnlyList<ParsedRouteEntry> Entries)
+{
+    public decimal VehicleCapacityKg { get; init; }
+}
 public sealed record ParsedImportError(string SheetName, int RowNumber, string Field, string RawValue, string Message);
 public sealed record RoutesSpreadsheetParseResult(
     IReadOnlyList<ParsedRoute> Routes,
@@ -21,9 +24,6 @@ public sealed class RoutesSpreadsheetParser
     private const int EntryNameColumn = 3;
     private const int DeliveriesColumn = 4;
     private const int AveragePerDayColumn = 5;
-    private const decimal TruckCapacityKg = 10_300m;
-    private const decimal TocoCapacityKg = 7_700m;
-    private const decimal AceloCapacityKg = 3_300m;
 
     public RoutesSpreadsheetParseResult Parse(
         Stream content,
@@ -96,8 +96,8 @@ public sealed class RoutesSpreadsheetParser
 
             if (!string.IsNullOrWhiteSpace(routeOrNote) && NormalizeToken(entryName) == "cidades da rota")
             {
-                FinishRoute(current, routes);
-                current = new RouteDraft(routeOrNote, weekday);
+                FinishRoute(current, routes, errors, corrections);
+                current = new RouteDraft(routeOrNote, weekday, sheet.Name, rowNumber);
                 continue;
             }
 
@@ -110,8 +110,7 @@ public sealed class RoutesSpreadsheetParser
             if (string.IsNullOrWhiteSpace(entryName) && vehicle is not null)
             {
                 current.VehicleType = vehicle;
-                current.VehicleCapacityKg = VehicleCapacity(vehicle);
-                FinishRoute(current, routes);
+                FinishRoute(current, routes, errors, corrections);
                 current = null;
                 continue;
             }
@@ -156,7 +155,7 @@ public sealed class RoutesSpreadsheetParser
             importedRows++;
         }
 
-        FinishRoute(current, routes);
+        FinishRoute(current, routes, errors, corrections);
     }
 
     private static string ResolveCellValue(
@@ -166,29 +165,55 @@ public sealed class RoutesSpreadsheetParser
         string field,
         IReadOnlyDictionary<string, string> corrections)
     {
-        return corrections.TryGetValue(CorrectionKey(sheet.Name, rowNumber, field), out var correction)
-            ? correction
-            : NormalizeText(sheet.Cell(rowNumber, columnNumber).GetFormattedString());
+        if (corrections.TryGetValue(
+            CorrectionKey(sheet.Name, rowNumber, field),
+            out var correction))
+        {
+            return correction;
+        }
+
+        var cell = sheet.Cell(rowNumber, columnNumber);
+        return cell.DataType == XLDataType.Number
+            ? cell.GetValue<decimal>().ToString(CultureInfo.GetCultureInfo("pt-BR"))
+            : NormalizeText(cell.GetFormattedString());
     }
 
-    private static void FinishRoute(RouteDraft? draft, ICollection<ParsedRoute> routes)
+    private static void FinishRoute(
+        RouteDraft? draft,
+        ICollection<ParsedRoute> routes,
+        ICollection<ParsedImportError>? errors = null,
+        IReadOnlyDictionary<string, string>? corrections = null)
     {
         if (draft is null || draft.Entries.Count == 0)
         {
             return;
         }
 
-        if (draft.VehicleType is null)
+        var vehicleType = draft.VehicleType;
+        if (vehicleType is null &&
+            corrections?.TryGetValue(
+                CorrectionKey(draft.SheetName, draft.HeaderRowNumber, "vehicle_type"),
+                out var correctedVehicleType) == true)
         {
-            throw new StructuralImportException($"A rota '{draft.Name}' não possui um tipo de veículo reconhecido.");
+            vehicleType = NormalizeVehicleType(correctedVehicleType);
+        }
+
+        if (vehicleType is null)
+        {
+            errors?.Add(new ParsedImportError(
+                draft.SheetName, draft.HeaderRowNumber, "vehicle_type", draft.Name,
+                $"A rota '{draft.Name}' não possui um tipo de veículo reconhecido."));
+            return;
         }
 
         routes.Add(new ParsedRoute(
             draft.Name,
             draft.Weekday,
-            draft.VehicleType,
-            draft.VehicleCapacityKg,
-            draft.Entries));
+            vehicleType,
+            draft.Entries)
+        {
+            VehicleCapacityKg = draft.VehicleCapacityKg
+        });
     }
 
     public static string? ResolveWeekday(string sheetName)
@@ -208,10 +233,9 @@ public sealed class RoutesSpreadsheetParser
     public static string? NormalizeVehicleType(string value)
     {
         var token = NormalizeToken(value);
-        if (token.Contains("truck", StringComparison.Ordinal)) return "Truck";
-        if (token.Contains("toco", StringComparison.Ordinal)) return "Toco";
-        if (token.Contains("acelo", StringComparison.Ordinal) || token.Contains("acello", StringComparison.Ordinal)) return "Acelo";
-        return null;
+        if (string.IsNullOrWhiteSpace(token)) return null;
+        if (token == "acello") return "Acelo";
+        return CultureInfo.GetCultureInfo("pt-BR").TextInfo.ToTitleCase(token);
     }
 
     public static bool TryParseInteger(string value, out int parsed) =>
@@ -223,14 +247,6 @@ public sealed class RoutesSpreadsheetParser
             NumberStyles.Number,
             CultureInfo.GetCultureInfo("pt-BR"),
             out parsed);
-
-    private static decimal VehicleCapacity(string vehicleType) => vehicleType switch
-    {
-        "Truck" => TruckCapacityKg,
-        "Toco" => TocoCapacityKg,
-        "Acelo" => AceloCapacityKg,
-        _ => throw new StructuralImportException($"Tipo de veículo '{vehicleType}' não reconhecido.")
-    };
 
     private static string CorrectionKey(string sheetName, int rowNumber, string field) =>
         $"{NormalizeToken(sheetName)}|{rowNumber}|{field}";
@@ -250,10 +266,12 @@ public sealed class RoutesSpreadsheetParser
         return builder.ToString().Normalize(NormalizationForm.FormC);
     }
 
-    private sealed class RouteDraft(string name, string weekday)
+    private sealed class RouteDraft(string name, string weekday, string sheetName, int headerRowNumber)
     {
         public string Name { get; } = name;
         public string Weekday { get; } = weekday;
+        public string SheetName { get; } = sheetName;
+        public int HeaderRowNumber { get; } = headerRowNumber;
         public string? VehicleType { get; set; }
         public decimal VehicleCapacityKg { get; set; }
         public List<ParsedRouteEntry> Entries { get; } = [];

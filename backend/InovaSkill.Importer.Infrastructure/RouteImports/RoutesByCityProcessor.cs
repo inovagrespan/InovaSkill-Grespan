@@ -11,7 +11,7 @@ public sealed class RoutesByCityProcessor(
     IImportFileStorage fileStorage,
     RoutesSpreadsheetParser parser) : IDataSourceProcessor
 {
-    public string SourceCode => RouteImportCodes.DataSource;
+    public string SourceCode => RouteImportCodes.ProcessorKey;
 
     public async Task ProcessAsync(Guid importId, CancellationToken cancellationToken)
     {
@@ -40,27 +40,64 @@ public sealed class RoutesByCityProcessor(
         dbContext.RouteImportErrors.RemoveRange(pendingErrors);
 
         var vehicleTypes = await EnsureVehicleTypesAsync(parsed.Routes, cancellationToken);
+        var routeMunicipalityNames = parsed.Routes.SelectMany(route => route.Entries)
+            .Select(entry => MunicipalityNameNormalizer.Normalize(entry.Name)).Distinct().ToArray();
+        var municipalityCandidates = await dbContext.Municipalities
+            .Where(item => routeMunicipalityNames.Contains(item.NormalizedName))
+            .ToListAsync(cancellationToken);
+        var unambiguousMunicipalities = municipalityCandidates
+            .GroupBy(item => item.NormalizedName)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single().Id);
         var now = DateTime.UtcNow;
         foreach (var parsedRoute in parsed.Routes)
         {
+            var vehicleType = vehicleTypes[parsedRoute.VehicleType];
+            var entries = parsedRoute.Entries
+                .Select(entry => new
+                {
+                    Parsed = entry,
+                    LoadKg = RouteLoadPolicy.Normalize(entry.AveragePerDay)
+                })
+                .ToArray();
+            var totalWeightKg = entries.Sum(entry => entry.LoadKg);
+            var occupancy = RouteOccupancyCalculator.Calculate(new RouteOccupancyInput(
+                totalWeightKg,
+                vehicleType.CapacityKg,
+                null,
+                vehicleType.CapacityVolumeM3,
+                null,
+                vehicleType.CapacityPallets));
             var route = new Route
             {
                 Id = Guid.NewGuid(),
                 ImportId = importId,
                 Name = parsedRoute.Name,
                 Weekday = parsedRoute.Weekday,
-                VehicleTypeId = vehicleTypes[parsedRoute.VehicleType].Id,
+                VehicleTypeId = vehicleType.Id,
+                TotalWeightKg = totalWeightKg,
+                WeightOccupancy = occupancy.WeightOccupancy,
+                VolumeOccupancy = occupancy.VolumeOccupancy,
+                PalletOccupancy = occupancy.PalletOccupancy,
+                OverallOccupancy = occupancy.OverallOccupancy,
+                OccupancyStatus = occupancy.HasAvailableCapacity
+                    ? RouteOccupancyStatus.Calculated
+                    : RouteOccupancyStatus.MissingCapacity,
                 CreatedAt = now
             };
-            route.Entries = parsedRoute.Entries.Select(entry => new RouteEntry
+            route.Entries = entries.Select(entry => new RouteEntry
             {
                 Id = Guid.NewGuid(),
                 RouteId = route.Id,
-                Sequence = entry.Sequence,
-                Name = entry.Name,
-                Deliveries = entry.Deliveries,
-                AveragePerDay = entry.AveragePerDay,
-                Note = entry.Note,
+                Sequence = entry.Parsed.Sequence,
+                Name = entry.Parsed.Name,
+                MunicipalityId = unambiguousMunicipalities.TryGetValue(
+                    MunicipalityNameNormalizer.Normalize(entry.Parsed.Name), out var municipalityId)
+                    ? municipalityId
+                    : null,
+                Deliveries = entry.Parsed.Deliveries,
+                AveragePerDay = entry.LoadKg,
+                Note = entry.Parsed.Note,
                 CreatedAt = now
             }).ToArray();
             dbContext.Routes.Add(route);
@@ -101,18 +138,32 @@ public sealed class RoutesByCityProcessor(
             .Where(x => names.Contains(x.Name))
             .ToListAsync(cancellationToken);
 
-        foreach (var route in routes)
+        foreach (var name in names)
         {
-            if (existing.All(x => !string.Equals(x.Name, route.VehicleType, StringComparison.OrdinalIgnoreCase)))
+            var existingVehicleType = existing.SingleOrDefault(
+                item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
+            var parsedCapacity = routes
+                .Where(route => string.Equals(route.VehicleType, name, StringComparison.OrdinalIgnoreCase))
+                .Select(route => route.VehicleCapacityKg)
+                .FirstOrDefault(capacity => capacity > 0);
+            var knownCapacity = parsedCapacity > 0
+                ? parsedCapacity
+                : LogisticsVehicleCapacityPolicy.FindWeightCapacityKg(name);
+
+            if (existingVehicleType is null)
             {
                 var vehicleType = new VehicleType
                 {
                     Id = Guid.NewGuid(),
-                    Name = route.VehicleType,
-                    CapacityKg = route.VehicleCapacityKg
+                    Name = name,
+                    CapacityKg = knownCapacity
                 };
                 existing.Add(vehicleType);
                 dbContext.VehicleTypes.Add(vehicleType);
+            }
+            else if (existingVehicleType.CapacityKg is null && knownCapacity.HasValue)
+            {
+                existingVehicleType.CapacityKg = knownCapacity;
             }
         }
 

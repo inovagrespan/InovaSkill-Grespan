@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE_URL = "http://localhost:5279";
+const DEFAULT_API_BASE_URL = "http://localhost:5279/api";
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");

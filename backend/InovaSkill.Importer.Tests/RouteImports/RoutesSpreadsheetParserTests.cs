@@ -33,7 +33,6 @@ public sealed class RoutesSpreadsheetParserTests
         Assert.Equal("RIO PRETO", route.Name);
         Assert.Equal("MONDAY", route.Weekday);
         Assert.Equal("Acelo", route.VehicleType);
-        Assert.Equal(3_300m, route.VehicleCapacityKg);
         Assert.Equal(2, route.Entries.Count);
         Assert.Equal([1, 2], route.Entries.Select(x => x.Sequence));
         Assert.Equal(["REGENTE FEIJO", "REGENTE FEIJO"], route.Entries.Select(x => x.Name));
@@ -83,6 +82,22 @@ public sealed class RoutesSpreadsheetParserTests
     }
 
     [Fact]
+    public void Parse_ResolvedVehicleCorrection_AppliesVehicleToRoute()
+    {
+        using var workbook = CreateWorkbook("SEGUNDA");
+        var sheet = workbook.Worksheet(1);
+        AddRouteHeader(sheet, 2, "MARÍLIA");
+        AddEntry(sheet, 3, "", "POMPEIA", "3", "200,25");
+        using var stream = Save(workbook);
+
+        var result = new RoutesSpreadsheetParser().Parse(stream,
+            [new SpreadsheetCorrection("SEGUNDA", 2, "vehicle_type", "Toco")]);
+
+        Assert.Empty(result.Errors);
+        Assert.Equal("Toco", Assert.Single(result.Routes).VehicleType);
+    }
+
+    [Fact]
     public void Parse_TotalRow_IsNotSavedAsEntry()
     {
         using var workbook = CreateWorkbook("SEXTA");
@@ -95,6 +110,24 @@ public sealed class RoutesSpreadsheetParserTests
 
         var entry = Assert.Single(Assert.Single(result.Routes).Entries);
         Assert.Equal("BADY BASSITT", entry.Name);
+    }
+
+    [Fact]
+    public void Parse_NumericLoadWithIntegerDisplayFormat_PreservesUnderlyingPrecision()
+    {
+        using var workbook = CreateWorkbook("SEGUNDA");
+        var sheet = workbook.Worksheet(1);
+        AddRouteHeader(sheet, 2, "GUARANTA NOVA");
+        sheet.Cell(3, 3).Value = "PIRAJUI";
+        sheet.Cell(3, 4).Value = 8;
+        sheet.Cell(3, 5).Value = 749.192m;
+        sheet.Cell(3, 5).Style.NumberFormat.Format = "0";
+        AddVehicleTotal(sheet, 4, "Truck", "8", "749,192");
+
+        var result = Parse(workbook);
+
+        var entry = Assert.Single(Assert.Single(result.Routes).Entries);
+        Assert.Equal(749.192m, entry.AveragePerDay);
     }
 
     [Fact]

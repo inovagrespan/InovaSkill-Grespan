@@ -16,21 +16,21 @@ import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as ProdutosRouteImport } from './routes/produtos'
 import { Route as ProcessamentosRouteImport } from './routes/processamentos'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
+import { Route as NotasFiscaisRouteImport } from './routes/notas-fiscais'
 import { Route as MapaRouteImport } from './routes/mapa'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as FinancasRouteImport } from './routes/financas'
 import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as ClientesImpactoRouteImport } from './routes/clientes-impacto'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LogisticaIndexRouteImport } from './routes/logistica.index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
+import { Route as VeiculosTiposRouteImport } from './routes/veiculos.tipos'
 import { Route as LogisticaRotasRouteImport } from './routes/logistica.rotas'
 import { Route as LogisticaMapaRouteImport } from './routes/logistica.mapa'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
-import { Route as ClientesAnaliseComercialRouteImport } from './routes/clientes.analise-comercial'
 
 const VendasRoute = VendasRouteImport.update({
   id: '/vendas',
@@ -67,6 +67,11 @@ const NotificacoesRoute = NotificacoesRouteImport.update({
   path: '/notificacoes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotasFiscaisRoute = NotasFiscaisRouteImport.update({
+  id: '/notas-fiscais',
+  path: '/notas-fiscais',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MapaRoute = MapaRouteImport.update({
   id: '/mapa',
   path: '/mapa',
@@ -97,11 +102,6 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ClientesImpactoRoute = ClientesImpactoRouteImport.update({
-  id: '/clientes-impacto',
-  path: '/clientes-impacto',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ClientesRoute = ClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
@@ -122,6 +122,11 @@ const ImportacoesIndexRoute = ImportacoesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ImportacoesRoute,
 } as any)
+const VeiculosTiposRoute = VeiculosTiposRouteImport.update({
+  id: '/veiculos/tipos',
+  path: '/veiculos/tipos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LogisticaRotasRoute = LogisticaRotasRouteImport.update({
   id: '/rotas',
   path: '/rotas',
@@ -137,23 +142,17 @@ const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
   path: '/files',
   getParentRoute: () => ImportacoesRoute,
 } as any)
-const ClientesAnaliseComercialRoute =
-  ClientesAnaliseComercialRouteImport.update({
-    id: '/analise-comercial',
-    path: '/analise-comercial',
-    getParentRoute: () => ClientesRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/clientes': typeof ClientesRouteWithChildren
-  '/clientes-impacto': typeof ClientesImpactoRoute
+  '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
   '/mapa': typeof MapaRoute
+  '/notas-fiscais': typeof NotasFiscaisRoute
   '/notificacoes': typeof NotificacoesRoute
   '/processamentos': typeof ProcessamentosRoute
   '/produtos': typeof ProdutosRoute
@@ -161,21 +160,21 @@ export interface FileRoutesByFullPath {
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
-  '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
+  '/veiculos/tipos': typeof VeiculosTiposRoute
   '/importacoes/': typeof ImportacoesIndexRoute
   '/logistica/': typeof LogisticaIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/clientes': typeof ClientesRouteWithChildren
-  '/clientes-impacto': typeof ClientesImpactoRoute
+  '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
   '/financas': typeof FinancasRoute
   '/login': typeof LoginRoute
   '/mapa': typeof MapaRoute
+  '/notas-fiscais': typeof NotasFiscaisRoute
   '/notificacoes': typeof NotificacoesRoute
   '/processamentos': typeof ProcessamentosRoute
   '/produtos': typeof ProdutosRoute
@@ -183,24 +182,24 @@ export interface FileRoutesByTo {
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
-  '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
+  '/veiculos/tipos': typeof VeiculosTiposRoute
   '/importacoes': typeof ImportacoesIndexRoute
   '/logistica': typeof LogisticaIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/clientes': typeof ClientesRouteWithChildren
-  '/clientes-impacto': typeof ClientesImpactoRoute
+  '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
   '/mapa': typeof MapaRoute
+  '/notas-fiscais': typeof NotasFiscaisRoute
   '/notificacoes': typeof NotificacoesRoute
   '/processamentos': typeof ProcessamentosRoute
   '/produtos': typeof ProdutosRoute
@@ -208,10 +207,10 @@ export interface FileRoutesById {
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
-  '/clientes/analise-comercial': typeof ClientesAnaliseComercialRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
+  '/veiculos/tipos': typeof VeiculosTiposRoute
   '/importacoes/': typeof ImportacoesIndexRoute
   '/logistica/': typeof LogisticaIndexRoute
 }
@@ -220,13 +219,13 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/clientes'
-    | '/clientes-impacto'
     | '/dashboard'
     | '/financas'
     | '/importacoes'
     | '/login'
     | '/logistica'
     | '/mapa'
+    | '/notas-fiscais'
     | '/notificacoes'
     | '/processamentos'
     | '/produtos'
@@ -234,21 +233,21 @@ export interface FileRouteTypes {
     | '/rotas'
     | '/simulacao'
     | '/vendas'
-    | '/clientes/analise-comercial'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
+    | '/veiculos/tipos'
     | '/importacoes/'
     | '/logistica/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/clientes'
-    | '/clientes-impacto'
     | '/dashboard'
     | '/financas'
     | '/login'
     | '/mapa'
+    | '/notas-fiscais'
     | '/notificacoes'
     | '/processamentos'
     | '/produtos'
@@ -256,23 +255,23 @@ export interface FileRouteTypes {
     | '/rotas'
     | '/simulacao'
     | '/vendas'
-    | '/clientes/analise-comercial'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
+    | '/veiculos/tipos'
     | '/importacoes'
     | '/logistica'
   id:
     | '__root__'
     | '/'
     | '/clientes'
-    | '/clientes-impacto'
     | '/dashboard'
     | '/financas'
     | '/importacoes'
     | '/login'
     | '/logistica'
     | '/mapa'
+    | '/notas-fiscais'
     | '/notificacoes'
     | '/processamentos'
     | '/produtos'
@@ -280,24 +279,24 @@ export interface FileRouteTypes {
     | '/rotas'
     | '/simulacao'
     | '/vendas'
-    | '/clientes/analise-comercial'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
+    | '/veiculos/tipos'
     | '/importacoes/'
     | '/logistica/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ClientesRoute: typeof ClientesRouteWithChildren
-  ClientesImpactoRoute: typeof ClientesImpactoRoute
+  ClientesRoute: typeof ClientesRoute
   DashboardRoute: typeof DashboardRoute
   FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LoginRoute: typeof LoginRoute
   LogisticaRoute: typeof LogisticaRouteWithChildren
   MapaRoute: typeof MapaRoute
+  NotasFiscaisRoute: typeof NotasFiscaisRoute
   NotificacoesRoute: typeof NotificacoesRoute
   ProcessamentosRoute: typeof ProcessamentosRoute
   ProdutosRoute: typeof ProdutosRoute
@@ -305,6 +304,7 @@ export interface RootRouteChildren {
   RotasRoute: typeof RotasRoute
   SimulacaoRoute: typeof SimulacaoRoute
   VendasRoute: typeof VendasRoute
+  VeiculosTiposRoute: typeof VeiculosTiposRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -358,6 +358,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotificacoesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notas-fiscais': {
+      id: '/notas-fiscais'
+      path: '/notas-fiscais'
+      fullPath: '/notas-fiscais'
+      preLoaderRoute: typeof NotasFiscaisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mapa': {
       id: '/mapa'
       path: '/mapa'
@@ -400,13 +407,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/clientes-impacto': {
-      id: '/clientes-impacto'
-      path: '/clientes-impacto'
-      fullPath: '/clientes-impacto'
-      preLoaderRoute: typeof ClientesImpactoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/clientes': {
       id: '/clientes'
       path: '/clientes'
@@ -435,6 +435,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacoesIndexRouteImport
       parentRoute: typeof ImportacoesRoute
     }
+    '/veiculos/tipos': {
+      id: '/veiculos/tipos'
+      path: '/veiculos/tipos'
+      fullPath: '/veiculos/tipos'
+      preLoaderRoute: typeof VeiculosTiposRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/logistica/rotas': {
       id: '/logistica/rotas'
       path: '/rotas'
@@ -456,27 +463,8 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacoesFilesRouteImport
       parentRoute: typeof ImportacoesRoute
     }
-    '/clientes/analise-comercial': {
-      id: '/clientes/analise-comercial'
-      path: '/analise-comercial'
-      fullPath: '/clientes/analise-comercial'
-      preLoaderRoute: typeof ClientesAnaliseComercialRouteImport
-      parentRoute: typeof ClientesRoute
-    }
   }
 }
-
-interface ClientesRouteChildren {
-  ClientesAnaliseComercialRoute: typeof ClientesAnaliseComercialRoute
-}
-
-const ClientesRouteChildren: ClientesRouteChildren = {
-  ClientesAnaliseComercialRoute: ClientesAnaliseComercialRoute,
-}
-
-const ClientesRouteWithChildren = ClientesRoute._addFileChildren(
-  ClientesRouteChildren,
-)
 
 interface ImportacoesRouteChildren {
   ImportacoesFilesRoute: typeof ImportacoesFilesRoute
@@ -510,14 +498,14 @@ const LogisticaRouteWithChildren = LogisticaRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ClientesRoute: ClientesRouteWithChildren,
-  ClientesImpactoRoute: ClientesImpactoRoute,
+  ClientesRoute: ClientesRoute,
   DashboardRoute: DashboardRoute,
   FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LoginRoute: LoginRoute,
   LogisticaRoute: LogisticaRouteWithChildren,
   MapaRoute: MapaRoute,
+  NotasFiscaisRoute: NotasFiscaisRoute,
   NotificacoesRoute: NotificacoesRoute,
   ProcessamentosRoute: ProcessamentosRoute,
   ProdutosRoute: ProdutosRoute,
@@ -525,6 +513,7 @@ const rootRouteChildren: RootRouteChildren = {
   RotasRoute: RotasRoute,
   SimulacaoRoute: SimulacaoRoute,
   VendasRoute: VendasRoute,
+  VeiculosTiposRoute: VeiculosTiposRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

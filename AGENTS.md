@@ -9,6 +9,8 @@ Guia local para qualquer IA que edite este repositório.
 
 ## Regras Obrigatórias
 - Salvar arquivos sempre em UTF-8.
+- Consultar `docs/architecture.md` antes de realizar alterações estruturais.
+- Manter `docs/architecture.md` sempre atualizado: qualquer mudança em componentes, limites de camada, dependências, fluxos, contratos, persistência, mensageria, infraestrutura ou estratégia de execução deve atualizar esse documento na mesma alteração.
 - Não renomear pastas de arquitetura existente sem pedido explícito.
 - Não quebrar separação entre `frontend` e `backend`.
 - Não mudar contratos de API sem atualizar frontend e backend no mesmo PR.
@@ -21,6 +23,8 @@ Guia local para qualquer IA que edite este repositório.
 - No frontend, criar casos de teste para funcionalidades importantes com cenários diferentes (fluxo feliz, bordas e entradas inválidas).
 - Sempre que houver qualquer alteração, executar imediatamente os testes aplicáveis da área alterada antes de encerrar a tarefa.
 - Não introduzir números mágicos em código de regra de negócio, cálculos, limites, paginação, datas ou timeouts; extrair para constantes nomeadas, configuração ou objetos de política conforme o contexto.
+- Buscas textuais reativas devem usar debounce padrão de 300 ms. Consultas comprovadamente mais complexas podem usar um intervalo maior, definido por constante compartilhada e acompanhado de justificativa no código ou na arquitetura; não criar timeouts isolados ou números mágicos por tela.
+- Toda criação ou alteração de consulta, filtro, busca, ordenação, paginação, relacionamento ou agregação persistida deve avaliar explicitamente os índices necessários. Criar índices apenas quando sustentados pelo padrão real de acesso, considerar seletividade e custo de escrita, cobrir a migration com teste e documentar índices especializados ou decisões de não indexar.
 - Antes de finalizar, executar toda a suíte de testes aplicável ao escopo alterado, incluindo testes de frontend quando houver mudanças no frontend e testes de backend quando houver mudanças no backend; só encerrar a tarefa com todos os testes aplicáveis passando.
 - Quando for solicitado criar commit, usar mensagens no padrão Conventional Commits.
 
@@ -53,6 +57,7 @@ rg "Ã|��|�" -n frontend backend -S
 ```
 
 ## Arquitetura Atual
+- A referência arquitetural completa e obrigatória está em `docs/architecture.md`.
 - `frontend/`: aplicação web (TanStack Router + Vite).
 - `backend/`: solução .NET separada em camadas:
   - `InovaSkill.Importer.Api` (HTTP API)

@@ -17,10 +17,13 @@ describe("sidebar navigation", () => {
     expect(diretorItems).toEqual([
       "Dashboard",
       "Rotas",
+      "Tipos de Veículo",
       "Mapa",
+      "Clientes",
+      "Notas Fiscais",
       "Importações",
     ]);
-    expect(vendasItems).toEqual(["Dashboard", "Rotas", "Mapa"]);
+    expect(vendasItems).toEqual(["Dashboard", "Rotas", "Tipos de Veículo", "Mapa", "Clientes", "Notas Fiscais"]);
     expect(adminItems).toContain("Importações");
     expect(adminSystemItems).toContain("Importações");
   });
@@ -50,7 +53,10 @@ describe("sidebar navigation", () => {
     expect(source).not.toContain('label: "Administrativo"');
     expect(source).not.toContain('to: "/relatorios"');
     expect(source).toContain('diretor');
-    expect(source).not.toContain('label: "Clientes"');
+    expect(source).toContain('to: "/clientes"');
+    expect(source).toContain('label: "Clientes"');
+    expect(source).toContain('to: "/notas-fiscais"');
+    expect(source).toContain('label: "Notas Fiscais"');
   });
 
   it("remove itens fora do novo desenho do menu", () => {

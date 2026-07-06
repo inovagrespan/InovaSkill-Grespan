@@ -1,7 +1,7 @@
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
-import { resolveTrendDirection, type TrendDirection } from "./kpi-card.utils";
+import { resolveKpiValueSizeClass, resolveTrendDirection, type TrendDirection } from "./kpi-card.utils";
 import { Skeleton } from "./skeleton";
 
 type KpiCardProps = {
@@ -19,6 +19,8 @@ type KpiCardProps = {
   className?: string;
   valueClassName?: string;
   allowWrapValue?: boolean;
+  tone?: "neutral" | "success" | "danger" | "info";
+  periodLabelClassName?: string;
 };
 
 function formatPct(value?: number | null): string {
@@ -42,6 +44,8 @@ export function KpiCard({
   className,
   valueClassName,
   allowWrapValue = false,
+  tone = "neutral",
+  periodLabelClassName,
 }: KpiCardProps) {
   const direction = resolveTrendDirection(percentageChange, trendDirection);
   const toneClass =
@@ -50,27 +54,53 @@ export function KpiCard({
       : direction === "down"
         ? "text-[var(--error)]"
         : "text-muted-foreground";
+  const cardToneClass = {
+    neutral: "",
+    success: "border-[color:var(--success)]/35 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--success)_8%,var(--surface)),var(--surface))]",
+    danger: "border-[color:var(--error)]/35 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--error)_8%,var(--surface)),var(--surface))]",
+    info: "border-[color:var(--info)]/35 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--info)_8%,var(--surface)),var(--surface))]",
+  }[tone];
+  const valueToneClass = {
+    neutral: "",
+    success: "text-[var(--success)]",
+    danger: "text-[var(--error)]",
+    info: "text-[var(--info)]",
+  }[tone];
+  const iconToneClass = {
+    neutral: "border-primary/15 bg-[var(--soft-red-background)] text-primary",
+    success: "border-[color:var(--success)]/25 bg-[color-mix(in_srgb,var(--success)_12%,transparent)] text-[var(--success)]",
+    danger: "border-[color:var(--error)]/25 bg-[color-mix(in_srgb,var(--error)_12%,transparent)] text-[var(--error)]",
+    info: "border-[color:var(--info)]/25 bg-[color-mix(in_srgb,var(--info)_12%,transparent)] text-[var(--info)]",
+  }[tone];
   return (
     <div
       className={cn(
         "h-full rounded-xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(250,251,253,0.96))] px-5 py-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-sm dark:bg-[linear-gradient(180deg,rgba(23,28,37,0.98),rgba(20,25,34,0.98))]",
         "metric-card-item animate-soft-enter",
+        cardToneClass,
         className,
       )}
     >
       <div className="flex min-h-12 items-start justify-between gap-3">
         <p className="text-xs text-muted-foreground">{title}</p>
-        {showPercentageChange ? (
+        <div className="flex shrink-0 items-center gap-2">
+          {showPercentageChange ? (
           <div className={cn("inline-flex items-center gap-1 text-xs font-semibold", toneClass)}>
             {direction === "up" && <TrendingUp className="size-3.5" />}
             {direction === "down" && <TrendingDown className="size-3.5" />}
             {direction === "stable" && <Minus className="size-3.5" />}
             {formatPct(percentageChange)}
           </div>
-        ) : null}
+          ) : null}
+          {Icon ? (
+            <div className={cn("inline-flex size-8 items-center justify-center rounded-full border", iconToneClass)}>
+              <Icon className="size-4" />
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      <div className="flex min-h-20 flex-1 items-center justify-between gap-3">
+      <div className="flex min-h-20 flex-1 items-center">
         {loading ? (
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <Skeleton className="h-8 w-32" />
@@ -80,26 +110,21 @@ export function KpiCard({
           <p
             title={valueTooltip ?? value}
             className={cn(
-              "min-w-0 flex-1 pr-1 text-2xl font-display leading-tight tracking-tight text-[var(--text-primary)] sm:text-3xl",
+              "min-w-0 flex-1 pr-1 font-display leading-tight tracking-tight text-[var(--text-primary)]",
+              resolveKpiValueSizeClass(value),
               allowWrapValue
                 ? "whitespace-normal break-words"
                 : "overflow-hidden text-ellipsis whitespace-nowrap",
               valueClassName,
+              valueToneClass,
             )}
           >
             {value}
           </p>
         )}
-        <div className="flex flex-col items-end gap-2">
-          {Icon ? (
-            <div className="inline-flex size-8 items-center justify-center rounded-full border border-primary/15 bg-[var(--soft-red-background)] text-primary">
-              <Icon className="size-4" />
-            </div>
-          ) : null}
-        </div>
       </div>
 
-      {periodLabel ? <p className="min-h-8 text-[11px] text-muted-foreground">{periodLabel}</p> : null}
+      {periodLabel ? <p className={cn("min-h-8 text-[11px] text-muted-foreground", periodLabelClassName)}>{periodLabel}</p> : null}
     </div>
   );
 }

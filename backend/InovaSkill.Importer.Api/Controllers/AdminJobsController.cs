@@ -120,4 +120,30 @@ public sealed class AdminJobsController(ImportDbContext dbContext, IMessageBus m
         await messageBus.PublishAsync(new ProcessImport(newJob.RelatedEntityId, newJob.Id));
         return Accepted(new { jobExecutionId = newJob.Id, status = "QUEUED" });
     }
+
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<ActionResult> Cancel(Guid id, CancellationToken cancellationToken)
+    {
+        var job = await dbContext.JobExecutions.Include(x => x.Import)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (job is null) return NotFound();
+        if (job.Status is not (JobExecutionStatus.Processing or JobExecutionStatus.Retrying or JobExecutionStatus.Queued))
+        {
+            return Conflict(new { message = "Apenas jobs em execução, na fila ou em retentativa podem ser cancelados." });
+        }
+
+        job.Status = JobExecutionStatus.Failed;
+        job.ErrorMessage = "Cancelado pelo usuário.";
+        job.FinishedAt = DateTime.UtcNow;
+
+        if (job.Import is not null && job.Import.Status == RouteImportStatus.Processing)
+        {
+            job.Import.Status = RouteImportStatus.Failed;
+            job.Import.FailureMessage = "Cancelado pelo usuário.";
+            job.Import.FinishedAt = DateTime.UtcNow;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { status = "CANCELLED" });
+    }
 }

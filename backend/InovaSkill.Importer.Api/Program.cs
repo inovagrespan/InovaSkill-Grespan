@@ -1,6 +1,4 @@
 using InovaSkill.Importer.Api.Auth;
-using InovaSkill.Importer.Api.Realtime;
-using InovaSkill.Importer.Application.Abstractions;
 using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
@@ -24,7 +22,7 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartBodyLengthLimit = 524_288_000; // 500 MB
 });
 builder.Services.AddCors(options => options.AddPolicy("frontend", policy => policy
-    .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+    .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost")
     .AllowAnyHeader()
     .AllowAnyMethod()));
 
