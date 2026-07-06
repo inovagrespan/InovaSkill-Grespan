@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
 import {
   MAX_UPLOAD_SIZE_BYTES,
+  MAX_UPLOAD_SIZE_MEGABYTES,
   fetchImportErrors,
   fetchImports,
   reprocessImport,
@@ -61,7 +62,6 @@ function formatDuration(seconds: number | null): string {
 function ImportacoesPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [sourceCode, setSourceCode] = useState("ROUTES_BY_CITY");
   const [message, setMessage] = useState("");
 
   const [imports, setImports] = useState<ImportItem[]>([]);
@@ -118,13 +118,13 @@ function ImportacoesPage() {
     setMessage("");
     try {
       for (const file of selectedFiles) {
-        if (file.size > 50 * 1024 * 1024) {
-          throw new Error(`Arquivo '${file.name}' excede o limite de 50 MB.`);
+        if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+          throw new Error(`Arquivo '${file.name}' excede o limite de ${MAX_UPLOAD_SIZE_MEGABYTES} MB.`);
         }
         if (!file.name.toLowerCase().endsWith(".xlsx")) {
           throw new Error(`Arquivo '${file.name}' não é um XLSX válido.`);
         }
-        await uploadImport(file, sourceCode);
+        await uploadImport(file);
       }
       setMessage("Upload concluído com sucesso.");
       setSelectedFiles([]);
@@ -196,22 +196,19 @@ function ImportacoesPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleUpload} className="space-y-4">
-            <label className="block space-y-2 text-sm font-medium">
-              Fonte de dados
-              <select
-                value={sourceCode}
-                onChange={(event) => setSourceCode(event.target.value)}
-                className="block h-10 w-full max-w-sm rounded-md border border-input bg-background px-3"
-              >
-                <option value="ROUTES_BY_CITY">Rotas por cidades</option>
-                <option value="CUSTOMERS">Cadastro de clientes</option>
-              </select>
-            </label>
+            <div className="rounded-lg border border-border bg-muted/35 px-4 py-3 text-sm">
+              <p className="font-medium">Identificação automática</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                O sistema reconhece rotas, clientes ou movimentações fiscais pelo cabeçalho da planilha.
+              </p>
+            </div>
             <label className="block cursor-pointer rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 p-6 transition-all duration-200 hover:bg-primary/10">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Clique para selecionar o arquivo</p>
-                  <p className="text-xs text-muted-foreground">Formato aceito: .xlsx (até 50 MB)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Formato aceito: .xlsx (até {MAX_UPLOAD_SIZE_MEGABYTES} MB)
+                  </p>
                 </div>
                 <div className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/20">
                   <FolderUp className="mr-2 size-4" />

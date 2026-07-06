@@ -16,6 +16,8 @@ configuração, ambos usam `backend/route-imports` em execução local.
 Cada upload recebe uma `version` crescente e única dentro da fonte. A linha da
 fonte é protegida durante a atribuição da versão, evitando versões duplicadas em
 uploads concorrentes. Reprocessar mantém o mesmo import e a mesma versão.
+Antes dessa criação, a API identifica automaticamente a fonte pelos cabeçalhos
+e estrutura do XLSX; não existe seleção manual no frontend.
 
 `data_sources` também guarda o modo de importação e os ponteiros opcionais
 `current_import_id` e `last_successful_import_id`. Para rotas, o modo é
@@ -124,5 +126,7 @@ médio usa `finished_at - started_at` apenas para jobs concluídos.
 
 Crie o registro em `data_sources`, implemente um `IDataSourceProcessor` com o
 novo `SourceCode`, seu parser/validador e as tabelas específicas da fonte.
+Também deve adicionar ao detector uma assinatura estrutural inequívoca, coberta
+por teste, para preservar o upload sem escolha manual.
 Registre o processador na DI. Reutilize imports, erros, jobs, storage, Wolverine,
 Redis, Worker e as telas base. Não grave nomes de classes no banco.

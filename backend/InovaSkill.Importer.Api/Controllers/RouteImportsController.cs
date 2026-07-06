@@ -14,29 +14,32 @@ namespace InovaSkill.Importer.Api.Controllers;
 public sealed class RouteImportsController(
     ImportDbContext dbContext,
     IImportFileStorage fileStorage,
+    ISpreadsheetDataSourceDetector dataSourceDetector,
     IImportLifecycleService importLifecycle,
     IMessageBus messageBus) : ControllerBase
 {
-    private const long MaximumFileSizeBytes = 500 * 1024 * 1024;
     private const int DefaultPageSize = 20;
     private const int MaximumPageSize = 100;
 
     [HttpPost]
-    [RequestSizeLimit(MaximumFileSizeBytes)]
+    [RequestSizeLimit(RouteImportCodes.MaximumUploadSizeBytes)]
     public async Task<ActionResult> Upload(
         IFormFile file,
-        [FromForm] string sourceCode = RouteImportCodes.DataSource,
         CancellationToken cancellationToken = default)
     {
         if (file.Length == 0 || !string.Equals(Path.GetExtension(file.FileName), ".xlsx", StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest(new { message = "Selecione um arquivo XLSX válido." });
         }
-        if (!string.Equals(sourceCode, RouteImportCodes.DataSource, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(sourceCode, CustomerImportCodes.DataSource, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(sourceCode, FiscalImportCodes.DataSource, StringComparison.OrdinalIgnoreCase))
+        string sourceCode;
+        try
         {
-            return BadRequest(new { message = "Fonte de dados inválida." });
+            await using var detectionContent = file.OpenReadStream();
+            sourceCode = dataSourceDetector.Detect(detectionContent);
+        }
+        catch (StructuralImportException exception)
+        {
+            return BadRequest(new { message = exception.Message });
         }
 
         var dataSource = await EnsureDataSourceAsync(sourceCode, cancellationToken);
@@ -52,7 +55,7 @@ public sealed class RouteImportsController(
         await dbContext.SaveChangesAsync(cancellationToken);
         await messageBus.PublishAsync(new ProcessImport(import.Id, job.Id));
 
-        return Accepted(new { importId = import.Id, status = "QUEUED" });
+        return Accepted(new { importId = import.Id, sourceCode, status = "QUEUED" });
     }
 
     [HttpGet]

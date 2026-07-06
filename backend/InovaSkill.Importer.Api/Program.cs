@@ -19,7 +19,7 @@ builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<PasswordHasher<AppUser>>();
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 524_288_000; // 500 MB
+    options.MultipartBodyLengthLimit = RouteImportCodes.MaximumUploadSizeBytes;
 });
 builder.Services.AddCors(options => options.AddPolicy("frontend", policy => policy
     .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost")

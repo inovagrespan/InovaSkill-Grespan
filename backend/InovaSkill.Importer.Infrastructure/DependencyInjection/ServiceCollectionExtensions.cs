@@ -18,6 +18,7 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<ImportDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<IImportFileStorage, LocalImportFileStorage>();
+        services.AddScoped<ISpreadsheetDataSourceDetector, SpreadsheetDataSourceDetector>();
         services.AddScoped<RoutesSpreadsheetParser>();
         services.AddScoped<CustomersSpreadsheetParser>();
         services.AddScoped<FiscalMovementsSpreadsheetParser>();

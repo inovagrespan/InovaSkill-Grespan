@@ -597,7 +597,8 @@ export type FinanceDashboardResponse = {
 };
 
 const API_URL = getApiServiceBaseUrl();
-export const MAX_UPLOAD_SIZE_BYTES = 524_288_000;
+export const MAX_UPLOAD_SIZE_MEGABYTES = 100;
+export const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MEGABYTES * 1024 * 1024;
 const DEMO_PAGE = 1;
 const DEMO_PAGE_SIZE = 20;
 const DEMO_HISTORY_PAGE_SIZE = 10;
@@ -1447,7 +1448,7 @@ export async function uploadFile(file: File): Promise<number> {
 
     if (!response.ok) {
       if (response.status === 413) {
-        throw new Error("Arquivo muito grande. O limite atual é 500 MB.");
+        throw new Error("Arquivo muito grande. O limite atual é 100 MB.");
       }
       throw new Error(await parseApiError(response, `Falha ao enviar '${file.name}'.`));
     }
@@ -2873,10 +2874,9 @@ export type AdminJobItem = {
 
 // ─── API functions reais ────────────────────────────────────────────────
 
-export async function uploadImport(file: File, sourceCode = "ROUTES_BY_CITY"): Promise<string> {
+export async function uploadImport(file: File): Promise<string> {
   const form = new FormData();
   form.append("file", file);
-  form.append("sourceCode", sourceCode);
 
   const response = await authFetch(`${API_URL}/api/route-imports`, {
     method: "POST",
@@ -2884,7 +2884,7 @@ export async function uploadImport(file: File, sourceCode = "ROUTES_BY_CITY"): P
   });
 
   if (response.status === 413) {
-    throw new Error("Arquivo muito grande. O limite é 500 MB.");
+    throw new Error("Arquivo muito grande. O limite é 100 MB.");
   }
   if (!response.ok) {
     throw new Error(await parseApiError(response, `Falha ao enviar '${file.name}'.`));

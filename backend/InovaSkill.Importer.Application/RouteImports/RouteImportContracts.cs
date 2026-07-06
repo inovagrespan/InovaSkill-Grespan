@@ -11,6 +11,7 @@ public static class RouteImportCodes
     public const string JobType = "PROCESS_IMPORT";
     public const long InitialVersion = 1;
     public const int WorkerExecutionTimeoutMinutes = 30;
+    public const long MaximumUploadSizeBytes = 100L * 1024 * 1024;
 }
 
 public static class CustomerImportCodes
@@ -52,6 +53,11 @@ public interface IImportFileStorage
 {
     Task<string> SaveAsync(Stream content, string fileName, CancellationToken cancellationToken);
     Task<Stream> OpenReadAsync(string storageKey, CancellationToken cancellationToken);
+}
+
+public interface ISpreadsheetDataSourceDetector
+{
+    string Detect(Stream content);
 }
 
 public sealed class StructuralImportException(string message, Exception? innerException = null)

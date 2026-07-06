@@ -276,7 +276,14 @@ A fonte `FISCAL_MOVEMENTS` reutiliza o upload, storage, fila, Worker e ciclo de
 vida genéricos. Ela não é um snapshot: documentos e itens são persistidos de
 forma acumulativa e idempotente em `fiscal_documents` e
 `fiscal_document_items`; produtos possuem identidade em `products`.
-O endpoint aceita arquivos de até 500 MB, alinhado ao limite multipart global.
+O endpoint aceita arquivos de até 100 MB, alinhado entre atributo HTTP, limite
+multipart, frontend e Nginx.
+O usuário não escolhe a fonte. `SpreadsheetDataSourceDetector` lê em streaming
+as primeiras 50 linhas das abas pelo OpenXML, sem materializar o workbook
+completo, e identifica clientes e movimentos fiscais pelos cabeçalhos
+obrigatórios ou rotas pela aba de dia da semana e pelo marcador `Cidades da
+Rota`. Arquivos desconhecidos ou ambíguos são rejeitados antes da criação do
+import.
 O parser lê o valor numérico real da célula (não a máscara contábil exibida) e
 o processador resolve documentos em lotes de 500, evitando uma consulta por
 documento e limitando o crescimento do Change Tracker.
