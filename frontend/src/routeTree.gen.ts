@@ -14,6 +14,7 @@ import { Route as SimulacaoRouteImport } from './routes/simulacao'
 import { Route as RotasRouteImport } from './routes/rotas'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as ProdutosRouteImport } from './routes/produtos'
+import { Route as ProducaoRouteImport } from './routes/producao'
 import { Route as ProcessamentosRouteImport } from './routes/processamentos'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as NotasFiscaisRouteImport } from './routes/notas-fiscais'
@@ -22,6 +23,7 @@ import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as FinancasRouteImport } from './routes/financas'
+import { Route as EstoqueRouteImport } from './routes/estoque'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as IndexRouteImport } from './routes/index'
@@ -55,6 +57,11 @@ const RelatoriosRoute = RelatoriosRouteImport.update({
 const ProdutosRoute = ProdutosRouteImport.update({
   id: '/produtos',
   path: '/produtos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProducaoRoute = ProducaoRouteImport.update({
+  id: '/producao',
+  path: '/producao',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProcessamentosRoute = ProcessamentosRouteImport.update({
@@ -95,6 +102,11 @@ const ImportacoesRoute = ImportacoesRouteImport.update({
 const FinancasRoute = FinancasRouteImport.update({
   id: '/financas',
   path: '/financas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EstoqueRoute = EstoqueRouteImport.update({
+  id: '/estoque',
+  path: '/estoque',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -147,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
+  '/estoque': typeof EstoqueRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
@@ -155,6 +168,7 @@ export interface FileRoutesByFullPath {
   '/notas-fiscais': typeof NotasFiscaisRoute
   '/notificacoes': typeof NotificacoesRoute
   '/processamentos': typeof ProcessamentosRoute
+  '/producao': typeof ProducaoRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rotas': typeof RotasRoute
@@ -171,12 +185,14 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
+  '/estoque': typeof EstoqueRoute
   '/financas': typeof FinancasRoute
   '/login': typeof LoginRoute
   '/mapa': typeof MapaRoute
   '/notas-fiscais': typeof NotasFiscaisRoute
   '/notificacoes': typeof NotificacoesRoute
   '/processamentos': typeof ProcessamentosRoute
+  '/producao': typeof ProducaoRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rotas': typeof RotasRoute
@@ -194,6 +210,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
+  '/estoque': typeof EstoqueRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
@@ -202,6 +219,7 @@ export interface FileRoutesById {
   '/notas-fiscais': typeof NotasFiscaisRoute
   '/notificacoes': typeof NotificacoesRoute
   '/processamentos': typeof ProcessamentosRoute
+  '/producao': typeof ProducaoRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rotas': typeof RotasRoute
@@ -220,6 +238,7 @@ export interface FileRouteTypes {
     | '/'
     | '/clientes'
     | '/dashboard'
+    | '/estoque'
     | '/financas'
     | '/importacoes'
     | '/login'
@@ -228,6 +247,7 @@ export interface FileRouteTypes {
     | '/notas-fiscais'
     | '/notificacoes'
     | '/processamentos'
+    | '/producao'
     | '/produtos'
     | '/relatorios'
     | '/rotas'
@@ -244,12 +264,14 @@ export interface FileRouteTypes {
     | '/'
     | '/clientes'
     | '/dashboard'
+    | '/estoque'
     | '/financas'
     | '/login'
     | '/mapa'
     | '/notas-fiscais'
     | '/notificacoes'
     | '/processamentos'
+    | '/producao'
     | '/produtos'
     | '/relatorios'
     | '/rotas'
@@ -266,6 +288,7 @@ export interface FileRouteTypes {
     | '/'
     | '/clientes'
     | '/dashboard'
+    | '/estoque'
     | '/financas'
     | '/importacoes'
     | '/login'
@@ -274,6 +297,7 @@ export interface FileRouteTypes {
     | '/notas-fiscais'
     | '/notificacoes'
     | '/processamentos'
+    | '/producao'
     | '/produtos'
     | '/relatorios'
     | '/rotas'
@@ -291,6 +315,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ClientesRoute: typeof ClientesRoute
   DashboardRoute: typeof DashboardRoute
+  EstoqueRoute: typeof EstoqueRoute
   FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LoginRoute: typeof LoginRoute
@@ -299,6 +324,7 @@ export interface RootRouteChildren {
   NotasFiscaisRoute: typeof NotasFiscaisRoute
   NotificacoesRoute: typeof NotificacoesRoute
   ProcessamentosRoute: typeof ProcessamentosRoute
+  ProducaoRoute: typeof ProducaoRoute
   ProdutosRoute: typeof ProdutosRoute
   RelatoriosRoute: typeof RelatoriosRoute
   RotasRoute: typeof RotasRoute
@@ -342,6 +368,13 @@ declare module '@tanstack/react-router' {
       path: '/produtos'
       fullPath: '/produtos'
       preLoaderRoute: typeof ProdutosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/producao': {
+      id: '/producao'
+      path: '/producao'
+      fullPath: '/producao'
+      preLoaderRoute: typeof ProducaoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/processamentos': {
@@ -398,6 +431,13 @@ declare module '@tanstack/react-router' {
       path: '/financas'
       fullPath: '/financas'
       preLoaderRoute: typeof FinancasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/estoque': {
+      id: '/estoque'
+      path: '/estoque'
+      fullPath: '/estoque'
+      preLoaderRoute: typeof EstoqueRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -500,6 +540,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ClientesRoute: ClientesRoute,
   DashboardRoute: DashboardRoute,
+  EstoqueRoute: EstoqueRoute,
   FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LoginRoute: LoginRoute,
@@ -508,6 +549,7 @@ const rootRouteChildren: RootRouteChildren = {
   NotasFiscaisRoute: NotasFiscaisRoute,
   NotificacoesRoute: NotificacoesRoute,
   ProcessamentosRoute: ProcessamentosRoute,
+  ProducaoRoute: ProducaoRoute,
   ProdutosRoute: ProdutosRoute,
   RelatoriosRoute: RelatoriosRoute,
   RotasRoute: RotasRoute,

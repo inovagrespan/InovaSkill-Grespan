@@ -1,11 +1,16 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  ChevronLeft,
+  ChevronRight,
+  Factory,
   FileUp,
   FileText,
   LayoutDashboard,
   LogOut,
   Map,
   Moon,
+  Package,
+  PackageCheck,
   Route,
   Settings,
   Sun,
@@ -44,6 +49,9 @@ const items = [
   { to: "/mapa", label: "Mapa", icon: Map },
   { to: "/clientes", label: "Clientes", icon: Users },
   { to: "/notas-fiscais", label: "Notas Fiscais", icon: FileText },
+  { to: "/produtos", label: "Produtos", icon: Package },
+  { to: "/estoque", label: "Estoque", icon: PackageCheck },
+  { to: "/producao", label: "Produção", icon: Factory },
   { to: "/importacoes/files", label: "Importações", icon: FileUp, accessRoles: ["diretor", "admin", "admin_system"] },
   { to: "/processamentos", label: "Processamento", icon: Settings, accessRoles: ["admin_system", "admin"] },
 ] as const;
@@ -63,21 +71,16 @@ function formatUserRole(role: string | null): string {
   return roleLabels[role ?? ""] ?? "Usuário";
 }
 
-function AnimatedMenuIcon({ open }: { open: boolean }) {
+function SidebarToggleArrow({ open }: { open: boolean }) {
+  const Icon = open ? ChevronLeft : ChevronRight;
+
   return (
-    <span aria-hidden="true" className="relative block size-5">
-      <span
-        className={cn(
-          "absolute left-0 top-1/2 h-0.5 w-5 rounded-full bg-current transition-transform duration-300 ease-out motion-reduce:transition-none",
-          open ? "translate-y-0 rotate-45" : "-translate-y-1 rotate-0",
-        )}
-      />
-      <span
-        className={cn(
-          "absolute left-0 top-1/2 h-0.5 w-5 rounded-full bg-current transition-transform duration-300 ease-out motion-reduce:transition-none",
-          open ? "translate-y-0 -rotate-45" : "translate-y-1 rotate-0",
-        )}
-      />
+    <span
+      aria-hidden="true"
+      data-sidebar-toggle-arrow={open ? "open" : "closed"}
+      className="inline-flex transition-transform duration-300 ease-out motion-reduce:transition-none"
+    >
+      <Icon className="size-5" strokeWidth={2.4} />
     </span>
   );
 }
@@ -209,7 +212,7 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
               aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
               className="inline-flex size-10 items-center justify-center rounded-xl bg-surface/60 text-foreground shadow-lg shadow-black/10 backdrop-blur-lg outline-none ring-primary/40 transition-all duration-200 hover:bg-surface/85 focus-visible:ring-2"
             >
-              <AnimatedMenuIcon open={mobileOpen} />
+              <SidebarToggleArrow open={mobileOpen} />
             </button>
           </SheetTrigger>
           <SheetContent side="left" hideClose className="w-[280px] border-r border-border bg-surface p-0">
@@ -244,21 +247,23 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
         )}
         aria-label="Navegação principal"
       >
+        <button
+          onClick={onToggleCollapsed}
+          className="absolute right-0 top-10 z-50 flex size-9 translate-x-1/2 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground shadow-lg shadow-black/15 outline-none ring-primary/40 transition-[background-color,color,transform,box-shadow] duration-300 ease-out hover:bg-muted/80 hover:text-foreground hover:shadow-black/25 focus-visible:ring-2 motion-reduce:transition-none"
+          aria-label={collapsed ? "Expandir sidebar" : "Recolher sidebar"}
+          aria-expanded={!collapsed}
+          title={collapsed ? "Expandir menu" : "Recolher menu"}
+        >
+          <SidebarToggleArrow open={!collapsed} />
+        </button>
+
         <div
           className={cn(
             "mb-3 mt-4 flex shrink-0 items-center gap-3 px-3 pb-4",
             collapsed ? "justify-center" : "justify-between border-b border-border",
           )}
         >
-          {!collapsed ? renderUserHeader(false) : null}
-          <button
-            onClick={onToggleCollapsed}
-            className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground shadow-sm outline-none ring-primary/40 transition-colors duration-300 hover:bg-muted/70 hover:text-foreground focus-visible:ring-2"
-            aria-label={collapsed ? "Expandir sidebar" : "Recolher sidebar"}
-            aria-expanded={!collapsed}
-          >
-            <AnimatedMenuIcon open={!collapsed} />
-          </button>
+          {renderUserHeader(collapsed)}
         </div>
 
         {renderNav(collapsed)}
