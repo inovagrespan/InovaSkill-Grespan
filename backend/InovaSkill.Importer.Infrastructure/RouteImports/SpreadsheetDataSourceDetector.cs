@@ -10,6 +10,10 @@ public sealed class SpreadsheetDataSourceDetector : ISpreadsheetDataSourceDetect
     private const int HeaderSearchRowLimit = 50;
     private static readonly string[] CustomerHeaders =
         ["CODIGO", "LOJA", "CNPJ/CPF", "NOME", "N FANTASIA", "TIPO", "ESTADO", "MUNICIPIO"];
+    private static readonly string[] ProductHeaders =
+        ["CODIGO", "CODONCLICK", "DESCRICAO", "TIPO", "UNIDADE", "GRUPO"];
+    private static readonly string[] InventoryHeaders =
+        ["CODIGO", "SALDO EM ESTOQUE", "EMPENHO PARA REQ/PV/RESERVA", "ESTOQUE DISPONIVEL"];
     private static readonly string[][] FiscalHeaders =
     [
         ["DOCUMENTO"], ["DATA"], ["ITEM"], ["CLIENTE", "CODIGO CLIENTE"], ["LOJA"],
@@ -46,12 +50,18 @@ public sealed class SpreadsheetDataSourceDetector : ISpreadsheetDataSourceDetect
             {
                 snapshot.Name,
                 Rows = snapshot.Rows.Select(row => row.Select(cell =>
-                    MunicipalityNameNormalizer.Normalize(cell.Resolve(sharedStrings))).ToHashSet()).ToArray()
+                    SpreadsheetParsingHelpers.NormalizeHeader(cell.Resolve(sharedStrings))).ToHashSet()).ToArray()
             }).ToArray();
 
             var matches = new List<string>();
             if (normalizedSheets.Any(sheet => sheet.Rows.Any(row => CustomerHeaders.All(row.Contains))))
                 matches.Add(CustomerImportCodes.DataSource);
+            if (normalizedSheets.Any(sheet => sheet.Rows.Any(row => ProductHeaders.All(row.Contains))))
+                matches.Add(ProductImportCodes.DataSource);
+            if (normalizedSheets.Any(sheet => sheet.Rows.Any(row => InventoryHeaders.All(row.Contains))))
+                matches.Add(InventoryCurrentImportCodes.DataSource);
+            if (normalizedSheets.Any(sheet => LooksLikeDailyInventory(sheet.Rows)))
+                matches.Add(DailyInventoryImportCodes.DataSource);
             if (normalizedSheets.Any(sheet => sheet.Rows.Any(row =>
                     FiscalHeaders.All(group => group.Any(row.Contains)))))
                 matches.Add(FiscalImportCodes.DataSource);
@@ -63,7 +73,7 @@ public sealed class SpreadsheetDataSourceDetector : ISpreadsheetDataSourceDetect
             {
                 1 => matches[0],
                 0 => throw new StructuralImportException(
-                    "Não foi possível identificar a fonte pelo cabeçalho. Use um modelo de rotas, clientes ou movimentações fiscais."),
+                    "Não foi possível identificar a fonte pelo cabeçalho. Use um modelo de rotas, clientes, fiscais, produtos ou estoque."),
                 _ => throw new StructuralImportException(
                     $"A planilha é ambígua e corresponde a mais de uma fonte: {string.Join(", ", matches)}.")
             };
@@ -111,6 +121,14 @@ public sealed class SpreadsheetDataSourceDetector : ISpreadsheetDataSourceDetect
 
     private static string NormalizeSheetName(string value) =>
         MunicipalityNameNormalizer.Normalize(value).Replace("-", " ", StringComparison.Ordinal);
+
+    private static bool LooksLikeDailyInventory(IReadOnlyList<HashSet<string>> rows)
+    {
+        if (rows.Count < 2) return false;
+        return rows[0].Contains("COD") && rows[0].Contains("PRODUTO") && rows[0].Contains("ATUAL") &&
+               rows[1].Contains("MOVIMENTACOES") && rows[1].Contains("ENTRADA") &&
+               rows[1].Contains("SAIDA") && rows[1].Contains("ATUAL");
+    }
 
     private sealed record SheetSnapshot(string Name, IReadOnlyList<IReadOnlyList<RawCell>> Rows);
 
