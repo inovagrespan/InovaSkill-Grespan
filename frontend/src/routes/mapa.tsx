@@ -91,6 +91,7 @@ function toLogisticsMapCustomer(item: LogisticsMapCustomerItem): LogisticsMapCus
   return {
     id: item.id,
     name: item.name,
+    isActive: item.isActive,
     city: item.city,
     type: item.type,
     status: item.status,

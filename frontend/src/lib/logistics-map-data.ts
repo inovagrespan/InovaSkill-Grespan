@@ -4,6 +4,7 @@ export type LogisticsCustomerStatus = "Normal" | "Atenção" | "Crítico";
 export type LogisticsMapCustomer = {
   id: string;
   name: string;
+  isActive: boolean;
   city: string;
   type: LogisticsCustomerType;
   status: LogisticsCustomerStatus;
@@ -162,6 +163,7 @@ export function buildDemoLogisticsMapCustomers(): LogisticsMapCustomer[] {
     const customer: LogisticsMapCustomer = {
       id: `CLI-${String(globalIndex + 1).padStart(3, "0")}`,
       name,
+      isActive: status !== "Crítico",
       city: profile.city,
       type,
       status,

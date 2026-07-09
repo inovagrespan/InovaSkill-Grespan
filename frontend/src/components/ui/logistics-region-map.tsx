@@ -13,7 +13,7 @@ import {
   type LogisticsMapCustomer,
 } from "@/lib/logistics-map-data";
 
-type LogisticsRegionMapProps = { customers: LogisticsMapCustomer[]; routes: LogisticsMapRoute[]; periodDays: LogisticsTrafficPeriodDays; compact?: boolean };
+type LogisticsRegionMapProps = { customers: LogisticsMapCustomer[]; routes: LogisticsMapRoute[]; periodDays?: LogisticsTrafficPeriodDays; compact?: boolean };
 
 const REGIONAL_ZOOM = 9;
 const CUSTOMER_ZOOM = 11;
@@ -24,15 +24,16 @@ function escapeHtml(value: string): string {
 }
 
 function customerPopup(customer: LogisticsMapCustomer): string {
-  return `<div class="logistics-map-popup"><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.city)} · ${escapeHtml(customer.type)}</span><hr/><span><b>Status:</b> ${escapeHtml(customer.status)}</span><span><b>Última entrega:</b> ${escapeHtml(customer.lastDelivery)}</span><span><b>Próxima entrega:</b> ${escapeHtml(customer.nextDelivery)}</span><span><b>Situação:</b> ${escapeHtml(customer.situation)}</span><span><b>Rota:</b> ${escapeHtml(customer.route)}</span><span><b>Prioridade:</b> ${escapeHtml(customer.priority)}</span></div>`;
+  const activityLabel = customer.isActive ? "Ativo" : "Inativo";
+  return `<div class="logistics-map-popup"><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.city)} · ${escapeHtml(customer.type)}</span><hr/><span><b>Atividade:</b> ${activityLabel}</span><span><b>Status:</b> ${escapeHtml(customer.status)}</span><span><b>Última entrega:</b> ${escapeHtml(customer.lastDelivery)}</span><span><b>Próxima entrega:</b> ${escapeHtml(customer.nextDelivery)}</span><span><b>Situação:</b> ${escapeHtml(customer.situation)}</span><span><b>Rota:</b> ${escapeHtml(customer.route)}</span><span><b>Prioridade:</b> ${escapeHtml(customer.priority)}</span></div>`;
 }
 
 function createHeadquartersIcon(): L.DivIcon {
   return L.divIcon({ className: "logistics-map-headquarters", html: "<span>G</span>", iconSize: [34, 34], iconAnchor: [17, 17] });
 }
 
-function createCustomerPinIcon(status: LogisticsCustomerStatus): L.DivIcon {
-  const statusClass = status === "Crítico" ? "critical" : status === "Atenção" ? "attention" : "normal";
+function createCustomerPinIcon(customer: LogisticsMapCustomer): L.DivIcon {
+  const statusClass = customer.isActive ? "normal" : "critical";
   return L.divIcon({
     className: "logistics-map-customer-icon",
     html: `<span class="logistics-map-pin logistics-map-pin--${statusClass}"><i></i></span>`,
@@ -58,7 +59,7 @@ function routePopup(route: LogisticsMapRoute): string {
   return `<div class="logistics-map-popup"><strong>${escapeHtml(route.name)}</strong><span>${escapeHtml(route.cities.join(" → "))}</span><hr/><span><b>Trajeto estimado</b></span><span>Baseado nas cidades atendidas e pontos de congestionamento monitorados.</span></div>`;
 }
 
-export function LogisticsRegionMap({ customers, routes, periodDays, compact = false }: LogisticsRegionMapProps) {
+export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact = false }: LogisticsRegionMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const customerLayerRef = useRef<L.LayerGroup | null>(null);
@@ -117,12 +118,12 @@ export function LogisticsRegionMap({ customers, routes, periodDays, compact = fa
     }
 
     for (const customer of filtered) {
-      const marker = L.marker([customer.lat, customer.lng], { icon: createCustomerPinIcon(customer.status), zIndexOffset: 500 });
+      const marker = L.marker([customer.lat, customer.lng], { icon: createCustomerPinIcon(customer), zIndexOffset: 500 });
       marker.bindPopup(customerPopup(customer), { maxWidth: 310 });
       marker.bindTooltip(customer.name, { direction: "top", offset: [0, -7] });
       layer.addLayer(marker);
     }
-  }, [city, filtered, periodDays, routes]);
+  }, [city, filtered, periodDays, routes, filtered.length]);
 
   function recenterHeadquarters() {
     mapRef.current?.setView([GRESPAN_HEADQUARTERS.lat, GRESPAN_HEADQUARTERS.lng], REGIONAL_ZOOM);
