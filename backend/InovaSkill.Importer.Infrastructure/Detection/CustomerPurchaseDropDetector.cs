@@ -10,7 +10,6 @@ public sealed class CustomerPurchaseDropDetector(
 {
     public string Code => DetectorCodes.CustomerPurchaseDrop;
 
-    private const int ActiveDays = 45;
     private const int RecentDays = 30;
     private const int HistoricalDays = 60;
     private const decimal DropThresholdPercent = 50m;
@@ -21,16 +20,21 @@ public sealed class CustomerPurchaseDropDetector(
         CancellationToken cancellationToken)
     {
         var referenceDate = context.ReferenceTime;
-        var activeStart = referenceDate.AddDays(-ActiveDays);
         var recentStart = referenceDate.AddDays(-RecentDays);
         var historicalStart = referenceDate.AddDays(-RecentDays - HistoricalDays);
-        var activeStartDateOnly = DateOnly.FromDateTime(activeStart);
         var recentStartDateOnly = DateOnly.FromDateTime(recentStart);
         var historicalStartDateOnly = DateOnly.FromDateTime(historicalStart);
         var referenceDateOnly = DateOnly.FromDateTime(referenceDate);
 
+        var activeCustomerIds = await dbContext.Customers.AsNoTracking()
+            .Where(c => c.IsActive)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+
         var sales = await dbContext.FiscalDocuments.AsNoTracking()
             .Where(d => d.MovementCategory == FiscalMovementCategory.Sale
+                && d.CustomerId.HasValue
+                && activeCustomerIds.Contains(d.CustomerId.Value)
                 && d.IssueDate >= historicalStartDateOnly
                 && d.IssueDate <= referenceDateOnly)
             .Include(d => d.Items)
@@ -44,19 +48,11 @@ public sealed class CustomerPurchaseDropDetector(
             })
             .ToList();
 
-        var analyzedCustomers = await dbContext.Customers.CountAsync(cancellationToken);
-
+        var analyzedCustomers = activeCustomerIds.Count;
         var findings = new List<FindingCandidate>();
 
         foreach (var group in customerGroups)
         {
-            var activeDocs = group
-                .Where(d => d.IssueDate >= activeStartDateOnly)
-                .ToList();
-
-            if (activeDocs.Count == 0)
-                continue;
-
             var recentDocs = group
                 .Where(d => d.IssueDate >= recentStartDateOnly)
                 .ToList();
@@ -119,7 +115,7 @@ public sealed class CustomerPurchaseDropDetector(
                         Value: historicalMonthlyAvg.ToString("F2"),
                         ReferenceValue: null,
                         Unit: "BRL",
-                        Description: $"Média mensal dos últimos {ActiveDays + HistoricalDays} dias",
+                        Description: $"Média mensal dos últimos {HistoricalDays + RecentDays} dias",
                         SourceType: "FiscalDocument",
                         SourceId: subjectId,
                         ObservedAt: referenceDate),

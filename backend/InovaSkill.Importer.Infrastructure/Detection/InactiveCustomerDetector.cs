@@ -1,4 +1,5 @@
 using InovaSkill.Importer.Application.Detection;
+using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -32,62 +33,72 @@ public sealed class InactiveCustomerDetector(
             .Include(d => d.Items)
             .ToListAsync(cancellationToken);
 
-        var customerGroups = sales
-            .GroupBy(d => new
+        var customerActivity = sales
+            .GroupBy(d => d.CustomerId)
+            .Where(g => g.Key.HasValue)
+            .Select(g => new
             {
-                CustomerId = d.CustomerId ?? Guid.Empty,
-                d.CustomerCodeAtIssue
+                CustomerId = g.Key!.Value,
+                LastPurchase = g.Max(d => d.IssueDate),
+                RecentDocs = g.Count(d => d.IssueDate >= inactiveStartDateOnly),
+                HistoricalDocs = g.Count(d =>
+                    d.IssueDate >= lookbackStartDateOnly
+                    && d.IssueDate < inactiveStartDateOnly),
+                Name = g.OrderByDescending(d => d.IssueDate).First().CustomerNameAtIssue,
+                Code = g.First().CustomerCodeAtIssue,
+                HistoricalTotal = g
+                    .Where(d => d.IssueDate >= lookbackStartDateOnly
+                        && d.IssueDate < inactiveStartDateOnly)
+                    .SelectMany(d => d.Items)
+                    .Sum(i => (i.UnitValue ?? 0m) * i.Quantity)
             })
             .ToList();
 
-        var analyzedCustomers = await dbContext.Customers.CountAsync(cancellationToken);
+        var customerIds = customerActivity.Select(c => c.CustomerId).ToList();
+        var customers = await dbContext.Customers
+            .Where(c => customerIds.Contains(c.Id))
+            .ToListAsync(cancellationToken);
+        var customerMap = customers.ToDictionary(c => c.Id);
 
+        var analyzedCustomers = customers.Count;
         var findings = new List<FindingCandidate>();
+        var now = DateTime.UtcNow;
 
-        foreach (var group in customerGroups)
+        foreach (var activity in customerActivity)
         {
-            var recentDocs = group
-                .Where(d => d.IssueDate >= inactiveStartDateOnly)
-                .ToList();
+            if (customerMap.TryGetValue(activity.CustomerId, out var customer))
+            {
+                customer.LastPurchaseAt = new DateTime(
+                    activity.LastPurchase.Year,
+                    activity.LastPurchase.Month,
+                    activity.LastPurchase.Day,
+                    0, 0, 0, DateTimeKind.Utc);
 
-            if (recentDocs.Count > 0)
+                if (activity.RecentDocs > 0)
+                {
+                    customer.IsActive = true;
+                    continue;
+                }
+
+                customer.IsActive = false;
+            }
+
+            if (activity.HistoricalDocs < MinimumHistoricalDocuments)
                 continue;
 
-            var historicalDocs = group
-                .Where(d => d.IssueDate >= lookbackStartDateOnly
-                    && d.IssueDate < inactiveStartDateOnly)
-                .ToList();
-
-            if (historicalDocs.Count < MinimumHistoricalDocuments)
-                continue;
-
-            var lastPurchase = historicalDocs.Max(d => d.IssueDate);
-            var daysSinceLastPurchase = (int)(referenceDateOnly.DayNumber - lastPurchase.DayNumber);
-
-            var historicalTotal = historicalDocs
-                .SelectMany(d => d.Items)
-                .Sum(i => (i.UnitValue ?? 0m) * i.Quantity);
-
+            var daysSinceLastPurchase = (int)(referenceDateOnly.DayNumber - activity.LastPurchase.DayNumber);
             var historicalMonths = (decimal)LookbackDays / 30;
             var historicalMonthlyAvg = historicalMonths > 0
-                ? historicalTotal / historicalMonths
+                ? activity.HistoricalTotal / historicalMonths
                 : 0;
 
-            var subjectId = group.Key.CustomerId != Guid.Empty
-                ? group.Key.CustomerId.ToString()
-                : group.Key.CustomerCodeAtIssue;
-
-            var customerName = group.OrderByDescending(d => d.IssueDate).First().CustomerNameAtIssue;
-
-            var fingerprint = $"{Code}:CUSTOMER:{subjectId}:{group.Key.CustomerCodeAtIssue}";
-
             findings.Add(new FindingCandidate(
-                Fingerprint: fingerprint,
+                Fingerprint: $"{Code}:CUSTOMER:{activity.CustomerId}:{activity.Code}",
                 Title: "Cliente inativo",
                 Description: $"O cliente não realiza compras há {daysSinceLastPurchase} dias.",
                 SubjectType: "Customer",
-                SubjectId: subjectId,
-                SubjectLabel: customerName,
+                SubjectId: activity.CustomerId.ToString(),
+                SubjectLabel: activity.Name,
                 Evidences: new List<FindingEvidenceCandidate>
                 {
                     new(
@@ -97,16 +108,16 @@ public sealed class InactiveCustomerDetector(
                         Unit: "dias",
                         Description: $"Tempo desde a última compra (limite de inatividade: {InactiveDays} dias)",
                         SourceType: "FiscalDocument",
-                        SourceId: subjectId,
+                        SourceId: activity.CustomerId.ToString(),
                         ObservedAt: referenceDate),
                     new(
                         Name: "Última compra",
-                        Value: lastPurchase.ToString("dd/MM/yyyy"),
+                        Value: activity.LastPurchase.ToString("dd/MM/yyyy"),
                         ReferenceValue: null,
                         Unit: null,
                         Description: "Data da última venda registrada",
                         SourceType: "FiscalDocument",
-                        SourceId: subjectId,
+                        SourceId: activity.CustomerId.ToString(),
                         ObservedAt: referenceDate),
                     new(
                         Name: "Média mensal histórica",
@@ -115,19 +126,21 @@ public sealed class InactiveCustomerDetector(
                         Unit: "BRL",
                         Description: "Média mensal de compras antes da inatividade",
                         SourceType: "FiscalDocument",
-                        SourceId: subjectId,
+                        SourceId: activity.CustomerId.ToString(),
                         ObservedAt: referenceDate),
                     new(
                         Name: "Documentos históricos",
-                        Value: historicalDocs.Count.ToString(),
+                        Value: activity.HistoricalDocs.ToString(),
                         ReferenceValue: null,
                         Unit: "documentos",
                         Description: "Total de documentos de venda no período histórico",
                         SourceType: "FiscalDocument",
-                        SourceId: subjectId,
+                        SourceId: activity.CustomerId.ToString(),
                         ObservedAt: referenceDate)
                 }));
         }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return new DetectionResult(
             AnalyzedItems: analyzedCustomers,
