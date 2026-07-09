@@ -17,10 +17,10 @@ import {
   Truck,
   WalletCards,
 } from "lucide-react";
-import { useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { DashboardKpiCard } from "@/components/ui/dashboard-kpi-card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   LOGISTICS_PERIOD_OPTIONS,
@@ -41,6 +41,7 @@ import {
   type LogisticsRecommendationContext,
   type LogisticsRootCause,
 } from "@/lib/logistics-dashboard";
+import { fetchRouteOccupancySummary, type RouteOccupancySummary } from "@/lib/importer-api";
 import { cn } from "@/lib/utils";
 import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -48,7 +49,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 export const Route = createFileRoute("/logistica/")({ component: LogisticsDashboardMetrics });
 
 type ExecutiveMetricId = "returns" | "occupancy" | "loading" | "transit" | "total-cost" | "route-cost" | "inventory-accuracy" | "stockout" | "occurrences" | "fill-rate";
-type MetricStatus = "healthy" | "attention" | "critical";
+type MetricStatus = "healthy" | "attention" | "critical" | "idle" | "medium" | "good";
 type SecondaryMetricId =
   | "occupancy-load"
   | "loading"
@@ -84,10 +85,16 @@ type ExecutiveCard = {
   recommendations: string[];
   detailMetric: SecondaryMetricId;
   rawValue: number;
+  occupancySummary?: RouteOccupancySummary;
+  unavailableReason?: string;
+  showStatus?: boolean;
 };
 
 const LOGISTICS_METRIC_UNDER_DEVELOPMENT = "em breve";
 const RELEASED_LOGISTICS_METRICS: ReadonlySet<ExecutiveMetricId> = new Set(["occupancy", "stockout"]);
+const MEDIUM_OCCUPANCY_LIMIT_PERCENT = 60;
+const GOOD_OCCUPANCY_LIMIT_PERCENT = 80;
+const CRITICAL_OCCUPANCY_LIMIT_PERCENT = 100;
 
 function isReleasedLogisticsMetric(metricId: ExecutiveMetricId): boolean {
   return RELEASED_LOGISTICS_METRICS.has(metricId);
@@ -115,8 +122,6 @@ type InvestigationFactor = {
   evidence: InvestigationEvidence[];
 };
 
-const HEALTHY_OCCUPANCY_PERCENT = 80;
-const ATTENTION_OCCUPANCY_PERCENT = 70;
 const HEALTHY_TRANSIT_MINUTES = 210;
 const ATTENTION_TRANSIT_MINUTES = 240;
 const HEALTHY_DAMAGE_RATE_PERCENT = 1;
@@ -127,6 +132,16 @@ const numberFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 
 
 function formatLogisticsCurrency(value: number): string {
   return formatKpiCompactCurrency(value);
+}
+
+function formatLogisticsWeightKg(value: number): string {
+  return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value)} kg`;
+}
+
+function formatBaseDate(value: string | null): string {
+  if (!value) return "Não informado";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("pt-BR");
 }
 
 const periodLabels: Record<LogisticsPeriodDays, string> = {
@@ -176,9 +191,10 @@ function changePhrase(label: string, change: number | null, lowerIsBetter: boole
 }
 
 function occupancyStatus(value: number): MetricStatus {
-  if (value >= HEALTHY_OCCUPANCY_PERCENT) return "healthy";
-  if (value >= ATTENTION_OCCUPANCY_PERCENT) return "attention";
-  return "critical";
+  if (value < MEDIUM_OCCUPANCY_LIMIT_PERCENT) return "idle";
+  if (value > CRITICAL_OCCUPANCY_LIMIT_PERCENT) return "critical";
+  if (value >= GOOD_OCCUPANCY_LIMIT_PERCENT) return "good";
+  return "medium";
 }
 
 function stockoutStatus(value: number): MetricStatus {
@@ -233,7 +249,10 @@ function occupancyToneClass(tone: "healthy" | "attention" | "critical" | "neutra
 
 function statusPresentation(status: MetricStatus): { label: string; className: string; dotClassName: string } {
   if (status === "healthy") return { label: "Saudável", className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300", dotClassName: "bg-emerald-500" };
+  if (status === "good") return { label: "Saudável", className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300", dotClassName: "bg-emerald-500" };
   if (status === "attention") return { label: "Atenção", className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300", dotClassName: "bg-amber-500" };
+  if (status === "medium") return { label: "Médio", className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300", dotClassName: "bg-amber-500" };
+  if (status === "idle") return { label: "Ocioso", className: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300", dotClassName: "bg-sky-500" };
   return { label: "Crítico", className: "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300", dotClassName: "bg-red-500" };
 }
 
@@ -245,31 +264,35 @@ function ExecutiveMetricCard({ card, onSelect }: { card: ExecutiveCard; onSelect
 
   return (
     <button type="button" onClick={released ? onSelect : undefined} className="h-full text-left">
-      <Card className={cn("h-full", released && "cursor-pointer hover:border-primary/40")}>
-        <CardContent className="relative flex h-full flex-col p-5">
-          <div className="min-h-11 pr-12">
-            <h2 className="flex min-h-10 min-w-0 items-center text-balance text-sm font-semibold leading-snug">{card.title}</h2>
-            <span className="absolute right-5 top-5 inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/10 bg-primary/10 text-primary"><card.icon className="size-4" /></span>
-          </div>
-          <p className="mt-4 text-3xl font-display tracking-tight">{card.value}</p>
-          {released && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={status.className}><span className={cn("mr-1.5 size-1.5 rounded-full", status.dotClassName)} />{status.label}</Badge>
+      <DashboardKpiCard title={card.title} value={card.value} icon={card.icon} interactive={released}>
+        {released && card.showStatus !== false && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={status.className}><span className={cn("mr-1.5 size-1.5 rounded-full", status.dotClassName)} />{status.label}</Badge>
+            {card.id !== "occupancy" && (
               <span className={cn("inline-flex items-center gap-1 text-xs", card.change == null ? "text-muted-foreground" : favorableTrend ? "text-emerald-600" : "text-amber-600")}>
                 <TrendIcon className="size-3.5" />{formatChange(card.change)}
               </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </div>
+        )}
+      </DashboardKpiCard>
     </button>
   );
 }
 
-function buildExecutiveCards(metrics: LogisticsKpis, changes: ReturnType<typeof compareLogisticsPeriods>["changes"]): ExecutiveCard[] {
+function buildExecutiveCards(
+  metrics: LogisticsKpis,
+  changes: ReturnType<typeof compareLogisticsPeriods>["changes"],
+  occupancySummary: RouteOccupancySummary | null,
+  occupancyLoading: boolean,
+  occupancyError: string | null,
+): ExecutiveCard[] {
+  const occupancyMetric = occupancySummary?.occupancyRatePercent ?? metrics.occupancyRatePercent;
+  const occupancyValue = occupancyLoading ? "Carregando" : occupancyError ? "Indisponível" : formatPercent(occupancyMetric);
+
   return [
     { id: "returns", area: "Qualidade", title: "Taxa de Devoluções", value: formatPercent(metrics.returnRatePercent), rawValue: metrics.returnRatePercent, status: lowerIsBetterStatus(metrics.returnRatePercent, 2, 4), change: changes.returnRatePercent, lowerIsBetter: true, insight: changePhrase("A taxa de devoluções", changes.returnRatePercent, true), icon: RotateCcw, description: "Percentual expedido que retornou à operação.", meaning: "Mostra quanto do volume expedido foi devolvido por clientes e ajuda a localizar falhas de pedido, produto ou entrega.", formula: "(Unidades devolvidas ÷ unidades expedidas) × 100", calculation: "O sistema somou as unidades devolvidas e dividiu pelo total expedido no período selecionado.", dataUsed: ["Unidades expedidas", "Unidades devolvidas", "Cliente", "Produto", "Rota", "Motivo da devolução"], factors: ["Divergência entre pedido e entrega", "Embalagens danificadas", "Conservação inadequada de congelados"], recommendations: ["Revisar separação nas rotas com devolução", "Validar pedido com clientes recorrentes", "Auditar embalagem e cadeia fria"], detailMetric: "returns" },
-    { id: "occupancy", area: "Operação", title: "Taxa de Ocupação", value: formatPercent(metrics.occupancyRatePercent), rawValue: metrics.occupancyRatePercent, status: occupancyStatus(metrics.occupancyRatePercent), change: changes.occupancyRatePercent, lowerIsBetter: false, insight: changePhrase("A ocupação", changes.occupancyRatePercent, false), icon: Gauge, description: "Capacidade dos veículos utilizada pelas cargas.", meaning: "Indica se a frota está sendo bem aproveitada e revela rotas subutilizadas ou próximas do limite.", formula: "(Peso carregado ÷ capacidade total dos veículos) × 100", calculation: "O peso carregado de todas as viagens foi comparado à soma da capacidade disponível dos veículos.", dataUsed: ["Peso carregado", "Capacidade do veículo", "Veículo", "Rota", "Número de paradas"], factors: ["Consolidação insuficiente de entregas", "Distribuição desigual entre veículos", "Restrições de janela dos clientes"], recommendations: ["Consolidar rotas com baixa ocupação", "Readequar o tipo de veículo à demanda", "Revisar frequência de entregas"], detailMetric: "occupancy-load" },
+    { id: "occupancy", area: "Operação", title: "Taxa de Ocupação", value: occupancyValue, rawValue: occupancyMetric, status: occupancyStatus(occupancyMetric), change: null, lowerIsBetter: false, insight: "A ocupação reflete a base atual de rotas, sem comparação com períodos anteriores.", icon: Gauge, description: "Capacidade dos veículos utilizada pelas cargas.", meaning: "Indica se a frota está sendo bem aproveitada e revela rotas subutilizadas ou acima do limite.", formula: "(Peso carregado ÷ capacidade total dos veículos) × 100", calculation: "O sistema soma o peso das rotas com capacidade configurada na base atual e divide pela soma da capacidade desses veículos.", dataUsed: ["Peso carregado", "Capacidade do veículo", "Veículo", "Rota"], factors: ["Rotas abaixo de 60% estão ociosas", "Rotas de 60% até menos de 80% ficam médias", "Rotas de 80% até 100% ficam saudáveis", "Rotas acima de 100% ficam críticas"], recommendations: ["Consolidar rotas ociosas", "Readequar o tipo de veículo à demanda", "Configurar capacidade dos veículos sem base"], detailMetric: "occupancy-load", occupancySummary, unavailableReason: occupancyError, showStatus: !occupancyLoading && !occupancyError },
     { id: "loading", area: "Operação", title: "Tempo de Carregamento", value: formatLogisticsDuration(metrics.averageLoadingMinutes), rawValue: metrics.averageLoadingMinutes, status: lowerIsBetterStatus(metrics.averageLoadingMinutes, 50, 60), change: changes.averageLoadingMinutes, lowerIsBetter: true, insight: changePhrase("O tempo de carregamento", changes.averageLoadingMinutes, true), icon: Timer, description: "Tempo médio necessário para liberar uma carga.", meaning: "Mede a eficiência do pátio desde o início da carga até a liberação do veículo.", formula: "Horário final do carregamento − horário inicial", calculation: "O sistema calculou a duração de cada carregamento e obteve a média das viagens do período.", dataUsed: ["Início do carregamento", "Fim do carregamento", "Veículo", "Equipe", "Tipo de carga"], factors: ["Fila no pátio", "Separação incompleta", "Carga mista de congelados e equipamentos"], recommendations: ["Pré-separar cargas antes da doca", "Balancear equipes nos horários de pico", "Criar janela específica para maquinários"], detailMetric: "loading" },
     { id: "transit", area: "Transporte", title: "Tempo de Trânsito", value: formatLogisticsDuration(metrics.averageTransitMinutes), rawValue: metrics.averageTransitMinutes, status: transitStatus(metrics.averageTransitMinutes), change: changes.averageTransitMinutes, lowerIsBetter: true, insight: changePhrase("O tempo de trânsito", changes.averageTransitMinutes, true), icon: Clock, description: "Tempo médio entre saída e entrega.", meaning: "Revela a duração real das viagens e o risco de atraso por rota, veículo ou transportadora.", formula: "Horário de entrega − horário de saída", calculation: "A duração das viagens concluídas foi somada e dividida pela quantidade de viagens analisadas.", dataUsed: ["Horário de saída", "Horário de entrega", "Rota", "Veículo", "Transportadora"], factors: ["Congestionamento", "Excesso de paradas", "Janelas restritas de recebimento"], recommendations: ["Replanejar sequenciamento das rotas críticas", "Antecipar saídas em horários de pico", "Negociar janelas com clientes recorrentes"], detailMetric: "route-time" },
     { id: "total-cost", area: "Custos", title: "Custo Logístico Total", value: formatLogisticsCurrency(metrics.totalLogisticsCost), rawValue: metrics.totalLogisticsCost, status: costStatus(changes.totalLogisticsCost), change: changes.totalLogisticsCost, lowerIsBetter: true, insight: changePhrase("O custo logístico", changes.totalLogisticsCost, true), icon: WalletCards, description: "Custo consolidado da operação logística.", meaning: "Consolida o valor gasto para armazenar, preparar e transportar os pedidos no período.", formula: "Transporte + combustível + manutenção + pedágio + armazenagem + operação", calculation: "O sistema somou os custos registrados em todas as viagens do período selecionado.", dataUsed: ["Custo de transporte", "Combustível", "Manutenção", "Pedágio", "Armazenagem", "Operação"], factors: ["Rotas longas ou ociosas", "Aumento do tempo de trânsito", "Devoluções e reentregas"], recommendations: ["Atacar as rotas de maior participação", "Reduzir viagens com baixa ocupação", "Monitorar custo de reentrega"], detailMetric: "route-cost" },
@@ -361,15 +384,39 @@ export function LogisticsDashboardMetrics() {
   const [selectedMetric, setSelectedMetric] = useState<ExecutiveMetricId | null>(null);
   const [selectedFactor, setSelectedFactor] = useState<InvestigationFactor | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<InvestigationEvidence | null>(null);
+  const [occupancySummary, setOccupancySummary] = useState<RouteOccupancySummary | null>(null);
+  const [occupancyLoading, setOccupancyLoading] = useState(true);
+  const [occupancyError, setOccupancyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setOccupancyLoading(true);
+    setOccupancyError(null);
+    fetchRouteOccupancySummary()
+      .then((summary) => {
+        if (active) setOccupancySummary(summary);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setOccupancySummary(null);
+        setOccupancyError((error as Error).message);
+      })
+      .finally(() => {
+        if (active) setOccupancyLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const comparison = useMemo(() => compareLogisticsPeriods(demoLogisticsDashboardSource, periodDays, LOGISTICS_REFERENCE_DATE), [periodDays]);
   const filteredSource = useMemo(() => filterLogisticsDashboardSource(demoLogisticsDashboardSource, periodDays, LOGISTICS_REFERENCE_DATE), [periodDays]);
   const routeSummaries = useMemo(() => summarizeLogisticsRoutes(filteredSource.routes), [filteredSource.routes]);
   const inventory = useMemo(() => selectLatestInventoryBySku(filteredSource.inventory), [filteredSource.inventory]);
   const metrics = comparison.current;
-  const executiveCards = buildExecutiveCards(metrics, comparison.changes);
+  const executiveCards = buildExecutiveCards(metrics, comparison.changes, occupancySummary, occupancyLoading, occupancyError);
   const selectedCard = executiveCards.find((card) => card.id === selectedMetric) ?? null;
-  const metricHistory = useMemo(() => selectedMetric ? buildMetricHistory(selectedMetric, periodDays) : [], [selectedMetric, periodDays]);
+  const metricHistory = useMemo(() => selectedMetric && selectedMetric !== "occupancy" ? buildMetricHistory(selectedMetric, periodDays) : [], [selectedMetric, periodDays]);
   const investigationFactors = useMemo(
     () => buildInvestigationFactors(selectedMetric, filteredSource.routes, inventory),
     [selectedMetric, filteredSource.routes, inventory],
@@ -390,7 +437,7 @@ export function LogisticsDashboardMetrics() {
     <div className="page-shell app-background space-y-6">
       <header className="animate-fade-in flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="flex flex-wrap items-center gap-2"><span className="page-header-kicker">Dashboard</span><Badge variant="outline">Base demonstrativa</Badge></div>
+          <div className="flex flex-wrap items-center gap-2"><span className="page-header-kicker">Dashboard</span><Badge variant="outline">Ocupação real</Badge><Badge variant="outline">Demais KPIs demonstrativos</Badge></div>
           <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Dashboard logístico</h1>
           <p className="mt-1 text-sm text-muted-foreground">Identifique o sinal, encontre a causa raiz e receba uma ação específica sem sair da tela.</p>
         </div>
@@ -405,7 +452,7 @@ export function LogisticsDashboardMetrics() {
         {executiveCards.map((card) => <ExecutiveMetricCard key={card.id} card={card} onSelect={() => openMetric(card.id)} />)}
       </section>
 
-      <p className="text-center text-xs text-muted-foreground">A API atual ainda não expõe todos os eventos logísticos necessários; por isso a tela usa uma amostra realista da operação Grespan sem exibir estados vazios.</p>
+      <p className="text-center text-xs text-muted-foreground">A taxa de ocupação usa a base atual de rotas; os demais KPIs continuam demonstrativos até a API expor os eventos logísticos necessários.</p>
 
       <Dialog open={selectedCard != null && selectedFactor == null} onOpenChange={(open) => !open && selectedFactor == null && setSelectedMetric(null)}>
         <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-4xl overflow-y-auto p-5 sm:p-6">
@@ -413,15 +460,14 @@ export function LogisticsDashboardMetrics() {
             <>
               <DialogHeader className="pr-8 text-left">
                 <div className="flex flex-wrap items-center gap-2"><DialogTitle className="text-xl">{selectedCard.title}</DialogTitle><MetricStatusBadge status={selectedCard.status} /></div>
-                <DialogDescription>Nível 2 · Entender o problema</DialogDescription>
               </DialogHeader>
               <div className="mt-3 space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg border bg-muted/20 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que aconteceu</p><p className="mt-2 text-lg font-semibold">{selectedCard.value}</p><p className="mt-1 text-sm text-muted-foreground">{formatChange(selectedCard.change)}</p></div>
+                  <div className="rounded-lg border bg-muted/20 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que aconteceu</p><p className="mt-2 text-lg font-semibold">{selectedCard.value}</p><p className="mt-1 text-sm text-muted-foreground">{selectedCard.id === "occupancy" ? "Base atual de rotas" : formatChange(selectedCard.change)}</p></div>
                   <div className="rounded-lg border bg-muted/20 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Por que está neste status</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{selectedCard.insight}</p></div>
                 </div>
-                <MetricHistoryChart history={metricHistory} periodDays={periodDays} />
-                <div><h3 className="text-sm font-semibold">Principais fatores que impactaram o resultado</h3><div className="mt-3 space-y-2">{investigationFactors.map((factor) => <button type="button" key={factor.id} onClick={() => openFactor(factor)} className="flex w-full items-center justify-between gap-3 rounded-lg border p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"><div><p className="text-sm font-semibold">{factor.title}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{factor.summary}</p></div><ChevronRight className="size-4 shrink-0 text-primary" /></button>)}</div></div>
+                {selectedCard.id === "occupancy" ? <OccupancySummaryDetails card={selectedCard} /> : <MetricHistoryChart history={metricHistory} periodDays={periodDays} />}
+                {selectedCard.id !== "occupancy" && <div><h3 className="text-sm font-semibold">Principais fatores que impactaram o resultado</h3><div className="mt-3 space-y-2">{investigationFactors.map((factor) => <button type="button" key={factor.id} onClick={() => openFactor(factor)} className="flex w-full items-center justify-between gap-3 rounded-lg border p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"><div><p className="text-sm font-semibold">{factor.title}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{factor.summary}</p></div><ChevronRight className="size-4 shrink-0 text-primary" /></button>)}</div></div>}
               </div>
             </>
           )}
@@ -439,6 +485,37 @@ export function LogisticsDashboardMetrics() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function OccupancySummaryDetails({ card }: { card: ExecutiveCard }) {
+  const summary = card.occupancySummary;
+
+  if (card.unavailableReason) {
+    return <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{card.unavailableReason}</div>;
+  }
+
+  if (!summary) {
+    return <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Carregando dados atuais de rotas.</div>;
+  }
+
+  const sourceLabel = summary.snapshot
+    ? `v${summary.snapshot.version} · ${summary.snapshot.fileName}`
+    : "Sem base publicada";
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <ForecastItem title="Peso total" value={formatLogisticsWeightKg(summary.totalWeightKg)} detail="Rotas com capacidade configurada" />
+        <ForecastItem title="Capacidade total" value={formatLogisticsWeightKg(summary.totalCapacityKg)} detail="Soma dos veículos considerados" />
+        <ForecastItem title="Rotas analisadas" value={String(summary.routeCount)} detail="Base atual de rotas" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <ForecastItem title="Com capacidade" value={String(summary.routesWithCapacity)} detail="Entram na taxa" />
+        <ForecastItem title="Sem capacidade" value={String(summary.routesWithoutCapacity)} detail="Ficam fora do cálculo" />
+        <ForecastItem title="Importação de rotas" value={sourceLabel} detail={summary.snapshot ? `Atualizado em ${formatBaseDate(summary.snapshot.finishedAt)}` : "Publique uma importação de rotas"} />
+      </div>
     </div>
   );
 }

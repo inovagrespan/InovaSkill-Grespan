@@ -7,54 +7,39 @@ function readRoute(routeFile: string): string {
 }
 
 describe("fake operational KPI pages", () => {
-  it("mantém Administrativo com KPIs demonstrativos no mesmo layout da Logística", () => {
-    const source = readRoute("administrativo.tsx");
+  it("mantém Finanças com KPIs consolidados no mesmo layout da Logística", () => {
+    const source = readRoute("financas.tsx");
 
-    expect(source).toContain('createFileRoute("/administrativo")');
+    expect(source).toContain('createFileRoute("/financas")');
     expect(source).not.toContain("Dados demonstrativos");
     expect(source).not.toContain("Base simulada");
     expect(source).not.toContain("Todos os KPIs abaixo");
-    expect(source).toContain("Saldo de Caixa Projetado");
-    expect(source).toContain('import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";');
-    expect(source).toContain("value: formatKpiCompactCurrency(428000)");
-    expect(source).toContain("Inadimplência Simulada");
-    expect(source).toContain("Conformidade de Processos");
-    expect(source).toContain("MetricDetailsDialog");
-    expect(source).toContain("max-w-4xl");
-    expect(source).toContain('className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5"');
-    expect(source).toContain('aria-label="Indicadores administrativos"');
-    expect(source).toContain("Fórmula");
-    expect(source).toContain("Como foi calculado");
-    expect(source).toContain("Histórico do indicador");
-    expect(source).toContain("Dados usados");
-    expect(source).toContain("Histórico e investigação");
-    expect(source).not.toContain("metric-row animate-soft-enter");
-    expect(source).not.toContain("line-clamp-2 text-xs text-muted-foreground");
+    expect(source).toContain("Faturamento total");
+    expect(source).toContain('import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";');
+    expect(source).toContain("formatKpiCompactCurrency(metrics.totalRevenue)");
+    expect(source).toContain("Pedidos");
+    expect(source).toContain("Quantidade");
+    expect(source).toContain("Ticket médio");
+    expect(source).toContain('className="metric-row"');
+    expect(source).toContain("fetchFinanceDashboard");
+    expect(source).toContain("TEXT_SEARCH_DEBOUNCE_MS");
   });
 
-  it("mantém Produção com KPIs demonstrativos no mesmo layout da Logística", () => {
-    const source = readRoute("produtos.tsx");
+  it("mantém Produção com KPIs reais no mesmo layout da Logística", () => {
+    const source = readRoute("producao.tsx");
 
-    expect(source).toContain('createFileRoute("/produtos")');
+    expect(source).toContain('createFileRoute("/producao")');
     expect(source).toContain("Produção");
-    expect(source).not.toContain("Smart Core / Produção");
     expect(source).not.toContain("Dados demonstrativos");
     expect(source).not.toContain("Base simulada");
     expect(source).not.toContain("Todos os KPIs abaixo");
-    expect(source).toContain("Eficiência de Produção");
-    expect(source).toContain("Ordens em Atraso");
-    expect(source).toContain("Capacidade Disponível");
-    expect(source).toContain("MetricDetailsDialog");
-    expect(source).toContain("max-w-4xl");
-    expect(source).toContain('className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5"');
-    expect(source).toContain('aria-label="Indicadores de produção"');
-    expect(source).toContain("Fórmula");
-    expect(source).toContain("Como foi calculado");
-    expect(source).toContain("Histórico do indicador");
-    expect(source).toContain("Dados usados");
-    expect(source).toContain("Histórico e investigação");
-    expect(source).not.toContain("metric-row animate-soft-enter");
-    expect(source).not.toContain("line-clamp-2 text-xs text-muted-foreground");
-    expect(source).not.toContain("fetchProducts");
+    expect(source).toContain("Produção (último dia)");
+    expect(source).toContain("Saída (último dia)");
+    expect(source).toContain("Saldo operacional");
+    expect(source).toContain("Produção (mês)");
+    expect(source).toContain("Saída (mês)");
+    expect(source).toContain('className="metric-row"');
+    expect(source).toContain("fetchProductionSummary");
+    expect(source).toContain("TEXT_SEARCH_DEBOUNCE_MS");
   });
 });

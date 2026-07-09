@@ -30,12 +30,89 @@ public static class FiscalImportCodes
     public const string ProcessorKey = "fiscal-movements";
 }
 
+public static class ProductImportCodes
+{
+    public const string DataSource = "PRODUCTS";
+    public const string DataSourceName = "Cadastro de Produtos";
+    public const string DataSourceType = "EXCEL";
+    public const string ProcessorKey = "products";
+}
+
+public static class InventoryCurrentImportCodes
+{
+    public const string DataSource = "INVENTORY_CURRENT";
+    public const string DataSourceName = "Estoque Atual";
+    public const string DataSourceType = "EXCEL";
+    public const string ProcessorKey = "inventory-current";
+}
+
+public static class DailyInventoryImportCodes
+{
+    public const string DataSource = "DAILY_INVENTORY";
+    public const string DataSourceName = "Controle Diário de Estoque";
+    public const string DataSourceType = "EXCEL";
+    public const string ProcessorKey = "daily-inventory";
+}
+
+public static class ProductCodeNormalizer
+{
+    public static string NormalizeOperationalCode(string value)
+    {
+        var compact = value.Trim().ToUpperInvariant();
+        return compact.StartsWith('V') ? compact[1..] : compact;
+    }
+}
+
+public static class OperationalJobCodes
+{
+    public const string MunicipalityCoordinateEnrichment = "MUNICIPALITY_COORDINATE_ENRICHMENT";
+    public const int WorkerExecutionTimeoutMinutes = 30;
+}
+
 public sealed record ProcessImport(Guid ImportId, Guid JobExecutionId);
+
+public sealed record ProcessOperationalJob(Guid JobExecutionId);
+
+public sealed record OperationalJobDefinition(
+    string JobType,
+    string DisplayName,
+    string Description,
+    bool ManualRunAllowed,
+    bool ScheduleAllowed,
+    bool AllowConcurrentRuns);
+
+public static class OperationalJobCatalog
+{
+    public static readonly OperationalJobDefinition MunicipalityCoordinateEnrichment = new(
+        OperationalJobCodes.MunicipalityCoordinateEnrichment,
+        "Enriquecer coordenadas de municípios",
+        "Busca municípios de clientes sem coordenadas e salva latitude/longitude por cidade.",
+        ManualRunAllowed: true,
+        ScheduleAllowed: true,
+        AllowConcurrentRuns: false);
+
+    public static IReadOnlyList<OperationalJobDefinition> All { get; } =
+        [MunicipalityCoordinateEnrichment];
+}
 
 public interface IDataSourceProcessor
 {
     string SourceCode { get; }
     Task ProcessAsync(Guid importId, CancellationToken cancellationToken);
+}
+
+public interface IOperationalJobProcessor
+{
+    string JobType { get; }
+    Task ProcessAsync(Guid relatedEntityId, CancellationToken cancellationToken);
+}
+
+public interface IOperationalJobQueue
+{
+    Task<Guid?> TryQueueAsync(
+        string jobType,
+        Guid relatedEntityId,
+        CancellationToken cancellationToken);
 }
 
 public interface IImportLifecycleService

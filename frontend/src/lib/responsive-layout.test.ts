@@ -52,7 +52,8 @@ describe("responsive layout behavior", () => {
     expect(root).toContain('useState<"light" | "dark">("dark")');
     expect(root).toContain('setTheme("dark")');
 
-    for (const source of [dashboard, vendas, financas, processamentos]) {
+    expect(dashboard).toContain("LogisticsDashboardMetrics");
+    for (const source of [vendas, financas, processamentos]) {
       expect(source).toContain("metric-row");
     }
     expect(clientes).toContain("SkeletonTable");

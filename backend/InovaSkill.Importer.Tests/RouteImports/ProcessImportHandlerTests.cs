@@ -36,7 +36,8 @@ public sealed class ProcessImportHandlerTests
         var handler = new ProcessImportHandler(
             db,
             [new ClearingProcessor(db)],
-            new NoOpLifecycle());
+            new NoOpLifecycle(),
+            new NoOpOperationalJobQueue());
 
         await handler.Handle(new ProcessImport(import.Id, job.Id), default);
 
@@ -65,5 +66,11 @@ public sealed class ProcessImportHandlerTests
 
         public Task<bool> TryActivateAsync(Guid importId, CancellationToken cancellationToken) =>
             Task.FromResult(false);
+    }
+
+    private sealed class NoOpOperationalJobQueue : IOperationalJobQueue
+    {
+        public Task<Guid?> TryQueueAsync(string jobType, Guid relatedEntityId, CancellationToken cancellationToken) =>
+            Task.FromResult<Guid?>(null);
     }
 }

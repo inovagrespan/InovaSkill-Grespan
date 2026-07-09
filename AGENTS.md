@@ -15,6 +15,7 @@ Guia local para qualquer IA que edite este repositório.
 - Não quebrar separação entre `frontend` e `backend`.
 - Não mudar contratos de API sem atualizar frontend e backend no mesmo PR.
 - Quando a tarefa envolver subir o ambiente em desenvolvimento local, subir apenas `postgres` e `redis` via Docker e executar `frontend`, `api` e `worker` localmente com os comandos próprios de cada projeto.
+- Todo processamento assíncrono, administrativo, importação, reprocessamento, enriquecimento ou job de manutenção deve reutilizar o padrão existente de `job_executions` e aparecer na Central de Processamentos; é proibido criar tabela, fila ou monitoramento paralelo de jobs sem pedido explícito e atualização arquitetural.
 - Escolha de nomes é parte obrigatória da qualidade do código: nomes de tipos, métodos, variáveis, constantes, rotas e casos de uso devem refletir o domínio com clareza; nome ruim não é detalhe, é defeito de legibilidade.
 - Para qualquer alteração de código, criar/atualizar testes cobrindo o comportamento alterado.
 - Para qualquer alteração no frontend, criar ou atualizar testes de frontend cobrindo o comportamento alterado.
@@ -81,6 +82,7 @@ rg "Ã|��|�" -n frontend backend -S
 - Para cálculos pesados, consolidações, enriquecimento de dados e geração de resumos (diário/semanal/mensal), preferir processamento assíncrono via `InovaSkill.Importer.Worker`.
 - A `Api` deve expor consulta e acionamento, mas não executar processamento pesado em request síncrono.
 - O `Worker` consome eventos/fila (Redis), executa o pipeline de processamento e persiste resultados nas tabelas de resumo.
+- Jobs de cálculo, importação, enriquecimento de dados e manutenção devem registrar ciclo de vida em `job_executions`, reutilizando a Central de Processamentos para fila, andamento, conclusão, falha, retry e auditoria operacional.
 - Regras de cálculo, validação e comparação devem ficar em `Application/Domain` (ou serviços de processamento em `Infrastructure` quando envolver integração/persistência), mantendo lógica reutilizável e testável.
 - Leitura para dashboards deve consultar dados já consolidados (materializados) sempre que possível, evitando recalcular tudo em cada requisição.
 - Sempre que criar novo cálculo:

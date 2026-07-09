@@ -21,9 +21,12 @@ describe("sidebar navigation", () => {
       "Mapa",
       "Clientes",
       "Notas Fiscais",
+      "Produtos",
+      "Estoque",
+      "Produção",
       "Importações",
     ]);
-    expect(vendasItems).toEqual(["Dashboard", "Rotas", "Tipos de Veículo", "Mapa", "Clientes", "Notas Fiscais"]);
+    expect(vendasItems).toEqual(["Dashboard", "Rotas", "Tipos de Veículo", "Mapa", "Clientes", "Notas Fiscais", "Produtos", "Estoque", "Produção"]);
     expect(adminItems).toContain("Importações");
     expect(adminSystemItems).toContain("Importações");
   });
@@ -43,8 +46,12 @@ describe("sidebar navigation", () => {
     expect(source).not.toContain('label: "Vendas"');
     expect(source).not.toContain('to: "/logistica"');
     expect(source).not.toContain('label: "Logística"');
-    expect(source).not.toContain('to: "/produtos"');
-    expect(source).not.toContain('label: "Produtos"');
+    expect(source).toContain('to: "/produtos"');
+    expect(source).toContain('label: "Produtos"');
+    expect(source).toContain('to: "/estoque"');
+    expect(source).toContain('label: "Estoque"');
+    expect(source).toContain('to: "/producao"');
+    expect(source).toContain('label: "Produção"');
     expect(source).toContain('to: "/importacoes/files"');
     expect(source).toContain('label: "Importações"');
     expect(source).toContain('to: "/processamentos"');
@@ -76,9 +83,9 @@ describe("sidebar navigation", () => {
     const source = readSidebar();
 
     expect(source).toContain("Expandir sidebar");
-    expect(source).toContain("AnimatedMenuIcon");
-    expect(source).toContain("open ? \"translate-y-0 rotate-45\"");
-    expect(source).toContain("open ? \"translate-y-0 -rotate-45\"");
+    expect(source).toContain("SidebarToggleArrow");
+    expect(source).toContain("data-sidebar-toggle-arrow");
+    expect(source).toContain("const Icon = open ? ChevronLeft : ChevronRight");
     expect(source).toContain("aria-expanded={!collapsed}");
     expect(source).toContain("flex size-10 shrink-0 items-center justify-center rounded-full");
     expect(source).not.toContain("collapsed && \"hidden\"");

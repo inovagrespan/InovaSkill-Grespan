@@ -772,7 +772,6 @@ export function SalesControlTower() {
                       {selected.status}
                     </Badge>
                   </div>
-                  <DialogDescription>Nível 2 · Entender o resultado</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-lg border bg-muted/20 p-4">

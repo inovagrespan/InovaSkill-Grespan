@@ -44,7 +44,7 @@ describe("director login token", () => {
     expect(token).toBe(apiToken);
     expect(getAuthToken()).toBe(apiToken);
     expect(window.fetch).toHaveBeenCalledWith(
-      "http://localhost:5279/login",
+      "http://localhost:5279/api/login",
       expect.objectContaining({ method: "POST" }),
     );
   });

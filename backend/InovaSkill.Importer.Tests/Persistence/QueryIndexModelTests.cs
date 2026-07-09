@@ -11,6 +11,10 @@ public sealed class QueryIndexModelTests
     [InlineData(typeof(Customer), "DataSourceId", "ExternalCode", "BranchCode")]
     [InlineData(typeof(CustomerSnapshot), "ImportId", "MunicipalityId")]
     [InlineData(typeof(CustomerSnapshot), "ImportId", "CustomerType")]
+    [InlineData(typeof(Product), "ErpCode")]
+    [InlineData(typeof(Product), "OperationalCode")]
+    [InlineData(typeof(InventorySnapshot), "ImportId", "AvailableQuantity")]
+    [InlineData(typeof(DailyInventoryRecord), "ProductId", "Date")]
     public void Model_HasIndexesForCurrentFilterAndOrderingPatterns(
         Type entityType,
         params string[] expectedProperties)

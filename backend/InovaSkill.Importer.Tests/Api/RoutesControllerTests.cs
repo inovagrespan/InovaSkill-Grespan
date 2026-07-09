@@ -12,6 +12,56 @@ namespace InovaSkill.Importer.Tests.Api;
 public sealed class RoutesControllerTests
 {
     [Fact]
+    public async Task GetOccupancySummary_UsesCurrentSnapshotAndWeightedCapacityAverage()
+    {
+        await using var db = CreateDbContext();
+        var source = CreateSource();
+        var currentImport = CreateImport(source.Id, 2, RouteImportStatus.Completed, new DateTime(2026, 7, 5, 12, 0, 0, DateTimeKind.Utc));
+        var olderImport = CreateImport(source.Id, 1, RouteImportStatus.Completed, new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc));
+        source.CurrentImportId = currentImport.Id;
+        source.CurrentImport = currentImport;
+        var smallVehicle = CreateVehicle(capacityKg: 1_000m);
+        var largeVehicle = CreateVehicle(name: "Carreta", capacityKg: 10_000m);
+        var missingCapacityVehicle = CreateVehicle(name: "Sem capacidade", capacityKg: null);
+        db.AddRange(source, currentImport, olderImport, smallVehicle, largeVehicle, missingCapacityVehicle);
+        db.AddRange(
+            CreateRoute(currentImport.Id, smallVehicle.Id, "Rota atual A", 0.90m, totalWeightKg: 900m),
+            CreateRoute(currentImport.Id, largeVehicle.Id, "Rota atual B", 0.10m, totalWeightKg: 1_000m),
+            CreateRoute(currentImport.Id, missingCapacityVehicle.Id, "Rota sem capacidade", null, totalWeightKg: 8_000m),
+            CreateRoute(olderImport.Id, largeVehicle.Id, "Rota anterior", 0.80m, totalWeightKg: 8_000m));
+        await db.SaveChangesAsync();
+
+        var response = await new RoutesController(db).GetOccupancySummary(default);
+        var json = SerializeOkResult(response);
+
+        Assert.Equal(17.3m, json.RootElement.GetProperty("OccupancyRatePercent").GetDecimal());
+        Assert.Equal(1_900m, json.RootElement.GetProperty("TotalWeightKg").GetDecimal());
+        Assert.Equal(11_000m, json.RootElement.GetProperty("TotalCapacityKg").GetDecimal());
+        Assert.Equal(3, json.RootElement.GetProperty("RouteCount").GetInt32());
+        Assert.Equal(2, json.RootElement.GetProperty("RoutesWithCapacity").GetInt32());
+        Assert.Equal(1, json.RootElement.GetProperty("RoutesWithoutCapacity").GetInt32());
+        Assert.Equal(2, json.RootElement.GetProperty("Snapshot").GetProperty("Version").GetInt64());
+        Assert.Equal("2.xlsx", json.RootElement.GetProperty("Snapshot").GetProperty("FileName").GetString());
+    }
+
+    [Fact]
+    public async Task GetOccupancySummary_WhenCurrentSnapshotDoesNotExist_ReturnsZeroSummary()
+    {
+        await using var db = CreateDbContext();
+        db.Add(CreateSource());
+        await db.SaveChangesAsync();
+
+        var response = await new RoutesController(db).GetOccupancySummary(default);
+        var json = SerializeOkResult(response);
+
+        Assert.Equal(0m, json.RootElement.GetProperty("OccupancyRatePercent").GetDecimal());
+        Assert.Equal(0m, json.RootElement.GetProperty("TotalWeightKg").GetDecimal());
+        Assert.Equal(0m, json.RootElement.GetProperty("TotalCapacityKg").GetDecimal());
+        Assert.Equal(0, json.RootElement.GetProperty("RouteCount").GetInt32());
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("Snapshot").ValueKind);
+    }
+
+    [Fact]
     public async Task List_WithArbitraryDate_SelectsLatestSnapshotAvailableByEndOfDay()
     {
         await using var db = CreateDbContext();
@@ -42,7 +92,7 @@ public sealed class RoutesControllerTests
 
     [Theory]
     [InlineData("critical", "Crítico")]
-    [InlineData("good", "Bom")]
+    [InlineData("good", "Saudável")]
     [InlineData("medium", "Médio")]
     [InlineData("idle", "Ocioso")]
     [InlineData("unavailable", "Indisponível")]
@@ -58,7 +108,7 @@ public sealed class RoutesControllerTests
         db.AddRange(source, routeImport, vehicle);
         db.AddRange(
             CreateRoute(routeImport.Id, vehicle.Id, "Crítico", 1.0001m),
-            CreateRoute(routeImport.Id, vehicle.Id, "Bom", 1.00m),
+            CreateRoute(routeImport.Id, vehicle.Id, "Saudável", 1.00m),
             CreateRoute(routeImport.Id, vehicle.Id, "Médio", 0.60m),
             CreateRoute(routeImport.Id, vehicle.Id, "Ocioso", 0.5999m),
             CreateRoute(routeImport.Id, vehicle.Id, "Indisponível", null));
@@ -167,23 +217,28 @@ public sealed class RoutesControllerTests
         FinishedAt = finishedAt
     };
 
-    private static VehicleType CreateVehicle() => new()
+    private static VehicleType CreateVehicle(
+        string name = "Truck",
+        decimal? capacityKg = null) => new()
     {
         Id = Guid.NewGuid(),
-        Name = "Truck"
+        Name = name,
+        CapacityKg = capacityKg
     };
 
     private static Route CreateRoute(
         Guid importId,
         Guid vehicleId,
         string name,
-        decimal? occupancy) => new()
+        decimal? occupancy,
+        decimal totalWeightKg = 0m) => new()
     {
         Id = Guid.NewGuid(),
         ImportId = importId,
         Name = name,
         Weekday = "MONDAY",
         VehicleTypeId = vehicleId,
+        TotalWeightKg = totalWeightKg,
         OverallOccupancy = occupancy,
         OccupancyStatus = occupancy.HasValue
             ? RouteOccupancyStatus.Calculated

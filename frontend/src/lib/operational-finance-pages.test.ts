@@ -14,6 +14,7 @@ describe("operational, finance and reports pages", () => {
 
   it("exibe dez KPIs mínimos e navegação progressiva em quatro níveis", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
+    const kpiCard = fs.readFileSync(path.resolve(process.cwd(), "src/components/ui/dashboard-kpi-card.tsx"), "utf8");
     const helper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/logistics-dashboard.ts"), "utf8");
 
     expect(source).toContain("Dashboard logístico");
@@ -30,14 +31,16 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("formatChange(card.change)");
     expect(source).toContain("statusPresentation(card.status)");
     expect(source).not.toContain("{card.area}");
-    expect(source).toContain("relative flex h-full flex-col p-5");
-    expect(source).toContain("min-h-11 pr-12");
-    expect(source).toContain("flex min-h-10 min-w-0 items-center text-balance");
-    expect(source).toContain("absolute right-5 top-5");
+    expect(source).toContain("DashboardKpiCard");
+    expect(kpiCard).toContain("h-full min-h-44");
+    expect(kpiCard).toContain("flex h-full flex-col gap-6 px-6 pb-5 pt-5");
+    expect(kpiCard).toContain("flex min-h-16 items-start justify-between gap-4 pt-3");
+    expect(kpiCard).toContain("min-w-0 flex-1 text-balance");
+    expect(kpiCard).toContain("inline-flex size-10");
     expect(source).not.toContain(">Investigar <");
     expect(source).toContain("DialogContent");
     expect(source).toContain("max-w-4xl");
-    expect(source).toContain("Nível 2 · Entender o problema");
+    expect(source).not.toContain("Nível 2 · Entender o problema");
     expect(source).toContain("O que aconteceu");
     expect(source).toContain("Por que está neste status");
     expect(source).toContain("Principais fatores que impactaram o resultado");
@@ -61,7 +64,8 @@ describe("operational, finance and reports pages", () => {
     expect(source).not.toContain('to="/logistica/rotas"');
     expect(source).not.toContain("Clientes, rotas e trânsito");
     expect(source).not.toContain("Rotas com mais atrasos por congestionamento");
-    expect(source).toContain("Base demonstrativa");
+    expect(source).toContain("Ocupação real");
+    expect(source).toContain("Demais KPIs demonstrativos");
     expect(helper).toContain("calculateLogisticsKpis");
     expect(helper).toContain("filterLogisticsDashboardSource");
     expect(helper).toContain("selectLatestInventoryBySku");
@@ -83,18 +87,21 @@ describe("operational, finance and reports pages", () => {
     expect(dateFilter).toContain('type="date"');
     expect(route).toContain("Filtrar por criticidade");
     expect(route).toContain('<SelectItem value="critical">Crítico</SelectItem>');
+    expect(route).toContain('<SelectItem value="good">Saudável</SelectItem>');
     expect(route).toContain("occupancyLevel:");
     expect(route).not.toContain("Importado de:");
     expect(legacyRoute).not.toContain("Importado de:");
   });
 
-  it("cria o mapa principal com as rotas desenhadas", () => {
+  it("cria o mapa principal sem rotas mockadas", () => {
     const route = fs.readFileSync(path.resolve(process.cwd(), "src/routes/mapa.tsx"), "utf8");
 
     expect(route).toContain('createFileRoute("/mapa")');
     expect(route).toContain("LogisticsRegionMap");
-    expect(route).toContain("demoLogisticsMapCustomers");
-    expect(route).toContain("demoLogisticsMapRoutes");
+    expect(route).toContain("fetchLogisticsMapCustomers");
+    expect(route).toContain("mapRouteOverlays");
+    expect(route).not.toContain("demoLogisticsMapRoutes");
+    expect(route).not.toContain("@/components/ui/card");
     expect(route).toContain("Mapa de rotas");
   });
 
@@ -117,8 +124,13 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("resolveExecutiveMetricValue(card.id, card.value)");
     expect(source).toContain("const released = isReleasedLogisticsMetric(card.id)");
     expect(source).toContain("onClick={released ? onSelect : undefined}");
-    expect(source).toContain("{released && (");
-    expect(source).toContain('title: "Taxa de Ocupação", value: formatPercent(metrics.occupancyRatePercent)');
+    expect(source).toContain("released && card.showStatus !== false");
+    expect(source).toContain('title: "Taxa de Ocupação", value: occupancyValue');
+    expect(source).toContain("Importação de rotas");
+    expect(source).toContain("MEDIUM_OCCUPANCY_LIMIT_PERCENT = 60");
+    expect(source).toContain("GOOD_OCCUPANCY_LIMIT_PERCENT = 80");
+    expect(source).toContain("CRITICAL_OCCUPANCY_LIMIT_PERCENT = 100");
+    expect(source).toContain("Rotas abaixo de 60% estão ociosas");
     expect(source).toContain('title: "Rupturas de Estoque", value: `${metrics.stockoutSkuCount} SKUs`');
   });
 
@@ -229,20 +241,27 @@ describe("operational, finance and reports pages", () => {
     expect(sidebar).not.toContain('to: "/financas"');
   });
 
-  it("mantem a pagina de produtos fora da estrutura da sidebar", () => {
+  it("mantem produtos e estoque na navegação operacional", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/produtos.tsx"), "utf8");
+    const inventory = fs.readFileSync(path.resolve(process.cwd(), "src/routes/estoque.tsx"), "utf8");
     const api = fs.readFileSync(path.resolve(process.cwd(), "src/lib/importer-api.ts"), "utf8");
     const sidebar = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
 
     expect(source).toContain('createFileRoute("/produtos")');
     expect(source).toContain("Produtos cadastrados");
-    expect(source).toContain("Buscar por SKU ou nome");
+    expect(source).toContain("Buscar por produto ou código");
+    expect(inventory).toContain('createFileRoute("/estoque")');
+    expect(inventory).toContain("Visão de Estoque");
     expect(source).toContain("fetchProducts");
+    expect(inventory).toContain("fetchInventorySummary");
     expect(api).toContain("/api/products");
+    expect(api).toContain("/api/inventory/summary");
     expect(api).toContain("demoProducts");
     expect(api).toContain("filterDemoProducts");
-    expect(sidebar).not.toContain('to: "/produtos"');
-    expect(sidebar).not.toContain('label: "Produtos"');
+    expect(sidebar).toContain('to: "/produtos"');
+    expect(sidebar).toContain('label: "Produtos"');
+    expect(sidebar).toContain('to: "/estoque"');
+    expect(sidebar).toContain('label: "Estoque"');
   });
 
   it("exibe kpis operacionais de nota fiscal na tela de vendas", () => {

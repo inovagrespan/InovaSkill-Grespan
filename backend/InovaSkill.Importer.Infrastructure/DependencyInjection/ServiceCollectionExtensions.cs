@@ -22,10 +22,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RoutesSpreadsheetParser>();
         services.AddScoped<CustomersSpreadsheetParser>();
         services.AddScoped<FiscalMovementsSpreadsheetParser>();
+        services.AddScoped<ProductsSpreadsheetParser>();
+        services.AddScoped<InventoryCurrentSpreadsheetParser>();
+        services.AddScoped<DailyInventorySpreadsheetParser>();
         services.AddScoped<IImportLifecycleService, ImportLifecycleService>();
+        services.AddScoped<IMunicipalityCoordinateProvider, EmbeddedMunicipalityCoordinateProvider>();
+        services.AddScoped<IOperationalJobQueue, OperationalJobQueue>();
         services.AddScoped<IDataSourceProcessor, RoutesByCityProcessor>();
         services.AddScoped<IDataSourceProcessor, CustomersProcessor>();
         services.AddScoped<IDataSourceProcessor, FiscalMovementsProcessor>();
+        services.AddScoped<IDataSourceProcessor, ProductsProcessor>();
+        services.AddScoped<IDataSourceProcessor, InventoryCurrentProcessor>();
+        services.AddScoped<IDataSourceProcessor, DailyInventoryProcessor>();
+        services.AddScoped<IOperationalJobProcessor, MunicipalityCoordinateEnrichmentProcessor>();
         return services;
     }
 }

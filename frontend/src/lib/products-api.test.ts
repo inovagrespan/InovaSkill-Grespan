@@ -41,7 +41,7 @@ describe("products api", () => {
       PageSize: 20,
       Total: 1,
       Items: [
-        { Id: 1, Sku: "PRD-001", Name: "Massa Congelada", Price: 42.5, CreatedAt: "2026-06-01T00:00:00Z", SourceFileJobId: 10 },
+        { Id: "1", ErpCode: "10000122", OperationalCode: "6793", Name: "Massa Congelada", Type: "PA", Unit: "UN", GroupCode: "0022", Inventory: { AvailableQuantity: 12, OnHandQuantity: 15, CommittedQuantity: 3, StockValue: 42.5 } },
       ],
     }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -54,12 +54,17 @@ describe("products api", () => {
     expect(requestedUrl).toContain("search=massa");
     expect(result.total).toBe(1);
     expect(result.items[0]).toEqual({
-      id: 1,
-      sku: "PRD-001",
+      id: "1",
+      erpCode: "10000122",
+      operationalCode: "6793",
       name: "Massa Congelada",
-      price: 42.5,
-      createdAt: "2026-06-01T00:00:00Z",
-      sourceFileJobId: 10,
+      type: "PA",
+      unit: "UN",
+      groupCode: "0022",
+      netWeightKg: null,
+      grossWeightKg: null,
+      gtin: "",
+      inventory: { availableQuantity: 12, onHandQuantity: 15, committedQuantity: 3, stockValue: 42.5 },
     });
   });
 
@@ -72,6 +77,31 @@ describe("products api", () => {
     const result = await fetchProducts({ search: "pão", page: 1, pageSize: 20 });
 
     expect(result.total).toBeGreaterThan(0);
-    expect(result.items[0].name).toContain("Pão");
+    expect(result.items[0].erpCode).toBeTruthy();
+  });
+
+  it("busca resumo de estoque na API", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      stockouts: 2,
+      committedPercent: 10.5,
+      lastDailyDate: "2026-05-31",
+      lastProduction: 5076,
+      lastOutbound: 5403,
+      operationalBalance: -327,
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { fetchInventorySummary } = await import("./importer-api");
+    const result = await fetchInventorySummary();
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/inventory/summary");
+    expect(result).toEqual({
+      stockouts: 2,
+      committedPercent: 10.5,
+      lastDailyDate: "2026-05-31",
+      lastProduction: 5076,
+      lastOutbound: 5403,
+      operationalBalance: -327,
+    });
   });
 });

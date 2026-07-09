@@ -6,7 +6,7 @@ export type OccupancyLevel = "idle" | "good" | "medium" | "critical" | "unavaila
 
 export type OccupancyPresentation = {
   level: OccupancyLevel;
-  label: "Ocioso" | "Bom" | "Médio" | "Crítico" | "Indisponível";
+  label: "Ocioso" | "Saudável" | "Médio" | "Crítico" | "Indisponível";
   color: string;
   backgroundColor: string;
 };
@@ -20,7 +20,7 @@ const OCCUPANCY_PRESENTATIONS: Record<OccupancyLevel, OccupancyPresentation> = {
   },
   good: {
     level: "good",
-    label: "Bom",
+    label: "Saudável",
     color: "#16a34a",
     backgroundColor: "rgba(22, 163, 74, 0.14)",
   },

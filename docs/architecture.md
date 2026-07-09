@@ -117,9 +117,18 @@ consulta, acompanhando a normalização dos nomes armazenados pelas planilhas.
 Cada rota apresenta a ocupação com uma barra e um indicador circular. A
 classificação visual usa faixas explícitas de eficiência logística: abaixo de
 60% é `Ocioso` (azul), de 60% até menos de 80% é `Médio` (amarelo), de 80% até
-100% é `Bom` (verde), e acima de 100% é `Crítico` (vermelho) por sobrecarga.
+100% é `Saudável` (verde), e acima de 100% é `Crítico` (vermelho) por sobrecarga.
 Sobrecargas preservam e exibem o percentual excedente;
 ausência de capacidade aparece como `Indisponível`, sem ser convertida em zero.
+
+O card executivo `Taxa de Ocupação` do dashboard logístico usa somente o
+snapshot atual publicado de rotas, sem filtro de data ou comparação com período
+anterior. A API soma `Route.TotalWeightKg` das rotas com capacidade configurada
+e divide pela soma de `VehicleType.CapacityKg` dessas mesmas rotas; rotas sem
+capacidade ficam fora do numerador e denominador, mas são retornadas como
+contagem de alerta. O card usa as mesmas faixas visuais das rotas: abaixo de
+60% é `Ocioso`, de 60% até menos de 80% é `Médio`, de 80% até 100% é
+`Saudável`, e acima de 100% é `Crítico`.
 
 Alguns clientes de `frontend/src/lib/importer-api.ts` representam contratos de
 serviços do ecossistema que não estão implementados neste backend. Ao alterar um
@@ -140,26 +149,35 @@ Os controllers atuais atendem:
 - autenticação e cadastro;
 - upload, consulta, correção e reprocessamento de importações de rotas;
 - consulta das rotas processadas;
+- consulta do resumo de ocupação do snapshot atual de rotas;
 - manutenção de tipos de veículo;
-- consulta, retry e cancelamento de jobs administrativos.
+- consulta, retry e cancelamento de jobs administrativos;
+- catálogo e execução manual de jobs operacionais declarados como executáveis;
 - consulta paginada dos clientes da importação atualmente publicada.
 - consulta paginada e detalhe de documentos fiscais, além do resumo histórico de
   consumo em vendas por cliente.
+- consulta de clientes reais para mapa logístico, posicionados pela coordenada
+  do município cadastrado.
+- upload versionado de cadastro de produtos, estoque atual e controle diário de
+  estoque pelo mesmo endpoint genérico de importações.
+- consulta paginada de produtos, detalhe do produto, estoque atual e métricas
+  operacionais de estoque/produção.
 
 O middleware JWT libera endpoints públicos e valida as demais requisições antes
 de chegarem aos controllers.
 
 ### Application e Domain
 
-`Application/RouteImports` contém os contratos do pipeline de importação, a
-mensagem `ProcessImport`, interfaces de storage/processadores, ciclo de vida,
-cálculo de ocupação, política de capacidade dos veículos logísticos e resumo de
-execuções.
+`Application/RouteImports` contém os contratos do pipeline de importação, as
+mensagens `ProcessImport` e `ProcessOperationalJob`, interfaces de
+storage/processadores, ciclo de vida, catálogo de jobs operacionais, cálculo de
+ocupação, política de capacidade dos veículos logísticos e resumo de execuções.
 
 `Domain/Entities` contém usuários, notificações, fontes de dados, importações,
 erros, execuções, tipos de veículo, rotas, entradas de rota, clientes, snapshots
-de clientes e municípios compartilhados. Os estados da
-importação ficam em `Domain/Enums`.
+de clientes, municípios compartilhados, coordenadas municipais, produtos,
+snapshots de estoque e registros diários de estoque. Os estados da importação
+ficam em `Domain/Enums`.
 
 ### Infrastructure
 
@@ -174,6 +192,19 @@ dependências registra:
   reutilizando o mesmo ciclo de vida, storage, fila e publicação versionada.
 - `FiscalMovementsSpreadsheetParser` e `FiscalMovementsProcessor` para a fonte
   `FISCAL_MOVEMENTS`, em modo `Upsert`, acumulando fatos históricos.
+- `ProductsSpreadsheetParser` e `ProductsProcessor` para a fonte `PRODUCTS`,
+  em modo `Upsert`, mantendo `Product` como cadastro mestre global por
+  `ErpCode` e enriquecendo produtos já vistos nas movimentações fiscais.
+- `InventoryCurrentSpreadsheetParser` e `InventoryCurrentProcessor` para a
+  fonte `INVENTORY_CURRENT`, em modo `Snapshot`, gravando a fotografia de
+  estoque em `inventory_snapshots` sem duplicar atributos cadastrais do produto.
+- `DailyInventorySpreadsheetParser` e `DailyInventoryProcessor` para a fonte
+  `DAILY_INVENTORY`, em modo `Snapshot`, transformando abas mensais em registros
+  normalizados por produto e data em `daily_inventory_records`.
+- `EmbeddedMunicipalityCoordinateProvider`, baseado no CSV versionado de
+  `github.com/kelvins/municipios-brasileiros`, e
+  `MunicipalityCoordinateEnrichmentProcessor` para enriquecer coordenadas por
+  município em job operacional.
 
 Parsing, acesso a arquivos e persistência ficam nesta camada porque dependem de
 formatos ou tecnologias externas. As decisões de domínio extraídas desses dados
@@ -208,6 +239,49 @@ transação e advisory lock no PostgreSQL. Fontes `Snapshot`, como rotas, soment
 trocam `CurrentImportId` depois do processamento completo e quando a versão
 candidata é maior que a atual. Assim, jobs fora de ordem não voltam o estado
 publicado e todos os snapshots permanecem disponíveis para histórico.
+
+Produtos, estoque atual e controle diário reutilizam esse mesmo mecanismo de
+importações e jobs. `Product` é o elo global entre itens fiscais, estoque e
+produção diária: o código ERP/TOTVS fica em `ErpCode`, o código operacional
+normalizado fica em `OperationalCode`, e o normalizador central remove espaços,
+normaliza caixa e retira apenas o prefixo `V` quando existir. Produtos vindos de
+nota fiscal continuam relacionados por `ProductId`, mas a importação fiscal
+passa a localizar produtos globalmente pelo código ERP, evitando duplicidade
+entre fontes.
+
+`InventorySnapshot` pertence ao `ImportId` da fonte `INVENTORY_CURRENT` e se
+relaciona com `ProductId`. A tabela armazena filial, armazém, saldo físico,
+empenhado, disponível e valores monetários; nome, unidade, grupo e pesos ficam
+somente em `Product`. A versão atual de estoque é resolvida pelo ponteiro
+`CurrentImportId` da fonte, sem campo `IsCurrent` nos registros. Os índices
+especializados cobrem unicidade lógica por import/produto/filial/armazém,
+filtros por estoque disponível no import atual e navegação por produto.
+
+`DailyInventoryRecord` pertence ao `ImportId` da fonte `DAILY_INVENTORY` e
+normaliza cada produto + data das abas mensais em uma linha com produção, saída,
+ajuste e estoque final. A planilha operacional é vinculada ao produto pelo
+código operacional normalizado. Células vazias de produção, saída e ajuste viram
+zero; fórmulas simples de soma/subtração são aceitas; erros de fórmula são
+registrados em `import_errors`. Duplicidade idêntica por produto/data é ignorada
+com aviso, e duplicidade conflitante registra erro sem escolher um valor
+arbitrário. Os índices cobrem unicidade por import/produto/data e consultas
+históricas por produto/data.
+
+`GET /api/products` lista produtos paginados com busca por nome, `ErpCode` ou
+`OperationalCode`, filtros por tipo, grupo e status de estoque. O status usa
+somente o import atual de `INVENTORY_CURRENT`: disponível quando a soma de
+`AvailableQuantity` é positiva, ruptura quando há snapshot e a soma é menor ou
+igual a zero, e sem informação quando não há snapshot para o produto. `GET
+/api/products/{id}` retorna cadastro, estoque atual por filial/armazém,
+histórico de snapshots, histórico diário atual e itens fiscais recentes.
+
+`GET /api/inventory` consulta o snapshot atual de estoque por produto, grupo,
+tipo, armazém, status e ordenações operacionais. `GET /api/inventory/summary`
+expõe apenas métricas suportadas pelos dados atuais: rupturas, percentual
+comprometido, produção do último dia disponível, saída do mesmo dia e saldo
+operacional. A fórmula de comprometimento é `SUM(CommittedQuantity) /
+SUM(OnHandQuantity) * 100`, com zero quando a base física é zero. Produção,
+saída e saldo usam a maior data publicada em `DAILY_INVENTORY`.
 
 ## Fluxos principais
 
@@ -371,6 +445,41 @@ A Central de Processamentos consulta `/api/admin/jobs` e
 `/api/admin/jobs/summary` a cada cinco segundos, além da atualização manual. O
 polling impede que a tela preserve indefinidamente um estado antigo depois que
 o Worker conclui o job.
+`GET /api/admin/jobs/definitions` expõe apenas jobs operacionais declarados no
+catálogo da Application, e `POST /api/admin/jobs/definitions/{jobType}/run`
+permite executar manualmente somente os que possuem `ManualRunAllowed`. Jobs de
+importação de planilha não entram nesse catálogo porque dependem de upload,
+arquivo e import específico; eles continuam sendo criados por upload,
+reprocessamento ou retry técnico.
+
+### Mapa de clientes por município
+
+Clientes reais no mapa usam a precisão municipal. A importação de clientes
+continua gravando `CustomerSnapshot.MunicipalityId`; a coordenada fica separada
+em `municipality_coordinates`, como enriquecimento externo do cadastro de
+municípios. A tabela guarda `MunicipalityId`, latitude, longitude, fonte,
+status, tentativa, resolução e eventual motivo de falha. Não há coordenada de
+endereço do cliente neste fluxo.
+
+Quando uma importação de clientes é concluída e publicada como snapshot atual,
+o `ProcessImportHandler` enfileira o job operacional
+`MUNICIPALITY_COORDINATE_ENRICHMENT`, vinculado ao `ImportId` publicado. O job
+é idempotente: consulta os municípios distintos usados pelos clientes daquele
+snapshot, ignora os que já possuem coordenada resolvida e tenta resolver apenas
+pendências. A fonte primária é o CSV embutido de
+`github.com/kelvins/municipios-brasileiros`, casando primeiro por `IbgeCode`
+quando disponível e depois por `StateCode + NormalizedName`. O job atualiza
+`municipalities.IbgeCode` quando resolve pela base e registra falha controlada
+quando o município não aparece na fonte.
+
+`GET /api/logistics/map/customers` consulta somente o snapshot atual de clientes
+e retorna pins para clientes cujo município tem coordenada resolvida. Clientes
+sem coordenada não aparecem no mapa, mas são contabilizados em
+`withoutCoordinates`. Para evitar pins sobrepostos na mesma cidade, a API aplica
+um deslocamento visual determinístico em memória; a coordenada persistida
+continua sendo a do município. A tela `/mapa` consome esse endpoint e mantém os
+trajetos demonstrativos como contexto visual enquanto os clientes vêm da API
+real.
 
 No frontend, `/clientes` é uma listagem cadastral simples, com busca feita no
 backend por código, razão social, nome fantasia, documento ou nome parcial do
@@ -401,6 +510,10 @@ Os índices acompanham os padrões reais de leitura:
   `DataSourceId + ExternalCode + BranchCode` para a ordenação da listagem;
 - snapshots usam `ImportId + CustomerId` para idempotência, `ImportId +
   MunicipalityId` e `ImportId + CustomerType` para filtros;
+- coordenadas municipais usam unicidade por `MunicipalityId` e índice por
+  `Status`; a consulta do mapa chega nelas por relacionamento 1:1 a partir dos
+  municípios presentes no snapshot atual, e o índice de status apoia auditoria
+  e reprocessamento de pendências;
 - razão social, nome fantasia e documento possuem índices GIN trigram porque a
   API oferece busca por trecho, que não é atendida eficientemente por B-tree;
 - municípios mantêm a unicidade e resolução por `StateCode + NormalizedName`.

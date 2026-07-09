@@ -33,6 +33,7 @@ builder.Host.UseWolverine(options =>
     options.ServiceName = "InovaSkill.Importer.Api";
     options.UseRedisTransport(redisConnection).AutoProvision();
     options.PublishMessage<ProcessImport>().ToRedisStream("route-imports");
+    options.PublishMessage<ProcessOperationalJob>().ToRedisStream("route-imports");
 });
 
 var app = builder.Build();

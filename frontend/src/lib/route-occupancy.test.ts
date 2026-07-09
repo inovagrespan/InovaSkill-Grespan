@@ -35,8 +35,8 @@ describe("route occupancy formatting", () => {
     [0.5999, "idle", "Ocioso"],
     [0.6, "medium", "Médio"],
     [0.7999, "medium", "Médio"],
-    [0.8, "good", "Bom"],
-    [1, "good", "Bom"],
+    [0.8, "good", "Saudável"],
+    [1, "good", "Saudável"],
     [1.25, "critical", "Crítico"],
   ] as const)("classifies %s with explicit boundaries", (value, level, label) => {
     expect(classifyOccupancy(value)).toMatchObject({ level, label });

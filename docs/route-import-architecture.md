@@ -75,6 +75,11 @@ Depois de concluir o snapshot, o Worker tenta publicá-lo em uma segunda operaç
 transacional, protegida por lock da `DataSource`. Se uma versão mais nova já
 estiver atual, a versão antiga continua `COMPLETED` no histórico e não altera o
 ponteiro.
+Quando o snapshot publicado pertence à fonte `CUSTOMERS`, o handler enfileira o
+job operacional `MUNICIPALITY_COORDINATE_ENRICHMENT` para o `ImportId`
+publicado. Esse job usa `job_executions`, aparece na Central de Processamentos,
+processa apenas municípios de clientes sem coordenada resolvida e não interfere
+no estado da importação de clientes.
 
 `GET /api/routes` consulta somente o import atual. Para auditoria,
 `GET /api/route-imports/{importId}/routes` consulta um snapshot específico.
@@ -111,8 +116,8 @@ entre as dimensões disponíveis. Se nenhuma capacidade estiver configurada, o
 status fica `MissingCapacity` e a ocupação geral permanece nula.
 
 O frontend representa a taxa com barra e círculo percentual. Abaixo de 60% a
-rota é `Ocioso`; entre 60% e menos de 80%, `Médio`; entre 80% e 100%, `Bom`; e
-acima de 100%, `Crítico` por sobrecarga. A barra visual termina
+rota é `Ocioso`; entre 60% e menos de 80%, `Médio`; entre 80% e 100%,
+`Saudável`; e acima de 100%, `Crítico` por sobrecarga. A barra visual termina
 em 100%, mas o valor e a sobrecarga continuam exibindo o percentual real.
 
 ## Métricas dos jobs

@@ -164,7 +164,12 @@ describe("processing monitoring", () => {
     expect(routeSource).toContain("Job");
     expect(routeSource).toContain("fetchAdminJobsSummary");
     expect(routeSource).toContain("fetchAdminJobs");
+    expect(routeSource).toContain("fetchOperationalJobDefinitions");
+    expect(routeSource).toContain("runOperationalJob");
     expect(routeSource).toContain("retryAdminJob");
+    expect(routeSource).toContain("Jobs operacionais");
+    expect(routeSource).toContain("Executar agora");
+    expect(routeSource).toContain("DashboardKpiCard");
     expect(sidebarSource).toContain('to: "/processamentos"');
     expect(sidebarSource).toContain('label: "Processamento"');
     expect(sidebarSource).toContain('accessRoles: ["admin_system", "admin"]');

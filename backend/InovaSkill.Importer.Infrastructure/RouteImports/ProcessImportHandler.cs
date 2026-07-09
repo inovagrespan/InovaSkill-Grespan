@@ -8,7 +8,8 @@ namespace InovaSkill.Importer.Infrastructure.RouteImports;
 public sealed class ProcessImportHandler(
     ImportDbContext dbContext,
     IEnumerable<IDataSourceProcessor> processors,
-    IImportLifecycleService importLifecycle)
+    IImportLifecycleService importLifecycle,
+    IOperationalJobQueue operationalJobQueue)
 {
     private const int MaximumAttempts = 4;
 
@@ -46,7 +47,26 @@ public sealed class ProcessImportHandler(
             job.Status = JobExecutionStatus.Completed;
             job.FinishedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
-            await importLifecycle.TryActivateAsync(import.Id, cancellationToken);
+            var activated = await importLifecycle.TryActivateAsync(import.Id, cancellationToken);
+            if (activated && string.Equals(import.DataSource!.Code, CustomerImportCodes.DataSource,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    await operationalJobQueue.TryQueueAsync(
+                        OperationalJobCodes.MunicipalityCoordinateEnrichment,
+                        import.Id,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    // O enriquecimento pode ser reenfileirado manualmente pela Central de Processamentos.
+                }
+            }
         }
         catch (StructuralImportException exception)
         {

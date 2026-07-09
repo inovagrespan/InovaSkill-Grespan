@@ -140,7 +140,7 @@ function LogisticaRotasPage() {
                   <SelectContent>
                     <SelectItem value={ALL_OCCUPANCY_LEVELS}>Todas</SelectItem>
                     <SelectItem value="critical">Crítico</SelectItem>
-                    <SelectItem value="good">Bom</SelectItem>
+                    <SelectItem value="good">Saudável</SelectItem>
                     <SelectItem value="medium">Médio</SelectItem>
                     <SelectItem value="idle">Ocioso</SelectItem>
                     <SelectItem value="unavailable">Indisponível</SelectItem>

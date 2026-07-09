@@ -35,21 +35,26 @@ public sealed class FiscalMovementsProcessor(
             .GroupBy(x => MunicipalityNameNormalizer.Normalize(x.Name))
             .Where(x => x.Count() == 1).ToDictionary(x => x.Key, x => x.Single());
         var productCodes = parsed.Rows.Select(x => x.ProductCode).Where(x => x.Length > 0).Distinct().ToArray();
-        var products = await dbContext.Products.Where(x => x.DataSourceId == import.DataSourceId &&
-            productCodes.Contains(x.ExternalCode)).ToDictionaryAsync(x => x.ExternalCode, cancellationToken);
+        var products = await dbContext.Products.Where(x => productCodes.Contains(x.ErpCode) ||
+                productCodes.Contains(x.ExternalCode))
+            .ToDictionaryAsync(x => string.IsNullOrWhiteSpace(x.ErpCode) ? x.ExternalCode : x.ErpCode, cancellationToken);
         foreach (var row in parsed.Rows.DistinctBy(x => x.ProductCode))
         {
             if (string.IsNullOrWhiteSpace(row.ProductCode)) continue;
             if (!products.TryGetValue(row.ProductCode, out var product))
             {
                 product = new Product { Id = Guid.NewGuid(), DataSourceId = import.DataSourceId,
-                    ExternalCode = row.ProductCode, Description = row.ProductDescription, CreatedAt = now, UpdatedAt = now };
+                    ErpCode = row.ProductCode, ExternalCode = row.ProductCode,
+                    Name = row.ProductDescription, Description = row.ProductDescription,
+                    GroupCode = row.ProductGroupCode, CreatedAt = now, UpdatedAt = now };
                 products.Add(row.ProductCode, product);
                 dbContext.Products.Add(product);
             }
             else if (row.ProductDescription.Length > 0)
             {
                 product.Description = row.ProductDescription;
+                product.Name = row.ProductDescription;
+                if (row.ProductGroupCode.Length > 0) product.GroupCode = row.ProductGroupCode;
                 product.UpdatedAt = now;
             }
         }

@@ -31,6 +31,62 @@ public sealed class AdminJobsController(ImportDbContext dbContext, IMessageBus m
         });
     }
 
+    [HttpGet("definitions")]
+    public async Task<ActionResult> Definitions(CancellationToken cancellationToken)
+    {
+        var runningJobs = await dbContext.JobExecutions.AsNoTracking()
+            .Where(job => job.Status == JobExecutionStatus.Queued ||
+                job.Status == JobExecutionStatus.Processing ||
+                job.Status == JobExecutionStatus.Retrying)
+            .GroupBy(job => job.JobType)
+            .Select(group => new { JobType = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.JobType, item => item.Count, cancellationToken);
+
+        return Ok(OperationalJobCatalog.All.Select(definition => new
+        {
+            definition.JobType,
+            definition.DisplayName,
+            definition.Description,
+            definition.ManualRunAllowed,
+            definition.ScheduleAllowed,
+            definition.AllowConcurrentRuns,
+            currentlyRunning = runningJobs.GetValueOrDefault(definition.JobType) > 0
+        }));
+    }
+
+    [HttpPost("definitions/{jobType}/run")]
+    public async Task<ActionResult> RunDefinition(
+        string jobType,
+        [FromServices] IOperationalJobQueue operationalJobQueue,
+        CancellationToken cancellationToken)
+    {
+        var definition = OperationalJobCatalog.All.SingleOrDefault(item =>
+            string.Equals(item.JobType, jobType, StringComparison.OrdinalIgnoreCase));
+        if (definition is null) return NotFound();
+        if (!definition.ManualRunAllowed)
+            return Conflict(new { message = "Este job não permite execução manual." });
+
+        var relatedEntityId = await ResolveOperationalJobRelatedEntityIdAsync(
+            definition.JobType,
+            cancellationToken);
+        if (!relatedEntityId.HasValue)
+        {
+            return Conflict(new
+            {
+                message = "Não existe importação de clientes publicada para enriquecer coordenadas."
+            });
+        }
+        var queuedJobId = await operationalJobQueue.TryQueueAsync(
+            definition.JobType,
+            relatedEntityId.Value,
+            cancellationToken);
+
+        if (!queuedJobId.HasValue)
+            return Conflict(new { message = "Já existe uma execução deste job em andamento." });
+
+        return Accepted(new { jobExecutionId = queuedJobId.Value, status = "QUEUED" });
+    }
+
     [HttpGet]
     public async Task<ActionResult> List(
         [FromQuery] string? status,
@@ -98,7 +154,7 @@ public sealed class AdminJobsController(ImportDbContext dbContext, IMessageBus m
         var failedJob = await dbContext.JobExecutions.Include(x => x.Import)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (failedJob is null) return NotFound();
-        if (failedJob.Status != JobExecutionStatus.Failed || failedJob.Import!.Status == RouteImportStatus.NeedsReview)
+        if (failedJob.Status != JobExecutionStatus.Failed)
         {
             return Conflict(new { message = "Apenas jobs técnicos com falha podem ser reenviados." });
         }
@@ -111,13 +167,25 @@ public sealed class AdminJobsController(ImportDbContext dbContext, IMessageBus m
             RelatedEntityId = failedJob.RelatedEntityId,
             CreatedAt = DateTime.UtcNow
         };
-        failedJob.Import.Status = RouteImportStatus.Queued;
-        failedJob.Import.StartedAt = null;
-        failedJob.Import.FinishedAt = null;
-        failedJob.Import.FailureMessage = null;
+        var isOperationalJob = OperationalJobCatalog.All.Any(item => item.JobType == failedJob.JobType);
+        if (!isOperationalJob)
+        {
+            if (failedJob.Import!.Status == RouteImportStatus.NeedsReview)
+            {
+                return Conflict(new { message = "Apenas jobs técnicos com falha podem ser reenviados." });
+            }
+
+            failedJob.Import.Status = RouteImportStatus.Queued;
+            failedJob.Import.StartedAt = null;
+            failedJob.Import.FinishedAt = null;
+            failedJob.Import.FailureMessage = null;
+        }
         dbContext.JobExecutions.Add(newJob);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await messageBus.PublishAsync(new ProcessImport(newJob.RelatedEntityId, newJob.Id));
+        if (isOperationalJob)
+            await messageBus.PublishAsync(new ProcessOperationalJob(newJob.Id));
+        else
+            await messageBus.PublishAsync(new ProcessImport(newJob.RelatedEntityId, newJob.Id));
         return Accepted(new { jobExecutionId = newJob.Id, status = "QUEUED" });
     }
 
@@ -145,5 +213,20 @@ public sealed class AdminJobsController(ImportDbContext dbContext, IMessageBus m
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { status = "CANCELLED" });
+    }
+
+    private async Task<Guid?> ResolveOperationalJobRelatedEntityIdAsync(
+        string jobType,
+        CancellationToken cancellationToken)
+    {
+        if (jobType != OperationalJobCodes.MunicipalityCoordinateEnrichment)
+            throw new InvalidOperationException($"Job operacional sem resolvedor: {jobType}.");
+
+        var currentImportId = await dbContext.DataSources.AsNoTracking()
+            .Where(source => source.Code == CustomerImportCodes.DataSource)
+            .Select(source => source.CurrentImportId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return currentImportId;
     }
 }

@@ -1,4 +1,4 @@
-export type LogisticsCustomerType = "Padaria" | "Mercado" | "Supermercado" | "Restaurante" | "Conveniência" | "Atacado";
+export type LogisticsCustomerType = string;
 export type LogisticsCustomerStatus = "Normal" | "Atenção" | "Crítico";
 
 export type LogisticsMapCustomer = {

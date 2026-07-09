@@ -7,8 +7,8 @@ public sealed class FiscalOperationClassifierTests
 {
     [Theory]
     [InlineData("VENDA", FiscalMovementCategory.Sale)]
-    [InlineData("DEVOLUÇÃO DE VENDA", FiscalMovementCategory.Return)]
-    [InlineData("BONIFICAÇÃO", FiscalMovementCategory.Bonus)]
+    [InlineData("devolução de venda", FiscalMovementCategory.Return)]
+    [InlineData("bonificação", FiscalMovementCategory.Bonus)]
     [InlineData("COMODATO", FiscalMovementCategory.Loan)]
     [InlineData("TROCA", FiscalMovementCategory.Exchange)]
     [InlineData("OUTRA", FiscalMovementCategory.Unknown)]

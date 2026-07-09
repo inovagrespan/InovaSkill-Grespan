@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { Activity, AlertTriangle, CheckCircle2, Clock, Database, Loader2, RefreshCw, StopCircle } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock, Database, Loader2, Play, RefreshCw, StopCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DashboardKpiCard } from "@/components/ui/dashboard-kpi-card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SkeletonMetricCard, SkeletonModalContent, SkeletonTable } from "@/components/ui/skeleton";
 import {
@@ -12,9 +13,12 @@ import {
   fetchAdminJobDetail,
   fetchAdminJobs,
   fetchAdminJobsSummary,
+  fetchOperationalJobDefinitions,
   retryAdminJob,
+  runOperationalJob,
   type AdminJobItem,
   type AdminJobSummary,
+  type OperationalJobDefinition,
 } from "@/lib/importer-api";
 import { canCurrentUserAccessProcessingArea } from "@/lib/auth";
 
@@ -76,6 +80,7 @@ function ProcessamentosPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [definitions, setDefinitions] = useState<OperationalJobDefinition[]>([]);
   const pageSize = 20;
   const pageRef = useRef(1);
   const loadingRef = useRef(false);
@@ -84,17 +89,20 @@ function ProcessamentosPage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [runningDefinitionType, setRunningDefinitionType] = useState<string | null>(null);
 
   async function loadData(p: number = pageRef.current) {
     if (loadingRef.current) return;
     loadingRef.current = true;
     try {
-      const [summaryData, jobsData] = await Promise.all([
+      const [summaryData, jobsData, definitionsData] = await Promise.all([
         fetchAdminJobsSummary(),
         fetchAdminJobs(p, pageSize, statusFilter ? { status: statusFilter } : undefined),
+        fetchOperationalJobDefinitions(),
       ]);
       setSummary(summaryData);
       setJobs(jobsData.items);
+      setDefinitions(definitionsData);
       setTotal(jobsData.total);
       setPage(jobsData.page);
       pageRef.current = jobsData.page;
@@ -153,6 +161,20 @@ function ProcessamentosPage() {
     }
   }
 
+  async function handleRunDefinition(jobType: string) {
+    setRunningDefinitionType(jobType);
+    setMessage("");
+    try {
+      await runOperationalJob(jobType);
+      setMessage("Job operacional enfileirado com sucesso.");
+      await loadData(pageRef.current);
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setRunningDefinitionType(null);
+    }
+  }
+
   async function openJob(job: AdminJobItem) {
     setSelectedJob(job);
     setDetailsOpen(true);
@@ -206,21 +228,55 @@ function ProcessamentosPage() {
         {loading && !summary
           ? Array.from({ length: 6 }).map((_, i) => <SkeletonMetricCard key={i} />)
           : summaryCards.map((card) => (
-              <Card key={card.title} className="metric-card-item bg-surface border-border">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">{card.title}</p>
-                      <p className="mt-1 text-2xl font-display font-semibold">{card.value}</p>
-                    </div>
-                    <span className="inline-flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-                      <card.icon className="size-4" />
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+              <DashboardKpiCard
+                key={card.title}
+                title={card.title}
+                value={card.value}
+                icon={card.icon}
+                className="metric-card-item bg-surface border-border"
+              />
             ))}
       </section>
+
+      <Card className="bg-surface border-border">
+        <CardHeader>
+          <CardTitle>Jobs operacionais</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {definitions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum job operacional disponível.</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {definitions.map((definition) => (
+                <article key={definition.jobType} className="rounded-lg border border-border p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold">{definition.displayName}</p>
+                        {definition.currentlyRunning && <Badge variant="secondary">Em andamento</Badge>}
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{definition.description}</p>
+                      <p className="mt-2 font-mono text-xs text-muted-foreground">{definition.jobType}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={!definition.manualRunAllowed || definition.currentlyRunning || runningDefinitionType === definition.jobType}
+                      onClick={() => void handleRunDefinition(definition.jobType)}
+                    >
+                      {runningDefinitionType === definition.jobType ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : (
+                        <Play className="mr-2 size-4" />
+                      )}
+                      Executar agora
+                    </Button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="bg-surface border-border">
         <CardHeader>
