@@ -8,9 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.*" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.*" />
-    <PackageReference Include="WolverineFx" Version="5.39.5" />
-    <PackageReference Include="WolverineFx.Redis" Version="5.39.5" />
   </ItemGroup>
 
   <ItemGroup>

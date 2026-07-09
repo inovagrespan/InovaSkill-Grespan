@@ -5,7 +5,6 @@ using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Wolverine;
 
 namespace InovaSkill.Importer.Api.Controllers;
 
@@ -16,7 +15,7 @@ public sealed class RouteImportsController(
     IImportFileStorage fileStorage,
     ISpreadsheetDataSourceDetector dataSourceDetector,
     IImportLifecycleService importLifecycle,
-    IMessageBus messageBus) : ControllerBase
+    IBackgroundJobDispatcher backgroundJobDispatcher) : ControllerBase
 {
     private const int DefaultPageSize = 20;
     private const int MaximumPageSize = 100;
@@ -53,7 +52,21 @@ public sealed class RouteImportsController(
         var job = CreateJob(import.Id, import.CreatedAt);
         dbContext.JobExecutions.Add(job);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await messageBus.PublishAsync(new ProcessImport(import.Id, job.Id));
+        try
+        {
+            backgroundJobDispatcher.EnqueueImport(import.Id, job.Id);
+        }
+        catch (Exception exception)
+        {
+            job.Status = JobExecutionStatus.Failed;
+            job.ErrorMessage = $"Falha ao enfileirar a importação no Hangfire: {exception.Message}";
+            job.FinishedAt = DateTime.UtcNow;
+            import.Status = RouteImportStatus.Failed;
+            import.FailureMessage = "Não foi possível enfileirar o processamento.";
+            import.FinishedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw;
+        }
 
         return Accepted(new { importId = import.Id, sourceCode, status = "QUEUED" });
     }
@@ -181,7 +194,22 @@ public sealed class RouteImportsController(
         import.FailureMessage = null;
         dbContext.JobExecutions.Add(job);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await messageBus.PublishAsync(new ProcessImport(import.Id, job.Id));
+        try
+        {
+            backgroundJobDispatcher.EnqueueImport(import.Id, job.Id);
+        }
+        catch (Exception exception)
+        {
+            job.Status = JobExecutionStatus.Failed;
+            job.ErrorMessage = $"Falha ao enfileirar a importação no Hangfire: {exception.Message}";
+            job.FinishedAt = DateTime.UtcNow;
+            import.Status = RouteImportStatus.Failed;
+            import.FailureMessage = "Não foi possível enfileirar o processamento.";
+            import.FinishedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw;
+        }
+
         return Accepted(new { importId = import.Id, jobExecutionId = job.Id, status = "QUEUED" });
     }
 

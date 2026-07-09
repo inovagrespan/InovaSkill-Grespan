@@ -41,7 +41,16 @@ import {
   type LogisticsRecommendationContext,
   type LogisticsRootCause,
 } from "@/lib/logistics-dashboard";
-import { fetchRouteOccupancySummary, type RouteOccupancySummary } from "@/lib/importer-api";
+import {
+  fetchInventoryStockouts,
+  fetchInventorySummary,
+  fetchFiscalReturnRate,
+  fetchRouteOccupancySummary,
+  type FiscalReturnRateSummary,
+  type InventoryStockoutProduct,
+  type InventorySummary,
+  type RouteOccupancySummary,
+} from "@/lib/importer-api";
 import { cn } from "@/lib/utils";
 import { formatKpiCompactCurrency } from "@/lib/vendas-formatters";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -91,10 +100,11 @@ type ExecutiveCard = {
 };
 
 const LOGISTICS_METRIC_UNDER_DEVELOPMENT = "em breve";
-const RELEASED_LOGISTICS_METRICS: ReadonlySet<ExecutiveMetricId> = new Set(["occupancy", "stockout"]);
+const RELEASED_LOGISTICS_METRICS: ReadonlySet<ExecutiveMetricId> = new Set(["returns", "occupancy", "stockout"]);
 const MEDIUM_OCCUPANCY_LIMIT_PERCENT = 60;
 const GOOD_OCCUPANCY_LIMIT_PERCENT = 80;
 const CRITICAL_OCCUPANCY_LIMIT_PERCENT = 100;
+const STOCKOUT_PRODUCTS_PAGE_SIZE = 10;
 
 function isReleasedLogisticsMetric(metricId: ExecutiveMetricId): boolean {
   return RELEASED_LOGISTICS_METRICS.has(metricId);
@@ -126,6 +136,7 @@ const HEALTHY_TRANSIT_MINUTES = 210;
 const ATTENTION_TRANSIT_MINUTES = 240;
 const HEALTHY_DAMAGE_RATE_PERCENT = 1;
 const ATTENTION_DAMAGE_RATE_PERCENT = 2;
+const EMPTY_RETURN_RATE_PERCENT = 0;
 const PERCENT_DECIMAL_PLACES = 1;
 
 const numberFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
@@ -268,7 +279,7 @@ function ExecutiveMetricCard({ card, onSelect }: { card: ExecutiveCard; onSelect
         {released && card.showStatus !== false && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Badge variant="outline" className={status.className}><span className={cn("mr-1.5 size-1.5 rounded-full", status.dotClassName)} />{status.label}</Badge>
-            {card.id !== "occupancy" && (
+            {card.id !== "returns" && card.id !== "occupancy" && card.id !== "stockout" && (
               <span className={cn("inline-flex items-center gap-1 text-xs", card.change == null ? "text-muted-foreground" : favorableTrend ? "text-emerald-600" : "text-amber-600")}>
                 <TrendIcon className="size-3.5" />{formatChange(card.change)}
               </span>
@@ -283,22 +294,32 @@ function ExecutiveMetricCard({ card, onSelect }: { card: ExecutiveCard; onSelect
 function buildExecutiveCards(
   metrics: LogisticsKpis,
   changes: ReturnType<typeof compareLogisticsPeriods>["changes"],
+  returnRateSummary: FiscalReturnRateSummary | null,
+  returnRateLoading: boolean,
+  returnRateError: string | null,
   occupancySummary: RouteOccupancySummary | null,
   occupancyLoading: boolean,
   occupancyError: string | null,
+  inventorySummary: InventorySummary | null,
+  inventorySummaryLoading: boolean,
+  inventorySummaryError: string | null,
 ): ExecutiveCard[] {
+  const returnRateMetric = returnRateSummary?.returnRatePercent ?? EMPTY_RETURN_RATE_PERCENT;
+  const returnRateValue = returnRateLoading ? "Carregando" : formatPercent(returnRateMetric);
   const occupancyMetric = occupancySummary?.occupancyRatePercent ?? metrics.occupancyRatePercent;
   const occupancyValue = occupancyLoading ? "Carregando" : occupancyError ? "Indisponível" : formatPercent(occupancyMetric);
+  const stockoutMetric = inventorySummary?.stockoutProducts ?? inventorySummary?.stockouts ?? metrics.stockoutSkuCount;
+  const stockoutValue = inventorySummaryLoading ? "Carregando" : inventorySummaryError ? "Indisponível" : `${stockoutMetric} produtos`;
 
   return [
-    { id: "returns", area: "Qualidade", title: "Taxa de Devoluções", value: formatPercent(metrics.returnRatePercent), rawValue: metrics.returnRatePercent, status: lowerIsBetterStatus(metrics.returnRatePercent, 2, 4), change: changes.returnRatePercent, lowerIsBetter: true, insight: changePhrase("A taxa de devoluções", changes.returnRatePercent, true), icon: RotateCcw, description: "Percentual expedido que retornou à operação.", meaning: "Mostra quanto do volume expedido foi devolvido por clientes e ajuda a localizar falhas de pedido, produto ou entrega.", formula: "(Unidades devolvidas ÷ unidades expedidas) × 100", calculation: "O sistema somou as unidades devolvidas e dividiu pelo total expedido no período selecionado.", dataUsed: ["Unidades expedidas", "Unidades devolvidas", "Cliente", "Produto", "Rota", "Motivo da devolução"], factors: ["Divergência entre pedido e entrega", "Embalagens danificadas", "Conservação inadequada de congelados"], recommendations: ["Revisar separação nas rotas com devolução", "Validar pedido com clientes recorrentes", "Auditar embalagem e cadeia fria"], detailMetric: "returns" },
+    { id: "returns", area: "Qualidade", title: "Taxa de Devolução", value: returnRateValue, rawValue: returnRateMetric, status: lowerIsBetterStatus(returnRateMetric, 2, 4), change: null, lowerIsBetter: true, insight: returnRateError ? "A taxa de devolução não pôde ser consultada na API fiscal." : "A taxa de devolução reflete os documentos fiscais importados no período.", icon: RotateCcw, description: "Percentual de devoluções sobre o volume vendido.", meaning: "Mostra quanto do peso vendido retornou como devolução no período selecionado.", formula: "(Peso devolvido ÷ peso vendido) × 100", calculation: "O sistema soma o peso bruto das devoluções e divide pelo peso bruto das vendas no período.", dataUsed: ["Peso vendido", "Peso devolvido", "Período"], factors: ["Devoluções registradas nos documentos fiscais", "Vendas registradas nos documentos fiscais"], recommendations: ["Acompanhar a evolução da taxa no período", "Investigar clientes ou produtos apenas em análises complementares"], detailMetric: "returns", unavailableReason: returnRateError, showStatus: !returnRateLoading && !returnRateError },
     { id: "occupancy", area: "Operação", title: "Taxa de Ocupação", value: occupancyValue, rawValue: occupancyMetric, status: occupancyStatus(occupancyMetric), change: null, lowerIsBetter: false, insight: "A ocupação reflete a base atual de rotas, sem comparação com períodos anteriores.", icon: Gauge, description: "Capacidade dos veículos utilizada pelas cargas.", meaning: "Indica se a frota está sendo bem aproveitada e revela rotas subutilizadas ou acima do limite.", formula: "(Peso carregado ÷ capacidade total dos veículos) × 100", calculation: "O sistema soma o peso das rotas com capacidade configurada na base atual e divide pela soma da capacidade desses veículos.", dataUsed: ["Peso carregado", "Capacidade do veículo", "Veículo", "Rota"], factors: ["Rotas abaixo de 60% estão ociosas", "Rotas de 60% até menos de 80% ficam médias", "Rotas de 80% até 100% ficam saudáveis", "Rotas acima de 100% ficam críticas"], recommendations: ["Consolidar rotas ociosas", "Readequar o tipo de veículo à demanda", "Configurar capacidade dos veículos sem base"], detailMetric: "occupancy-load", occupancySummary, unavailableReason: occupancyError, showStatus: !occupancyLoading && !occupancyError },
     { id: "loading", area: "Operação", title: "Tempo de Carregamento", value: formatLogisticsDuration(metrics.averageLoadingMinutes), rawValue: metrics.averageLoadingMinutes, status: lowerIsBetterStatus(metrics.averageLoadingMinutes, 50, 60), change: changes.averageLoadingMinutes, lowerIsBetter: true, insight: changePhrase("O tempo de carregamento", changes.averageLoadingMinutes, true), icon: Timer, description: "Tempo médio necessário para liberar uma carga.", meaning: "Mede a eficiência do pátio desde o início da carga até a liberação do veículo.", formula: "Horário final do carregamento − horário inicial", calculation: "O sistema calculou a duração de cada carregamento e obteve a média das viagens do período.", dataUsed: ["Início do carregamento", "Fim do carregamento", "Veículo", "Equipe", "Tipo de carga"], factors: ["Fila no pátio", "Separação incompleta", "Carga mista de congelados e equipamentos"], recommendations: ["Pré-separar cargas antes da doca", "Balancear equipes nos horários de pico", "Criar janela específica para maquinários"], detailMetric: "loading" },
     { id: "transit", area: "Transporte", title: "Tempo de Trânsito", value: formatLogisticsDuration(metrics.averageTransitMinutes), rawValue: metrics.averageTransitMinutes, status: transitStatus(metrics.averageTransitMinutes), change: changes.averageTransitMinutes, lowerIsBetter: true, insight: changePhrase("O tempo de trânsito", changes.averageTransitMinutes, true), icon: Clock, description: "Tempo médio entre saída e entrega.", meaning: "Revela a duração real das viagens e o risco de atraso por rota, veículo ou transportadora.", formula: "Horário de entrega − horário de saída", calculation: "A duração das viagens concluídas foi somada e dividida pela quantidade de viagens analisadas.", dataUsed: ["Horário de saída", "Horário de entrega", "Rota", "Veículo", "Transportadora"], factors: ["Congestionamento", "Excesso de paradas", "Janelas restritas de recebimento"], recommendations: ["Replanejar sequenciamento das rotas críticas", "Antecipar saídas em horários de pico", "Negociar janelas com clientes recorrentes"], detailMetric: "route-time" },
     { id: "total-cost", area: "Custos", title: "Custo Logístico Total", value: formatLogisticsCurrency(metrics.totalLogisticsCost), rawValue: metrics.totalLogisticsCost, status: costStatus(changes.totalLogisticsCost), change: changes.totalLogisticsCost, lowerIsBetter: true, insight: changePhrase("O custo logístico", changes.totalLogisticsCost, true), icon: WalletCards, description: "Custo consolidado da operação logística.", meaning: "Consolida o valor gasto para armazenar, preparar e transportar os pedidos no período.", formula: "Transporte + combustível + manutenção + pedágio + armazenagem + operação", calculation: "O sistema somou os custos registrados em todas as viagens do período selecionado.", dataUsed: ["Custo de transporte", "Combustível", "Manutenção", "Pedágio", "Armazenagem", "Operação"], factors: ["Rotas longas ou ociosas", "Aumento do tempo de trânsito", "Devoluções e reentregas"], recommendations: ["Atacar as rotas de maior participação", "Reduzir viagens com baixa ocupação", "Monitorar custo de reentrega"], detailMetric: "route-cost" },
     { id: "route-cost", area: "Custos", title: "Custo Logístico por Rota", value: formatLogisticsCurrency(metrics.costPerRoute), rawValue: metrics.costPerRoute, status: costStatus(changes.costPerRoute), change: changes.costPerRoute, lowerIsBetter: true, insight: changePhrase("O custo por rota", changes.costPerRoute, true), icon: RouteIcon, description: "Custo médio das rotas realizadas.", meaning: "Permite comparar eficiência financeira entre rotas e identificar trajetos que consomem margem.", formula: "Custo logístico total ÷ quantidade de rotas distintas", calculation: `O custo de ${formatLogisticsCurrency(metrics.totalLogisticsCost)} foi dividido por ${metrics.routeCount} rotas distintas.`, dataUsed: ["Custo da viagem", "Rota", "Entregas", "Peso transportado", "Veículo"], factors: ["Baixa ocupação", "Distância e pedágios", "Atrasos e reentregas"], recommendations: ["Consolidar rotas de alto custo", "Comparar custo com faturamento atendido", "Rever veículo e transportadora"], detailMetric: "route-cost" },
     { id: "inventory-accuracy", area: "Estoque", title: "Acuracidade de Estoque", value: formatPercent(metrics.inventoryAccuracyPercent), rawValue: metrics.inventoryAccuracyPercent, status: higherIsBetterStatus(metrics.inventoryAccuracyPercent, 98, 95), change: changes.inventoryAccuracyPercent, lowerIsBetter: false, insight: changePhrase("A acuracidade", changes.inventoryAccuracyPercent, false), icon: ShieldCheck, description: "Aderência entre saldo sistêmico e contagem física.", meaning: "Indica a confiabilidade do estoque usado para prometer pedidos e planejar reposições.", formula: "[1 − (divergência absoluta ÷ estoque sistêmico)] × 100", calculation: "O sistema comparou a última contagem física de cada SKU com o saldo registrado e consolidou as diferenças.", dataUsed: ["Estoque sistêmico", "Estoque contado", "SKU", "Centro de distribuição", "Data da contagem"], factors: ["Movimentações sem baixa", "Erros de contagem", "Perdas de produtos congelados"], recommendations: ["Realizar inventário cíclico dos SKUs divergentes", "Bloquear movimentações sem confirmação", "Auditar perdas e ajustes manuais"], detailMetric: "inventory-accuracy" },
-    { id: "stockout", area: "Estoque", title: "Rupturas de Estoque", value: `${metrics.stockoutSkuCount} SKUs`, rawValue: metrics.stockoutSkuCount, status: stockoutStatus(metrics.stockoutSkuCount), change: changes.stockoutSkuCount, lowerIsBetter: true, insight: changePhrase("A ruptura", changes.stockoutSkuCount, true), icon: PackageX, description: "Produtos cuja disponibilidade não cobre a demanda.", meaning: "Mostra quantos produtos podem impedir o atendimento integral dos pedidos.", formula: "Contagem de SKUs com saldo disponível menor que a demanda", calculation: "O sistema usou a posição mais recente de cada SKU e marcou como ruptura quando a demanda superou o saldo disponível.", dataUsed: ["Saldo disponível", "Demanda", "SKU", "Clientes afetados", "Centro de distribuição"], factors: ["Previsão de demanda insuficiente", "Acuracidade baixa", "Reposição atrasada"], recommendations: ["Priorizar compra dos SKUs críticos", "Revisar estoque de segurança", "Realocar saldo entre centros"], detailMetric: "affected-products" },
+    { id: "stockout", area: "Estoque", title: "Rupturas de Estoque", value: stockoutValue, rawValue: stockoutMetric, status: stockoutStatus(stockoutMetric), change: null, lowerIsBetter: true, insight: inventorySummaryError ? "A ruptura não pôde ser consultada na API de estoque." : "A ruptura reflete a última importação publicada de estoque.", icon: PackageX, description: "Produtos cuja disponibilidade atual está zerada ou negativa.", meaning: "Mostra quantos produtos podem impedir o atendimento integral dos pedidos.", formula: "Contagem de produtos com saldo disponível total menor ou igual a zero", calculation: "O sistema agrupa o estoque atual por produto e soma o saldo disponível de todos os armazéns.", dataUsed: ["Saldo disponível", "Produto", "Armazém", "Última importação publicada de estoque"], factors: ["Empenho maior que saldo físico", "Reposição atrasada", "Divergências de inventário"], recommendations: ["Priorizar reposição dos produtos em ruptura", "Revisar empenhos e reservas", "Realocar saldo entre armazéns"], detailMetric: "affected-products", unavailableReason: inventorySummaryError, showStatus: !inventorySummaryLoading && !inventorySummaryError },
     { id: "occurrences", area: "Qualidade", title: "Índice de Ocorrências", value: formatPercent(metrics.damageRatePercent), rawValue: metrics.damageRatePercent, status: occurrenceStatus(metrics.damageRatePercent), change: changes.damageRatePercent, lowerIsBetter: true, insight: changePhrase("O índice de ocorrências", changes.damageRatePercent, true), icon: AlertTriangle, description: "Incidência de avarias sobre o volume expedido.", meaning: "Aponta problemas como danos, descongelamento, atraso, divergência e ausência do cliente.", formula: "(Unidades com ocorrência ÷ unidades expedidas) × 100", calculation: "Na base disponível, o sistema consolidou as unidades avariadas e comparou com o volume expedido.", dataUsed: ["Unidades expedidas", "Avarias", "Motivo", "Produto", "Rota", "Cliente"], factors: ["Embalagem inadequada", "Movimentação incorreta", "Variação de temperatura"], recommendations: ["Reforçar padrão de acondicionamento", "Treinar equipes de movimentação", "Monitorar temperatura por rota"], detailMetric: "damage" },
     { id: "fill-rate", area: "Atendimento", title: "Nível de Atendimento / Fill Rate", value: formatPercent(metrics.fillRatePercent), rawValue: metrics.fillRatePercent, status: higherIsBetterStatus(metrics.fillRatePercent, 95, 90), change: changes.fillRatePercent, lowerIsBetter: false, insight: changePhrase("O Fill Rate", changes.fillRatePercent, false), icon: PackageCheck, description: "Percentual da quantidade solicitada que foi entregue.", meaning: "Mede quanto a Grespan conseguiu atender sem falta de produtos ou cortes no pedido.", formula: "(Quantidade entregue ÷ quantidade solicitada) × 100", calculation: "As unidades entregues foram somadas e divididas pelo total solicitado pelos clientes.", dataUsed: ["Quantidade solicitada", "Quantidade entregue", "Cliente", "Produto", "Rota"], factors: ["Ruptura de estoque", "Cortes na separação", "Divergências de inventário"], recommendations: ["Relacionar cortes aos SKUs em ruptura", "Priorizar clientes com recorrência", "Aumentar acuracidade e estoque de segurança"], detailMetric: "fill-rate" },
   ].map((card) => ({ ...card, value: resolveExecutiveMetricValue(card.id, card.value) }));
@@ -384,9 +405,20 @@ export function LogisticsDashboardMetrics() {
   const [selectedMetric, setSelectedMetric] = useState<ExecutiveMetricId | null>(null);
   const [selectedFactor, setSelectedFactor] = useState<InvestigationFactor | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<InvestigationEvidence | null>(null);
+  const [returnRateSummary, setReturnRateSummary] = useState<FiscalReturnRateSummary | null>(null);
+  const [returnRateLoading, setReturnRateLoading] = useState(true);
+  const [returnRateError, setReturnRateError] = useState<string | null>(null);
   const [occupancySummary, setOccupancySummary] = useState<RouteOccupancySummary | null>(null);
   const [occupancyLoading, setOccupancyLoading] = useState(true);
   const [occupancyError, setOccupancyError] = useState<string | null>(null);
+  const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
+  const [inventorySummaryLoading, setInventorySummaryLoading] = useState(true);
+  const [inventorySummaryError, setInventorySummaryError] = useState<string | null>(null);
+  const [stockoutProducts, setStockoutProducts] = useState<InventoryStockoutProduct[]>([]);
+  const [stockoutProductsTotal, setStockoutProductsTotal] = useState(0);
+  const [stockoutProductsPage, setStockoutProductsPage] = useState(1);
+  const [stockoutProductsLoading, setStockoutProductsLoading] = useState(false);
+  const [stockoutProductsError, setStockoutProductsError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -409,12 +441,91 @@ export function LogisticsDashboardMetrics() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    setReturnRateLoading(true);
+    setReturnRateError(null);
+    fetchFiscalReturnRate(periodDays)
+      .then((summary) => {
+        if (active) setReturnRateSummary(summary);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setReturnRateSummary(null);
+        setReturnRateError((error as Error).message);
+      })
+      .finally(() => {
+        if (active) setReturnRateLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [periodDays]);
+
+  useEffect(() => {
+    if (selectedMetric !== "stockout" || selectedFactor != null) return;
+    let active = true;
+    setStockoutProductsLoading(true);
+    setStockoutProductsError(null);
+    fetchInventoryStockouts({ page: stockoutProductsPage, pageSize: STOCKOUT_PRODUCTS_PAGE_SIZE })
+      .then((result) => {
+        if (!active) return;
+        setStockoutProducts(result.items);
+        setStockoutProductsTotal(result.total);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setStockoutProducts([]);
+        setStockoutProductsTotal(0);
+        setStockoutProductsError((error as Error).message);
+      })
+      .finally(() => {
+        if (active) setStockoutProductsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedMetric, selectedFactor, stockoutProductsPage]);
+
+  useEffect(() => {
+    let active = true;
+    setInventorySummaryLoading(true);
+    setInventorySummaryError(null);
+    fetchInventorySummary()
+      .then((summary) => {
+        if (active) setInventorySummary(summary);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setInventorySummary(null);
+        setInventorySummaryError((error as Error).message);
+      })
+      .finally(() => {
+        if (active) setInventorySummaryLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const comparison = useMemo(() => compareLogisticsPeriods(demoLogisticsDashboardSource, periodDays, LOGISTICS_REFERENCE_DATE), [periodDays]);
   const filteredSource = useMemo(() => filterLogisticsDashboardSource(demoLogisticsDashboardSource, periodDays, LOGISTICS_REFERENCE_DATE), [periodDays]);
   const routeSummaries = useMemo(() => summarizeLogisticsRoutes(filteredSource.routes), [filteredSource.routes]);
   const inventory = useMemo(() => selectLatestInventoryBySku(filteredSource.inventory), [filteredSource.inventory]);
   const metrics = comparison.current;
-  const executiveCards = buildExecutiveCards(metrics, comparison.changes, occupancySummary, occupancyLoading, occupancyError);
+  const executiveCards = buildExecutiveCards(
+    metrics,
+    comparison.changes,
+    returnRateSummary,
+    returnRateLoading,
+    returnRateError,
+    occupancySummary,
+    occupancyLoading,
+    occupancyError,
+    inventorySummary,
+    inventorySummaryLoading,
+    inventorySummaryError,
+  );
   const selectedCard = executiveCards.find((card) => card.id === selectedMetric) ?? null;
   const metricHistory = useMemo(() => selectedMetric && selectedMetric !== "occupancy" ? buildMetricHistory(selectedMetric, periodDays) : [], [selectedMetric, periodDays]);
   const investigationFactors = useMemo(
@@ -426,6 +537,7 @@ export function LogisticsDashboardMetrics() {
     setSelectedMetric(metricId);
     setSelectedFactor(null);
     setSelectedEvidence(null);
+    if (metricId === "stockout") setStockoutProductsPage(1);
   }
 
   function openFactor(factor: InvestigationFactor) {
@@ -437,7 +549,7 @@ export function LogisticsDashboardMetrics() {
     <div className="page-shell app-background space-y-6">
       <header className="animate-fade-in flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="flex flex-wrap items-center gap-2"><span className="page-header-kicker">Dashboard</span><Badge variant="outline">Ocupação real</Badge><Badge variant="outline">Demais KPIs demonstrativos</Badge></div>
+          <div className="flex flex-wrap items-center gap-2"><span className="page-header-kicker">Dashboard</span><Badge variant="outline">Devolução real</Badge><Badge variant="outline">Ocupação real</Badge><Badge variant="outline">Ruptura real</Badge><Badge variant="outline">Demais KPIs demonstrativos</Badge></div>
           <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Dashboard logístico</h1>
           <p className="mt-1 text-sm text-muted-foreground">Identifique o sinal, encontre a causa raiz e receba uma ação específica sem sair da tela.</p>
         </div>
@@ -452,10 +564,10 @@ export function LogisticsDashboardMetrics() {
         {executiveCards.map((card) => <ExecutiveMetricCard key={card.id} card={card} onSelect={() => openMetric(card.id)} />)}
       </section>
 
-      <p className="text-center text-xs text-muted-foreground">A taxa de ocupação usa a base atual de rotas; os demais KPIs continuam demonstrativos até a API expor os eventos logísticos necessários.</p>
+      <p className="text-center text-xs text-muted-foreground">A taxa de devolução usa documentos fiscais importados, a ocupação usa a base atual de rotas e a ruptura usa a última importação publicada de estoque; os demais KPIs continuam demonstrativos até a API expor os eventos logísticos necessários.</p>
 
       <Dialog open={selectedCard != null && selectedFactor == null} onOpenChange={(open) => !open && selectedFactor == null && setSelectedMetric(null)}>
-        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-4xl overflow-y-auto p-5 sm:p-6">
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-5xl overflow-y-auto p-5 sm:p-6">
           {selectedCard && (
             <>
               <DialogHeader className="pr-8 text-left">
@@ -463,11 +575,27 @@ export function LogisticsDashboardMetrics() {
               </DialogHeader>
               <div className="mt-3 space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg border bg-muted/20 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que aconteceu</p><p className="mt-2 text-lg font-semibold">{selectedCard.value}</p><p className="mt-1 text-sm text-muted-foreground">{selectedCard.id === "occupancy" ? "Base atual de rotas" : formatChange(selectedCard.change)}</p></div>
+                  <div className="rounded-lg border bg-muted/20 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que aconteceu</p><p className="mt-2 text-lg font-semibold">{selectedCard.value}</p><p className="mt-1 text-sm text-muted-foreground">{selectedCard.id === "returns" ? "Documentos fiscais importados" : selectedCard.id === "occupancy" ? "Base atual de rotas" : selectedCard.id === "stockout" ? "Última importação publicada de estoque" : formatChange(selectedCard.change)}</p></div>
                   <div className="rounded-lg border bg-muted/20 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Por que está neste status</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{selectedCard.insight}</p></div>
                 </div>
-                {selectedCard.id === "occupancy" ? <OccupancySummaryDetails card={selectedCard} /> : <MetricHistoryChart history={metricHistory} periodDays={periodDays} />}
-                {selectedCard.id !== "occupancy" && <div><h3 className="text-sm font-semibold">Principais fatores que impactaram o resultado</h3><div className="mt-3 space-y-2">{investigationFactors.map((factor) => <button type="button" key={factor.id} onClick={() => openFactor(factor)} className="flex w-full items-center justify-between gap-3 rounded-lg border p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"><div><p className="text-sm font-semibold">{factor.title}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{factor.summary}</p></div><ChevronRight className="size-4 shrink-0 text-primary" /></button>)}</div></div>}
+                {selectedCard.id === "returns" ? (
+                  <ReturnRateDetails summary={returnRateSummary} loading={returnRateLoading} error={returnRateError} />
+                ) : selectedCard.id === "occupancy" ? <OccupancySummaryDetails card={selectedCard} /> : selectedCard.id === "stockout" ? (
+                  <StockoutProductsDetails
+                    items={stockoutProducts}
+                    total={stockoutProductsTotal}
+                    page={stockoutProductsPage}
+                    pageSize={STOCKOUT_PRODUCTS_PAGE_SIZE}
+                    loading={stockoutProductsLoading}
+                    error={stockoutProductsError}
+                    onPageChange={setStockoutProductsPage}
+                  />
+                ) : (
+                  <>
+                    <MetricHistoryChart history={metricHistory} periodDays={periodDays} />
+                    <div><h3 className="text-sm font-semibold">Principais fatores que impactaram o resultado</h3><div className="mt-3 space-y-2">{investigationFactors.map((factor) => <button type="button" key={factor.id} onClick={() => openFactor(factor)} className="flex w-full items-center justify-between gap-3 rounded-lg border p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"><div><p className="text-sm font-semibold">{factor.title}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{factor.summary}</p></div><ChevronRight className="size-4 shrink-0 text-primary" /></button>)}</div></div>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -485,6 +613,79 @@ export function LogisticsDashboardMetrics() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function formatFiscalDate(value: string | null): string {
+  if (!value) return "Não informado";
+  const [year, month, day] = value.slice(0, 10).split("-");
+  if (!year || !month || !day) return value;
+  return `${day}/${month}/${year}`;
+}
+
+function ReturnRateDetails({
+  summary,
+  loading,
+  error,
+}: {
+  summary: FiscalReturnRateSummary | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  if (loading) {
+    return <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Carregando base fiscal de devoluções.</div>;
+  }
+
+  const salesWeightKg = summary?.salesWeightKg ?? 0;
+  const returnWeightKg = summary?.returnWeightKg ?? 0;
+  const returnRatePercent = summary?.returnRatePercent ?? EMPTY_RETURN_RATE_PERCENT;
+  const periodLabel = summary?.dateFrom && summary.dateTo
+    ? `${formatFiscalDate(summary.dateFrom)} até ${formatFiscalDate(summary.dateTo)}`
+    : "Sem período fiscal disponível";
+  const denominatorLabel = salesWeightKg > 0
+    ? `${formatLogisticsWeightKg(returnWeightKg)} ÷ ${formatLogisticsWeightKg(salesWeightKg)} × 100`
+    : "Sem peso vendido no período";
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="rounded-lg border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          {error}
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <ForecastItem title="Peso vendido" value={formatLogisticsWeightKg(salesWeightKg)} detail="Documentos fiscais de venda" />
+        <ForecastItem title="Peso devolvido" value={formatLogisticsWeightKg(returnWeightKg)} detail="Documentos fiscais de devolução" />
+        <ForecastItem title="Taxa calculada" value={formatPercent(returnRatePercent)} detail={periodLabel} />
+      </div>
+
+      <div className="rounded-xl border bg-muted/20 p-4">
+        <h3 className="text-sm font-semibold">Cálculo da taxa</h3>
+        <div className="mt-3 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fórmula</p>
+            <p className="mt-2 text-lg font-semibold">(Peso devolvido ÷ peso vendido) × 100</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              O peso devolvido vem dos itens de documentos fiscais classificados como devolução. O peso vendido vem dos itens de documentos fiscais classificados como venda no mesmo período.
+            </p>
+          </div>
+          <div className="rounded-lg border bg-background p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Aplicado na base</p>
+            <p className="mt-2 text-lg font-semibold">{denominatorLabel}</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Categorias como bonificação, comodato, troca e desconhecido ficam fora desta taxa.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <ForecastItem title="Período" value={`${summary?.periodDays ?? 0} dia(s)`} detail={periodLabel} />
+        <ForecastItem title="Numerador" value="Devolução" detail="Soma de GrossWeightKg devolvido" />
+        <ForecastItem title="Denominador" value="Venda" detail="Soma de GrossWeightKg vendido" />
+      </div>
     </div>
   );
 }
@@ -522,6 +723,88 @@ function OccupancySummaryDetails({ card }: { card: ExecutiveCard }) {
 
 function ForecastItem({ title, value, detail }: { title: string; value: string; detail: string }) {
   return <div className="rounded-lg border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">{title}</p><p className="mt-1 text-lg font-semibold">{value}</p><p className="mt-1 text-[11px] text-muted-foreground">{detail}</p></div>;
+}
+
+function StockoutProductsDetails({
+  items,
+  total,
+  page,
+  pageSize,
+  loading,
+  error,
+  onPageChange,
+}: {
+  items: InventoryStockoutProduct[];
+  total: number;
+  page: number;
+  pageSize: number;
+  loading: boolean;
+  error: string | null;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  if (error) {
+    return <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{error}</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[920px] text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/45 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="px-3 py-3 font-medium">Código</th>
+              <th className="px-3 py-3 font-medium">Produto</th>
+              <th className="px-3 py-3 font-medium">Tipo</th>
+              <th className="px-3 py-3 font-medium">Grupo</th>
+              <th className="px-3 py-3 text-right font-medium">Saldo físico</th>
+              <th className="px-3 py-3 text-right font-medium">Empenhado</th>
+              <th className="px-3 py-3 text-right font-medium">Disponível</th>
+              <th className="px-3 py-3 text-right font-medium">Armazéns afetados</th>
+              <th className="px-3 py-3 text-right font-medium">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 5 }).map((_, index) => (
+                <tr key={index} className="border-b border-border/70">
+                  <td className="px-3 py-3 text-muted-foreground" colSpan={9}>Carregando produtos em ruptura...</td>
+                </tr>
+              ))
+            ) : items.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">Nenhum produto em ruptura encontrado.</td>
+              </tr>
+            ) : (
+              items.map((item) => (
+                <tr key={item.productId} className="border-b border-border/70 last:border-0">
+                  <td className="px-3 py-3"><div className="font-mono text-xs">{item.erpCode}</div><div className="font-mono text-[11px] text-muted-foreground">{item.operationalCode || "-"}</div></td>
+                  <td className="max-w-80 truncate px-3 py-3 font-medium" title={item.productName}>{item.productName}</td>
+                  <td className="px-3 py-3">{item.type || "-"}</td>
+                  <td className="px-3 py-3">{item.groupCode || "-"}</td>
+                  <td className="px-3 py-3 text-right">{numberFormatter.format(item.onHandQuantity)}</td>
+                  <td className="px-3 py-3 text-right">{numberFormatter.format(item.committedQuantity)}</td>
+                  <td className="px-3 py-3 text-right font-semibold text-red-700 dark:text-red-300">{numberFormatter.format(item.availableQuantity)}</td>
+                  <td className="px-3 py-3 text-right">{item.affectedWarehousePositions} de {item.warehousePositions}</td>
+                  <td className="px-3 py-3 text-right">{formatLogisticsCurrency(item.stockValue)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <span>{total} produto(s) em ruptura</span>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => onPageChange(page - 1)}>Anterior</Button>
+          <span>Página {page} de {totalPages}</span>
+          <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => onPageChange(page + 1)}>Próxima</Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 type MetricHistoryPoint = { label: string; value: number; formattedValue: string };
@@ -687,7 +970,7 @@ function InvestigationContent(props: InvestigationContentProps) {
     const type = metric === "damage" ? "Avaria" : "Devolução";
     const records = occurrenceDetails.filter((item) => item.type === type);
     return <InvestigationLayout summaries={[
-      { title: type === "Avaria" ? "Damage Rate" : "Taxa de devoluções", value: type === "Avaria" ? formatPercent(metrics.damageRatePercent) : formatPercent(metrics.returnRatePercent), detail: "Sobre unidades expedidas" },
+      { title: type === "Avaria" ? "Damage Rate" : "Taxa de devolução", value: type === "Avaria" ? formatPercent(metrics.damageRatePercent) : formatPercent(metrics.returnRatePercent), detail: type === "Avaria" ? "Sobre unidades expedidas" : "Sobre peso vendido" },
       { title: "Impacto financeiro", value: formatLogisticsCurrency(records.reduce((total, item) => total + item.financialImpact, 0)), detail: `${records.length} registros analisados` },
     ]} title="Produto → cliente → região → impacto">
       {records.map((item) => <InvestigationRow key={`${item.customer}-${item.reason}`} title={item.product} subtitle={`${item.customer} · ${item.region} · ${item.reason}`} value={formatLogisticsCurrency(item.financialImpact)} critical />)}

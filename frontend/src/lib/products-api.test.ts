@@ -83,6 +83,8 @@ describe("products api", () => {
   it("busca resumo de estoque na API", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       stockouts: 2,
+      stockoutProducts: 2,
+      stockoutWarehousePositions: 5,
       committedPercent: 10.5,
       lastDailyDate: "2026-05-31",
       lastProduction: 5076,
@@ -97,11 +99,49 @@ describe("products api", () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/inventory/summary");
     expect(result).toEqual({
       stockouts: 2,
+      stockoutProducts: 2,
+      stockoutWarehousePositions: 5,
       committedPercent: 10.5,
       lastDailyDate: "2026-05-31",
       lastProduction: 5076,
       lastOutbound: 5403,
       operationalBalance: -327,
+    });
+  });
+
+  it("busca produtos em ruptura consolidados na API", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      items: [{
+        productId: "p1",
+        erpCode: "10000123",
+        operationalCode: "6792",
+        productName: "Produto em ruptura",
+        type: "PA",
+        unit: "UN",
+        groupCode: "0022",
+        onHandQuantity: 5,
+        committedQuantity: 7,
+        availableQuantity: -2,
+        stockValue: 123.45,
+        affectedWarehousePositions: 2,
+        warehousePositions: 3,
+      }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { fetchInventoryStockouts } = await import("./importer-api");
+    const result = await fetchInventoryStockouts({ page: 1, pageSize: 20 });
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/inventory/stockouts");
+    expect(result.total).toBe(1);
+    expect(result.items[0]).toMatchObject({
+      productId: "p1",
+      availableQuantity: -2,
+      affectedWarehousePositions: 2,
+      warehousePositions: 3,
     });
   });
 });

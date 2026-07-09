@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Label } from "@/components/ui/label";
@@ -14,9 +15,11 @@ import {
   fetchInventory,
   fetchInventoryFilters,
   fetchInventorySummary,
+  fetchInventoryStockouts,
   fetchProductFilters,
   type InventoryItem,
   type InventorySummary,
+  type InventoryStockoutProduct,
 } from "@/lib/importer-api";
 import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
@@ -24,6 +27,7 @@ import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-f
 export const Route = createFileRoute("/estoque")({ component: EstoquePage });
 
 const PAGE_SIZE = 25;
+const STOCKOUT_PAGE_SIZE = 10;
 const numberFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
 
 function formatDate(value: string | null): string {
@@ -53,10 +57,17 @@ function EstoquePage() {
   const [types, setTypes] = useState<string[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
   const [warehouses, setWarehouses] = useState<string[]>([]);
+  const [stockoutDetailsOpen, setStockoutDetailsOpen] = useState(false);
+  const [stockoutItems, setStockoutItems] = useState<InventoryStockoutProduct[]>([]);
+  const [stockoutTotal, setStockoutTotal] = useState(0);
+  const [stockoutPage, setStockoutPage] = useState(1);
+  const [stockoutLoading, setStockoutLoading] = useState(false);
+  const [stockoutError, setStockoutError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const debouncedSearch = useDebouncedValue(search, TEXT_SEARCH_DEBOUNCE_MS);
   const pages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
+  const stockoutPages = useMemo(() => Math.max(1, Math.ceil(stockoutTotal / STOCKOUT_PAGE_SIZE)), [stockoutTotal]);
 
   useEffect(() => {
     fetchProductFilters().then((result) => { setTypes(result.types); setGroups(result.groups); }).catch(() => undefined);
@@ -84,6 +95,22 @@ function EstoquePage() {
     return () => { active = false; };
   }, [page, debouncedSearch, type, group, warehouse, status, sort]);
 
+  useEffect(() => {
+    if (!stockoutDetailsOpen) return;
+    let active = true;
+    setStockoutLoading(true);
+    setStockoutError("");
+    fetchInventoryStockouts({ page: stockoutPage, pageSize: STOCKOUT_PAGE_SIZE })
+      .then((result) => {
+        if (!active) return;
+        setStockoutItems(result.items);
+        setStockoutTotal(result.total);
+      })
+      .catch((reason) => active && setStockoutError((reason as Error).message))
+      .finally(() => active && setStockoutLoading(false));
+    return () => { active = false; };
+  }, [stockoutDetailsOpen, stockoutPage]);
+
   return (
     <div className="page-shell app-background min-w-0 max-w-full overflow-x-hidden">
       <header>
@@ -101,7 +128,19 @@ function EstoquePage() {
           </>
         ) : (
           <>
-            <KpiCard className="metric-card-item" title="Rupturas" value={formatKpiCompactNumber(summary?.stockouts ?? 0)} valueTooltip={String(summary?.stockouts ?? 0)} icon={PackageX} periodLabel="Disponível <= 0" showPercentageChange={false} allowWrapValue />
+            <KpiCard
+              className="metric-card-item"
+              title="Ruptura de Estoque"
+              value={`${formatKpiCompactNumber(summary?.stockoutProducts ?? summary?.stockouts ?? 0)} produtos`}
+              valueTooltip={`${summary?.stockoutProducts ?? summary?.stockouts ?? 0} produto(s) com saldo disponível total menor ou igual a zero`}
+              icon={PackageX}
+              periodLabel={`${summary?.stockoutWarehousePositions ?? 0} posição(ões) de armazém afetada(s)`}
+              showPercentageChange={false}
+              allowWrapValue
+              tone={(summary?.stockoutProducts ?? summary?.stockouts ?? 0) > 0 ? "danger" : "success"}
+              onClick={() => { setStockoutPage(1); setStockoutDetailsOpen(true); }}
+              ariaLabel="Abrir produtos em ruptura de estoque"
+            />
             <KpiCard className="metric-card-item" title="Estoque comprometido" value={`${(summary?.committedPercent ?? 0).toFixed(1).replace(".", ",")}%`} valueTooltip={`${(summary?.committedPercent ?? 0).toFixed(2).replace(".", ",")}%`} icon={PackageCheck} periodLabel="Empenhado / físico" showPercentageChange={false} allowWrapValue />
             <KpiCard className="metric-card-item" title="Produção" value={formatKpiCompactNumber(summary?.lastProduction ?? 0)} valueTooltip={numberFormatter.format(summary?.lastProduction ?? 0)} icon={TrendingUp} periodLabel={`Último registro: ${formatDate(summary?.lastDailyDate ?? null)}`} showPercentageChange={false} allowWrapValue />
             <KpiCard className="metric-card-item" title="Saída" value={formatKpiCompactNumber(summary?.lastOutbound ?? 0)} valueTooltip={numberFormatter.format(summary?.lastOutbound ?? 0)} icon={TrendingDown} periodLabel={`Último registro: ${formatDate(summary?.lastDailyDate ?? null)}`} showPercentageChange={false} allowWrapValue />
@@ -177,6 +216,73 @@ function EstoquePage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={stockoutDetailsOpen} onOpenChange={setStockoutDetailsOpen}>
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[96vw] max-w-5xl overflow-y-auto border-border bg-surface">
+          <DialogHeader>
+            <DialogTitle>Produtos em ruptura de estoque</DialogTitle>
+            <DialogDescription>
+              Produtos cuja soma do saldo disponível em todos os armazéns é menor ou igual a zero na última importação publicada.
+            </DialogDescription>
+          </DialogHeader>
+
+          {stockoutError && <Alert variant="destructive"><AlertDescription>{stockoutError}</AlertDescription></Alert>}
+
+          {stockoutLoading ? <SkeletonTable rows={6} columns={8} /> : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <Table className="min-w-[920px]">
+                <TableHeader>
+                  <TableRow className="bg-muted/45">
+                    <TableHead>Código</TableHead>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Grupo</TableHead>
+                    <TableHead className="text-right">Saldo físico</TableHead>
+                    <TableHead className="text-right">Empenhado</TableHead>
+                    <TableHead className="text-right">Disponível</TableHead>
+                    <TableHead className="text-right">Armazéns afetados</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stockoutItems.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
+                        Nenhum produto em ruptura encontrado.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {stockoutItems.map((item) => (
+                    <TableRow key={item.productId}>
+                      <TableCell>
+                        <div className="font-mono text-xs">{item.erpCode}</div>
+                        <div className="font-mono text-[11px] text-muted-foreground">{item.operationalCode || "-"}</div>
+                      </TableCell>
+                      <TableCell className="max-w-80 truncate font-medium" title={item.productName}>{item.productName}</TableCell>
+                      <TableCell>{item.type || "-"}</TableCell>
+                      <TableCell>{item.groupCode || "-"}</TableCell>
+                      <TableCell className="text-right">{numberFormatter.format(item.onHandQuantity)}</TableCell>
+                      <TableCell className="text-right">{numberFormatter.format(item.committedQuantity)}</TableCell>
+                      <TableCell className="text-right font-semibold text-red-700 dark:text-red-300">{numberFormatter.format(item.availableQuantity)}</TableCell>
+                      <TableCell className="text-right">{item.affectedWarehousePositions} de {item.warehousePositions}</TableCell>
+                      <TableCell className="text-right">{formatKpiCompactCurrency(item.stockValue)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{stockoutTotal} produto(s) em ruptura</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={stockoutPage <= 1 || stockoutLoading} onClick={() => setStockoutPage(stockoutPage - 1)}>Anterior</Button>
+              <span>Página {stockoutPage} de {stockoutPages}</span>
+              <Button variant="outline" size="sm" disabled={stockoutPage >= stockoutPages || stockoutLoading} onClick={() => setStockoutPage(stockoutPage + 1)}>Próxima</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

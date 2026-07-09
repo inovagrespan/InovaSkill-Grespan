@@ -11,6 +11,7 @@ public sealed class InventoryController(ImportDbContext dbContext) : ControllerB
 {
     private const int DefaultPageSize = 25;
     private const int MaximumPageSize = 100;
+    private const int DefaultStockoutPageSize = 20;
 
     [HttpGet]
     public async Task<ActionResult> List(
@@ -94,6 +95,7 @@ public sealed class InventoryController(ImportDbContext dbContext) : ControllerB
         var inventoryImportId = await CurrentImportIdAsync(InventoryCurrentImportCodes.DataSource, cancellationToken);
         var dailyImportId = await CurrentImportIdAsync(DailyInventoryImportCodes.DataSource, cancellationToken);
         var stockouts = 0;
+        var stockoutWarehousePositions = 0;
         decimal committedPercent = 0;
         DateOnly? lastDailyDate = null;
         decimal lastProduction = 0;
@@ -104,6 +106,9 @@ public sealed class InventoryController(ImportDbContext dbContext) : ControllerB
                 .Where(snapshot => snapshot.ImportId == inventoryImportId.Value)
                 .GroupBy(snapshot => snapshot.ProductId)
                 .CountAsync(grouped => grouped.Sum(snapshot => snapshot.AvailableQuantity) <= 0, cancellationToken);
+            stockoutWarehousePositions = await dbContext.InventorySnapshots.AsNoTracking()
+                .Where(snapshot => snapshot.ImportId == inventoryImportId.Value && snapshot.AvailableQuantity <= 0)
+                .CountAsync(cancellationToken);
             var totals = await dbContext.InventorySnapshots.AsNoTracking()
                 .Where(snapshot => snapshot.ImportId == inventoryImportId.Value)
                 .GroupBy(_ => 1)
@@ -140,12 +145,68 @@ public sealed class InventoryController(ImportDbContext dbContext) : ControllerB
         return Ok(new
         {
             stockouts,
+            stockoutProducts = stockouts,
+            stockoutWarehousePositions,
             committedPercent,
             lastDailyDate,
             lastProduction,
             lastOutbound,
             operationalBalance = lastProduction - lastOutbound
         });
+    }
+
+    [HttpGet("stockouts")]
+    public async Task<ActionResult> Stockouts(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = DefaultStockoutPageSize,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, MaximumPageSize);
+        var importId = await CurrentImportIdAsync(InventoryCurrentImportCodes.DataSource, cancellationToken);
+        if (!importId.HasValue)
+            return Ok(new { page, pageSize, total = 0, items = Array.Empty<object>() });
+
+        var grouped = dbContext.InventorySnapshots.AsNoTracking()
+            .Where(snapshot => snapshot.ImportId == importId.Value)
+            .GroupBy(snapshot => new
+            {
+                snapshot.ProductId,
+                snapshot.Product!.ErpCode,
+                snapshot.Product.OperationalCode,
+                ProductName = snapshot.Product.Name,
+                snapshot.Product.Type,
+                snapshot.Product.Unit,
+                snapshot.Product.GroupCode
+            })
+            .Select(group => new
+            {
+                group.Key.ProductId,
+                group.Key.ErpCode,
+                group.Key.OperationalCode,
+                group.Key.ProductName,
+                group.Key.Type,
+                group.Key.Unit,
+                group.Key.GroupCode,
+                OnHandQuantity = group.Sum(snapshot => snapshot.OnHandQuantity),
+                CommittedQuantity = group.Sum(snapshot => snapshot.CommittedQuantity),
+                AvailableQuantity = group.Sum(snapshot => snapshot.AvailableQuantity),
+                StockValue = group.Sum(snapshot => snapshot.StockValue),
+                AffectedWarehousePositions = group.Count(snapshot => snapshot.AvailableQuantity <= 0),
+                WarehousePositions = group.Count()
+            })
+            .Where(item => item.AvailableQuantity <= 0);
+
+        var total = await grouped.CountAsync(cancellationToken);
+        var items = await grouped
+            .OrderBy(item => item.AvailableQuantity)
+            .ThenByDescending(item => item.CommittedQuantity)
+            .ThenBy(item => item.ProductName)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return Ok(new { page, pageSize, total, items });
     }
 
     [HttpGet("filters")]

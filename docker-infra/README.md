@@ -1,8 +1,7 @@
-﻿# Docker Infra (Postgres + Redis)
+﻿# Docker Infra (Postgres)
 
-Este compose sobe apenas os servicos de infraestrutura para desenvolvimento local:
+Este compose sobe apenas o servico de infraestrutura para desenvolvimento local:
 - Postgres
-- Redis
 
 Comandos:
 

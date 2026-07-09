@@ -3,13 +3,12 @@ using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Wolverine;
 
 namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
 public sealed class OperationalJobQueue(
     ImportDbContext dbContext,
-    IMessageBus messageBus) : IOperationalJobQueue
+    IBackgroundJobDispatcher backgroundJobDispatcher) : IOperationalJobQueue
 {
     public async Task<Guid?> TryQueueAsync(
         string jobType,
@@ -41,7 +40,19 @@ public sealed class OperationalJobQueue(
         };
         dbContext.JobExecutions.Add(job);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await messageBus.PublishAsync(new ProcessOperationalJob(job.Id));
+        try
+        {
+            backgroundJobDispatcher.EnqueueOperationalJob(job.Id);
+        }
+        catch (Exception exception)
+        {
+            job.Status = JobExecutionStatus.Failed;
+            job.ErrorMessage = $"Falha ao enfileirar o job no Hangfire: {exception.Message}";
+            job.FinishedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw;
+        }
+
         return job.Id;
     }
 }

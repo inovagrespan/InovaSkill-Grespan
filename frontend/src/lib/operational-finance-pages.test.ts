@@ -16,9 +16,30 @@ describe("operational, finance and reports pages", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
     const kpiCard = fs.readFileSync(path.resolve(process.cwd(), "src/components/ui/dashboard-kpi-card.tsx"), "utf8");
     const helper = fs.readFileSync(path.resolve(process.cwd(), "src/lib/logistics-dashboard.ts"), "utf8");
+    const api = fs.readFileSync(path.resolve(process.cwd(), "src/lib/importer-api.ts"), "utf8");
 
     expect(source).toContain("Dashboard logístico");
-    expect(source).toContain('title: "Taxa de Devoluções"');
+    expect(source).toContain('title: "Taxa de Devolução"');
+    expect(source).toContain('formula: "(Peso devolvido ÷ peso vendido) × 100"');
+    expect(source).toContain('dataUsed: ["Peso vendido", "Peso devolvido", "Período"]');
+    expect(source).toContain("fetchFiscalReturnRate(periodDays)");
+    expect(source).toContain("Documentos fiscais importados");
+    expect(source).toContain('selectedCard.id === "returns" ? (');
+    expect(source).toContain("<ReturnRateDetails summary={returnRateSummary} loading={returnRateLoading} error={returnRateError} />");
+    expect(source).toContain("function ReturnRateDetails");
+    expect(source).toContain("Peso vendido");
+    expect(source).toContain("Peso devolvido");
+    expect(source).toContain("Cálculo da taxa");
+    expect(source).toContain("O peso devolvido vem dos itens de documentos fiscais classificados como devolução.");
+    expect(source).toContain("Categorias como bonificação, comodato, troca e desconhecido ficam fora desta taxa.");
+    expect(api).toContain("returnRatePercent: Number(raw.returnRatePercent ?? raw.ReturnRatePercent ?? 0)");
+    expect(api).toContain("returnWeightKg: Number(raw.returnWeightKg ?? raw.ReturnWeightKg ?? 0)");
+    expect(api).toContain("salesWeightKg: Number(raw.salesWeightKg ?? raw.SalesWeightKg ?? 0)");
+    expect(source).toContain("EMPTY_RETURN_RATE_PERCENT = 0");
+    expect(source).toContain("returnRateSummary?.returnRatePercent ?? EMPTY_RETURN_RATE_PERCENT");
+    expect(source).toContain('const returnRateValue = returnRateLoading ? "Carregando" : formatPercent(returnRateMetric);');
+    expect(source).not.toContain('formula: "(Unidades devolvidas ÷ unidades expedidas) × 100"');
+    expect(source).not.toContain('returnRateError ? "Indisponível"');
     expect(source).toContain('title: "Taxa de Ocupação"');
     expect(source).toContain('title: "Tempo de Carregamento"');
     expect(source).toContain('title: "Tempo de Trânsito"');
@@ -120,18 +141,24 @@ describe("operational, finance and reports pages", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
 
     expect(source).toContain('const LOGISTICS_METRIC_UNDER_DEVELOPMENT = "em breve";');
-    expect(source).toContain('new Set(["occupancy", "stockout"])');
+    expect(source).toContain('new Set(["returns", "occupancy", "stockout"])');
     expect(source).toContain("resolveExecutiveMetricValue(card.id, card.value)");
     expect(source).toContain("const released = isReleasedLogisticsMetric(card.id)");
     expect(source).toContain("onClick={released ? onSelect : undefined}");
     expect(source).toContain("released && card.showStatus !== false");
     expect(source).toContain('title: "Taxa de Ocupação", value: occupancyValue');
+    expect(source).toContain('title: "Taxa de Devolução", value: returnRateValue');
+    expect(source).toContain("A taxa de devolução usa documentos fiscais importados");
     expect(source).toContain("Importação de rotas");
     expect(source).toContain("MEDIUM_OCCUPANCY_LIMIT_PERCENT = 60");
     expect(source).toContain("GOOD_OCCUPANCY_LIMIT_PERCENT = 80");
     expect(source).toContain("CRITICAL_OCCUPANCY_LIMIT_PERCENT = 100");
     expect(source).toContain("Rotas abaixo de 60% estão ociosas");
-    expect(source).toContain('title: "Rupturas de Estoque", value: `${metrics.stockoutSkuCount} SKUs`');
+    expect(source).toContain("fetchInventorySummary");
+    expect(source).toContain('title: "Rupturas de Estoque", value: stockoutValue');
+    expect(source).toContain('Ruptura real');
+    expect(source).toContain('stockoutValue = inventorySummaryLoading ? "Carregando"');
+    expect(source).toContain('`${stockoutMetric} produtos`');
   });
 
   it("constrói causas e evidências específicas para a árvore de investigação logística", () => {
@@ -252,10 +279,14 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("Buscar por produto ou código");
     expect(inventory).toContain('createFileRoute("/estoque")');
     expect(inventory).toContain("Visão de Estoque");
+    expect(inventory).toContain("Produtos em ruptura de estoque");
+    expect(inventory).toContain("fetchInventoryStockouts");
+    expect(inventory).toContain("Abrir produtos em ruptura de estoque");
     expect(source).toContain("fetchProducts");
     expect(inventory).toContain("fetchInventorySummary");
     expect(api).toContain("/api/products");
     expect(api).toContain("/api/inventory/summary");
+    expect(api).toContain("/api/inventory/stockouts");
     expect(api).toContain("demoProducts");
     expect(api).toContain("filterDemoProducts");
     expect(sidebar).toContain('to: "/produtos"');

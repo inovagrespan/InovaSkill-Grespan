@@ -4,13 +4,14 @@ using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Wolverine;
 
 namespace InovaSkill.Importer.Api.Controllers;
 
 [ApiController]
 [Route("api/admin/jobs")]
-public sealed class AdminJobsController(ImportDbContext dbContext, IMessageBus messageBus) : ControllerBase
+public sealed class AdminJobsController(
+    ImportDbContext dbContext,
+    IBackgroundJobDispatcher backgroundJobDispatcher) : ControllerBase
 {
     private const int DefaultPageSize = 20;
     private const int MaximumPageSize = 100;
@@ -182,10 +183,28 @@ public sealed class AdminJobsController(ImportDbContext dbContext, IMessageBus m
         }
         dbContext.JobExecutions.Add(newJob);
         await dbContext.SaveChangesAsync(cancellationToken);
-        if (isOperationalJob)
-            await messageBus.PublishAsync(new ProcessOperationalJob(newJob.Id));
-        else
-            await messageBus.PublishAsync(new ProcessImport(newJob.RelatedEntityId, newJob.Id));
+        try
+        {
+            if (isOperationalJob)
+                backgroundJobDispatcher.EnqueueOperationalJob(newJob.Id);
+            else
+                backgroundJobDispatcher.EnqueueImport(newJob.RelatedEntityId, newJob.Id);
+        }
+        catch (Exception exception)
+        {
+            newJob.Status = JobExecutionStatus.Failed;
+            newJob.ErrorMessage = $"Falha ao reenfileirar o job no Hangfire: {exception.Message}";
+            newJob.FinishedAt = DateTime.UtcNow;
+            if (!isOperationalJob && failedJob.Import is not null)
+            {
+                failedJob.Import.Status = RouteImportStatus.Failed;
+                failedJob.Import.FailureMessage = "Não foi possível reenfileirar o processamento.";
+                failedJob.Import.FinishedAt = DateTime.UtcNow;
+            }
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw;
+        }
+
         return Accepted(new { jobExecutionId = newJob.Id, status = "QUEUED" });
     }
 

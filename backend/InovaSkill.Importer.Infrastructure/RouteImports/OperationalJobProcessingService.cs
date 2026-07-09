@@ -5,16 +5,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
-public sealed class ProcessOperationalJobHandler(
+public sealed class OperationalJobProcessingService(
     ImportDbContext dbContext,
-    IEnumerable<IOperationalJobProcessor> processors)
+    IEnumerable<IOperationalJobProcessor> processors) : IOperationalJobProcessingService
 {
     private const int MaximumAttempts = 4;
 
-    public async Task Handle(ProcessOperationalJob message, CancellationToken cancellationToken)
+    public async Task ProcessAsync(
+        Guid jobExecutionId,
+        CancellationToken cancellationToken)
     {
         var job = await dbContext.JobExecutions
-            .SingleAsync(x => x.Id == message.JobExecutionId, cancellationToken);
+            .SingleAsync(x => x.Id == jobExecutionId, cancellationToken);
 
         if (job.Status is JobExecutionStatus.Completed or JobExecutionStatus.Failed)
         {
@@ -37,7 +39,7 @@ public sealed class ProcessOperationalJobHandler(
             await processor.ProcessAsync(job.RelatedEntityId, cancellationToken);
             dbContext.ChangeTracker.Clear();
             job = await dbContext.JobExecutions
-                .SingleAsync(x => x.Id == message.JobExecutionId, cancellationToken);
+                .SingleAsync(x => x.Id == jobExecutionId, cancellationToken);
             job.Status = JobExecutionStatus.Completed;
             job.FinishedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -46,7 +48,7 @@ public sealed class ProcessOperationalJobHandler(
         {
             dbContext.ChangeTracker.Clear();
             job = await dbContext.JobExecutions
-                .SingleAsync(x => x.Id == message.JobExecutionId, cancellationToken);
+                .SingleAsync(x => x.Id == jobExecutionId, cancellationToken);
             job.ErrorMessage = exception.Message;
             if (job.Attempts >= MaximumAttempts)
             {

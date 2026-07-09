@@ -11,6 +11,11 @@ public sealed class FiscalDocumentsController(ImportDbContext dbContext) : Contr
 {
     private const int DefaultPageSize = 25;
     private const int MaximumPageSize = 100;
+    private const int DefaultReturnRatePeriodDays = 30;
+    private const int MinimumReturnRatePeriodDays = 1;
+    private const int MaximumReturnRatePeriodDays = 365;
+    private const int PercentScale = 100;
+    private const int PercentDecimalPlaces = 1;
 
     [HttpGet]
     public async Task<ActionResult> List(int page = 1, int pageSize = DefaultPageSize, string? search = null,
@@ -39,6 +44,59 @@ public sealed class FiscalDocumentsController(ImportDbContext dbContext) : Contr
                 itemCount = x.Items.Count, grossWeightKg = x.Items.Sum(item => item.GrossWeightKg)
             }).ToListAsync(cancellationToken);
         return Ok(new { page, pageSize, total, items });
+    }
+
+    [HttpGet("return-rate")]
+    public async Task<ActionResult> ReturnRate(
+        [FromQuery] int periodDays = DefaultReturnRatePeriodDays,
+        [FromQuery] DateOnly? dateTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        periodDays = Math.Clamp(periodDays, MinimumReturnRatePeriodDays, MaximumReturnRatePeriodDays);
+        var referenceDate = dateTo ?? await dbContext.FiscalDocuments.AsNoTracking()
+            .MaxAsync(document => (DateOnly?)document.IssueDate, cancellationToken);
+
+        if (!referenceDate.HasValue)
+            return Ok(new
+            {
+                periodDays,
+                dateFrom = (DateOnly?)null,
+                dateTo = (DateOnly?)null,
+                salesWeightKg = 0m,
+                returnWeightKg = 0m,
+                returnRatePercent = 0m
+            });
+
+        var dateFrom = referenceDate.Value.AddDays(-(periodDays - 1));
+        var weights = await dbContext.FiscalDocumentItems.AsNoTracking()
+            .Where(item =>
+                item.FiscalDocument!.IssueDate >= dateFrom &&
+                item.FiscalDocument.IssueDate <= referenceDate.Value &&
+                (item.FiscalDocument.MovementCategory == FiscalMovementCategory.Sale ||
+                    item.FiscalDocument.MovementCategory == FiscalMovementCategory.Return))
+            .GroupBy(item => item.FiscalDocument!.MovementCategory)
+            .Select(grouped => new
+            {
+                category = grouped.Key,
+                grossWeightKg = grouped.Sum(item => item.GrossWeightKg)
+            })
+            .ToListAsync(cancellationToken);
+
+        var salesWeightKg = weights.SingleOrDefault(item => item.category == FiscalMovementCategory.Sale)?.grossWeightKg ?? 0m;
+        var returnWeightKg = weights.SingleOrDefault(item => item.category == FiscalMovementCategory.Return)?.grossWeightKg ?? 0m;
+        var returnRatePercent = salesWeightKg <= 0
+            ? 0m
+            : Math.Round(returnWeightKg / salesWeightKg * PercentScale, PercentDecimalPlaces);
+
+        return Ok(new
+        {
+            periodDays,
+            dateFrom,
+            dateTo = referenceDate.Value,
+            salesWeightKg,
+            returnWeightKg,
+            returnRatePercent
+        });
     }
 
     [HttpGet("{id:guid}")]

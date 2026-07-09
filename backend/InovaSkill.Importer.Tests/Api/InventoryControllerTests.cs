@@ -30,6 +30,7 @@ public sealed class InventoryControllerTests
         db.InventorySnapshots.AddRange(
             Snapshot(oldInventoryImport, productA, 999, 0, 999),
             Snapshot(currentInventoryImport, productA, 10, 3, 7),
+            Snapshot(currentInventoryImport, productA, 5, 5, 0, warehouseCode: "CD"),
             Snapshot(currentInventoryImport, productB, 5, 2, 0));
         db.DailyInventoryRecords.AddRange(
             Daily(currentDailyImport, productA, new DateOnly(2026, 5, 30), 100, 80, 20),
@@ -42,12 +43,43 @@ public sealed class InventoryControllerTests
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         Assert.Contains("\"stockouts\":1", json);
-        Assert.Contains("\"committedPercent\":33.33", json);
+        Assert.Contains("\"stockoutProducts\":1", json);
+        Assert.Contains("\"stockoutWarehousePositions\":2", json);
+        Assert.Contains("\"committedPercent\":50", json);
         Assert.Contains("\"lastDailyDate\":\"2026-05-31\"", json);
         Assert.Contains("\"lastProduction\":81", json);
         Assert.Contains("\"lastOutbound\":181", json);
         Assert.Contains("\"operationalBalance\":-100", json);
         Assert.DoesNotContain("999", json);
+    }
+
+    [Fact]
+    public async Task Stockouts_ReturnsOnlyProductsWithConsolidatedUnavailableInventory()
+    {
+        await using var db = new ImportDbContext(new DbContextOptionsBuilder<ImportDbContext>()
+            .UseInMemoryDatabase($"inventory-stockouts-{Guid.NewGuid()}").Options);
+        var source = Source(InventoryCurrentImportCodes.DataSource, DataSourceImportMode.Snapshot);
+        var import = Import(source, 1, DateTime.UtcNow);
+        source.CurrentImportId = import.Id;
+        var productWithPositiveTotal = Product("10000122", "6793");
+        var stockoutProduct = Product("10000123", "6792");
+        db.AddRange(source, import, productWithPositiveTotal, stockoutProduct);
+        db.InventorySnapshots.AddRange(
+            Snapshot(import, productWithPositiveTotal, 0, 0, 0, warehouseCode: "PA"),
+            Snapshot(import, productWithPositiveTotal, 15, 1, 14, warehouseCode: "CD"),
+            Snapshot(import, stockoutProduct, 3, 3, 0, warehouseCode: "PA"),
+            Snapshot(import, stockoutProduct, 2, 4, -2, warehouseCode: "CD"));
+        await db.SaveChangesAsync();
+
+        var result = await new InventoryController(db).Stockouts(cancellationToken: default);
+        var json = JsonSerializer.Serialize(Assert.IsType<OkObjectResult>(result).Value,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Contains("\"total\":1", json);
+        Assert.Contains("\"erpCode\":\"10000123\"", json);
+        Assert.Contains("\"availableQuantity\":-2", json);
+        Assert.Contains("\"affectedWarehousePositions\":2", json);
+        Assert.DoesNotContain("\"erpCode\":\"10000122\"", json);
     }
 
     [Fact]
@@ -100,10 +132,11 @@ public sealed class InventoryControllerTests
         Product product,
         decimal onHand,
         decimal committed,
-        decimal available) => new()
+        decimal available,
+        string warehouseCode = "PA") => new()
     {
         Id = Guid.NewGuid(), ImportId = import.Id, ProductId = product.Id,
-        BranchCode = "010101", WarehouseCode = "PA", OnHandQuantity = onHand,
+        BranchCode = "010101", WarehouseCode = warehouseCode, OnHandQuantity = onHand,
         CommittedQuantity = committed, AvailableQuantity = available, StockValue = 0,
         CommittedValue = 0, SourceRowNumber = 1, CreatedAt = DateTime.UtcNow
     };

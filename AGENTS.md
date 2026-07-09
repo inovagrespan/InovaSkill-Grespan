@@ -14,7 +14,7 @@ Guia local para qualquer IA que edite este repositório.
 - Não renomear pastas de arquitetura existente sem pedido explícito.
 - Não quebrar separação entre `frontend` e `backend`.
 - Não mudar contratos de API sem atualizar frontend e backend no mesmo PR.
-- Quando a tarefa envolver subir o ambiente em desenvolvimento local, subir apenas `postgres` e `redis` via Docker e executar `frontend`, `api` e `worker` localmente com os comandos próprios de cada projeto.
+- Quando a tarefa envolver subir o ambiente em desenvolvimento local, subir apenas `postgres` via Docker e executar `frontend`, `api` e `worker` localmente com os comandos próprios de cada projeto.
 - Todo processamento assíncrono, administrativo, importação, reprocessamento, enriquecimento ou job de manutenção deve reutilizar o padrão existente de `job_executions` e aparecer na Central de Processamentos; é proibido criar tabela, fila ou monitoramento paralelo de jobs sem pedido explícito e atualização arquitetural.
 - Escolha de nomes é parte obrigatória da qualidade do código: nomes de tipos, métodos, variáveis, constantes, rotas e casos de uso devem refletir o domínio com clareza; nome ruim não é detalhe, é defeito de legibilidade.
 - Para qualquer alteração de código, criar/atualizar testes cobrindo o comportamento alterado.
@@ -76,12 +76,12 @@ rg "Ã|��|�" -n frontend backend -S
   - Endpoints em `Api`.
   - Regra de negócio em `Application/Domain`.
   - Banco, fila e arquivos em `Infrastructure`.
-  - Worker deve consumir fila (Redis) e não depender de chamadas internas da API.
+  - Worker deve consumir fila Hangfire e não depender de chamadas internas da API.
 
 ## Padrão Para Cálculos e Agregações
 - Para cálculos pesados, consolidações, enriquecimento de dados e geração de resumos (diário/semanal/mensal), preferir processamento assíncrono via `InovaSkill.Importer.Worker`.
 - A `Api` deve expor consulta e acionamento, mas não executar processamento pesado em request síncrono.
-- O `Worker` consome eventos/fila (Redis), executa o pipeline de processamento e persiste resultados nas tabelas de resumo.
+- O `Worker` consome filas Hangfire, executa o pipeline de processamento e persiste resultados nas tabelas de resumo.
 - Jobs de cálculo, importação, enriquecimento de dados e manutenção devem registrar ciclo de vida em `job_executions`, reutilizando a Central de Processamentos para fila, andamento, conclusão, falha, retry e auditoria operacional.
 - Regras de cálculo, validação e comparação devem ficar em `Application/Domain` (ou serviços de processamento em `Infrastructure` quando envolver integração/persistência), mantendo lógica reutilizável e testável.
 - Leitura para dashboards deve consultar dados já consolidados (materializados) sempre que possível, evitando recalcular tudo em cada requisição.
@@ -93,10 +93,10 @@ rg "Ã|��|�" -n frontend backend -S
   - Criar testes de unidade para cálculo e testes de integração para filtros/agregações.
 
 ## Docker e Infra
-- Serviços padrão: `frontend`, `api`, `worker`, `postgres`, `redis`.
-- Persistência obrigatória via volumes para Postgres/Redis/uploads.
+- Serviços padrão: `frontend`, `api`, `worker`, `postgres`.
+- Persistência obrigatória via volumes para Postgres/uploads.
 - Evitar alterações que removam `restart: unless-stopped`.
-- Durante desenvolvimento local, subir no Docker somente a infraestrutura (`postgres` e `redis`) com `docker compose up -d postgres redis`; rodar `frontend`, `api` e `worker` localmente pelos comandos próprios de cada projeto.
+- Durante desenvolvimento local, subir no Docker somente a infraestrutura (`postgres`) com `docker compose up -d postgres`; rodar `frontend`, `api` e `worker` localmente pelos comandos próprios de cada projeto.
 
 ## Checklist Antes de Entregar
 - Build frontend:
@@ -109,7 +109,7 @@ cd ..; docker compose up -d --build
 ```
 - Em desenvolvimento local, subir apenas a infraestrutura:
 ```powershell
-docker compose up -d postgres redis
+docker compose up -d postgres
 ```
 - Verificar containers:
 ```powershell
