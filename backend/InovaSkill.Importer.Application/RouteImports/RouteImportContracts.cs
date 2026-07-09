@@ -66,12 +66,16 @@ public static class ProductCodeNormalizer
 public static class OperationalJobCodes
 {
     public const string MunicipalityCoordinateEnrichment = "MUNICIPALITY_COORDINATE_ENRICHMENT";
+    public const string InactiveCustomerDetection = "INACTIVE_CUSTOMER_DETECTION";
     public const int WorkerExecutionTimeoutMinutes = 30;
 }
 
-public sealed record ProcessImport(Guid ImportId, Guid JobExecutionId);
-
-public sealed record ProcessOperationalJob(Guid JobExecutionId);
+public static class BackgroundJobQueues
+{
+    public const string Imports = "imports";
+    public const string Detectors = "detectors";
+    public const string Default = "default";
+}
 
 public sealed record OperationalJobDefinition(
     string JobType,
@@ -91,8 +95,16 @@ public static class OperationalJobCatalog
         ScheduleAllowed: true,
         AllowConcurrentRuns: false);
 
+    public static readonly OperationalJobDefinition InactiveCustomerDetection = new(
+        OperationalJobCodes.InactiveCustomerDetection,
+        "Detectar clientes inativos",
+        "Identifica clientes sem compras nos últimos 45 dias e atualiza IsActive no cadastro.",
+        ManualRunAllowed: true,
+        ScheduleAllowed: true,
+        AllowConcurrentRuns: false);
+
     public static IReadOnlyList<OperationalJobDefinition> All { get; } =
-        [MunicipalityCoordinateEnrichment];
+        [MunicipalityCoordinateEnrichment, InactiveCustomerDetection];
 }
 
 public interface IDataSourceProcessor
@@ -112,6 +124,28 @@ public interface IOperationalJobQueue
     Task<Guid?> TryQueueAsync(
         string jobType,
         Guid relatedEntityId,
+        CancellationToken cancellationToken);
+}
+
+public interface IBackgroundJobDispatcher
+{
+    string EnqueueImport(Guid importId, Guid jobExecutionId);
+
+    string EnqueueOperationalJob(Guid jobExecutionId);
+}
+
+public interface IImportProcessingService
+{
+    Task ProcessAsync(
+        Guid importId,
+        Guid jobExecutionId,
+        CancellationToken cancellationToken);
+}
+
+public interface IOperationalJobProcessingService
+{
+    Task ProcessAsync(
+        Guid jobExecutionId,
         CancellationToken cancellationToken);
 }
 

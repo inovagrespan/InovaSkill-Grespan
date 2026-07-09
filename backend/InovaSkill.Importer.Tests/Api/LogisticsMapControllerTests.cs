@@ -43,7 +43,7 @@ public sealed class LogisticsMapControllerTests
             Snapshot(import.Id, secondCustomer.Id, pending.Id, "Mercado Pendente"));
         await db.SaveChangesAsync();
 
-        var result = await new LogisticsMapController(db).Customers(CancellationToken.None);
+        var result = await new LogisticsMapController(db).Customers(null, CancellationToken.None);
         var json = System.Text.Json.JsonSerializer.Serialize(
             Assert.IsType<OkObjectResult>(result).Value,
             new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));

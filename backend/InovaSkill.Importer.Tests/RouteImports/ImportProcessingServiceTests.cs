@@ -1,4 +1,3 @@
-using InovaSkill.Importer.Application.Detection;
 using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
@@ -38,8 +37,7 @@ public sealed class ImportProcessingServiceTests
             db,
             [new ClearingProcessor(db)],
             new NoOpLifecycle(),
-            new NoOpOperationalJobQueue(),
-            new NoOpDetectionJobDispatcher());
+            new NoOpOperationalJobQueue());
 
         await service.ProcessAsync(import.Id, job.Id, default);
 
@@ -77,8 +75,7 @@ public sealed class ImportProcessingServiceTests
             db,
             [processor],
             new NoOpLifecycle(),
-            new NoOpOperationalJobQueue(),
-            new NoOpDetectionJobDispatcher());
+            new NoOpOperationalJobQueue());
 
         await service.ProcessAsync(import.Id, job.Id, default);
 
@@ -129,8 +126,4 @@ public sealed class ImportProcessingServiceTests
             Task.FromResult<Guid?>(null);
     }
 
-    private sealed class NoOpDetectionJobDispatcher : IDetectionJobDispatcher
-    {
-        public string Enqueue(Guid detectionRunId) => "noop-job-id";
-    }
 }

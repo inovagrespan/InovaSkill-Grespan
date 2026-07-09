@@ -46,7 +46,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDetectionRunService, DetectionRunService>();
         services.AddScoped<IDetector, CustomerPurchaseDropDetector>();
         services.AddScoped<IDetector, RouteOccupancyDetector>();
-        services.AddScoped<IDetector, InactiveCustomerDetector>();
+        services.AddScoped<InactiveCustomerDetector>();
+        services.AddScoped<IOperationalJobProcessor, InactiveCustomerJobProcessor>();
         return services;
     }
 }

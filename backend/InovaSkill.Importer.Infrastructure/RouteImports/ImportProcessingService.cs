@@ -1,6 +1,4 @@
-using InovaSkill.Importer.Application.Detection;
 using InovaSkill.Importer.Application.RouteImports;
-using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -11,8 +9,7 @@ public sealed class ImportProcessingService(
     ImportDbContext dbContext,
     IEnumerable<IDataSourceProcessor> processors,
     IImportLifecycleService importLifecycle,
-    IOperationalJobQueue operationalJobQueue,
-    IDetectionJobDispatcher detectionJobDispatcher) : IImportProcessingService
+    IOperationalJobQueue operationalJobQueue) : IImportProcessingService
 {
     private const int MaximumAttempts = 4;
 
@@ -79,22 +76,10 @@ public sealed class ImportProcessingService(
             {
                 try
                 {
-                    var now = DateTime.UtcNow;
-                    var run = new DetectionRun
-                    {
-                        Id = Guid.NewGuid(),
-                        DetectorDefinitionId = (await dbContext.DetectorDefinitions
-                            .Where(d => d.Code == DetectorCodes.InactiveCustomer)
-                            .Select(d => d.Id)
-                            .SingleAsync(cancellationToken)),
-                        Status = DetectionRunStatus.Queued,
-                        Trigger = DetectionTrigger.Scheduled,
-                        RequestedAt = now,
-                        AttemptCount = 0
-                    };
-                    dbContext.DetectionRuns.Add(run);
-                    await dbContext.SaveChangesAsync(cancellationToken);
-                    detectionJobDispatcher.Enqueue(run.Id);
+                    await operationalJobQueue.TryQueueAsync(
+                        OperationalJobCodes.InactiveCustomerDetection,
+                        import.Id,
+                        cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -102,7 +87,7 @@ public sealed class ImportProcessingService(
                 }
                 catch (Exception)
                 {
-                    // A detecção pode ser executada manualmente pela tela de Detecção.
+                    // A detecção pode ser executada manualmente pela Central de Processamentos.
                 }
             }
         }
