@@ -24,15 +24,18 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as FinancasRouteImport } from './routes/financas'
 import { Route as EstoqueRouteImport } from './routes/estoque'
+import { Route as DetectionsRouteImport } from './routes/detections'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LogisticaIndexRouteImport } from './routes/logistica.index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
+import { Route as DetectionsIndexRouteImport } from './routes/detections.index'
 import { Route as VeiculosTiposRouteImport } from './routes/veiculos.tipos'
 import { Route as LogisticaRotasRouteImport } from './routes/logistica.rotas'
 import { Route as LogisticaMapaRouteImport } from './routes/logistica.mapa'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
+import { Route as DetectionsRunIdRouteImport } from './routes/detections.$runId'
 
 const VendasRoute = VendasRouteImport.update({
   id: '/vendas',
@@ -109,6 +112,11 @@ const EstoqueRoute = EstoqueRouteImport.update({
   path: '/estoque',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DetectionsRoute = DetectionsRouteImport.update({
+  id: '/detections',
+  path: '/detections',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -134,6 +142,11 @@ const ImportacoesIndexRoute = ImportacoesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ImportacoesRoute,
 } as any)
+const DetectionsIndexRoute = DetectionsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DetectionsRoute,
+} as any)
 const VeiculosTiposRoute = VeiculosTiposRouteImport.update({
   id: '/veiculos/tipos',
   path: '/veiculos/tipos',
@@ -154,11 +167,17 @@ const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
   path: '/files',
   getParentRoute: () => ImportacoesRoute,
 } as any)
+const DetectionsRunIdRoute = DetectionsRunIdRouteImport.update({
+  id: '/$runId',
+  path: '/$runId',
+  getParentRoute: () => DetectionsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
+  '/detections': typeof DetectionsRouteWithChildren
   '/estoque': typeof EstoqueRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
@@ -174,10 +193,12 @@ export interface FileRoutesByFullPath {
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/detections/$runId': typeof DetectionsRunIdRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
   '/veiculos/tipos': typeof VeiculosTiposRoute
+  '/detections/': typeof DetectionsIndexRoute
   '/importacoes/': typeof ImportacoesIndexRoute
   '/logistica/': typeof LogisticaIndexRoute
 }
@@ -198,10 +219,12 @@ export interface FileRoutesByTo {
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/detections/$runId': typeof DetectionsRunIdRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
   '/veiculos/tipos': typeof VeiculosTiposRoute
+  '/detections': typeof DetectionsIndexRoute
   '/importacoes': typeof ImportacoesIndexRoute
   '/logistica': typeof LogisticaIndexRoute
 }
@@ -210,6 +233,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
+  '/detections': typeof DetectionsRouteWithChildren
   '/estoque': typeof EstoqueRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
@@ -225,10 +249,12 @@ export interface FileRoutesById {
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/detections/$runId': typeof DetectionsRunIdRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
   '/veiculos/tipos': typeof VeiculosTiposRoute
+  '/detections/': typeof DetectionsIndexRoute
   '/importacoes/': typeof ImportacoesIndexRoute
   '/logistica/': typeof LogisticaIndexRoute
 }
@@ -238,6 +264,7 @@ export interface FileRouteTypes {
     | '/'
     | '/clientes'
     | '/dashboard'
+    | '/detections'
     | '/estoque'
     | '/financas'
     | '/importacoes'
@@ -253,10 +280,12 @@ export interface FileRouteTypes {
     | '/rotas'
     | '/simulacao'
     | '/vendas'
+    | '/detections/$runId'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
     | '/veiculos/tipos'
+    | '/detections/'
     | '/importacoes/'
     | '/logistica/'
   fileRoutesByTo: FileRoutesByTo
@@ -277,10 +306,12 @@ export interface FileRouteTypes {
     | '/rotas'
     | '/simulacao'
     | '/vendas'
+    | '/detections/$runId'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
     | '/veiculos/tipos'
+    | '/detections'
     | '/importacoes'
     | '/logistica'
   id:
@@ -288,6 +319,7 @@ export interface FileRouteTypes {
     | '/'
     | '/clientes'
     | '/dashboard'
+    | '/detections'
     | '/estoque'
     | '/financas'
     | '/importacoes'
@@ -303,10 +335,12 @@ export interface FileRouteTypes {
     | '/rotas'
     | '/simulacao'
     | '/vendas'
+    | '/detections/$runId'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
     | '/veiculos/tipos'
+    | '/detections/'
     | '/importacoes/'
     | '/logistica/'
   fileRoutesById: FileRoutesById
@@ -315,6 +349,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ClientesRoute: typeof ClientesRoute
   DashboardRoute: typeof DashboardRoute
+  DetectionsRoute: typeof DetectionsRouteWithChildren
   EstoqueRoute: typeof EstoqueRoute
   FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
@@ -440,6 +475,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EstoqueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/detections': {
+      id: '/detections'
+      path: '/detections'
+      fullPath: '/detections'
+      preLoaderRoute: typeof DetectionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -475,6 +517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacoesIndexRouteImport
       parentRoute: typeof ImportacoesRoute
     }
+    '/detections/': {
+      id: '/detections/'
+      path: '/'
+      fullPath: '/detections/'
+      preLoaderRoute: typeof DetectionsIndexRouteImport
+      parentRoute: typeof DetectionsRoute
+    }
     '/veiculos/tipos': {
       id: '/veiculos/tipos'
       path: '/veiculos/tipos'
@@ -503,8 +552,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacoesFilesRouteImport
       parentRoute: typeof ImportacoesRoute
     }
+    '/detections/$runId': {
+      id: '/detections/$runId'
+      path: '/$runId'
+      fullPath: '/detections/$runId'
+      preLoaderRoute: typeof DetectionsRunIdRouteImport
+      parentRoute: typeof DetectionsRoute
+    }
   }
 }
+
+interface DetectionsRouteChildren {
+  DetectionsRunIdRoute: typeof DetectionsRunIdRoute
+  DetectionsIndexRoute: typeof DetectionsIndexRoute
+}
+
+const DetectionsRouteChildren: DetectionsRouteChildren = {
+  DetectionsRunIdRoute: DetectionsRunIdRoute,
+  DetectionsIndexRoute: DetectionsIndexRoute,
+}
+
+const DetectionsRouteWithChildren = DetectionsRoute._addFileChildren(
+  DetectionsRouteChildren,
+)
 
 interface ImportacoesRouteChildren {
   ImportacoesFilesRoute: typeof ImportacoesFilesRoute
@@ -540,6 +610,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ClientesRoute: ClientesRoute,
   DashboardRoute: DashboardRoute,
+  DetectionsRoute: DetectionsRouteWithChildren,
   EstoqueRoute: EstoqueRoute,
   FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,

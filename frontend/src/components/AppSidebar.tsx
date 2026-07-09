@@ -12,6 +12,7 @@ import {
   Package,
   PackageCheck,
   Route,
+  ScanSearch,
   Settings,
   Sun,
   Truck,
@@ -54,6 +55,7 @@ const items = [
   { to: "/producao", label: "Produção", icon: Factory },
   { to: "/importacoes/files", label: "Importações", icon: FileUp, accessRoles: ["diretor", "admin", "admin_system"] },
   { to: "/processamentos", label: "Processamento", icon: Settings, accessRoles: ["admin_system", "admin"] },
+  { to: "/detections", label: "Detecção", icon: ScanSearch },
 ] as const;
 
 export function getVisibleSidebarItemsForRole(role: string | null) {

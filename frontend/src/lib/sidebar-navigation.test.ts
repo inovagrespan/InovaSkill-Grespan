@@ -25,8 +25,9 @@ describe("sidebar navigation", () => {
       "Estoque",
       "Produção",
       "Importações",
+      "Detecção",
     ]);
-    expect(vendasItems).toEqual(["Dashboard", "Rotas", "Tipos de Veículo", "Mapa", "Clientes", "Notas Fiscais", "Produtos", "Estoque", "Produção"]);
+    expect(vendasItems).toEqual(["Dashboard", "Rotas", "Tipos de Veículo", "Mapa", "Clientes", "Notas Fiscais", "Produtos", "Estoque", "Produção", "Detecção"]);
     expect(adminItems).toContain("Importações");
     expect(adminSystemItems).toContain("Importações");
   });
@@ -56,6 +57,8 @@ describe("sidebar navigation", () => {
     expect(source).toContain('label: "Importações"');
     expect(source).toContain('to: "/processamentos"');
     expect(source).toContain('label: "Processamento"');
+    expect(source).toContain('to: "/detections"');
+    expect(source).toContain('label: "Detecção"');
     expect(source).not.toContain('to: "/administrativo"');
     expect(source).not.toContain('label: "Administrativo"');
     expect(source).not.toContain('to: "/relatorios"');

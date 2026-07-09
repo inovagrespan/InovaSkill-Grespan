@@ -23,6 +23,10 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<DailyInventoryRecord> DailyInventoryRecords => Set<DailyInventoryRecord>();
     public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
     public DbSet<FiscalDocumentItem> FiscalDocumentItems => Set<FiscalDocumentItem>();
+    public DbSet<DetectorDefinition> DetectorDefinitions => Set<DetectorDefinition>();
+    public DbSet<DetectionRun> DetectionRuns => Set<DetectionRun>();
+    public DbSet<Finding> Findings => Set<Finding>();
+    public DbSet<FindingEvidence> FindingEvidences => Set<FindingEvidence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -310,6 +314,65 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasOne(x => x.FiscalDocument).WithMany(x => x.Items)
                 .HasForeignKey(x => x.FiscalDocumentId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<DetectorDefinition>(entity =>
+        {
+            entity.ToTable("detector_definitions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1024);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => x.Code).IsUnique();
+        });
+
+        modelBuilder.Entity<DetectionRun>(entity =>
+        {
+            entity.ToTable("detection_runs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Trigger).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.Property(x => x.StatusReason).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.DetectorDefinitionId, x.Status });
+            entity.HasIndex(x => x.RequestedAt);
+            entity.HasOne(x => x.DetectorDefinition).WithMany()
+                .HasForeignKey(x => x.DetectorDefinitionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DetectionRun>().WithMany()
+                .HasForeignKey(x => x.RetryOfRunId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Finding>(entity =>
+        {
+            entity.ToTable("findings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Fingerprint).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.SubjectType).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.SubjectId).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.SubjectLabel).HasMaxLength(512);
+            entity.HasIndex(x => x.DetectionRunId);
+            entity.HasIndex(x => new { x.SubjectType, x.SubjectId });
+            entity.HasIndex(x => new { x.DetectionRunId, x.Fingerprint }).IsUnique();
+            entity.HasOne(x => x.DetectionRun).WithMany()
+                .HasForeignKey(x => x.DetectionRunId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FindingEvidence>(entity =>
+        {
+            entity.ToTable("finding_evidences");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Value).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.ReferenceValue).HasMaxLength(512);
+            entity.Property(x => x.Unit).HasMaxLength(32);
+            entity.Property(x => x.Description).HasMaxLength(1024);
+            entity.Property(x => x.SourceType).HasMaxLength(128);
+            entity.Property(x => x.SourceId).HasMaxLength(128);
+            entity.HasIndex(x => x.FindingId);
+            entity.HasOne(x => x.Finding).WithMany()
+                .HasForeignKey(x => x.FindingId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Notification>(entity =>
