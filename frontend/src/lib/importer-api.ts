@@ -123,11 +123,22 @@ export type ProductDetails = {
 
 export type InventorySummary = {
   stockouts: number;
+  stockoutProducts: number;
+  stockoutWarehousePositions: number;
   committedPercent: number;
   lastDailyDate: string | null;
   lastProduction: number;
   lastOutbound: number;
   operationalBalance: number;
+};
+
+export type FiscalReturnRateSummary = {
+  periodDays: number;
+  dateFrom: string | null;
+  dateTo: string | null;
+  salesWeightKg: number;
+  returnWeightKg: number;
+  returnRatePercent: number;
 };
 
 export type InventoryItem = ProductInventorySummary & {
@@ -142,6 +153,22 @@ export type InventoryItem = ProductInventorySummary & {
   branchCode: string;
   warehouseCode: string;
   committedPercent: number | null;
+};
+
+export type InventoryStockoutProduct = {
+  productId: string;
+  erpCode: string;
+  operationalCode: string;
+  productName: string;
+  type: string;
+  unit: string;
+  groupCode: string;
+  onHandQuantity: number;
+  committedQuantity: number;
+  availableQuantity: number;
+  stockValue: number;
+  affectedWarehousePositions: number;
+  warehousePositions: number;
 };
 
 export type InventoryFilterOptions = {
@@ -2549,11 +2576,45 @@ export async function fetchInventorySummary(): Promise<InventorySummary> {
   const raw = await response.json();
   return {
     stockouts: Number(raw.stockouts ?? raw.Stockouts ?? 0),
+    stockoutProducts: Number(raw.stockoutProducts ?? raw.StockoutProducts ?? raw.stockouts ?? raw.Stockouts ?? 0),
+    stockoutWarehousePositions: Number(raw.stockoutWarehousePositions ?? raw.StockoutWarehousePositions ?? 0),
     committedPercent: Number(raw.committedPercent ?? raw.CommittedPercent ?? 0),
     lastDailyDate: raw.lastDailyDate ?? raw.LastDailyDate ?? null,
     lastProduction: Number(raw.lastProduction ?? raw.LastProduction ?? 0),
     lastOutbound: Number(raw.lastOutbound ?? raw.LastOutbound ?? 0),
     operationalBalance: Number(raw.operationalBalance ?? raw.OperationalBalance ?? 0),
+  };
+}
+
+export async function fetchInventoryStockouts(input: {
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<PagedResult<InventoryStockoutProduct>> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+  const response = await authFetch(`${API_URL}/api/inventory/stockouts?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar rupturas de estoque."));
+  const raw = await response.json();
+  return {
+    page: raw.page ?? raw.Page ?? 1,
+    pageSize: raw.pageSize ?? raw.PageSize ?? 20,
+    total: raw.total ?? raw.Total ?? 0,
+    items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
+      productId: String(item.productId ?? item.ProductId ?? ""),
+      erpCode: item.erpCode ?? item.ErpCode ?? "",
+      operationalCode: item.operationalCode ?? item.OperationalCode ?? "",
+      productName: item.productName ?? item.ProductName ?? "",
+      type: item.type ?? item.Type ?? "",
+      unit: item.unit ?? item.Unit ?? "",
+      groupCode: item.groupCode ?? item.GroupCode ?? "",
+      onHandQuantity: Number(item.onHandQuantity ?? item.OnHandQuantity ?? 0),
+      committedQuantity: Number(item.committedQuantity ?? item.CommittedQuantity ?? 0),
+      availableQuantity: Number(item.availableQuantity ?? item.AvailableQuantity ?? 0),
+      stockValue: Number(item.stockValue ?? item.StockValue ?? 0),
+      affectedWarehousePositions: Number(item.affectedWarehousePositions ?? item.AffectedWarehousePositions ?? 0),
+      warehousePositions: Number(item.warehousePositions ?? item.WarehousePositions ?? 0),
+    })),
   };
 }
 
@@ -3104,6 +3165,7 @@ export type OperationalJobDefinition = {
 export type LogisticsMapCustomerItem = {
   id: string;
   name: string;
+  isActive: boolean;
   externalCode: string;
   branchCode: string;
   city: string;
@@ -3391,6 +3453,21 @@ export async function fetchRouteOccupancySummary(): Promise<RouteOccupancySummar
   return (await response.json()) as RouteOccupancySummary;
 }
 
+export async function fetchFiscalReturnRate(periodDays: number): Promise<FiscalReturnRateSummary> {
+  const query = new URLSearchParams({ periodDays: String(periodDays) });
+  const response = await authFetch(`${API_URL}/api/fiscal-documents/return-rate?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a taxa de devolução."));
+  const raw = await response.json();
+  return {
+    periodDays: Number(raw.periodDays ?? raw.PeriodDays ?? periodDays),
+    dateFrom: raw.dateFrom ?? raw.DateFrom ?? null,
+    dateTo: raw.dateTo ?? raw.DateTo ?? null,
+    salesWeightKg: Number(raw.salesWeightKg ?? raw.SalesWeightKg ?? 0),
+    returnWeightKg: Number(raw.returnWeightKg ?? raw.ReturnWeightKg ?? 0),
+    returnRatePercent: Number(raw.returnRatePercent ?? raw.ReturnRatePercent ?? 0),
+  };
+}
+
 export async function fetchImportedRoutes(
   page = 1,
   pageSize = 20,
@@ -3498,8 +3575,9 @@ export async function cancelAdminJob(jobId: string): Promise<void> {
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao cancelar job."));
 }
 
-export async function fetchLogisticsMapCustomers(): Promise<LogisticsMapCustomersResponse> {
-  const response = await authFetch(`${API_URL}/api/logistics/map/customers`);
+export async function fetchLogisticsMapCustomers(active?: string): Promise<LogisticsMapCustomersResponse> {
+  const query = active ? `?active=${encodeURIComponent(active)}` : "";
+  const response = await authFetch(`${API_URL}/api/logistics/map/customers${query}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar clientes do mapa."));
   return (await response.json()) as LogisticsMapCustomersResponse;
 }

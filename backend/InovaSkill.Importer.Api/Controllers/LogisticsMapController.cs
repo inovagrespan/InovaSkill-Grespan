@@ -15,7 +15,9 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
     private const int CustomerPinRadiusStepCount = 4;
 
     [HttpGet("customers")]
-    public async Task<ActionResult> Customers(CancellationToken cancellationToken)
+    public async Task<ActionResult> Customers(
+        [FromQuery] string? active = null,
+        CancellationToken cancellationToken = default)
     {
         var currentImportId = await dbContext.DataSources.AsNoTracking()
             .Where(source => source.Code == CustomerImportCodes.DataSource)
@@ -26,10 +28,17 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
             return Ok(new { total = 0, visible = 0, withoutCoordinates = 0, items = Array.Empty<object>() });
         }
 
-        var snapshots = await dbContext.CustomerSnapshots.AsNoTracking()
+        var query = dbContext.CustomerSnapshots.AsNoTracking()
             .Include(snapshot => snapshot.Customer)
             .Include(snapshot => snapshot.Municipality)
-            .Where(snapshot => snapshot.ImportId == currentImportId.Value)
+            .Where(snapshot => snapshot.ImportId == currentImportId.Value);
+
+        if (string.Equals(active, "true", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(s => s.Customer!.IsActive);
+        else if (string.Equals(active, "false", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(s => !s.Customer!.IsActive);
+
+        var snapshots = await query
             .OrderBy(snapshot => snapshot.Municipality!.Name)
             .ThenBy(snapshot => snapshot.Customer!.ExternalCode)
             .ThenBy(snapshot => snapshot.Customer!.BranchCode)
@@ -51,6 +60,7 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
                     snapshot.TradeName,
                     snapshot.LegalName,
                     snapshot.CustomerType,
+                    snapshot.Customer.IsActive,
                     snapshot.MunicipalityId,
                     snapshot.Municipality!.Name,
                     snapshot.Municipality.StateCode,
@@ -91,6 +101,7 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
         {
             id = row.CustomerId,
             name = string.IsNullOrWhiteSpace(row.TradeName) ? row.LegalName : row.TradeName,
+            isActive = row.IsActive,
             row.ExternalCode,
             row.BranchCode,
             city = row.City,
@@ -117,6 +128,7 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
         string TradeName,
         string LegalName,
         string CustomerType,
+        bool IsActive,
         Guid MunicipalityId,
         string City,
         string StateCode,

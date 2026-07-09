@@ -1,54 +1,53 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { LogisticsRegionMap } from "@/components/ui/logistics-region-map";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchLogisticsMapCustomers, type LogisticsMapCustomerItem } from "@/lib/importer-api";
-import { LOGISTICS_PERIOD_OPTIONS, type LogisticsPeriodDays } from "@/lib/logistics-dashboard";
 import { type LogisticsMapCustomer, type LogisticsMapRoute } from "@/lib/logistics-map-data";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/mapa")({ component: MapaPage });
 
-const periodLabels: Record<LogisticsPeriodDays, string> = {
-  1: "Hoje",
-  7: "7 dias",
-  30: "30 dias",
-  90: "90 dias",
+type ActivityFilter = "all" | "true" | "false";
+
+const activityLabels: Record<ActivityFilter, string> = {
+  all: "Todos",
+  true: "Ativos",
+  false: "Inativos",
 };
 
 const mapRouteOverlays: LogisticsMapRoute[] = [];
 
 function MapaPage() {
-  const [periodDays, setPeriodDays] = useState<LogisticsPeriodDays>(30);
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [customers, setCustomers] = useState<LogisticsMapCustomer[]>([]);
   const [withoutCoordinates, setWithoutCoordinates] = useState(0);
   const [totalCustomers, setTotalCustomers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let active = true;
+  const loadCustomers = useCallback(async (filter: ActivityFilter) => {
     setLoading(true);
     setError("");
-    fetchLogisticsMapCustomers()
-      .then(result => {
-        if (!active) return;
-        setCustomers(result.items.map(toLogisticsMapCustomer));
-        setWithoutCoordinates(result.withoutCoordinates);
-        setTotalCustomers(result.total);
-      })
-      .catch(reason => {
-        if (active) setError((reason as Error).message);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+    try {
+      const activeParam = filter === "all" ? undefined : filter;
+      const result = await fetchLogisticsMapCustomers(activeParam);
+      setCustomers(result.items.map(toLogisticsMapCustomer));
+      setWithoutCoordinates(result.withoutCoordinates);
+      setTotalCustomers(result.total);
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadCustomers(activityFilter);
+  }, [activityFilter, loadCustomers]);
 
   return (
     <div className="page-shell app-background space-y-6">
@@ -61,10 +60,10 @@ function MapaPage() {
           <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Mapa de rotas</h1>
           <p className="mt-1 text-sm text-muted-foreground">Visualize clientes reais posicionados pelo município cadastrado.</p>
         </div>
-        <div className="flex flex-wrap gap-2" aria-label="Período do mapa de rotas">
-          {LOGISTICS_PERIOD_OPTIONS.map((days) => (
-            <Button key={days} size="sm" variant={periodDays === days ? "default" : "outline"} onClick={() => setPeriodDays(days)}>
-              {periodLabels[days]}
+        <div className="flex flex-wrap gap-2" aria-label="Filtro de atividade">
+          {(Object.entries(activityLabels) as [ActivityFilter, string][]).map(([value, label]) => (
+            <Button key={value} size="sm" variant={activityFilter === value ? "default" : "outline"} onClick={() => setActivityFilter(value)}>
+              {label}
             </Button>
           ))}
         </div>
@@ -82,7 +81,7 @@ function MapaPage() {
       {loading ? (
         <Skeleton className="h-[500px] min-h-[420px] w-full rounded-xl" />
       ) : (
-        <LogisticsRegionMap customers={customers} routes={mapRouteOverlays} periodDays={periodDays} />
+        <LogisticsRegionMap customers={customers} routes={mapRouteOverlays} />
       )}
     </div>
   );
