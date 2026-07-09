@@ -22,7 +22,7 @@ const activityLabels: Record<ActivityFilter, string> = {
 const mapRouteOverlays: LogisticsMapRoute[] = [];
 
 function MapaPage() {
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("true");
   const [customers, setCustomers] = useState<LogisticsMapCustomer[]>([]);
   const [withoutCoordinates, setWithoutCoordinates] = useState(0);
   const [totalCustomers, setTotalCustomers] = useState(0);
