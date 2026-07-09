@@ -75,6 +75,22 @@ using (var scope = app.Services.CreateScope())
 
         await db.SaveChangesAsync();
     }
+
+    if (!await db.DetectorDefinitions.AnyAsync(x => x.Code == DetectorCodes.RouteOccupancyAnomaly))
+    {
+        var now = DateTime.UtcNow;
+        db.DetectorDefinitions.Add(new DetectorDefinition
+        {
+            Id = Guid.NewGuid(),
+            Code = DetectorCodes.RouteOccupancyAnomaly,
+            Name = "Rotas com ocupação crítica ou ociosa",
+            Description = "Identifica rotas com ocupação acima de 100% (crítica) ou abaixo de 60% (ociosa) em relação à capacidade do veículo.",
+            Status = DetectorStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+    }
 }
 
 if (!builder.Configuration.GetValue<bool>("DisableHttpsRedirection"))

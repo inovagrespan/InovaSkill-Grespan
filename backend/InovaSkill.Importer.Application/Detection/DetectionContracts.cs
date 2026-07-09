@@ -3,6 +3,7 @@ namespace InovaSkill.Importer.Application.Detection;
 public static class DetectorCodes
 {
     public const string CustomerPurchaseDrop = "CUSTOMER_PURCHASE_DROP";
+    public const string RouteOccupancyAnomaly = "ROUTE_OCCUPANCY_ANOMALY";
 }
 
 public sealed record DetectionContext(
