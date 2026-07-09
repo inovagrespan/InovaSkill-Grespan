@@ -4,6 +4,8 @@ using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
+using LevelPolicy = InovaSkill.Importer.Application.RouteImports.RouteOccupancyLevelPolicy;
+
 namespace InovaSkill.Importer.Infrastructure.Detection;
 
 public sealed class RouteOccupancyDetector(
@@ -11,8 +13,6 @@ public sealed class RouteOccupancyDetector(
 {
     public string Code => DetectorCodes.RouteOccupancyAnomaly;
 
-    private const decimal CriticalThreshold = 100m;
-    private const decimal IdleThreshold = 60m;
     private const int OccupancyPercentDecimalPlaces = 1;
 
     public async Task<DetectionResult> DetectAsync(
@@ -52,12 +52,12 @@ public sealed class RouteOccupancyDetector(
             .ToListAsync(cancellationToken);
 
         var criticalRoutes = routes
-            .Where(r => r.OverallOccupancy!.Value > CriticalThreshold)
+            .Where(r => LevelPolicy.Classify(r.OverallOccupancy) == "critical")
             .OrderByDescending(r => r.OverallOccupancy)
             .ToList();
 
         var idleRoutes = routes
-            .Where(r => r.OverallOccupancy!.Value < IdleThreshold)
+            .Where(r => LevelPolicy.Classify(r.OverallOccupancy) == "idle")
             .OrderBy(r => r.OverallOccupancy)
             .ToList();
 
@@ -66,11 +66,11 @@ public sealed class RouteOccupancyDetector(
 
         foreach (var route in criticalRoutes)
         {
-            var occupancy = Math.Round(route.OverallOccupancy!.Value, OccupancyPercentDecimalPlaces);
+            var occupancyPercent = Math.Round(route.OverallOccupancy!.Value * 100, OccupancyPercentDecimalPlaces);
             findings.Add(new FindingCandidate(
                 Fingerprint: $"{Code}:CRITICAL:{route.Id}",
                 Title: "Rota com ocupação crítica",
-                Description: $"A rota '{route.Name}' ({route.Weekday}) está com {occupancy}% de ocupação, excedendo a capacidade do veículo {route.VehicleTypeName} ({route.CapacityKg} kg).",
+                Description: $"A rota '{route.Name}' ({route.Weekday}) está com {occupancyPercent}% de ocupação, excedendo a capacidade do veículo {route.VehicleTypeName} ({route.CapacityKg} kg).",
                 SubjectType: "Route",
                 SubjectId: route.Id.ToString(),
                 SubjectLabel: $"{route.Name} ({route.Weekday})",
@@ -78,8 +78,8 @@ public sealed class RouteOccupancyDetector(
                 {
                     new(
                         Name: "Ocupação geral",
-                        Value: occupancy.ToString("F1"),
-                        ReferenceValue: "100",
+                        Value: occupancyPercent.ToString("F1"),
+                        ReferenceValue: (LevelPolicy.CriticalMinimumExclusive * 100).ToString("F0"),
                         Unit: "%",
                         Description: "Percentual de ocupação sobre a capacidade do veículo",
                         SourceType: "Route",
@@ -117,11 +117,11 @@ public sealed class RouteOccupancyDetector(
 
         foreach (var route in idleRoutes)
         {
-            var occupancy = Math.Round(route.OverallOccupancy!.Value, OccupancyPercentDecimalPlaces);
+            var occupancyPercent = Math.Round(route.OverallOccupancy!.Value * 100, OccupancyPercentDecimalPlaces);
             findings.Add(new FindingCandidate(
                 Fingerprint: $"{Code}:IDLE:{route.Id}",
                 Title: "Rota com ocupação ociosa",
-                Description: $"A rota '{route.Name}' ({route.Weekday}) está com apenas {occupancy}% de ocupação do veículo {route.VehicleTypeName} ({route.CapacityKg} kg).",
+                Description: $"A rota '{route.Name}' ({route.Weekday}) está com apenas {occupancyPercent}% de ocupação do veículo {route.VehicleTypeName} ({route.CapacityKg} kg).",
                 SubjectType: "Route",
                 SubjectId: route.Id.ToString(),
                 SubjectLabel: $"{route.Name} ({route.Weekday})",
@@ -129,8 +129,8 @@ public sealed class RouteOccupancyDetector(
                 {
                     new(
                         Name: "Ocupação geral",
-                        Value: occupancy.ToString("F1"),
-                        ReferenceValue: "60",
+                        Value: occupancyPercent.ToString("F1"),
+                        ReferenceValue: (LevelPolicy.MediumMinimum * 100).ToString("F0"),
                         Unit: "%",
                         Description: "Percentual de ocupação (abaixo de 60% é considerado ocioso)",
                         SourceType: "Route",
@@ -148,7 +148,7 @@ public sealed class RouteOccupancyDetector(
                     new(
                         Name: "Ocupação de peso",
                         Value: (route.WeightOccupancy.HasValue
-                            ? Math.Round(route.WeightOccupancy.Value, OccupancyPercentDecimalPlaces).ToString("F1")
+                            ? Math.Round(route.WeightOccupancy.Value * 100, OccupancyPercentDecimalPlaces).ToString("F1")
                             : "N/A"),
                         ReferenceValue: null,
                         Unit: "%",
