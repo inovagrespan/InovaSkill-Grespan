@@ -91,6 +91,22 @@ using (var scope = app.Services.CreateScope())
         });
         await db.SaveChangesAsync();
     }
+
+    if (!await db.DetectorDefinitions.AnyAsync(x => x.Code == DetectorCodes.InactiveCustomer))
+    {
+        var now = DateTime.UtcNow;
+        db.DetectorDefinitions.Add(new DetectorDefinition
+        {
+            Id = Guid.NewGuid(),
+            Code = DetectorCodes.InactiveCustomer,
+            Name = "Clientes inativos",
+            Description = "Identifica clientes que não realizam compras há mais de 45 dias, mas que possuem histórico de compras anterior.",
+            Status = DetectorStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+    }
 }
 
 if (!builder.Configuration.GetValue<bool>("DisableHttpsRedirection"))

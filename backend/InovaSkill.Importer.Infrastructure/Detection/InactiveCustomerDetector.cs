@@ -5,15 +5,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace InovaSkill.Importer.Infrastructure.Detection;
 
-public sealed class CustomerPurchaseDropDetector(
+public sealed class InactiveCustomerDetector(
     ImportDbContext dbContext) : IDetector
 {
-    public string Code => DetectorCodes.CustomerPurchaseDrop;
+    public string Code => DetectorCodes.InactiveCustomer;
 
-    private const int ActiveDays = 45;
-    private const int RecentDays = 30;
-    private const int HistoricalDays = 60;
-    private const decimal DropThresholdPercent = 50m;
+    private const int InactiveDays = 45;
+    private const int LookbackDays = 165;
     private const int MinimumHistoricalDocuments = 2;
 
     public async Task<DetectionResult> DetectAsync(
@@ -21,17 +19,15 @@ public sealed class CustomerPurchaseDropDetector(
         CancellationToken cancellationToken)
     {
         var referenceDate = context.ReferenceTime;
-        var activeStart = referenceDate.AddDays(-ActiveDays);
-        var recentStart = referenceDate.AddDays(-RecentDays);
-        var historicalStart = referenceDate.AddDays(-RecentDays - HistoricalDays);
-        var activeStartDateOnly = DateOnly.FromDateTime(activeStart);
-        var recentStartDateOnly = DateOnly.FromDateTime(recentStart);
-        var historicalStartDateOnly = DateOnly.FromDateTime(historicalStart);
+        var inactiveStart = referenceDate.AddDays(-InactiveDays);
+        var lookbackStart = referenceDate.AddDays(-LookbackDays);
+        var inactiveStartDateOnly = DateOnly.FromDateTime(inactiveStart);
+        var lookbackStartDateOnly = DateOnly.FromDateTime(lookbackStart);
         var referenceDateOnly = DateOnly.FromDateTime(referenceDate);
 
         var sales = await dbContext.FiscalDocuments.AsNoTracking()
             .Where(d => d.MovementCategory == FiscalMovementCategory.Sale
-                && d.IssueDate >= historicalStartDateOnly
+                && d.IssueDate >= lookbackStartDateOnly
                 && d.IssueDate <= referenceDateOnly)
             .Include(d => d.Items)
             .ToListAsync(cancellationToken);
@@ -50,45 +46,32 @@ public sealed class CustomerPurchaseDropDetector(
 
         foreach (var group in customerGroups)
         {
-            var activeDocs = group
-                .Where(d => d.IssueDate >= activeStartDateOnly)
+            var recentDocs = group
+                .Where(d => d.IssueDate >= inactiveStartDateOnly)
                 .ToList();
 
-            if (activeDocs.Count == 0)
+            if (recentDocs.Count > 0)
                 continue;
 
-            var recentDocs = group
-                .Where(d => d.IssueDate >= recentStartDateOnly)
-                .ToList();
-
             var historicalDocs = group
-                .Where(d => d.IssueDate >= historicalStartDateOnly
-                    && d.IssueDate < recentStartDateOnly)
+                .Where(d => d.IssueDate >= lookbackStartDateOnly
+                    && d.IssueDate < inactiveStartDateOnly)
                 .ToList();
 
             if (historicalDocs.Count < MinimumHistoricalDocuments)
                 continue;
 
-            var recentTotal = recentDocs
-                .SelectMany(d => d.Items)
-                .Sum(i => (i.UnitValue ?? 0m) * i.Quantity);
+            var lastPurchase = historicalDocs.Max(d => d.IssueDate);
+            var daysSinceLastPurchase = (int)(referenceDateOnly.DayNumber - lastPurchase.DayNumber);
 
             var historicalTotal = historicalDocs
                 .SelectMany(d => d.Items)
                 .Sum(i => (i.UnitValue ?? 0m) * i.Quantity);
 
-            var historicalMonths = (decimal)HistoricalDays / 30;
+            var historicalMonths = (decimal)LookbackDays / 30;
             var historicalMonthlyAvg = historicalMonths > 0
                 ? historicalTotal / historicalMonths
                 : 0;
-
-            if (historicalMonthlyAvg <= 0)
-                continue;
-
-            var dropPercent = (int)((historicalMonthlyAvg - recentTotal) / historicalMonthlyAvg * 100);
-
-            if (dropPercent < (int)DropThresholdPercent)
-                continue;
 
             var subjectId = group.Key.CustomerId != Guid.Empty
                 ? group.Key.CustomerId.ToString()
@@ -96,21 +79,32 @@ public sealed class CustomerPurchaseDropDetector(
 
             var customerName = group.OrderByDescending(d => d.IssueDate).First().CustomerNameAtIssue;
 
+            var fingerprint = $"{Code}:CUSTOMER:{subjectId}:{group.Key.CustomerCodeAtIssue}";
+
             findings.Add(new FindingCandidate(
-                Fingerprint: $"{Code}:CUSTOMER:{subjectId}:{group.Key.CustomerCodeAtIssue}",
-                Title: "Cliente fora do padrão de compra",
-                Description: $"O cliente comprou {dropPercent}% abaixo da média histórica mensal nos últimos {RecentDays} dias.",
+                Fingerprint: fingerprint,
+                Title: "Cliente inativo",
+                Description: $"O cliente não realiza compras há {daysSinceLastPurchase} dias.",
                 SubjectType: "Customer",
                 SubjectId: subjectId,
                 SubjectLabel: customerName,
                 Evidences: new List<FindingEvidenceCandidate>
                 {
                     new(
-                        Name: "Compra nos últimos 30 dias",
-                        Value: recentTotal.ToString("F2"),
-                        ReferenceValue: historicalMonthlyAvg.ToString("F2"),
-                        Unit: "BRL",
-                        Description: $"Valor total de compras nos últimos {RecentDays} dias",
+                        Name: "Dias sem compras",
+                        Value: daysSinceLastPurchase.ToString(),
+                        ReferenceValue: InactiveDays.ToString(),
+                        Unit: "dias",
+                        Description: $"Tempo desde a última compra (limite de inatividade: {InactiveDays} dias)",
+                        SourceType: "FiscalDocument",
+                        SourceId: subjectId,
+                        ObservedAt: referenceDate),
+                    new(
+                        Name: "Última compra",
+                        Value: lastPurchase.ToString("dd/MM/yyyy"),
+                        ReferenceValue: null,
+                        Unit: null,
+                        Description: "Data da última venda registrada",
                         SourceType: "FiscalDocument",
                         SourceId: subjectId,
                         ObservedAt: referenceDate),
@@ -119,25 +113,16 @@ public sealed class CustomerPurchaseDropDetector(
                         Value: historicalMonthlyAvg.ToString("F2"),
                         ReferenceValue: null,
                         Unit: "BRL",
-                        Description: $"Média mensal dos últimos {ActiveDays + HistoricalDays} dias",
+                        Description: "Média mensal de compras antes da inatividade",
                         SourceType: "FiscalDocument",
                         SourceId: subjectId,
                         ObservedAt: referenceDate),
                     new(
-                        Name: "Variação",
-                        Value: $"-{dropPercent}",
+                        Name: "Documentos históricos",
+                        Value: historicalDocs.Count.ToString(),
                         ReferenceValue: null,
-                        Unit: "%",
-                        Description: "Queda percentual em relação à média histórica mensal",
-                        SourceType: null,
-                        SourceId: null,
-                        ObservedAt: referenceDate),
-                    new(
-                        Name: "Documentos recentes",
-                        Value: recentDocs.Count.ToString(),
-                        ReferenceValue: historicalDocs.Count.ToString(),
                         Unit: "documentos",
-                        Description: $"Documentos de venda nos últimos {RecentDays} dias vs período histórico",
+                        Description: "Total de documentos de venda no período histórico",
                         SourceType: "FiscalDocument",
                         SourceId: subjectId,
                         ObservedAt: referenceDate)
