@@ -1,3 +1,4 @@
+using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
@@ -44,6 +45,14 @@ public sealed class FiscalDocumentsController(ImportDbContext dbContext) : Contr
     [HttpGet("{id:guid}")]
     public async Task<ActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
+        var documentTotals = dbContext.FiscalDocuments.AsNoTracking()
+            .Select(x => new
+            {
+                x.Id,
+                CalculatedTotalAmount = x.Items.Sum(item =>
+                    item.UnitValue.HasValue ? item.Quantity * item.UnitValue.Value : 0)
+            });
+
         var item = await dbContext.FiscalDocuments.AsNoTracking().Where(x => x.Id == id).Select(x => new {
             x.Id, x.IssueDate, x.DocumentNumber, x.Series, x.DocumentType, x.MovementType, x.CustomerId,
             x.CustomerNameAtIssue, x.CustomerCodeAtIssue, x.BranchCodeAtIssue, x.CityNameAtIssue,
@@ -60,6 +69,36 @@ public sealed class FiscalDocumentsController(ImportDbContext dbContext) : Contr
                 calculatedAmount = item.UnitValue.HasValue ? item.Quantity * item.UnitValue.Value : 0
             })
         }).SingleOrDefaultAsync(cancellationToken);
-        return item is null ? NotFound() : Ok(item);
+        if (item is null) return NotFound();
+
+        var customerAverageTicket = item.CustomerId is null
+            ? null
+            : await dbContext.FiscalDocuments.AsNoTracking()
+                .Where(x => x.Id != item.Id && x.CustomerId == item.CustomerId &&
+                    x.IssueDate < item.IssueDate &&
+                    x.MovementCategory == FiscalMovementCategory.Sale)
+                .Join(documentTotals, document => document.Id, total => total.Id,
+                    (document, total) => total.CalculatedTotalAmount)
+                .GroupBy(_ => 1)
+                .Select(group => new
+                {
+                    Count = group.Count(),
+                    Average = group.Average()
+                })
+                .SingleOrDefaultAsync(cancellationToken);
+
+        var commercialQuality = CommercialSaleQualityCalculator.Calculate(new CommercialSaleQualityInput(
+            item.calculatedTotalAmount,
+            customerAverageTicket?.Average,
+            customerAverageTicket?.Count ?? 0,
+            item.operationCategory == FiscalMovementCategory.Sale.ToString()));
+
+        return Ok(new {
+            item.Id, item.IssueDate, item.DocumentNumber, item.Series, item.DocumentType, item.MovementType,
+            item.CustomerId, item.CustomerNameAtIssue, item.CustomerCodeAtIssue, item.BranchCodeAtIssue,
+            item.CityNameAtIssue, item.StateCodeAtIssue, item.OperationCode, item.OperationDescription,
+            item.operationCategory, item.OriginalDocumentNumber, item.itemCount, item.grossWeightKg,
+            item.totalQuantity, item.calculatedTotalAmount, commercialQuality, item.items
+        });
     }
 }

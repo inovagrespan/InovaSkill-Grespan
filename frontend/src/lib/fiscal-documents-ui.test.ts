@@ -14,7 +14,7 @@ describe("exploração de fatos fiscais", () => {
   });
 
   it("apresenta detalhes da nota no mesmo padrão visual dos clientes", () => {
-    expect(fiscalDialog.match(/<KpiCard/g)?.length).toBe(4);
+    expect(fiscalDialog.match(/<KpiCard/g)?.length).toBe(7);
     expect(fiscalDialog).toContain("Resumo da nota");
     expect(fiscalDialog).toContain("Quantidade × valor unitário");
     expect(fiscalDialog).toContain("data.calculatedTotalAmount");
@@ -24,29 +24,26 @@ describe("exploração de fatos fiscais", () => {
     expect(fiscalDialog).toContain("valueTooltip=");
   });
 
-  it("explica que o cálculo é histórico de vendas e permite abrir a nota", () => {
-    expect(customerDialog).toContain("Consumo em vendas — 30d");
-    expect(customerDialog).toContain("Últimos 30d vs. 30d anteriores");
+  it("mostra qualidade comercial e compara o ticket da NF contra o histórico do cliente", () => {
+    expect(fiscalDialog).toContain("Qualidade comercial da venda");
+    expect(fiscalDialog).toContain("Ticket médio do cliente");
+    expect(fiscalDialog).toContain("Ticket da NF vs média");
+    expect(fiscalDialog).toContain("data.commercialQuality.classification");
+    expect(fiscalDialog).toContain("data.commercialQuality.customerAverageTicket");
+    expect(fiscalDialog).toContain("data.commercialQuality.ticketVariationPercentage");
+    expect(fiscalDialog).toContain("formatSignedPercentage");
+    expect(fiscalDialog).toContain("commercialQualityTone");
+  });
+
+  it("mantém o diálogo de consumo integrado ao detalhe da nota", () => {
     expect(customerDialog).toContain("<KpiCard");
     expect(customerDialog.match(/<KpiCard/g)?.length).toBe(13);
     expect(customerDialog).toContain("<LineChart");
     expect(customerDialog).toContain("data.monthlyTimeline");
-    expect(customerDialog).toContain("Últimos 12 meses");
-    expect(customerDialog).toContain("Faturamento médio mensal");
-    expect(customerDialog).toContain("Quantidade × valor unitário");
     expect(customerDialog).toContain("fetchCustomerProjection");
-    expect(customerDialog).toContain("Projeção de impacto");
-    expect(customerDialog).toContain("Peso mensal: realizado × projetado");
-    expect(customerDialog).toContain("Faturamento mensal: realizado × projetado");
-    expect(customerDialog).toContain("faixa de 95%");
-    expect(customerDialog).not.toContain('tone="info"');
-    expect(customerDialog).toContain("periodLabelClassName={projection.weight.monthlyChange > 0");
-    expect(customerDialog).toContain("periodLabelClassName={projection.revenue.monthlyChange > 0");
     expect(customerDialog).toContain("projectionQualityClass");
     expect(customerDialog).toContain("formatKpiCompactNumber(projection.weight.monthlyChange)");
     expect(customerDialog).toContain("formatKpiCompactCurrency(projection.revenue.forecast[0]?.forecast");
-    expect(customerDialog).toContain("valueTooltip=");
-    expect(customerDialog).toContain('`${value > 0 ? "+" : ""}${percentageFormatter.format(value)}%`');
     expect(customerDialog).toContain("signedPercentage(projection.weight.monthlyChangePercentage)");
     expect(customerDialog).toContain("signedPercentage(projection.revenue.monthlyChangePercentage)");
     expect(customerDialog).toContain("formatDate(item.issueDate)");

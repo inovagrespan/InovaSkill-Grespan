@@ -2928,6 +2928,13 @@ export type FiscalDocumentListItem = {
 export type FiscalDocumentDetails = FiscalDocumentListItem & {
   documentType: string; movementType: string; operationCode: string;
   originalDocumentNumber: string | null; totalQuantity: number; calculatedTotalAmount: number;
+  commercialQuality: {
+    customerAverageTicket: number | null;
+    historicalSaleDocumentCount: number;
+    ticketVariationPercentage: number | null;
+    classification: string;
+    reason: string;
+  };
   items: Array<{ id: string; itemNumber: string; productCode: string; productDescription: string;
     productGroupCode: string; productGroupDescription: string; quantity: number; grossWeightKg: number;
     unitValue: number | null; calculatedAmount: number }>;
