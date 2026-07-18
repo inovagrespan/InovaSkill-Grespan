@@ -29,7 +29,7 @@ const reportAreas = [
   {
     id: "clientes",
     label: "Clientes",
-    description: "Carteira, saúde comercial e alertas de recompra.",
+    description: "Carteira, saúde comercial e acompanhamento de recompra.",
     metrics: ["Clientes ativos", "Ticket por cliente", "Risco comercial", "Produtos mais comprados"],
   },
 ];

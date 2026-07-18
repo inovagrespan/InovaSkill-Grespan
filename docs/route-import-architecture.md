@@ -82,6 +82,12 @@ publicado. Esse job usa `job_executions`, aparece na Central de Processamentos,
 processa apenas municípios de clientes sem coordenada resolvida e não interfere
 no estado da importação de clientes.
 
+Quando o snapshot publicado pertence à fonte `ROUTES_BY_CITY`, a conclusão da
+ativação solicita uma otimização global de rotas com escopo `AllRoutes` e
+enfileira `ProcessRouteOptimizationJob` na fila `route-optimization`. O job de
+importação não executa o solver e termina sem aguardar a otimização; telas e
+chat consultam apenas resultados persistidos desse processamento.
+
 `GET /api/routes` consulta somente o import atual. Para auditoria,
 `GET /api/route-imports/{importId}/routes` consulta um snapshot específico.
 No frontend, o usuário escolhe snapshots históricos somente pela data. Se

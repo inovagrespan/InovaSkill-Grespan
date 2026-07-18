@@ -16,9 +16,9 @@ type FeedbackMessageProps = {
 
 const feedbackMessageStyles: Record<FeedbackMessageType, string> = {
   error: "border-destructive/25 bg-destructive/5 text-destructive",
-  success: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700",
-  warning: "border-amber-500/25 bg-amber-500/10 text-amber-800",
-  info: "border-sky-500/25 bg-sky-500/10 text-sky-700",
+  success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  warning: "border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+  info: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
 };
 
 const feedbackMessageIcons: Record<FeedbackMessageType, LucideIcon> = {

@@ -10,7 +10,8 @@ public sealed class ImportProcessingService(
     IEnumerable<IDataSourceProcessor> processors,
     IImportLifecycleService importLifecycle,
     IRouteCustomerAssignmentSynchronizer routeCustomerAssignments,
-    IOperationalJobQueue operationalJobQueue) : IImportProcessingService
+    IOperationalJobQueue operationalJobQueue,
+    IRouteOptimizationService routeOptimizationService) : IImportProcessingService
 {
     private const int MaximumAttempts = 4;
 
@@ -59,6 +60,31 @@ public sealed class ImportProcessingService(
                 await routeCustomerAssignments.SyncInferredAssignmentsAsync(cancellationToken);
             }
 
+            if (activated && string.Equals(import.DataSource!.Code, RouteImportCodes.DataSource,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    await routeOptimizationService.StartOptimizationAsync(
+                        new RouteOptimizationStartRequest(
+                            RouteOptimizationScope.AllRoutes,
+                            DateOnly.FromDateTime(DateTime.UtcNow),
+                            null,
+                            RouteOptimizationRequestedFrom.InternalProcess,
+                            0,
+                            import.Id),
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    // A otimização pode ser solicitada manualmente sem invalidar a importação concluída.
+                }
+            }
+
             if (activated && string.Equals(import.DataSource!.Code, CustomerImportCodes.DataSource,
                     StringComparison.OrdinalIgnoreCase))
             {
@@ -79,25 +105,6 @@ public sealed class ImportProcessingService(
                 }
             }
 
-            if (activated && string.Equals(import.DataSource!.Code, FiscalImportCodes.DataSource,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    await operationalJobQueue.TryQueueAsync(
-                        OperationalJobCodes.InactiveCustomerDetection,
-                        import.Id,
-                        cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception)
-                {
-                    // A detecção pode ser executada manualmente pela Central de Processamentos.
-                }
-            }
         }
         catch (StructuralImportException exception)
         {

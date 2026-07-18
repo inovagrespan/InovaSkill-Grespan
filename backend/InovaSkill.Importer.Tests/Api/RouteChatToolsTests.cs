@@ -233,6 +233,27 @@ public sealed class RouteChatToolsTests
     }
 
     [Fact]
+    public async Task GetLatestGlobalRouteOptimization_ReturnsPersistedGlobalSuggestion()
+    {
+        var run = RouteOptimizationRun();
+        var service = new CapturingOptimizationService(run);
+        var tool = new GetLatestGlobalRouteOptimizationChatTool(
+            service,
+            NullLogger<GetLatestGlobalRouteOptimizationChatTool>.Instance);
+
+        var result = await tool.ExecuteAsync("""{"referenceDate":null}""", Context(), default);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, result.RecordCount);
+        var payload = Assert.IsType<LatestGlobalRouteOptimizationChatPayload>(result.Payload);
+        Assert.True(payload.Found);
+        Assert.NotNull(payload.Run);
+        Assert.Equal(run.Id, payload.Run.Id);
+        Assert.Equal(RouteOptimizationStatus.Completed, payload.Run.Status);
+        Assert.Single(payload.Run.Scenarios);
+    }
+
+    [Fact]
     public async Task GetRouteDetails_CountsPotentialCustomersByRouteMunicipality()
     {
         await using var db = CreateDbContext();
@@ -349,6 +370,102 @@ public sealed class RouteChatToolsTests
 
     private static JsonDocument Serialize(object payload) =>
         JsonDocument.Parse(JsonSerializer.Serialize(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+    private static RouteOptimizationRunDto RouteOptimizationRun()
+    {
+        var sourceRouteId = Guid.NewGuid();
+        var destinationRouteId = Guid.NewGuid();
+        var cityId = Guid.NewGuid();
+        var reasons = new[]
+        {
+            new RouteOptimizationReasonDto("RelievesOverload", "Reduz a ocupação da rota de origem.")
+        };
+        var reallocation = new RouteCityReallocationDto(
+            cityId,
+            "Marília",
+            sourceRouteId,
+            "Rota Origem",
+            destinationRouteId,
+            "Rota Destino",
+            1200m,
+            1.20m,
+            0.98m,
+            0.60m,
+            0.72m,
+            12.5m,
+            reasons);
+        var current = new RouteOptimizationMetricsDto(
+            Guid.Empty,
+            "Todas as rotas",
+            "Múltiplos modelos",
+            null,
+            10_000m,
+            1.20m,
+            "1 crítica(s)",
+            ["Rota Origem", "Rota Destino"]);
+        var proposed = current with { Occupancy = 0.98m, OccupancyLevel = "0 crítica(s)" };
+
+        return new RouteOptimizationRunDto(
+            Guid.NewGuid(),
+            RouteOptimizationScope.AllRoutes,
+            null,
+            new DateOnly(2026, 7, 18),
+            RouteOptimizationRequestedFrom.Chat,
+            RouteOptimizationStatus.Completed,
+            RouteOptimizationStatus.Completed,
+            null,
+            RouteOptimizationCodes.AlgorithmVersion,
+            RouteOptimizationCodes.RulesVersion,
+            "hash",
+            RouteOptimizationConfidence.Medium,
+            Guid.NewGuid(),
+            5,
+            DateTime.UtcNow.AddMinutes(-1),
+            DateTime.UtcNow.AddMinutes(-1),
+            DateTime.UtcNow,
+            null,
+            null,
+            [
+                new RouteOptimizationScenarioDto(
+                    Guid.NewGuid(),
+                    1,
+                    42m,
+                    RouteOptimizationActionType.ReallocateCities,
+                    true,
+                    RouteOptimizationConfidence.Medium,
+                    12.5m,
+                    current,
+                    proposed,
+                    reasons,
+                    ["Simulação: nenhuma alteração foi aplicada às rotas atuais."],
+                    [reallocation],
+                    null)
+            ]);
+    }
+
+    private sealed class CapturingOptimizationService(RouteOptimizationRunDto? run) : IRouteOptimizationService
+    {
+        public Task<RouteOptimizationRunDto> StartOptimizationAsync(
+            RouteOptimizationStartRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<RouteOptimizationRunDto?> GetOptimizationResultAsync(
+            Guid optimizationRunId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<RouteOptimizationRunDto?>(run);
+
+        public Task<RouteOptimizationRunDto?> GetLatestGlobalOptimizationAsync(
+            DateOnly? referenceDate,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(run);
+
+        public Task<RouteLatestOptimizationDto> GetLatestRouteOptimizationAsync(
+            Guid routeId,
+            DateOnly? referenceDate,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
 
     private static async Task<Guid> SeedCustomerSourceAsync(ImportDbContext db)
     {
