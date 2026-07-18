@@ -7,17 +7,18 @@ export type AssistantSource = {
 };
 
 export type AssistantAnswer = {
+  sessionId: string;
   answer: string;
   sources: AssistantSource[];
   suggestions: string[];
   mode: string;
 };
 
-export async function askBusinessAssistant(question: string): Promise<AssistantAnswer> {
+export async function askBusinessAssistant(message: string, sessionId?: string): Promise<AssistantAnswer> {
   const response = await authFetch(buildGatewayUrl("assistant/ask"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ sessionId, message }),
   });
 
   if (!response.ok) {

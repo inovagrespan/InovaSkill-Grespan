@@ -17,11 +17,17 @@ describe("business assistant UI", () => {
   it("oferece painel moderno, sugestões e histórico visual", () => {
     expect(component).toContain("Conecta IA");
     expect(component).toContain("Pergunte aos seus dados");
-    expect(component).toContain("dados fictícios");
-    expect(component).toContain("não representam a operação real");
+    expect(component).toContain("dados reais de rotas");
+    expect(component).toContain("consulta somente informações de rotas");
     expect(component).toContain("suggestions.map");
     expect(component).toContain("messages.map");
+    expect(component).toContain("AssistantResponseText");
+    expect(component).toContain("parseRouteLine");
+    expect(component).toContain("route-list");
+    expect(component).toContain("bullet-list");
+    expect(component).toContain("cleanListMarker");
     expect(component).toContain("backdrop-blur");
+    expect(component).not.toContain("message.sources.map");
   });
 
   it("mantém o acionador recolhido e expande no hover ou foco", () => {
@@ -35,6 +41,7 @@ describe("business assistant UI", () => {
     expect(component).toContain("function clearConversation()");
     expect(component).toContain("setMessages([WELCOME_MESSAGE])");
     expect(component).toContain("setSuggestions(DEFAULT_SUGGESTIONS)");
+    expect(component).toContain("setSessionId(undefined)");
     expect(component).toContain('aria-label="Limpar conversa"');
     expect(component).toContain("<RotateCcw");
     expect(component).toContain("Deseja limpar a conversa?");
@@ -52,5 +59,6 @@ describe("business assistant UI", () => {
     expect(component).toContain("slice(0, 800)");
     expect(client).toContain("authFetch");
     expect(client).toContain('buildGatewayUrl("assistant/ask")');
+    expect(client).toContain("sessionId");
   });
 });

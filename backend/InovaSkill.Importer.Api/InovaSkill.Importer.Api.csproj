@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-InovaSkill.Importer.Api-2db4eecb-3879-4a1c-8f9e-3ef1f99d9c40</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

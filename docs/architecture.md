@@ -217,22 +217,67 @@ administradores podem alterá-los. Detecções são consultáveis pelos cinco pe
 
 ### Assistente corporativo
 
-`AssistantController` expõe uma consulta somente leitura. Nesta fase,
-`BusinessAssistantService` não consulta o PostgreSQL: ele interpreta o domínio
-da pergunta e responde a partir de um catálogo fictício e imutável de rotas,
-estoque, clientes e importações. O contexto demonstrativo de importações é
-disponibilizado apenas para `admin` e `admin_system`. O modelo nunca recebe
-conexão, SQL, entidades reais ou liberdade para executar comandos.
+`AssistantController` expõe `POST /api/assistant/ask` como uma operação somente
+leitura para o chat. O request aceita `sessionId` opcional e `message`; `question`
+continua aceito apenas por compatibilidade com clientes antigos. O controller
+valida tamanho e vazio, obtém `sub` e `role` do JWT e não aceita identidade,
+empresa, perfil ou permissão vindos do frontend ou da OpenAI.
 
-Quando `OPENAI_API_KEY` está configurada, a API envia à OpenAI Responses API
-somente a pergunta, o perfil e o resumo fictício estruturado já autorizado, usando o
-modelo definido por `Assistant:Model`. Sem chave, indisponibilidade externa ou
-resposta inválida, o serviço retorna a resposta demonstrativa determinística do
-backend. A primeira versão não persiste conversas, não acessa dados reais, não
-executa alterações e não cria jobs. A futura ativação de dados operacionais
-deverá substituir o catálogo por consultas autorizadas e testadas; análises que
-exijam processamento pesado devem reutilizar `job_executions` e a Central de
-Processamentos.
+`BusinessAssistantService` orquestra o ciclo de tool calling com a OpenAI
+Responses API. Ele carrega até `Assistant:MaximumHistoryMessages` mensagens,
+envia o prompt centralizado em `AssistantPrompts`, registra as ferramentas
+permitidas por DI e limita cada pergunta a
+`Assistant:MaximumToolExecutionsPerMessage` execuções. Timeouts de modelo e de
+ferramenta são configuráveis por `Assistant:OpenAiTimeoutSeconds` e
+`Assistant:ToolTimeoutSeconds`. Respostas controladas são usadas quando a OpenAI
+fica indisponível, excede timeout, devolve resposta vazia ou tenta executar uma
+ferramenta inválida. Detalhes técnicos ficam em logs; a resposta HTTP expõe
+somente texto final, `sessionId`, sugestões, fontes resumidas e nomes públicos
+em `consultedTools`.
+
+`OpenAiChatModelClient` é a única classe que conhece a API da OpenAI. A chave é
+carregada exclusivamente de `OPENAI_API_KEY`; ela não é versionada, logada ou
+enviada ao frontend. O modelo padrão vem de `Assistant:Model`. A OpenAI recebe
+apenas definições de ferramentas com JSON Schema e payloads pequenos retornados
+por essas ferramentas. Ela nunca recebe connection string, SQL, schema completo,
+nomes internos de tabelas/colunas ou entidades do Entity Framework.
+
+As ferramentas do chat implementam `IChatTool` e são registradas como coleção no
+container. Nesta versão existem `search_routes`, `get_route_details`,
+`get_critical_routes`, `list_routes_by_occupancy` e `get_route_cities`.
+`list_routes_by_occupancy` dá ao modelo uma consulta ampla, mas ainda limitada,
+para responder rankings e recortes como rotas ociosas, maiores ocupações,
+menores ocupações, rotas por classificação e faixas percentuais. Cada ferramenta
+valida os argumentos recebidos do modelo, aplica limites configurados ou
+constantes explícitas e chama `IRouteChatQueryService`; não há ferramenta
+genérica de banco, SQL ou consulta livre. Adicionar uma nova ferramenta exige
+criar a classe, registrar no container e cobrir permissões/testes, sem alterar
+um bloco central de decisão do orquestrador. Os nomes das ferramentas ficam
+restritos aos logs operacionais e não são expostos no contrato público do chat.
+
+`IRouteChatQueryService`, em `Application/RouteImports`, define DTOs pequenos e
+seguros para exposição ao modelo. `RouteChatQueryService`, em `Infrastructure`,
+implementa essas consultas com `ImportDbContext`, sempre sobre o snapshot atual
+publicado de rotas. A busca reutiliza a normalização de município já existente e
+procura por nome de rota ou cidade. Rotas críticas usam
+`RouteOccupancyLevelPolicy`, a mesma política de classificação exibida nas telas
+de rotas e usada por detectores, mantendo a IA fora do cálculo de criticidade.
+
+O histórico mínimo fica em `chat_sessions` e `chat_messages`, associado ao
+`AppUser` autenticado. Ele armazena apenas mensagens do usuário e respostas do
+assistente, com índices por usuário/sessão e data para retomada limitada da
+conversa. Resultados brutos de ferramentas, prompts, argumentos, chaves e dados
+sensíveis não são persistidos no histórico.
+
+As respostas textuais do assistente seguem um contrato de apresentação simples
+para o frontend não inferir estrutura visual de forma ambígua. Registros de
+rotas devem sair em linhas iniciadas por `[ROTA]`, no formato
+`[ROTA] Nome | Ocupação: 97,4% | Status: Crítico | Motivo: ...`; o componente
+renderiza essas linhas como cartões compactos de rota. Recomendações e ações
+operacionais usam bullets simples e são renderizadas como lista textual normal.
+Parágrafos explicativos continuam como texto. O modelo não deve misturar rotas
+e ações na mesma lista nem usar marcadores técnicos ou markdown de destaque para
+representar dados estruturados.
 
 ### Application e Domain
 

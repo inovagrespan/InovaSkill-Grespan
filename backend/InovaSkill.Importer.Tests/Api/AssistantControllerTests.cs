@@ -14,7 +14,7 @@ public sealed class AssistantControllerTests
     {
         var controller = CreateController(maximumLength: 800);
 
-        var result = await controller.Ask(new AssistantQuestionRequest(question), CancellationToken.None);
+        var result = await controller.Ask(new AssistantQuestionRequest(null, question, null), CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
@@ -25,7 +25,7 @@ public sealed class AssistantControllerTests
         var controller = CreateController(maximumLength: 10);
 
         var result = await controller.Ask(
-            new AssistantQuestionRequest("pergunta muito longa"),
+            new AssistantQuestionRequest(null, "pergunta muito longa", null),
             CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);

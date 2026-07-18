@@ -28,15 +28,16 @@ type BusinessAssistantProps = {
 
 const DEFAULT_SUGGESTIONS = [
   "Quais rotas estão críticas?",
-  "Quais produtos estão em ruptura?",
-  "Quantos clientes existem?",
+  "Quais são as 3 rotas mais ociosas?",
+  "Procure a rota Marília.",
+  "Quais rotas estão acima de 140%?",
 ];
 
 const WELCOME_MESSAGE: AssistantMessage = {
   id: "welcome",
   author: "assistant",
-  text: "Olá! Nesta fase eu uso uma base fictícia do Conecta360 para demonstrar análises com segurança. O que você gostaria de perguntar?",
-  mode: "Ambiente demonstrativo · dados fictícios",
+  text: "Olá! Eu consulto os dados reais de rotas disponíveis na aplicação. O que você gostaria de perguntar?",
+  mode: "IA com dados reais de rotas",
 };
 
 export function BusinessAssistant({ variant = "floating" }: BusinessAssistantProps) {
@@ -46,6 +47,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string | undefined>();
   const [suggestions, setSuggestions] = useState(DEFAULT_SUGGESTIONS);
   const [messages, setMessages] = useState<AssistantMessage[]>([WELCOME_MESSAGE]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -65,7 +67,8 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
     ]);
     setLoading(true);
     try {
-      const response = await askBusinessAssistant(trimmed);
+      const response = await askBusinessAssistant(trimmed, sessionId);
+      setSessionId(response.sessionId);
       setMessages((current) => [
         ...current,
         {
@@ -101,6 +104,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
     setMessages([WELCOME_MESSAGE]);
     setSuggestions(DEFAULT_SUGGESTIONS);
     setQuestion("");
+    setSessionId(undefined);
     setClearConfirmationOpen(false);
   }
 
@@ -127,7 +131,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
                 <h2 className="font-display text-lg font-semibold">Conecta IA</h2>
                 <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">ONLINE</span>
               </div>
-              <p className="text-xs text-slate-300">Demonstração segura com dados fictícios</p>
+              <p className="text-xs text-slate-300">Consulta segura aos dados reais de rotas</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -169,18 +173,12 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
                   ? "rounded-tl-md border border-border/70 bg-surface"
                   : "rounded-tr-md bg-primary text-primary-foreground",
               )}>
-                {message.text}
+                {message.author === "assistant" ? (
+                  <AssistantResponseText text={message.text} />
+                ) : (
+                  message.text
+                )}
               </div>
-              {message.sources && message.sources.length > 0 && (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {message.sources.map((source) => (
-                    <div key={`${message.id}-${source.label}`} className="rounded-xl border border-border/70 bg-muted/30 px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{source.label}</p>
-                      <p className="mt-0.5 text-xs font-semibold">{source.value}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
               {message.author === "assistant" && message.mode && (
                 <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <Sparkles className="size-3" />
@@ -220,7 +218,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
               }
             }}
             rows={1}
-            placeholder="Pergunte sobre rotas, estoque, clientes..."
+            placeholder="Pergunte sobre rotas..."
             className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
           />
           <button type="submit" disabled={!question.trim() || loading} className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-all hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Enviar pergunta">
@@ -229,7 +227,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
         </form>
         <p className="mt-2 flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
           <ChevronDown className="size-3 rotate-90" />
-          Os números exibidos nesta fase são fictícios e não representam a operação real.
+          Nesta versão, a IA consulta somente informações de rotas.
         </p>
       </footer>
       {!isPage && clearConfirmationOpen && (
@@ -317,6 +315,182 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
       )}
     </>
   );
+}
+
+function AssistantResponseText({ text }: { text: string }) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const blocks = buildAssistantBlocks(lines);
+
+  if (blocks.length === 0) {
+    return <p className="whitespace-pre-line">{sanitizeAssistantText(text)}</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {blocks.map((block, index) => {
+        if (block.type === "heading") {
+          return <h3 key={`${block.type}-${index}`} className="text-sm font-semibold">{block.text}</h3>;
+        }
+
+        if (block.type === "paragraph") {
+          return <p key={`${block.type}-${index}`}>{block.text}</p>;
+        }
+
+        if (block.type === "bullet-list") {
+          return (
+            <ul key={`${block.type}-${index}`} className="space-y-1.5 pl-4">
+              {block.items.map((item) => (
+                <li key={item} className="list-disc pl-1 text-muted-foreground marker:text-primary">
+                  <span className="text-foreground">{item}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        return (
+          <div key={`${block.type}-${index}`} className="space-y-2">
+            {block.routes.map((route, routeIndex) => (
+              <div key={`${route.name}-${routeIndex}`} className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                    {routeIndex + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 break-words font-semibold text-foreground">{route.name}</span>
+                  {route.occupancy && (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                      {route.occupancy}
+                    </span>
+                  )}
+                  {route.status && (
+                    <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                      {route.status}
+                    </span>
+                  )}
+                </div>
+                {route.detail && <p className="mt-1 text-xs text-muted-foreground">{route.detail}</p>}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type AssistantBlock =
+  | { type: "heading"; text: string }
+  | { type: "paragraph"; text: string }
+  | { type: "bullet-list"; items: string[] }
+  | { type: "route-list"; routes: AssistantRouteDisplay[] };
+
+type AssistantRouteDisplay = {
+  name: string;
+  occupancy?: string;
+  status?: string;
+  detail?: string;
+};
+
+function buildAssistantBlocks(lines: string[]): AssistantBlock[] {
+  const blocks: AssistantBlock[] = [];
+  let pendingBullets: string[] = [];
+  let pendingRoutes: AssistantRouteDisplay[] = [];
+
+  function flushLists() {
+    if (pendingRoutes.length > 0) {
+      blocks.push({ type: "route-list", routes: pendingRoutes });
+      pendingRoutes = [];
+    }
+    if (pendingBullets.length > 0) {
+      blocks.push({ type: "bullet-list", items: pendingBullets });
+      pendingBullets = [];
+    }
+  }
+
+  for (const rawLine of lines) {
+    const line = sanitizeAssistantText(rawLine);
+    const route = parseRouteLine(line);
+    if (route) {
+      if (pendingBullets.length > 0) {
+        blocks.push({ type: "bullet-list", items: pendingBullets });
+        pendingBullets = [];
+      }
+      pendingRoutes.push(route);
+      continue;
+    }
+
+    if (isBulletLine(line)) {
+      if (pendingRoutes.length > 0) {
+        blocks.push({ type: "route-list", routes: pendingRoutes });
+        pendingRoutes = [];
+      }
+      pendingBullets.push(cleanListMarker(line));
+      continue;
+    }
+
+    flushLists();
+    if (line.startsWith("### ")) {
+      blocks.push({ type: "heading", text: line.replace(/^###\s+/, "") });
+    } else {
+      blocks.push({ type: "paragraph", text: line });
+    }
+  }
+
+  flushLists();
+  return blocks;
+}
+
+function parseRouteLine(line: string): AssistantRouteDisplay | null {
+  const routeContractMatch = line.match(/^(?:[-*]\s*)?\[ROTA\]\s*(.+)$/i);
+  if (routeContractMatch) {
+    return parseRouteContract(routeContractMatch[1]);
+  }
+
+  const routeListMatch = cleanListMarker(line).match(/^(.+?)\s+[—-]\s+(\d+(?:,\d+)?%)\s+[—-]\s+(.+)$/);
+  if (!routeListMatch) return null;
+
+  return {
+    name: routeListMatch[1].trim(),
+    occupancy: routeListMatch[2].trim(),
+    status: routeListMatch[3].trim(),
+  };
+}
+
+function parseRouteContract(value: string): AssistantRouteDisplay {
+  const parts = value.split("|").map((part) => part.trim()).filter(Boolean);
+  const route: AssistantRouteDisplay = { name: parts[0] ?? "Rota" };
+
+  for (const part of parts.slice(1)) {
+    const [rawLabel, ...rawValueParts] = part.split(":");
+    const label = rawLabel.trim().toLowerCase();
+    const partValue = rawValueParts.join(":").trim();
+    if (!partValue) continue;
+
+    if (label === "ocupação" || label === "ocupacao") {
+      route.occupancy = partValue;
+    } else if (label === "status") {
+      route.status = partValue;
+    } else if (label === "motivo" || label === "observação" || label === "observacao") {
+      route.detail = partValue;
+    }
+  }
+
+  return route;
+}
+
+function isBulletLine(line: string) {
+  return /^([-*]\s+|\d+[\).]\s+)/.test(line);
+}
+
+function cleanListMarker(line: string) {
+  return line.replace(/^([-*]\s+|\d+[\).]\s+)/, "").trim();
+}
+
+function sanitizeAssistantText(value: string) {
+  return value.replace(/\*\*/g, "").trim();
 }
 
 function ClearConversationDialog({

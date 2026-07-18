@@ -204,7 +204,6 @@ public sealed class FiscalDocumentsControllerTests
         FilePath = "fiscal.xlsx", Status = RouteImportStatus.Completed, CreatedAt = now
     };
 
-<<<<<<< HEAD
     private static FiscalDocument Document(
         Guid sourceId,
         Guid importId,
@@ -217,11 +216,11 @@ public sealed class FiscalDocumentsControllerTests
         DocumentType = "NF", MovementType = "NF", IssueDate = issueDate, CustomerId = customerId,
         CustomerCodeAtIssue = "001091", BranchCodeAtIssue = "01", CustomerNameAtIssue = "Mercado",
         CityNameAtIssue = "Piraju", StateCodeAtIssue = "SP", OperationCode = "01",
-        OperationDescription = category == FiscalMovementCategory.Sale ? "VENDA" : "DEVOLUÇÃO",
+        OperationDescription = category == FiscalMovementCategory.Sale ? "VENDA" : "DEVOLUCAO",
         MovementCategory = category, FirstSeenImportId = importId, LastSeenImportId = importId,
         CreatedAt = now, UpdatedAt = now
     };
-=======
+
     private static void AddDocument(
         ImportDbContext db,
         Guid sourceId,
@@ -243,5 +242,4 @@ public sealed class FiscalDocumentsControllerTests
         document.Items.Add(Item("1", 1, null, grossWeightKg, grossWeightKg));
         db.FiscalDocuments.Add(document);
     }
->>>>>>> c21ebb21d9b03f71e75e78c3d0c9db9b97a658d3
 }

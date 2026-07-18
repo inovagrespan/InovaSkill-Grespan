@@ -27,6 +27,8 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<DetectionRun> DetectionRuns => Set<DetectionRun>();
     public DbSet<Finding> Findings => Set<Finding>();
     public DbSet<FindingEvidence> FindingEvidences => Set<FindingEvidence>();
+    public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -98,6 +100,26 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasIndex(x => new { x.Status, x.CreatedAt });
             entity.HasOne(x => x.Import).WithMany(x => x.JobExecutions)
                 .HasForeignKey(x => x.RelatedEntityId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChatSession>(entity =>
+        {
+            entity.ToTable("chat_sessions");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.UpdatedAt });
+            entity.HasOne(x => x.User).WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChatMessage>(entity =>
+        {
+            entity.ToTable("chat_messages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Role).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Content).HasMaxLength(4000).IsRequired();
+            entity.HasIndex(x => new { x.ChatSessionId, x.CreatedAt });
+            entity.HasOne(x => x.ChatSession).WithMany(x => x.Messages)
+                .HasForeignKey(x => x.ChatSessionId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<VehicleType>(entity =>

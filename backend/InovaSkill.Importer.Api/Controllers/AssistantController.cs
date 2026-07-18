@@ -16,7 +16,7 @@ public sealed class AssistantController(
         AssistantQuestionRequest request,
         CancellationToken cancellationToken)
     {
-        var question = request.Question?.Trim() ?? string.Empty;
+        var question = (request.Message ?? request.Question)?.Trim() ?? string.Empty;
         if (question.Length == 0)
         {
             return BadRequest(new ProblemDetails { Detail = "Informe uma pergunta." });
@@ -30,6 +30,16 @@ public sealed class AssistantController(
         }
 
         var role = User.FindFirstValue(ClaimTypes.Role) ?? User.FindFirstValue("role") ?? string.Empty;
-        return Ok(await assistantService.AnswerAsync(question, role, cancellationToken));
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (!long.TryParse(userIdValue, out var userId))
+        {
+            return Unauthorized(new ProblemDetails { Detail = "Usuário autenticado inválido." });
+        }
+
+        return Ok(await assistantService.AnswerAsync(
+            request.SessionId,
+            question,
+            new ChatExecutionContext(userId, role),
+            cancellationToken));
     }
 }

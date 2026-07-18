@@ -22,7 +22,14 @@ builder.Services.Configure<AssistantOptions>(options =>
     builder.Configuration.GetSection(AssistantOptions.SectionName).Bind(options);
     options.OpenAiApiKey = builder.Configuration["OPENAI_API_KEY"] ?? options.OpenAiApiKey;
 });
-builder.Services.AddSingleton<BusinessAssistantService>();
+builder.Services.AddScoped<IChatModelClient, OpenAiChatModelClient>();
+builder.Services.AddScoped<IChatHistoryStore, ChatHistoryStore>();
+builder.Services.AddScoped<IChatTool, SearchRoutesChatTool>();
+builder.Services.AddScoped<IChatTool, GetRouteDetailsChatTool>();
+builder.Services.AddScoped<IChatTool, GetCriticalRoutesChatTool>();
+builder.Services.AddScoped<IChatTool, ListRoutesByOccupancyChatTool>();
+builder.Services.AddScoped<IChatTool, GetRouteCitiesChatTool>();
+builder.Services.AddScoped<BusinessAssistantService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddImportInfrastructure(builder.Configuration);
 builder.Services.Configure<ImportHangfireOptions>(

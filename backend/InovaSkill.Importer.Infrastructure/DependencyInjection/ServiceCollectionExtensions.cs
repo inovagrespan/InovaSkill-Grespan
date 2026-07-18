@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBackgroundJobDispatcher, HangfireBackgroundJobDispatcher>();
         services.AddScoped<IImportProcessingService, ImportProcessingService>();
         services.AddScoped<IOperationalJobProcessingService, OperationalJobProcessingService>();
+        services.AddScoped<IRouteChatQueryService, RouteChatQueryService>();
         services.AddScoped<IDataSourceProcessor, RoutesByCityProcessor>();
         services.AddScoped<IDataSourceProcessor, CustomersProcessor>();
         services.AddScoped<IDataSourceProcessor, FiscalMovementsProcessor>();
