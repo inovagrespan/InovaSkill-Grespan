@@ -10,7 +10,9 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "../components/AppSidebar";
 import { NotificationCenter } from "../components/NotificationCenter";
-import { isAuthenticated, redirectToLogin } from "../lib/auth";
+import { BusinessAssistant } from "../components/BusinessAssistant";
+import { getCurrentUserRole, isAuthenticated, redirectToLogin } from "../lib/auth";
+import { canRoleAccessPath, getDefaultPathForRole } from "../lib/access-control";
 import { cn } from "../lib/utils";
 
 const KPI_CARD_BASE_WIDTH_PX = 248;
@@ -77,6 +79,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         search: { redirect: `${location.pathname}${location.searchStr}` },
       });
     }
+
+    const role = getCurrentUserRole();
+    if (!canRoleAccessPath(role, location.pathname)) {
+      throw redirect({ to: getDefaultPathForRole(role) });
+    }
   },
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
@@ -94,6 +101,7 @@ function RootComponent() {
     () => !isPublicPage && authenticated,
     [authenticated, isPublicPage],
   );
+  const isAssistantPage = pathname === "/assistente";
 
   useEffect(() => {
     document.title = "AAI Seguri - ERP Corporativo";
@@ -170,6 +178,7 @@ function RootComponent() {
           />
         ) : null}
         {canRenderPrivateApp ? <NotificationCenter /> : null}
+        {canRenderPrivateApp && !isAssistantPage ? <BusinessAssistant /> : null}
         <main
           className={cn(
             "min-h-screen transition-[margin] duration-200 ease-out motion-reduce:transition-none",

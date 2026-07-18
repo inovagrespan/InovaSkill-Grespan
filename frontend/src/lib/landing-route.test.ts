@@ -18,7 +18,7 @@ describe("landing route", () => {
     expect(source).toContain("Conecta360");
     expect(source).toContain("Acessar o sistema");
     expect(source).toContain('to="/login"');
-    expect(source).toContain("Da reunião reativa para uma operação");
+    expect(source).toContain("Da operação desarticulada para uma operação");
     expect(root).toContain('const PUBLIC_ROUTES = new Set(["/", "/login"])');
     expect(login).toContain('to="/"');
     expect(login).toContain('search.redirect || "/dashboard"');

@@ -14,6 +14,7 @@ import { Route as SimulacaoRouteImport } from './routes/simulacao'
 import { Route as RotasRouteImport } from './routes/rotas'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as ProdutosRouteImport } from './routes/produtos'
+import { Route as ProducaoRouteImport } from './routes/producao'
 import { Route as ProcessamentosRouteImport } from './routes/processamentos'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as NotasFiscaisRouteImport } from './routes/notas-fiscais'
@@ -22,15 +23,20 @@ import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImportacoesRouteImport } from './routes/importacoes'
 import { Route as FinancasRouteImport } from './routes/financas'
+import { Route as EstoqueRouteImport } from './routes/estoque'
+import { Route as DetectionsRouteImport } from './routes/detections'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ClientesRouteImport } from './routes/clientes'
+import { Route as AssistenteRouteImport } from './routes/assistente'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LogisticaIndexRouteImport } from './routes/logistica.index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
+import { Route as DetectionsIndexRouteImport } from './routes/detections.index'
 import { Route as VeiculosTiposRouteImport } from './routes/veiculos.tipos'
 import { Route as LogisticaRotasRouteImport } from './routes/logistica.rotas'
 import { Route as LogisticaMapaRouteImport } from './routes/logistica.mapa'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
+import { Route as DetectionsRunIdRouteImport } from './routes/detections.$runId'
 
 const VendasRoute = VendasRouteImport.update({
   id: '/vendas',
@@ -55,6 +61,11 @@ const RelatoriosRoute = RelatoriosRouteImport.update({
 const ProdutosRoute = ProdutosRouteImport.update({
   id: '/produtos',
   path: '/produtos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProducaoRoute = ProducaoRouteImport.update({
+  id: '/producao',
+  path: '/producao',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProcessamentosRoute = ProcessamentosRouteImport.update({
@@ -97,6 +108,16 @@ const FinancasRoute = FinancasRouteImport.update({
   path: '/financas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EstoqueRoute = EstoqueRouteImport.update({
+  id: '/estoque',
+  path: '/estoque',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DetectionsRoute = DetectionsRouteImport.update({
+  id: '/detections',
+  path: '/detections',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -105,6 +126,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const ClientesRoute = ClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssistenteRoute = AssistenteRouteImport.update({
+  id: '/assistente',
+  path: '/assistente',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -121,6 +147,11 @@ const ImportacoesIndexRoute = ImportacoesIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ImportacoesRoute,
+} as any)
+const DetectionsIndexRoute = DetectionsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DetectionsRoute,
 } as any)
 const VeiculosTiposRoute = VeiculosTiposRouteImport.update({
   id: '/veiculos/tipos',
@@ -142,11 +173,19 @@ const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
   path: '/files',
   getParentRoute: () => ImportacoesRoute,
 } as any)
+const DetectionsRunIdRoute = DetectionsRunIdRouteImport.update({
+  id: '/$runId',
+  path: '/$runId',
+  getParentRoute: () => DetectionsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/assistente': typeof AssistenteRoute
   '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
+  '/detections': typeof DetectionsRouteWithChildren
+  '/estoque': typeof EstoqueRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
@@ -155,45 +194,56 @@ export interface FileRoutesByFullPath {
   '/notas-fiscais': typeof NotasFiscaisRoute
   '/notificacoes': typeof NotificacoesRoute
   '/processamentos': typeof ProcessamentosRoute
+  '/producao': typeof ProducaoRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/detections/$runId': typeof DetectionsRunIdRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
   '/veiculos/tipos': typeof VeiculosTiposRoute
+  '/detections/': typeof DetectionsIndexRoute
   '/importacoes/': typeof ImportacoesIndexRoute
   '/logistica/': typeof LogisticaIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/assistente': typeof AssistenteRoute
   '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
+  '/estoque': typeof EstoqueRoute
   '/financas': typeof FinancasRoute
   '/login': typeof LoginRoute
   '/mapa': typeof MapaRoute
   '/notas-fiscais': typeof NotasFiscaisRoute
   '/notificacoes': typeof NotificacoesRoute
   '/processamentos': typeof ProcessamentosRoute
+  '/producao': typeof ProducaoRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/detections/$runId': typeof DetectionsRunIdRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
   '/veiculos/tipos': typeof VeiculosTiposRoute
+  '/detections': typeof DetectionsIndexRoute
   '/importacoes': typeof ImportacoesIndexRoute
   '/logistica': typeof LogisticaIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/assistente': typeof AssistenteRoute
   '/clientes': typeof ClientesRoute
   '/dashboard': typeof DashboardRoute
+  '/detections': typeof DetectionsRouteWithChildren
+  '/estoque': typeof EstoqueRoute
   '/financas': typeof FinancasRoute
   '/importacoes': typeof ImportacoesRouteWithChildren
   '/login': typeof LoginRoute
@@ -202,15 +252,18 @@ export interface FileRoutesById {
   '/notas-fiscais': typeof NotasFiscaisRoute
   '/notificacoes': typeof NotificacoesRoute
   '/processamentos': typeof ProcessamentosRoute
+  '/producao': typeof ProducaoRoute
   '/produtos': typeof ProdutosRoute
   '/relatorios': typeof RelatoriosRoute
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/detections/$runId': typeof DetectionsRunIdRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
   '/veiculos/tipos': typeof VeiculosTiposRoute
+  '/detections/': typeof DetectionsIndexRoute
   '/importacoes/': typeof ImportacoesIndexRoute
   '/logistica/': typeof LogisticaIndexRoute
 }
@@ -218,8 +271,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/assistente'
     | '/clientes'
     | '/dashboard'
+    | '/detections'
+    | '/estoque'
     | '/financas'
     | '/importacoes'
     | '/login'
@@ -228,44 +284,55 @@ export interface FileRouteTypes {
     | '/notas-fiscais'
     | '/notificacoes'
     | '/processamentos'
+    | '/producao'
     | '/produtos'
     | '/relatorios'
     | '/rotas'
     | '/simulacao'
     | '/vendas'
+    | '/detections/$runId'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
     | '/veiculos/tipos'
+    | '/detections/'
     | '/importacoes/'
     | '/logistica/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/assistente'
     | '/clientes'
     | '/dashboard'
+    | '/estoque'
     | '/financas'
     | '/login'
     | '/mapa'
     | '/notas-fiscais'
     | '/notificacoes'
     | '/processamentos'
+    | '/producao'
     | '/produtos'
     | '/relatorios'
     | '/rotas'
     | '/simulacao'
     | '/vendas'
+    | '/detections/$runId'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
     | '/veiculos/tipos'
+    | '/detections'
     | '/importacoes'
     | '/logistica'
   id:
     | '__root__'
     | '/'
+    | '/assistente'
     | '/clientes'
     | '/dashboard'
+    | '/detections'
+    | '/estoque'
     | '/financas'
     | '/importacoes'
     | '/login'
@@ -274,23 +341,29 @@ export interface FileRouteTypes {
     | '/notas-fiscais'
     | '/notificacoes'
     | '/processamentos'
+    | '/producao'
     | '/produtos'
     | '/relatorios'
     | '/rotas'
     | '/simulacao'
     | '/vendas'
+    | '/detections/$runId'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
     | '/veiculos/tipos'
+    | '/detections/'
     | '/importacoes/'
     | '/logistica/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AssistenteRoute: typeof AssistenteRoute
   ClientesRoute: typeof ClientesRoute
   DashboardRoute: typeof DashboardRoute
+  DetectionsRoute: typeof DetectionsRouteWithChildren
+  EstoqueRoute: typeof EstoqueRoute
   FinancasRoute: typeof FinancasRoute
   ImportacoesRoute: typeof ImportacoesRouteWithChildren
   LoginRoute: typeof LoginRoute
@@ -299,6 +372,7 @@ export interface RootRouteChildren {
   NotasFiscaisRoute: typeof NotasFiscaisRoute
   NotificacoesRoute: typeof NotificacoesRoute
   ProcessamentosRoute: typeof ProcessamentosRoute
+  ProducaoRoute: typeof ProducaoRoute
   ProdutosRoute: typeof ProdutosRoute
   RelatoriosRoute: typeof RelatoriosRoute
   RotasRoute: typeof RotasRoute
@@ -342,6 +416,13 @@ declare module '@tanstack/react-router' {
       path: '/produtos'
       fullPath: '/produtos'
       preLoaderRoute: typeof ProdutosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/producao': {
+      id: '/producao'
+      path: '/producao'
+      fullPath: '/producao'
+      preLoaderRoute: typeof ProducaoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/processamentos': {
@@ -400,6 +481,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinancasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/estoque': {
+      id: '/estoque'
+      path: '/estoque'
+      fullPath: '/estoque'
+      preLoaderRoute: typeof EstoqueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/detections': {
+      id: '/detections'
+      path: '/detections'
+      fullPath: '/detections'
+      preLoaderRoute: typeof DetectionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -412,6 +507,13 @@ declare module '@tanstack/react-router' {
       path: '/clientes'
       fullPath: '/clientes'
       preLoaderRoute: typeof ClientesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assistente': {
+      id: '/assistente'
+      path: '/assistente'
+      fullPath: '/assistente'
+      preLoaderRoute: typeof AssistenteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -434,6 +536,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/importacoes/'
       preLoaderRoute: typeof ImportacoesIndexRouteImport
       parentRoute: typeof ImportacoesRoute
+    }
+    '/detections/': {
+      id: '/detections/'
+      path: '/'
+      fullPath: '/detections/'
+      preLoaderRoute: typeof DetectionsIndexRouteImport
+      parentRoute: typeof DetectionsRoute
     }
     '/veiculos/tipos': {
       id: '/veiculos/tipos'
@@ -463,8 +572,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacoesFilesRouteImport
       parentRoute: typeof ImportacoesRoute
     }
+    '/detections/$runId': {
+      id: '/detections/$runId'
+      path: '/$runId'
+      fullPath: '/detections/$runId'
+      preLoaderRoute: typeof DetectionsRunIdRouteImport
+      parentRoute: typeof DetectionsRoute
+    }
   }
 }
+
+interface DetectionsRouteChildren {
+  DetectionsRunIdRoute: typeof DetectionsRunIdRoute
+  DetectionsIndexRoute: typeof DetectionsIndexRoute
+}
+
+const DetectionsRouteChildren: DetectionsRouteChildren = {
+  DetectionsRunIdRoute: DetectionsRunIdRoute,
+  DetectionsIndexRoute: DetectionsIndexRoute,
+}
+
+const DetectionsRouteWithChildren = DetectionsRoute._addFileChildren(
+  DetectionsRouteChildren,
+)
 
 interface ImportacoesRouteChildren {
   ImportacoesFilesRoute: typeof ImportacoesFilesRoute
@@ -498,8 +628,11 @@ const LogisticaRouteWithChildren = LogisticaRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AssistenteRoute: AssistenteRoute,
   ClientesRoute: ClientesRoute,
   DashboardRoute: DashboardRoute,
+  DetectionsRoute: DetectionsRouteWithChildren,
+  EstoqueRoute: EstoqueRoute,
   FinancasRoute: FinancasRoute,
   ImportacoesRoute: ImportacoesRouteWithChildren,
   LoginRoute: LoginRoute,
@@ -508,6 +641,7 @@ const rootRouteChildren: RootRouteChildren = {
   NotasFiscaisRoute: NotasFiscaisRoute,
   NotificacoesRoute: NotificacoesRoute,
   ProcessamentosRoute: ProcessamentosRoute,
+  ProducaoRoute: ProducaoRoute,
   ProdutosRoute: ProdutosRoute,
   RelatoriosRoute: RelatoriosRoute,
   RotasRoute: RotasRoute,

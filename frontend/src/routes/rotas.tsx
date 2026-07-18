@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  ChevronLeft, ChevronRight, MapPin, Search, Truck,
+  ChevronLeft, ChevronRight, FlaskConical, MapPin, Search, Truck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
 import { RouteSnapshotDateSelect } from "@/components/RouteSnapshotDateSelect";
 import { RouteOccupancyIndicator } from "@/components/RouteOccupancyIndicator";
+import { RouteVehicleSimulationDialog } from "@/components/RouteVehicleSimulationDialog";
 import {
   fetchImportedRoutes,
   fetchImportedRouteDetail,
+  fetchVehicleTypes,
   type ImportedRouteItem,
   type ImportedRouteDetail,
+  type VehicleTypeItem,
 } from "@/lib/importer-api";
+import { getCurrentUserRole } from "@/lib/auth";
 import { formatCapacityKg, formatRouteLoadKg, type OccupancyLevel } from "@/lib/route-occupancy";
 import { getCurrentLocalDate } from "@/lib/route-snapshot-history";
 import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
@@ -37,6 +41,11 @@ const weekdayLabels: Record<string, string> = {
 const ALL_OCCUPANCY_LEVELS = "all";
 
 function RotasPage() {
+  const currentRole = getCurrentUserRole();
+  const canSimulate = currentRole === "vendas"
+    || currentRole === "logistica"
+    || currentRole === "admin"
+    || currentRole === "admin_system";
   const [routes, setRoutes] = useState<ImportedRouteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -51,6 +60,12 @@ function RotasPage() {
   const [selectedRoute, setSelectedRoute] = useState<ImportedRouteDetail | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [simulationOpen, setSimulationOpen] = useState(false);
+  const [simulationRoute, setSimulationRoute] = useState<ImportedRouteDetail | null>(null);
+  const [simulationVehicleTypes, setSimulationVehicleTypes] = useState<VehicleTypeItem[]>([]);
+  const [simulationVehicleTypeId, setSimulationVehicleTypeId] = useState("");
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
 
   async function load(p: number = page) {
     setLoading(true);
@@ -89,6 +104,32 @@ function RotasPage() {
     }
   }
 
+  async function openSimulation(route: ImportedRouteItem) {
+    setSimulationOpen(true);
+    setSimulationLoading(true);
+    setSimulationError(null);
+    setSimulationRoute(null);
+    setSimulationVehicleTypes([]);
+    setSimulationVehicleTypeId("");
+    try {
+      const [detail, vehicleTypes] = await Promise.all([
+        fetchImportedRouteDetail(route.id),
+        fetchVehicleTypes(),
+      ]);
+      setSimulationRoute(detail);
+      setSimulationVehicleTypes(vehicleTypes);
+      const currentVehicle = vehicleTypes.find((vehicle) => vehicle.id === detail.vehicleTypeId);
+      const initialVehicle = currentVehicle?.capacityKg
+        ? currentVehicle
+        : vehicleTypes.find((vehicle) => vehicle.capacityKg !== null && vehicle.capacityKg > 0);
+      setSimulationVehicleTypeId(initialVehicle?.id ?? "");
+    } catch (error) {
+      setSimulationError((error as Error).message || "Não foi possível carregar os dados da simulação.");
+    } finally {
+      setSimulationLoading(false);
+    }
+  }
+
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -119,7 +160,7 @@ function RotasPage() {
                   <SelectContent>
                     <SelectItem value={ALL_OCCUPANCY_LEVELS}>Todas</SelectItem>
                     <SelectItem value="critical">Crítico</SelectItem>
-                    <SelectItem value="good">Bom</SelectItem>
+                    <SelectItem value="good">Saudável</SelectItem>
                     <SelectItem value="medium">Médio</SelectItem>
                     <SelectItem value="idle">Ocioso</SelectItem>
                     <SelectItem value="unavailable">Indisponível</SelectItem>
@@ -157,29 +198,43 @@ function RotasPage() {
           )}
 
           {routes.map((r) => (
-            <button
+            <div
               key={r.id}
-              type="button"
-              onClick={() => openDetails(r)}
-              className="w-full rounded-lg border border-border/80 p-3 text-left transition-all duration-200 hover:border-border hover:bg-white/[0.03]"
+              className="w-full rounded-lg border border-border/80 p-3 transition-all duration-200 hover:border-border hover:bg-white/[0.03]"
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <button type="button" onClick={() => openDetails(r)} className="flex min-w-0 items-center gap-2 text-left">
                   <MapPin className="size-4 text-muted-foreground shrink-0" />
                   <p className="truncate text-sm font-medium">{r.name}</p>
+                </button>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <Badge variant="outline">{weekdayLabels[r.weekday] ?? r.weekday}</Badge>
+                  {canSimulate && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void openSimulation(r)}
+                      aria-label={`Simular veículo para a rota ${r.name}`}
+                    >
+                      <FlaskConical className="mr-1.5 size-3.5" />
+                      Simular
+                    </Button>
+                  )}
                 </div>
-                <Badge variant="outline">{weekdayLabels[r.weekday] ?? r.weekday}</Badge>
               </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Truck className="size-3" />
-                  {r.vehicleType}
-                </span>
-                <span>{r.entryCount} cidade(s)</span>
-                <span>{r.totalDeliveries} entrega(s)</span>
-              </div>
-              <RouteOccupancyIndicator value={r.overallOccupancy} compact />
-            </button>
+              <button type="button" onClick={() => openDetails(r)} className="w-full text-left">
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Truck className="size-3" />
+                    {r.vehicleType}
+                  </span>
+                  <span>{r.entryCount} cidade(s)</span>
+                  <span>{r.totalDeliveries} entrega(s)</span>
+                </div>
+                <RouteOccupancyIndicator value={r.overallOccupancy} compact />
+              </button>
+            </div>
           ))}
 
           {!loading && total > pageSize && (
@@ -274,6 +329,19 @@ function RotasPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {canSimulate && (
+        <RouteVehicleSimulationDialog
+          open={simulationOpen}
+          onOpenChange={setSimulationOpen}
+          route={simulationRoute}
+          vehicleTypes={simulationVehicleTypes}
+          selectedVehicleTypeId={simulationVehicleTypeId}
+          onVehicleTypeChange={setSimulationVehicleTypeId}
+          loading={simulationLoading}
+          error={simulationError}
+        />
+      )}
     </div>
   );
 }

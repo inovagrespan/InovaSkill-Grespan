@@ -7,6 +7,8 @@ public sealed class Customer
     public DataSource? DataSource { get; set; }
     public string BranchCode { get; set; } = string.Empty;
     public string ExternalCode { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
+    public DateTime? LastPurchaseAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public ICollection<CustomerSnapshot> Snapshots { get; set; } = [];
 }

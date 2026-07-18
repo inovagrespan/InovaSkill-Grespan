@@ -15,11 +15,18 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<Route> Routes => Set<Route>();
     public DbSet<RouteEntry> RouteEntries => Set<RouteEntry>();
     public DbSet<Municipality> Municipalities => Set<Municipality>();
+    public DbSet<MunicipalityCoordinate> MunicipalityCoordinates => Set<MunicipalityCoordinate>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerSnapshot> CustomerSnapshots => Set<CustomerSnapshot>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<InventorySnapshot> InventorySnapshots => Set<InventorySnapshot>();
+    public DbSet<DailyInventoryRecord> DailyInventoryRecords => Set<DailyInventoryRecord>();
     public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
     public DbSet<FiscalDocumentItem> FiscalDocumentItems => Set<FiscalDocumentItem>();
+    public DbSet<DetectorDefinition> DetectorDefinitions => Set<DetectorDefinition>();
+    public DbSet<DetectionRun> DetectionRuns => Set<DetectionRun>();
+    public DbSet<Finding> Findings => Set<Finding>();
+    public DbSet<FindingEvidence> FindingEvidences => Set<FindingEvidence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -149,6 +156,22 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasIndex(x => new { x.StateCode, x.NormalizedName }).IsUnique();
         });
 
+        modelBuilder.Entity<MunicipalityCoordinate>(entity =>
+        {
+            entity.ToTable("municipality_coordinates");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Latitude).HasPrecision(9, 6);
+            entity.Property(x => x.Longitude).HasPrecision(9, 6);
+            entity.Property(x => x.Source).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.FailureReason).HasMaxLength(1024);
+            entity.HasIndex(x => x.MunicipalityId).IsUnique();
+            entity.HasIndex(x => x.Status);
+            entity.HasOne(x => x.Municipality).WithOne(x => x.Coordinate)
+                .HasForeignKey<MunicipalityCoordinate>(x => x.MunicipalityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<Customer>(entity =>
         {
             entity.ToTable("customers");
@@ -183,9 +206,58 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasKey(x => x.Id);
             entity.Property(x => x.ExternalCode).HasMaxLength(128).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.ErpCode).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.OperationalCode).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.Type).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.GroupCode).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.NetWeightKg).HasPrecision(18, 6);
+            entity.Property(x => x.GrossWeightKg).HasPrecision(18, 6);
+            entity.Property(x => x.Gtin).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => x.ErpCode).IsUnique();
+            entity.HasIndex(x => x.OperationalCode);
+            entity.HasIndex(x => x.GroupCode);
             entity.HasIndex(x => new { x.DataSourceId, x.ExternalCode }).IsUnique();
             entity.HasOne(x => x.DataSource).WithMany().HasForeignKey(x => x.DataSourceId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.Restrict).IsRequired(false);
+        });
+
+        modelBuilder.Entity<InventorySnapshot>(entity =>
+        {
+            entity.ToTable("inventory_snapshots");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.BranchCode).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.WarehouseCode).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.OnHandQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.CommittedQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.AvailableQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.StockValue).HasPrecision(18, 2);
+            entity.Property(x => x.CommittedValue).HasPrecision(18, 2);
+            entity.HasIndex(x => new { x.ImportId, x.ProductId, x.BranchCode, x.WarehouseCode }).IsUnique();
+            entity.HasIndex(x => new { x.ImportId, x.AvailableQuantity });
+            entity.HasIndex(x => x.ProductId);
+            entity.HasOne(x => x.Import).WithMany().HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DailyInventoryRecord>(entity =>
+        {
+            entity.ToTable("daily_inventory_records");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ProductionQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.OutboundQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.AdjustmentQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.ClosingQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.FirstShiftProductionQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.SecondShiftProductionQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.ThirdShiftProductionQuantity).HasPrecision(18, 6);
+            entity.Property(x => x.SourceSheetName).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => new { x.ImportId, x.ProductId, x.Date }).IsUnique();
+            entity.HasIndex(x => new { x.ProductId, x.Date });
+            entity.HasIndex(x => x.Date);
+            entity.HasOne(x => x.Import).WithMany().HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<FiscalDocument>(entity =>
@@ -242,6 +314,65 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasOne(x => x.FiscalDocument).WithMany(x => x.Items)
                 .HasForeignKey(x => x.FiscalDocumentId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<DetectorDefinition>(entity =>
+        {
+            entity.ToTable("detector_definitions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1024);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => x.Code).IsUnique();
+        });
+
+        modelBuilder.Entity<DetectionRun>(entity =>
+        {
+            entity.ToTable("detection_runs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Trigger).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.Property(x => x.StatusReason).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.DetectorDefinitionId, x.Status });
+            entity.HasIndex(x => x.RequestedAt);
+            entity.HasOne(x => x.DetectorDefinition).WithMany()
+                .HasForeignKey(x => x.DetectorDefinitionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<DetectionRun>().WithMany()
+                .HasForeignKey(x => x.RetryOfRunId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Finding>(entity =>
+        {
+            entity.ToTable("findings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Fingerprint).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.SubjectType).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.SubjectId).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.SubjectLabel).HasMaxLength(512);
+            entity.HasIndex(x => x.DetectionRunId);
+            entity.HasIndex(x => new { x.SubjectType, x.SubjectId });
+            entity.HasIndex(x => new { x.DetectionRunId, x.Fingerprint }).IsUnique();
+            entity.HasOne(x => x.DetectionRun).WithMany()
+                .HasForeignKey(x => x.DetectionRunId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FindingEvidence>(entity =>
+        {
+            entity.ToTable("finding_evidences");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Value).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.ReferenceValue).HasMaxLength(512);
+            entity.Property(x => x.Unit).HasMaxLength(32);
+            entity.Property(x => x.Description).HasMaxLength(1024);
+            entity.Property(x => x.SourceType).HasMaxLength(128);
+            entity.Property(x => x.SourceId).HasMaxLength(128);
+            entity.HasIndex(x => x.FindingId);
+            entity.HasOne(x => x.Finding).WithMany()
+                .HasForeignKey(x => x.FindingId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Notification>(entity =>

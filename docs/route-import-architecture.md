@@ -3,13 +3,13 @@
 ## Fluxo
 
 `POST /api/route-imports` valida apenas o arquivo, salva o XLSX no storage compartilhado,
-cria `imports` e `job_executions` em `QUEUED`, publica `ProcessImport { ImportId,
-JobExecutionId }` e retorna HTTP 202. A mensagem pequena segue pelo stream
-`route-imports` do Redis. O Worker Wolverine é o único consumidor, resolve
-`IDataSourceProcessor` pelo código estável `ROUTES_BY_CITY` e persiste o resultado
-no PostgreSQL.
+cria `imports` e `job_executions` em `QUEUED`, enfileira `ProcessImportJob` no
+Hangfire com `ImportId` e `JobExecutionId` e retorna HTTP 202. O job pequeno
+segue pela fila `imports`. O Worker Hangfire é o consumidor, resolve
+`IDataSourceProcessor` pelo código estável `ROUTES_BY_CITY` e persiste o
+resultado no PostgreSQL.
 
-O banco é a fonte histórica. Redis não recebe arquivos nem linhas da planilha.
+O banco é a fonte histórica. Hangfire não recebe arquivos nem linhas da planilha.
 API e Worker devem apontar `Storage__ImportsPath` para a mesma pasta. Sem
 configuração, ambos usam `backend/route-imports` em execução local.
 
@@ -27,9 +27,10 @@ quando sua versão é maior que a versão atualmente publicada.
 ## Responsabilidades e estados
 
 - API: upload, consultas, correções, reprocessamento e publicação.
-- Redis/Wolverine: transporte durável e retries em 5 segundos, 30 segundos e 2 minutos.
+- Hangfire/PostgreSQL: execução técnica persistente, fila `imports` e retries
+  em 5 segundos, 30 segundos e 2 minutos.
 - Worker: leitura, validação, normalização e persistência.
-- PostgreSQL: imports, erros, execuções e rotas.
+- PostgreSQL: imports, erros, execuções, rotas e schema técnico `hangfire`.
 
 Processamento e publicação são etapas diferentes. Enquanto uma nova versão está
 em fila, processando, com erros ou falhou, as consultas continuam usando o
@@ -75,6 +76,11 @@ Depois de concluir o snapshot, o Worker tenta publicá-lo em uma segunda operaç
 transacional, protegida por lock da `DataSource`. Se uma versão mais nova já
 estiver atual, a versão antiga continua `COMPLETED` no histórico e não altera o
 ponteiro.
+Quando o snapshot publicado pertence à fonte `CUSTOMERS`, o serviço enfileira o
+job operacional `MUNICIPALITY_COORDINATE_ENRICHMENT` para o `ImportId`
+publicado. Esse job usa `job_executions`, aparece na Central de Processamentos,
+processa apenas municípios de clientes sem coordenada resolvida e não interfere
+no estado da importação de clientes.
 
 `GET /api/routes` consulta somente o import atual. Para auditoria,
 `GET /api/route-imports/{importId}/routes` consulta um snapshot específico.
@@ -111,8 +117,8 @@ entre as dimensões disponíveis. Se nenhuma capacidade estiver configurada, o
 status fica `MissingCapacity` e a ocupação geral permanece nula.
 
 O frontend representa a taxa com barra e círculo percentual. Abaixo de 60% a
-rota é `Ocioso`; entre 60% e menos de 80%, `Médio`; entre 80% e 100%, `Bom`; e
-acima de 100%, `Crítico` por sobrecarga. A barra visual termina
+rota é `Ocioso`; entre 60% e menos de 80%, `Médio`; entre 80% e 100%,
+`Saudável`; e acima de 100%, `Crítico` por sobrecarga. A barra visual termina
 em 100%, mas o valor e a sobrecarga continuam exibindo o percentual real.
 
 ## Métricas dos jobs
@@ -128,5 +134,5 @@ Crie o registro em `data_sources`, implemente um `IDataSourceProcessor` com o
 novo `SourceCode`, seu parser/validador e as tabelas específicas da fonte.
 Também deve adicionar ao detector uma assinatura estrutural inequívoca, coberta
 por teste, para preservar o upload sem escolha manual.
-Registre o processador na DI. Reutilize imports, erros, jobs, storage, Wolverine,
-Redis, Worker e as telas base. Não grave nomes de classes no banco.
+Registre o processador na DI. Reutilize imports, erros, jobs, storage, Hangfire,
+Worker e as telas base. Não grave nomes de classes no banco.

@@ -8,7 +8,7 @@ Detalhes exclusivos da importação de rotas estão em
 ## Visão geral
 
 O sistema é composto por uma aplicação web, uma API HTTP, um Worker assíncrono e
-dois serviços de infraestrutura:
+um serviço de infraestrutura:
 
 ```text
 ┌──────────────────────┐       HTTP/JSON       ┌──────────────────────┐
@@ -19,16 +19,18 @@ dois serviços de infraestrutura:
                                       ┌─────────────────┼─────────────────┐
                                       │                 │                 │
                                       v                 v                 v
-                              ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-                              │ PostgreSQL   │  │ Redis Stream │  │ Storage XLSX │
-                              │ persistência │  │ route-imports│  │ compartilhado│
-                              └──────▲───────┘  └──────┬───────┘  └──────▲───────┘
-                                     │                 │                 │
-                                     └─────────────────┼─────────────────┘
+                              ┌──────────────┐                  ┌──────────────┐
+                              │ PostgreSQL   │                  │ Storage XLSX │
+                              │ domínio +    │                  │ compartilhado│
+                              │ Hangfire     │                  └──────▲───────┘
+                              └──────▲───────┘                         │
+                                     │                                 │
+                                     └─────────────────────────────────┘
+                                                       │
                                                        v
                                              ┌──────────────────────┐
                                              │ Worker .NET          │
-                                             │ processamento XLSX  │
+                                             │ Hangfire queues      │
                                              └──────────────────────┘
 ```
 
@@ -43,8 +45,8 @@ dois serviços de infraestrutura:
 - `backend/InovaSkill.Importer.Infrastructure`: Entity Framework Core,
   PostgreSQL, arquivos, parsing de planilhas e implementações dos processadores.
 - `backend/InovaSkill.Importer.Tests`: testes automatizados do backend.
-- `postgres`: fonte persistente dos dados de negócio e históricos de execução.
-- `redis`: transporte das mensagens assíncronas com Wolverine.
+- `postgres`: fonte persistente dos dados de negócio, históricos de execução e
+  storage técnico do Hangfire no schema `hangfire`.
 - volume `route_imports_data`: arquivos de importação compartilhados entre API e
   Worker.
 
@@ -69,9 +71,9 @@ Na prática:
 - `Infrastructure` implementa persistência e integrações e referencia
   `Application` e `Domain`.
 - `Api` e `Worker` são pontos de composição: configuram infraestrutura,
-  mensageria e processo de hospedagem.
+  Hangfire e processo de hospedagem.
 - `Api` e `Worker` não se chamam diretamente. A comunicação assíncrona ocorre
-  pelo Redis.
+  pelo storage persistente do Hangfire no PostgreSQL.
 - O frontend acessa o backend por HTTP e não conhece banco, fila ou storage.
 
 Regras de negócio devem permanecer em `Application` ou `Domain`. Controllers,
@@ -95,6 +97,35 @@ O layout raiz fornece o `QueryClient`, controla autenticação das rotas privada
 tema e barra lateral. Requisições autenticadas passam pelos clientes de
 `src/lib`, que centralizam a URL da API e o token JWT.
 
+Todas as telas privadas também renderizam o painel flutuante `Conecta IA`. O
+painel mantém o histórico apenas na sessão atual do navegador, oferece perguntas
+sugeridas e envia perguntas autenticadas para `POST /api/assistant/ask`. As
+respostas exibem os conjuntos de dados consultados e informam se foram redigidas
+diretamente pelo catálogo demonstrativo ou com auxílio do modelo configurado.
+Nesta primeira etapa, o cabeçalho, a mensagem inicial e o rodapé identificam
+explicitamente que todos os números são fictícios.
+O mesmo componente possui uma variante de página completa em `/assistente`,
+disponível para todos os perfis pelo item `Chat IA` da navegação principal. Essa
+rota usa toda a área útil para histórico, fontes, sugestões e composição da
+pergunta. Enquanto ela está ativa, o layout raiz não renderiza o acionador
+flutuante, evitando duas instâncias concorrentes da conversa.
+Nos dois modos, a ação `Limpar conversa` descarta apenas o estado visual local,
+restaura a saudação e as sugestões iniciais e não envia comandos ao backend.
+Antes da limpeza, um diálogo de confirmação exige uma segunda ação explícita,
+evitando que cliques acidentais removam o histórico visível.
+No modo flutuante, essa confirmação é renderizada dentro dos limites do próprio
+painel de conversa; na página completa, permanece como diálogo centralizado.
+
+O acesso funcional usa os perfis `diretor`, `vendas`, `logistica`, `admin` e
+`admin_system`. A política compartilhada do frontend controla menu e navegação
+direta: Vendas recebe dashboard comercial e módulos de clientes, documentos,
+produtos, estoque, mapa e detecções; Logística recebe dashboard operacional,
+rotas, veículos, mapa, contexto comercial, estoque, produção e detecções;
+Diretor consulta os módulos gerenciais e operacionais, sem importações ou
+processamentos; administradores acessam todos os módulos. Usuários com o perfil
+genérico `gestor` não recebem acesso funcional até serem classificados em um
+perfil explícito.
+
 Buscas textuais reativas usam `useDebouncedValue` e o intervalo compartilhado
 `TEXT_SEARCH_DEBOUNCE_MS`, de 400 ms. O intervalo compartilhado evita uma
 requisição por tecla sem tornar a busca perceptivelmente lenta. Consultas mais pesadas podem usar
@@ -117,9 +148,24 @@ consulta, acompanhando a normalização dos nomes armazenados pelas planilhas.
 Cada rota apresenta a ocupação com uma barra e um indicador circular. A
 classificação visual usa faixas explícitas de eficiência logística: abaixo de
 60% é `Ocioso` (azul), de 60% até menos de 80% é `Médio` (amarelo), de 80% até
-100% é `Bom` (verde), e acima de 100% é `Crítico` (vermelho) por sobrecarga.
+100% é `Saudável` (verde), e acima de 100% é `Crítico` (vermelho) por sobrecarga.
 Sobrecargas preservam e exibem o percentual excedente;
 ausência de capacidade aparece como `Indisponível`, sem ser convertida em zero.
+Na tela principal de rotas, a ação `Simular`, visível para Vendas, Logística e
+administradores, consulta o detalhe da rota e o
+catálogo existente de tipos de veículo para comparar visualmente a ocupação
+atual com `TotalWeightKg / capacidade selecionada`. O cálculo ocorre somente no
+frontend, mantém carga, cidades e entregas inalteradas e não envia comandos de
+criação ou atualização para a API.
+
+O card executivo `Taxa de Ocupação` do dashboard logístico usa somente o
+snapshot atual publicado de rotas, sem filtro de data ou comparação com período
+anterior. A API soma `Route.TotalWeightKg` das rotas com capacidade configurada
+e divide pela soma de `VehicleType.CapacityKg` dessas mesmas rotas; rotas sem
+capacidade ficam fora do numerador e denominador, mas são retornadas como
+contagem de alerta. O card usa as mesmas faixas visuais das rotas: abaixo de
+60% é `Ocioso`, de 60% até menos de 80% é `Médio`, de 80% até 100% é
+`Saudável`, e acima de 100% é `Crítico`.
 
 Alguns clientes de `frontend/src/lib/importer-api.ts` representam contratos de
 serviços do ecossistema que não estão implementados neste backend. Ao alterar um
@@ -131,35 +177,81 @@ atualizados juntos.
 ### API
 
 `InovaSkill.Importer.Api/Program.cs` é a composição da API. Ele registra
-controllers, infraestrutura, JWT, CORS, limites de upload e Wolverine. Na
-inicialização, aplica as migrations do Entity Framework e garante os usuários
-padrão.
+controllers, infraestrutura, JWT, CORS, limites de upload, storage Hangfire e o
+Dashboard em `/hangfire`. Na inicialização, aplica as migrations do Entity
+Framework e garante os usuários padrão.
 
 Os controllers atuais atendem:
 
 - autenticação e cadastro;
 - upload, consulta, correção e reprocessamento de importações de rotas;
 - consulta das rotas processadas;
+- consulta do resumo de ocupação do snapshot atual de rotas;
 - manutenção de tipos de veículo;
-- consulta, retry e cancelamento de jobs administrativos.
+- consulta, retry e cancelamento de jobs administrativos;
+- catálogo e execução manual de jobs operacionais declarados como executáveis;
 - consulta paginada dos clientes da importação atualmente publicada.
 - consulta paginada e detalhe de documentos fiscais, além do resumo histórico de
-  consumo em vendas por cliente.
+  consumo em vendas por cliente e da taxa fiscal de devolução por peso.
+- consulta de clientes reais para mapa logístico, posicionados pela coordenada
+  do município cadastrado.
+- upload versionado de cadastro de produtos, estoque atual e controle diário de
+  estoque pelo mesmo endpoint genérico de importações.
+- consulta paginada de produtos, detalhe do produto, estoque atual e métricas
+  operacionais de estoque/produção.
+- listagem de detectores disponíveis e execução manual de detecção;
+- consulta de execuções de detecção, findings e evidências.
 
 O middleware JWT libera endpoints públicos e valida as demais requisições antes
 de chegarem aos controllers.
+Depois da autenticação, `ApiAuthorizationMiddleware` aplica a mesma separação
+por domínio e método HTTP. Rotas podem ser consultadas pelos cinco perfis;
+produção é restrita a Logística, Diretor e administradores; leitura de clientes,
+documentos fiscais, produtos, estoque
+e mapa atende os cinco perfis; importações e jobs administrativos são exclusivos
+de `admin` e `admin_system`. Tipos de veículo são consultáveis pelos cinco
+perfis para sustentar consultas e simulações, mas a aba de cadastro permanece
+restrita a Diretor, Logística e administradores, e somente Logística e
+administradores podem alterá-los. Detecções são consultáveis pelos cinco perfis e sua execução manual
+é reservada aos administradores. Violações autenticadas retornam HTTP `403`.
+
+### Assistente corporativo
+
+`AssistantController` expõe uma consulta somente leitura. Nesta fase,
+`BusinessAssistantService` não consulta o PostgreSQL: ele interpreta o domínio
+da pergunta e responde a partir de um catálogo fictício e imutável de rotas,
+estoque, clientes e importações. O contexto demonstrativo de importações é
+disponibilizado apenas para `admin` e `admin_system`. O modelo nunca recebe
+conexão, SQL, entidades reais ou liberdade para executar comandos.
+
+Quando `OPENAI_API_KEY` está configurada, a API envia à OpenAI Responses API
+somente a pergunta, o perfil e o resumo fictício estruturado já autorizado, usando o
+modelo definido por `Assistant:Model`. Sem chave, indisponibilidade externa ou
+resposta inválida, o serviço retorna a resposta demonstrativa determinística do
+backend. A primeira versão não persiste conversas, não acessa dados reais, não
+executa alterações e não cria jobs. A futura ativação de dados operacionais
+deverá substituir o catálogo por consultas autorizadas e testadas; análises que
+exijam processamento pesado devem reutilizar `job_executions` e a Central de
+Processamentos.
 
 ### Application e Domain
 
-`Application/RouteImports` contém os contratos do pipeline de importação, a
-mensagem `ProcessImport`, interfaces de storage/processadores, ciclo de vida,
-cálculo de ocupação, política de capacidade dos veículos logísticos e resumo de
-execuções.
+`Application/RouteImports` contém os contratos do pipeline de importação, filas
+assíncronas, dispatcher de jobs em background, interfaces de
+storage/processadores, ciclo de vida, catálogo de jobs operacionais, cálculo de
+ocupação, política de capacidade dos veículos logísticos e resumo de execuções.
+
+`Application/Detection` contém os contratos do módulo de detecção:
+`IDetector`, `IDetectorRegistry`, `IDetectionRunService`, `IDetectionJobDispatcher`,
+`DetectionContext`, `DetectionResult`, `FindingCandidate`, `FindingEvidenceCandidate`
+e `DetectorCodes` com as constantes de código dos detectores.
 
 `Domain/Entities` contém usuários, notificações, fontes de dados, importações,
 erros, execuções, tipos de veículo, rotas, entradas de rota, clientes, snapshots
-de clientes e municípios compartilhados. Os estados da
-importação ficam em `Domain/Enums`.
+de clientes, municípios compartilhados, coordenadas municipais, produtos,
+snapshots de estoque, registros diários de estoque, além das entidades de
+detecção: `DetectorDefinition`, `DetectionRun`, `Finding` e `FindingEvidence`.
+Os estados da importação e da detecção ficam em `Domain/Enums`.
 
 ### Infrastructure
 
@@ -174,6 +266,27 @@ dependências registra:
   reutilizando o mesmo ciclo de vida, storage, fila e publicação versionada.
 - `FiscalMovementsSpreadsheetParser` e `FiscalMovementsProcessor` para a fonte
   `FISCAL_MOVEMENTS`, em modo `Upsert`, acumulando fatos históricos.
+- `ProductsSpreadsheetParser` e `ProductsProcessor` para a fonte `PRODUCTS`,
+  em modo `Upsert`, mantendo `Product` como cadastro mestre global por
+  `ErpCode` e enriquecendo produtos já vistos nas movimentações fiscais.
+- `InventoryCurrentSpreadsheetParser` e `InventoryCurrentProcessor` para a
+  fonte `INVENTORY_CURRENT`, em modo `Snapshot`, gravando a fotografia de
+  estoque em `inventory_snapshots` sem duplicar atributos cadastrais do produto.
+- `DailyInventorySpreadsheetParser` e `DailyInventoryProcessor` para a fonte
+  `DAILY_INVENTORY`, em modo `Snapshot`, transformando abas mensais em registros
+  normalizados por produto e data em `daily_inventory_records`.
+- `EmbeddedMunicipalityCoordinateProvider`, baseado no CSV versionado de
+  `github.com/kelvins/municipios-brasileiros`, e
+  `MunicipalityCoordinateEnrichmentProcessor` para enriquecer coordenadas por
+  município em job operacional.
+- `HangfireBackgroundJobDispatcher`, `ProcessImportJob` e
+  `ProcessOperationalJob` como camada fina de execução assíncrona. As regras
+  permanecem em `ImportProcessingService`, `OperationalJobProcessingService` e
+  processadores de aplicação/infraestrutura.
+- `DetectorRegistry` (implementa `IDetectorRegistry`), `HangfireDetectionJobDispatcher`
+  (implementa `IDetectionJobDispatcher`), `DetectionRunService` (implementa
+  `IDetectionRunService`), `ExecuteDetectionRunJob` e `SampleDetector` como
+  processadores do módulo de detecção.
 
 Parsing, acesso a arquivos e persistência ficam nesta camada porque dependem de
 formatos ou tecnologias externas. As decisões de domínio extraídas desses dados
@@ -182,19 +295,23 @@ devem continuar testáveis sem depender do host HTTP.
 ### Worker
 
 `InovaSkill.Importer.Worker/Program.cs` configura o mesmo acesso a banco e
-storage da API e escuta o stream Redis `route-imports`, no grupo
-`route-import-workers`. O Wolverine descobre o `ProcessImportHandler` na
-Infrastructure e agenda retries após 5 segundos, 30 segundos e 2 minutos.
+storage da API, registra o storage Hangfire em PostgreSQL e sobe servidores
+separados para as filas `imports`, `detectors` e `default`. A quantidade de
+workers de cada fila vem de `Hangfire:Workers:{Imports,Detectors,Default}`.
+`detectors` é a fila utilizada pelo módulo de detecção: o
+`ExecuteDetectionRunJob` é enfileirado nessa fila e o Worker a consome,
+executando o detector (via `IDetectorRegistry`) e persistindo os resultados
+(Findings/Evidences) no banco.
 
 O Worker é o local para parsing, consolidações e cálculos pesados. A API apenas
-registra/consulta o trabalho e publica a mensagem.
-Mensagens de importação possuem timeout de execução de 30 minutos, definido pela
-constante compartilhada `WorkerExecutionTimeoutMinutes`. O intervalo acomoda
-planilhas fiscais grandes sem transformar cancelamentos normais do host em
-falhas silenciosas; retries continuam seguindo a política do Wolverine.
+registra/consulta o trabalho e enfileira o job no Hangfire após persistir o
+estado de negócio. Jobs de importação rodam na fila `imports`; jobs
+operacionais genéricos rodam na fila `default`. Retries técnicos são explícitos:
+5 segundos, 30 segundos e 2 minutos, preservando o total de quatro execuções
+incluindo a tentativa inicial.
 Processadores podem limpar o `ChangeTracker` entre lotes para limitar memória.
-Por isso, o handler sempre recarrega `JobExecution` após o processador retornar
-e antes de persistir o estado terminal, evitando divergência entre um import
+Por isso, o serviço de processamento sempre recarrega `JobExecution` após o
+processador retornar e antes de persistir o estado terminal, evitando divergência entre um import
 `Completed` e um job ainda `Processing`.
 
 ### Versionamento e publicação
@@ -208,6 +325,59 @@ transação e advisory lock no PostgreSQL. Fontes `Snapshot`, como rotas, soment
 trocam `CurrentImportId` depois do processamento completo e quando a versão
 candidata é maior que a atual. Assim, jobs fora de ordem não voltam o estado
 publicado e todos os snapshots permanecem disponíveis para histórico.
+
+Produtos, estoque atual e controle diário reutilizam esse mesmo mecanismo de
+importações e jobs. `Product` é o elo global entre itens fiscais, estoque e
+produção diária: o código ERP/TOTVS fica em `ErpCode`, o código operacional
+normalizado fica em `OperationalCode`, e o normalizador central remove espaços,
+normaliza caixa e retira apenas o prefixo `V` quando existir. Produtos vindos de
+nota fiscal continuam relacionados por `ProductId`, mas a importação fiscal
+passa a localizar produtos globalmente pelo código ERP, evitando duplicidade
+entre fontes.
+
+`InventorySnapshot` pertence ao `ImportId` da fonte `INVENTORY_CURRENT` e se
+relaciona com `ProductId`. A tabela armazena filial, armazém, saldo físico,
+empenhado, disponível e valores monetários; nome, unidade, grupo e pesos ficam
+somente em `Product`. A versão atual de estoque é resolvida pelo ponteiro
+`CurrentImportId` da fonte, sem campo `IsCurrent` nos registros. Os índices
+especializados cobrem unicidade lógica por import/produto/filial/armazém,
+filtros por estoque disponível no import atual e navegação por produto.
+
+`DailyInventoryRecord` pertence ao `ImportId` da fonte `DAILY_INVENTORY` e
+normaliza cada produto + data das abas mensais em uma linha com produção, saída,
+ajuste e estoque final. A planilha operacional é vinculada ao produto pelo
+código operacional normalizado. Células vazias de produção, saída e ajuste viram
+zero; fórmulas simples de soma/subtração são aceitas; erros de fórmula são
+registrados em `import_errors`. Duplicidade idêntica por produto/data é ignorada
+com aviso, e duplicidade conflitante registra erro sem escolher um valor
+arbitrário. Os índices cobrem unicidade por import/produto/data e consultas
+históricas por produto/data.
+
+`GET /api/products` lista produtos paginados com busca por nome, `ErpCode` ou
+`OperationalCode`, filtros por tipo, grupo e status de estoque. O status usa
+somente o import atual de `INVENTORY_CURRENT`: disponível quando a soma de
+`AvailableQuantity` é positiva, ruptura quando há snapshot e a soma é menor ou
+igual a zero, e sem informação quando não há snapshot para o produto. `GET
+/api/products/{id}` retorna cadastro, estoque atual por filial/armazém,
+histórico de snapshots, histórico diário atual e itens fiscais recentes.
+
+`GET /api/inventory` consulta o snapshot atual de estoque por produto, grupo,
+tipo, armazém, status e ordenações operacionais. `GET /api/inventory/summary`
+expõe apenas métricas suportadas pelos dados atuais: rupturas, percentual
+comprometido, produção, saída e saldo operacional. A métrica `stockouts` /
+`stockoutProducts` conta produtos em ruptura de forma consolidada: agrupa as
+linhas do `CurrentImportId` de `INVENTORY_CURRENT` por `ProductId`, soma
+`AvailableQuantity` em todos os armazéns e conta o produto quando o saldo
+disponível total é menor ou igual a zero. `stockoutWarehousePositions` é apenas
+contexto operacional e conta posições de armazém com `AvailableQuantity <= 0`,
+sem substituir a métrica executiva por produto. `GET /api/inventory/stockouts`
+retorna a lista paginada dos produtos em ruptura, com cadastro do produto,
+saldo físico, empenhado, disponível, valor de estoque e quantidade de posições
+de armazém afetadas. Como a fonte é uma fotografia, "hoje" significa a última
+importação de estoque publicada, não uma leitura transacional em tempo real.
+Produção, saída e saldo usam a maior data publicada em `DAILY_INVENTORY`. A
+fórmula de comprometimento é `SUM(CommittedQuantity) /
+SUM(OnHandQuantity) * 100`, com zero quando a base física é zero.
 
 ## Fluxos principais
 
@@ -225,9 +395,9 @@ publicado e todos os snapshots permanecem disponíveis para histórico.
 
 1. O frontend envia o XLSX para `POST /api/route-imports`.
 2. A API salva o arquivo, cria a importação e a execução em fila.
-3. A API publica `ProcessImport` no stream Redis `route-imports` e responde
-   `202 Accepted`.
-4. O Worker consome a mensagem e abre o arquivo no storage compartilhado.
+3. Após confirmar o estado de negócio no PostgreSQL, a API enfileira
+   `ProcessImportJob` no Hangfire na fila `imports` e responde `202 Accepted`.
+4. O Worker consome a fila `imports` e abre o arquivo no storage compartilhado.
 5. O processador interpreta, valida, calcula ocupações e persiste um snapshot
    vinculado exclusivamente àquela importação.
 6. Depois de concluir, o Worker tenta publicar o snapshot por comparação segura
@@ -235,7 +405,7 @@ publicado e todos os snapshots permanecem disponíveis para histórico.
 7. O frontend consulta o ponteiro atual sem precisar conhecer o ID da versão
    publicada; consultas históricas recebem explicitamente o ID do import.
 
-O arquivo não trafega pelo Redis. API e Worker precisam usar o mesmo
+O arquivo não trafega pelo Hangfire. API e Worker precisam usar o mesmo
 `Storage__ImportsPath`. Consulte o documento específico da importação para
 estados, idempotência, correções e estrutura das tabelas.
 
@@ -317,6 +487,16 @@ e bonificações são exibidas separadamente e não alteram o consumo inicial.
 Os indicadores aplicáveis abrem uma linha mensal de 12 pontos, reutilizando a
 mesma resposta agregada sem novas requisições ou cálculo sobre itens no browser.
 
+`GET /api/fiscal-documents/return-rate` calcula a taxa exibida no card
+`Taxa de Devolução` do dashboard logístico. A API usa o peso bruto dos itens em
+documentos fiscais importados no período: `SUM(Return.GrossWeightKg) /
+SUM(Sale.GrossWeightKg) * 100`, arredondado para uma casa decimal e retornando
+zero quando a base de vendas é zero. O período padrão é de 30 dias e, sem
+`dateTo` explícito, termina na maior data fiscal importada; isso evita depender
+de datas demonstrativas no frontend. O índice existente por `IssueDate` e
+`MovementCategory` sustenta o filtro temporal e por categoria, e os itens são
+agregados pelo relacionamento com seus documentos fiscais.
+
 O faturamento calculado segue a regra de negócio explícita
 `Quantity × UnitValue` para itens de documentos `Sale`. Valores unitários
 ausentes contribuem com zero e outras categorias não compõem o faturamento.
@@ -371,6 +551,41 @@ A Central de Processamentos consulta `/api/admin/jobs` e
 `/api/admin/jobs/summary` a cada cinco segundos, além da atualização manual. O
 polling impede que a tela preserve indefinidamente um estado antigo depois que
 o Worker conclui o job.
+`GET /api/admin/jobs/definitions` expõe apenas jobs operacionais declarados no
+catálogo da Application, e `POST /api/admin/jobs/definitions/{jobType}/run`
+permite executar manualmente somente os que possuem `ManualRunAllowed`. Jobs de
+importação de planilha não entram nesse catálogo porque dependem de upload,
+arquivo e import específico; eles continuam sendo criados por upload,
+reprocessamento ou retry técnico.
+
+### Mapa de clientes por município
+
+Clientes reais no mapa usam a precisão municipal. A importação de clientes
+continua gravando `CustomerSnapshot.MunicipalityId`; a coordenada fica separada
+em `municipality_coordinates`, como enriquecimento externo do cadastro de
+municípios. A tabela guarda `MunicipalityId`, latitude, longitude, fonte,
+status, tentativa, resolução e eventual motivo de falha. Não há coordenada de
+endereço do cliente neste fluxo.
+
+Quando uma importação de clientes é concluída e publicada como snapshot atual,
+o `ProcessImportHandler` enfileira o job operacional
+`MUNICIPALITY_COORDINATE_ENRICHMENT`, vinculado ao `ImportId` publicado. O job
+é idempotente: consulta os municípios distintos usados pelos clientes daquele
+snapshot, ignora os que já possuem coordenada resolvida e tenta resolver apenas
+pendências. A fonte primária é o CSV embutido de
+`github.com/kelvins/municipios-brasileiros`, casando primeiro por `IbgeCode`
+quando disponível e depois por `StateCode + NormalizedName`. O job atualiza
+`municipalities.IbgeCode` quando resolve pela base e registra falha controlada
+quando o município não aparece na fonte.
+
+`GET /api/logistics/map/customers` consulta somente o snapshot atual de clientes
+e retorna pins para clientes cujo município tem coordenada resolvida. Clientes
+sem coordenada não aparecem no mapa, mas são contabilizados em
+`withoutCoordinates`. Para evitar pins sobrepostos na mesma cidade, a API aplica
+um deslocamento visual determinístico em memória; a coordenada persistida
+continua sendo a do município. A tela `/mapa` consome esse endpoint e mantém os
+trajetos demonstrativos como contexto visual enquanto os clientes vêm da API
+real.
 
 No frontend, `/clientes` é uma listagem cadastral simples, com busca feita no
 backend por código, razão social, nome fantasia, documento ou nome parcial do
@@ -401,6 +616,10 @@ Os índices acompanham os padrões reais de leitura:
   `DataSourceId + ExternalCode + BranchCode` para a ordenação da listagem;
 - snapshots usam `ImportId + CustomerId` para idempotência, `ImportId +
   MunicipalityId` e `ImportId + CustomerType` para filtros;
+- coordenadas municipais usam unicidade por `MunicipalityId` e índice por
+  `Status`; a consulta do mapa chega nelas por relacionamento 1:1 a partir dos
+  municípios presentes no snapshot atual, e o índice de status apoia auditoria
+  e reprocessamento de pendências;
 - razão social, nome fantasia e documento possuem índices GIN trigram porque a
   API oferece busca por trecho, que não é atendida eficientemente por B-tree;
 - municípios mantêm a unicidade e resolução por `StateCode + NormalizedName`.
@@ -409,14 +628,108 @@ A extensão PostgreSQL `pg_trgm` é criada pela migration de índices. Novas
 consultas devem revisar seletividade, ordenação, joins e custo de escrita antes
 de adicionar ou dispensar um índice.
 
+### Detecção de inconformidades
+
+1. O frontend lista os detectores disponíveis via `GET /api/detectors`.
+2. O usuário clica em "Executar agora" → `POST /api/detectors/{id}/runs`.
+3. A API valida: detector ativo e sem execução concorrente (Queued/Running).
+4. Cria `DetectionRun` com status `Queued`, trigger `Manual`.
+5. Enfileira `ExecuteDetectionRunJob` no Hangfire na fila `detectors`.
+6. O Worker consome a fila `detectors`, carrega a `DetectionRun`,
+   `DetectorDefinition` e localiza o `IDetector` pelo `Code` no
+   `DetectorRegistry`.
+7. Marca a execução como `Running`, incrementa `AttemptCount`.
+8. Cria `DetectionContext` com o timestamp de referência.
+9. Executa `IDetector.DetectAsync`, que retorna `DetectionResult` com
+   `FindingCandidate[]`.
+10. Valida a integridade dos candidatos (fingerprints únicos, campos
+    obrigatórios).
+11. Em transação: persiste `Finding` e `FindingEvidence`, finaliza
+    `DetectionRun` como `Succeeded`.
+12. Em caso de erro: captura exceção, marca `DetectionRun` como `Failed`
+    com `StatusReason`, relança para o Hangfire registrar a falha.
+13. O frontend faz polling a cada 3 segundos via `GET /api/detection-runs/{runId}`
+    até o status ser `Succeeded` ou `Failed`.
+14. O usuário abre a execução e visualiza os Findings com suas evidências.
+
+O job Hangfire não possui retry automático (`[AutomaticRetry(Attempts = 0)]`):
+cada execução do Hangfire corresponde a uma única tentativa da `DetectionRun`.
+O reprocessamento manual será implementado em etapa futura.
+
+### Tabelas do módulo de detecção
+
+```text
+detector_definitions
+    id (uuid PK)
+    code (varchar 64, unique)
+    name (varchar 256)
+    description (varchar 1024)
+    status (varchar 32)
+    created_at (timestamptz)
+    updated_at (timestamptz)
+
+detection_runs
+    id (uuid PK)
+    detector_definition_id (uuid FK → detector_definitions)
+    status (varchar 32)
+    trigger (varchar 32)
+    requested_at (timestamptz)
+    started_at (timestamptz)
+    finished_at (timestamptz)
+    attempt_count (int)
+    analyzed_items (int)
+    findings_count (int)
+    status_reason (varchar 1024)
+    requested_by_user_id (uuid)
+    retry_of_run_id (uuid FK → detection_runs)
+
+findings
+    id (uuid PK)
+    detection_run_id (uuid FK → detection_runs)
+    fingerprint (varchar 256)
+    title (varchar 512)
+    description (varchar 2000)
+    subject_type (varchar 128)
+    subject_id (varchar 128)
+    subject_label (varchar 512)
+    detected_at (timestamptz)
+
+finding_evidences
+    id (uuid PK)
+    finding_id (uuid FK → findings)
+    name (varchar 256)
+    value (varchar 512)
+    reference_value (varchar 512)
+    unit (varchar 32)
+    description (varchar 1024)
+    source_type (varchar 128)
+    source_id (varchar 128)
+    observed_at (timestamptz)
+```
+
+Índices: `detection_runs` por `(DetectorDefinitionId, Status)` e
+`RequestedAt`; `findings` por `DetectionRunId`, `(SubjectType, SubjectId)`
+e unique `(DetectionRunId, Fingerprint)`; `finding_evidences` por `FindingId`.
+
+### Limitações intencionais desta etapa
+
+- Apenas o detector `DEV_SAMPLE_DETECTOR` (exemplo) está registrado.
+- Não há schedule, CRON, `DetectorSchedule`, alertas, notificações, IA,
+  deduplicação entre execuções, workflow de resolução, responsáveis ou
+  severidade.
+- Não há retry automático do job; cada falha é terminal na `DetectionRun`.
+- O frontend é intencionalmente simples: lista de detectores, cards de
+  execução, detalhe com findings e evidências em modal.
+- Não há WebSocket; o polling consulta o status a cada 3 segundos.
+
 ## Dados e infraestrutura
 
-O `docker-compose.yml` da raiz define `frontend`, `api`, `worker`, `postgres` e
-`redis`, com volumes persistentes para PostgreSQL, Redis e uploads. No
-desenvolvimento local, apenas PostgreSQL e Redis devem rodar no Docker:
+O `docker-compose.yml` da raiz define `frontend`, `api`, `worker` e `postgres`,
+com volumes persistentes para PostgreSQL e uploads. No desenvolvimento local,
+apenas PostgreSQL deve rodar no Docker:
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres
 ```
 
 Frontend, API e Worker devem ser executados localmente pelos comandos de seus
@@ -428,7 +741,7 @@ estáticos e encaminha chamadas `/api` para a API.
 Na raiz do repositório, suba somente a infraestrutura:
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres
 docker compose ps
 ```
 
@@ -459,19 +772,24 @@ Endereços padrão:
 
 - frontend: `http://localhost:5173`;
 - API: `http://localhost:5279`;
-- PostgreSQL: `localhost:5432`;
-- Redis: `localhost:6379`.
+- Hangfire Dashboard: `http://localhost:5279/hangfire`;
+- PostgreSQL: `localhost:5432`.
 
 Para encerrar a infraestrutura depois de parar os processos locais:
 
 ```bash
-docker compose stop postgres redis
+docker compose stop postgres
 ```
 
 Configurações essenciais:
 
 - `ConnectionStrings__ImportDb`: conexão PostgreSQL usada pela API e pelo Worker.
-- `ConnectionStrings__Redis`: conexão Redis usada pelo Wolverine.
+- `Hangfire__Storage__ConnectionString`: conexão opcional específica do
+  Hangfire; quando ausente, usa `ConnectionStrings__ImportDb`.
+- `Hangfire__Workers__Imports`, `Hangfire__Workers__Detectors` e
+  `Hangfire__Workers__Default`: concorrência por fila do Worker.
+- `Hangfire__Dashboard__AllowAnonymous`: libera acesso ao dashboard fora de
+  desenvolvimento somente quando configurado explicitamente.
 - `Storage__ImportsPath`: caminho compartilhado dos arquivos importados.
 - `VITE_API_URL`: base da API incorporada ao build do frontend.
 
@@ -498,10 +816,10 @@ invariantes de negócio, conforme as regras do `AGENTS.md`.
 - Um novo endpoint entra na API, mas sua regra vai para `Application/Domain`.
 - Uma nova integração ou persistência é implementada em `Infrastructure` e
   registrada na composição da API/Worker.
-- Um processamento pesado é publicado pela API, consumido pelo Worker e tem seu
-  resultado persistido antes da consulta.
+- Um processamento pesado é enfileirado pela API no Hangfire, consumido pelo
+  Worker e tem seu resultado persistido antes da consulta.
 - Uma nova fonte de importação implementa `IDataSourceProcessor`, mantém um
-  código estável de fonte e reutiliza fila, storage e histórico de jobs.
+  código estável de fonte e reutiliza Hangfire, storage e histórico de jobs.
 
 Qualquer mudança em componentes, limites de camada, dependências entre projetos,
 fluxos, contratos, persistência, mensageria, infraestrutura ou estratégia de

@@ -24,10 +24,14 @@ describe("logistics map demo fallback", () => {
 
   it("mantém mapa interativo com clientes, trânsito, trajetos tracejados, popup e controles", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/components/ui/logistics-region-map.tsx"), "utf8");
+    const select = fs.readFileSync(path.resolve(process.cwd(), "src/components/ui/select.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve(process.cwd(), "src/styles.css"), "utf8");
     expect(source).toContain("openstreetmap.org");
     expect(source).toContain("zoomControl: true");
     expect(source).toContain("scrollWheelZoom: true");
+    expect(source).toContain("rounded-xl border border-border/70 bg-surface/60 p-3 sm:p-4");
+    expect(source).toContain("relative z-0 overflow-hidden rounded-xl border border-border shadow-sm");
+    expect(select).toContain("z-[2100]");
     expect(source).toContain("L.polyline");
     expect(source).toContain('dashArray: "8 8"');
     expect(source).toContain("Trajeto estimado");

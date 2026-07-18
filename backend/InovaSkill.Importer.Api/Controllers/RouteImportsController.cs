@@ -5,7 +5,6 @@ using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Wolverine;
 
 namespace InovaSkill.Importer.Api.Controllers;
 
@@ -16,7 +15,7 @@ public sealed class RouteImportsController(
     IImportFileStorage fileStorage,
     ISpreadsheetDataSourceDetector dataSourceDetector,
     IImportLifecycleService importLifecycle,
-    IMessageBus messageBus) : ControllerBase
+    IBackgroundJobDispatcher backgroundJobDispatcher) : ControllerBase
 {
     private const int DefaultPageSize = 20;
     private const int MaximumPageSize = 100;
@@ -53,7 +52,21 @@ public sealed class RouteImportsController(
         var job = CreateJob(import.Id, import.CreatedAt);
         dbContext.JobExecutions.Add(job);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await messageBus.PublishAsync(new ProcessImport(import.Id, job.Id));
+        try
+        {
+            backgroundJobDispatcher.EnqueueImport(import.Id, job.Id);
+        }
+        catch (Exception exception)
+        {
+            job.Status = JobExecutionStatus.Failed;
+            job.ErrorMessage = $"Falha ao enfileirar a importação no Hangfire: {exception.Message}";
+            job.FinishedAt = DateTime.UtcNow;
+            import.Status = RouteImportStatus.Failed;
+            import.FailureMessage = "Não foi possível enfileirar o processamento.";
+            import.FinishedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw;
+        }
 
         return Accepted(new { importId = import.Id, sourceCode, status = "QUEUED" });
     }
@@ -181,27 +194,40 @@ public sealed class RouteImportsController(
         import.FailureMessage = null;
         dbContext.JobExecutions.Add(job);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await messageBus.PublishAsync(new ProcessImport(import.Id, job.Id));
+        try
+        {
+            backgroundJobDispatcher.EnqueueImport(import.Id, job.Id);
+        }
+        catch (Exception exception)
+        {
+            job.Status = JobExecutionStatus.Failed;
+            job.ErrorMessage = $"Falha ao enfileirar a importação no Hangfire: {exception.Message}";
+            job.FinishedAt = DateTime.UtcNow;
+            import.Status = RouteImportStatus.Failed;
+            import.FailureMessage = "Não foi possível enfileirar o processamento.";
+            import.FinishedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw;
+        }
+
         return Accepted(new { importId = import.Id, jobExecutionId = job.Id, status = "QUEUED" });
     }
 
     private async Task<DataSource> EnsureDataSourceAsync(string sourceCode, CancellationToken cancellationToken)
     {
-        var isCustomers = string.Equals(sourceCode, CustomerImportCodes.DataSource, StringComparison.OrdinalIgnoreCase);
-        var isFiscal = string.Equals(sourceCode, FiscalImportCodes.DataSource, StringComparison.OrdinalIgnoreCase);
-        var code = isCustomers ? CustomerImportCodes.DataSource : isFiscal ? FiscalImportCodes.DataSource : RouteImportCodes.DataSource;
+        var definition = ResolveDataSourceDefinition(sourceCode);
         var existing = await dbContext.DataSources
-            .SingleOrDefaultAsync(x => x.Code == code, cancellationToken);
+            .SingleOrDefaultAsync(x => x.Code == definition.Code, cancellationToken);
         if (existing is not null) return existing;
         var now = DateTime.UtcNow;
         var dataSource = new DataSource
         {
             Id = Guid.NewGuid(),
-            Code = code,
-            ProcessorKey = isCustomers ? CustomerImportCodes.ProcessorKey : isFiscal ? FiscalImportCodes.ProcessorKey : RouteImportCodes.ProcessorKey,
-            Name = isCustomers ? CustomerImportCodes.DataSourceName : isFiscal ? FiscalImportCodes.DataSourceName : RouteImportCodes.DataSourceName,
-            Type = isCustomers ? CustomerImportCodes.DataSourceType : isFiscal ? FiscalImportCodes.DataSourceType : RouteImportCodes.DataSourceType,
-            ImportMode = isFiscal ? DataSourceImportMode.Upsert : DataSourceImportMode.Snapshot,
+            Code = definition.Code,
+            ProcessorKey = definition.ProcessorKey,
+            Name = definition.Name,
+            Type = definition.Type,
+            ImportMode = definition.ImportMode,
             NextImportVersion = RouteImportCodes.InitialVersion,
             Active = true,
             CreatedAt = now,
@@ -211,6 +237,25 @@ public sealed class RouteImportsController(
         await dbContext.SaveChangesAsync(cancellationToken);
         return dataSource;
     }
+
+    private static DataSourceDefinition ResolveDataSourceDefinition(string sourceCode) =>
+        sourceCode.ToUpperInvariant() switch
+        {
+            CustomerImportCodes.DataSource => new(CustomerImportCodes.DataSource, CustomerImportCodes.ProcessorKey,
+                CustomerImportCodes.DataSourceName, CustomerImportCodes.DataSourceType, DataSourceImportMode.Snapshot),
+            FiscalImportCodes.DataSource => new(FiscalImportCodes.DataSource, FiscalImportCodes.ProcessorKey,
+                FiscalImportCodes.DataSourceName, FiscalImportCodes.DataSourceType, DataSourceImportMode.Upsert),
+            ProductImportCodes.DataSource => new(ProductImportCodes.DataSource, ProductImportCodes.ProcessorKey,
+                ProductImportCodes.DataSourceName, ProductImportCodes.DataSourceType, DataSourceImportMode.Upsert),
+            InventoryCurrentImportCodes.DataSource => new(InventoryCurrentImportCodes.DataSource,
+                InventoryCurrentImportCodes.ProcessorKey, InventoryCurrentImportCodes.DataSourceName,
+                InventoryCurrentImportCodes.DataSourceType, DataSourceImportMode.Snapshot),
+            DailyInventoryImportCodes.DataSource => new(DailyInventoryImportCodes.DataSource,
+                DailyInventoryImportCodes.ProcessorKey, DailyInventoryImportCodes.DataSourceName,
+                DailyInventoryImportCodes.DataSourceType, DataSourceImportMode.Snapshot),
+            _ => new(RouteImportCodes.DataSource, RouteImportCodes.ProcessorKey, RouteImportCodes.DataSourceName,
+                RouteImportCodes.DataSourceType, DataSourceImportMode.Snapshot)
+        };
 
     private static JobExecution CreateJob(Guid importId, DateTime now) => new()
     {
@@ -238,3 +283,10 @@ public sealed class RouteImportsController(
 }
 
 public sealed record ResolveImportErrorRequest(string CorrectedValue);
+
+sealed record DataSourceDefinition(
+    string Code,
+    string ProcessorKey,
+    string Name,
+    string Type,
+    DataSourceImportMode ImportMode);

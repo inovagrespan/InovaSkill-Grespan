@@ -14,7 +14,7 @@ Esta auditoria registra lacunas encontradas na suíte atual e direciona a evolu�
 - Parsing monetário tinha um caso ambíguo sem regressão: `1.234` em contexto brasileiro deve ser milhar, enquanto `3.32` pode ser decimal internacional.
 - Monitoramento de processamento cobria snapshot básico, mas faltavam invariantes operacionais como progresso limitado a 0..100, jobs sem heartbeat e worker offline.
 - Template builder tinha testes de normalização e checklist, mas faltavam entradas inválidas, dados contraditórios, duplicidades e defaults em preview.
-- Áreas ainda merecem novas rodadas: concorrência real em filas Redis, idempotência sob reentrega de evento, filtros combinados dos dashboards, timezones em virada de dia e grandes volumes.
+- Áreas ainda merecem novas rodadas: concorrência real nas filas Hangfire, idempotência sob reexecução de job, filtros combinados dos dashboards, timezones em virada de dia e grandes volumes.
 
 ## Mudanças Aplicadas
 
@@ -26,7 +26,7 @@ Esta auditoria registra lacunas encontradas na suíte atual e direciona a evolu�
 
 ## Lacunas Restantes
 
-- Criar testes de integração com Redis real ou substituto controlado para reentrega, dead-letter e concorrência entre workers.
+- Criar testes de integração com Hangfire/PostgreSQL real ou substituto controlado para retries e concorrência entre workers.
 - Cobrir filtros combinados dos dashboards com dados pequenos que revelem joins duplicadores.
 - Testar imports com planilhas maiores, linhas parcialmente inválidas e múltiplas falhas simultâneas.
 - Adicionar regressões para timezone em datas próximas de meia-noite e mudança de mês.

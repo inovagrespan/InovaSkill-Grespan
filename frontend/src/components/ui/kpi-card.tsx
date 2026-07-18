@@ -1,5 +1,5 @@
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 import { resolveKpiValueSizeClass, resolveTrendDirection, type TrendDirection } from "./kpi-card.utils";
 import { Skeleton } from "./skeleton";
@@ -21,6 +21,8 @@ type KpiCardProps = {
   allowWrapValue?: boolean;
   tone?: "neutral" | "success" | "danger" | "info";
   periodLabelClassName?: string;
+  onClick?: () => void;
+  ariaLabel?: string;
 };
 
 function formatPct(value?: number | null): string {
@@ -46,6 +48,8 @@ export function KpiCard({
   allowWrapValue = false,
   tone = "neutral",
   periodLabelClassName,
+  onClick,
+  ariaLabel,
 }: KpiCardProps) {
   const direction = resolveTrendDirection(percentageChange, trendDirection);
   const toneClass =
@@ -72,11 +76,25 @@ export function KpiCard({
     danger: "border-[color:var(--error)]/25 bg-[color-mix(in_srgb,var(--error)_12%,transparent)] text-[var(--error)]",
     info: "border-[color:var(--info)]/25 bg-[color-mix(in_srgb,var(--info)_12%,transparent)] text-[var(--info)]",
   }[tone];
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!onClick) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClick();
+    }
+  }
+
   return (
     <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={ariaLabel}
+      onClick={onClick}
+      onKeyDown={handleKeyDown}
       className={cn(
         "h-full rounded-xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(250,251,253,0.96))] px-5 py-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-sm dark:bg-[linear-gradient(180deg,rgba(23,28,37,0.98),rgba(20,25,34,0.98))]",
         "metric-card-item animate-soft-enter",
+        onClick ? "cursor-pointer outline-none ring-primary/40 focus-visible:ring-2" : "",
         cardToneClass,
         className,
       )}

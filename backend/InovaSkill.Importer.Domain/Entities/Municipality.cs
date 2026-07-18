@@ -8,4 +8,5 @@ public sealed class Municipality
     public string NormalizedName { get; set; } = string.Empty;
     public string? IbgeCode { get; set; }
     public DateTime CreatedAt { get; set; }
+    public MunicipalityCoordinate? Coordinate { get; set; }
 }

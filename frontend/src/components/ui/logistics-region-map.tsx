@@ -13,7 +13,7 @@ import {
   type LogisticsMapCustomer,
 } from "@/lib/logistics-map-data";
 
-type LogisticsRegionMapProps = { customers: LogisticsMapCustomer[]; routes: LogisticsMapRoute[]; periodDays: LogisticsTrafficPeriodDays; compact?: boolean };
+type LogisticsRegionMapProps = { customers: LogisticsMapCustomer[]; routes: LogisticsMapRoute[]; periodDays?: LogisticsTrafficPeriodDays; compact?: boolean };
 
 const REGIONAL_ZOOM = 9;
 const CUSTOMER_ZOOM = 11;
@@ -24,15 +24,16 @@ function escapeHtml(value: string): string {
 }
 
 function customerPopup(customer: LogisticsMapCustomer): string {
-  return `<div class="logistics-map-popup"><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.city)} · ${escapeHtml(customer.type)}</span><hr/><span><b>Status:</b> ${escapeHtml(customer.status)}</span><span><b>Última entrega:</b> ${escapeHtml(customer.lastDelivery)}</span><span><b>Próxima entrega:</b> ${escapeHtml(customer.nextDelivery)}</span><span><b>Situação:</b> ${escapeHtml(customer.situation)}</span><span><b>Rota:</b> ${escapeHtml(customer.route)}</span><span><b>Prioridade:</b> ${escapeHtml(customer.priority)}</span></div>`;
+  const activityLabel = customer.isActive ? "Ativo" : "Inativo";
+  return `<div class="logistics-map-popup"><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.city)} · ${escapeHtml(customer.type)}</span><hr/><span><b>Atividade:</b> ${activityLabel}</span><span><b>Status:</b> ${escapeHtml(customer.status)}</span><span><b>Última entrega:</b> ${escapeHtml(customer.lastDelivery)}</span><span><b>Próxima entrega:</b> ${escapeHtml(customer.nextDelivery)}</span><span><b>Situação:</b> ${escapeHtml(customer.situation)}</span><span><b>Rota:</b> ${escapeHtml(customer.route)}</span><span><b>Prioridade:</b> ${escapeHtml(customer.priority)}</span></div>`;
 }
 
 function createHeadquartersIcon(): L.DivIcon {
   return L.divIcon({ className: "logistics-map-headquarters", html: "<span>G</span>", iconSize: [34, 34], iconAnchor: [17, 17] });
 }
 
-function createCustomerPinIcon(status: LogisticsCustomerStatus): L.DivIcon {
-  const statusClass = status === "Crítico" ? "critical" : status === "Atenção" ? "attention" : "normal";
+function createCustomerPinIcon(customer: LogisticsMapCustomer): L.DivIcon {
+  const statusClass = customer.isActive ? "normal" : "critical";
   return L.divIcon({
     className: "logistics-map-customer-icon",
     html: `<span class="logistics-map-pin logistics-map-pin--${statusClass}"><i></i></span>`,
@@ -58,7 +59,7 @@ function routePopup(route: LogisticsMapRoute): string {
   return `<div class="logistics-map-popup"><strong>${escapeHtml(route.name)}</strong><span>${escapeHtml(route.cities.join(" → "))}</span><hr/><span><b>Trajeto estimado</b></span><span>Baseado nas cidades atendidas e pontos de congestionamento monitorados.</span></div>`;
 }
 
-export function LogisticsRegionMap({ customers, routes, periodDays, compact = false }: LogisticsRegionMapProps) {
+export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact = false }: LogisticsRegionMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const customerLayerRef = useRef<L.LayerGroup | null>(null);
@@ -68,6 +69,7 @@ export function LogisticsRegionMap({ customers, routes, periodDays, compact = fa
 
   const cities = useMemo(() => [...new Set(customers.map((customer) => customer.city))].sort(), [customers]);
   const types = useMemo(() => [...new Set(customers.map((customer) => customer.type))].sort(), [customers]);
+  const hasRouteOverlays = routes.length > 0;
   const filtered = useMemo(() => customers.filter((customer) =>
     (status === ALL_FILTER || customer.status === status)
     && (city === ALL_FILTER || customer.city === city)
@@ -116,12 +118,12 @@ export function LogisticsRegionMap({ customers, routes, periodDays, compact = fa
     }
 
     for (const customer of filtered) {
-      const marker = L.marker([customer.lat, customer.lng], { icon: createCustomerPinIcon(customer.status), zIndexOffset: 500 });
+      const marker = L.marker([customer.lat, customer.lng], { icon: createCustomerPinIcon(customer), zIndexOffset: 500 });
       marker.bindPopup(customerPopup(customer), { maxWidth: 310 });
       marker.bindTooltip(customer.name, { direction: "top", offset: [0, -7] });
       layer.addLayer(marker);
     }
-  }, [city, filtered, periodDays, routes]);
+  }, [city, filtered, periodDays, routes, filtered.length]);
 
   function recenterHeadquarters() {
     mapRef.current?.setView([GRESPAN_HEADQUARTERS.lat, GRESPAN_HEADQUARTERS.lng], REGIONAL_ZOOM);
@@ -134,15 +136,15 @@ export function LogisticsRegionMap({ customers, routes, periodDays, compact = fa
   }
 
   return (
-    <div className="space-y-4">
-      <div className={compact ? "grid gap-2 sm:grid-cols-2" : "grid gap-2 sm:grid-cols-3 xl:grid-cols-[180px_220px_220px_auto]"}>
+    <div className="space-y-4 rounded-xl border border-border/70 bg-surface/60 p-3 sm:p-4">
+      <div className={compact ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-3 xl:grid-cols-[180px_220px_220px_auto]"}>
         <Select value={status} onValueChange={setStatus}><SelectTrigger aria-label="Filtrar por status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_FILTER}>Todos os status</SelectItem><SelectItem value="Normal">Normal</SelectItem><SelectItem value="Atenção">Atenção</SelectItem><SelectItem value="Crítico">Crítico</SelectItem></SelectContent></Select>
         <Select value={city} onValueChange={setCity}><SelectTrigger aria-label="Filtrar por cidade"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_FILTER}>Todas as cidades</SelectItem>{cities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>
         <Select value={type} onValueChange={setType}><SelectTrigger aria-label="Filtrar por tipo"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_FILTER}>Todos os tipos</SelectItem>{types.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>
-        <div className={compact ? "flex flex-wrap gap-2 sm:col-span-2" : "flex flex-wrap gap-2 xl:justify-end"}><Button variant="outline" onClick={recenterHeadquarters}><LocateFixed className="mr-2 size-4" />Centralizar matriz</Button><Button variant="outline" onClick={showAllCustomers}><Users className="mr-2 size-4" />Mostrar clientes</Button></div>
+        <div className={compact ? "flex flex-wrap gap-3 sm:col-span-2" : "flex flex-wrap gap-3 xl:justify-end"}><Button variant="outline" onClick={recenterHeadquarters}><LocateFixed className="mr-2 size-4" />Centralizar matriz</Button><Button variant="outline" onClick={showAllCustomers}><Users className="mr-2 size-4" />Mostrar clientes</Button></div>
       </div>
-      <div className="relative overflow-hidden rounded-xl border border-border shadow-sm"><div ref={containerRef} className={compact ? "h-[390px] min-h-[360px] w-full md:h-[430px]" : "h-[500px] min-h-[420px] w-full md:h-[560px]"} /><div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border bg-background/95 px-3 py-2 text-xs font-medium shadow-sm backdrop-blur">{filtered.length} clientes visíveis</div></div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Legenda:</span><span className="inline-flex items-center gap-1.5"><i className="size-6 border-t-2 border-dashed border-primary" />Trajeto estimado</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-emerald-600" />Cliente normal</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-amber-500" />Cliente em atenção</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-red-600" />Cliente crítico</span><span className="inline-flex items-center gap-1.5"><TrafficCone className="size-3.5 text-red-600" />Congestionamento</span></div>
+      <div className="relative z-0 overflow-hidden rounded-xl border border-border shadow-sm"><div ref={containerRef} className={compact ? "h-[390px] min-h-[360px] w-full md:h-[430px]" : "h-[500px] min-h-[420px] w-full md:h-[560px]"} /><div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border bg-background/95 px-3 py-2 text-xs font-medium shadow-sm backdrop-blur">{filtered.length} clientes visíveis</div></div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Legenda:</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><i className="size-6 border-t-2 border-dashed border-primary" />Trajeto estimado</span>}<span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-emerald-600" />Cliente normal</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-amber-500" />Cliente em atenção</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-red-600" />Cliente crítico</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><TrafficCone className="size-3.5 text-red-600" />Congestionamento</span>}</div>
     </div>
   );
 }

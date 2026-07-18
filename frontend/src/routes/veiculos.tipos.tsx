@@ -17,6 +17,7 @@ import {
   deleteVehicleType,
   type VehicleTypeItem,
 } from "@/lib/importer-api";
+import { getCurrentUserRole } from "@/lib/auth";
 
 export const Route = createFileRoute("/veiculos/tipos")({ component: VeiculosTiposPage });
 
@@ -29,6 +30,8 @@ const weekdayLabels: Record<string, string> = {
 };
 
 function VeiculosTiposPage() {
+  const currentRole = getCurrentUserRole();
+  const canManage = currentRole === "logistica" || currentRole === "admin" || currentRole === "admin_system";
   const [types, setTypes] = useState<VehicleTypeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -120,7 +123,9 @@ function VeiculosTiposPage() {
         <span className="page-header-kicker">Configurações</span>
         <h1 className="mt-2 text-4xl font-display tracking-tight">Tipos de Veículo</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Gerencie os tipos de caminhão disponíveis no sistema. Cadastre, edite ou exclua tipos conforme necessário.
+          {canManage
+            ? "Gerencie os tipos de caminhão disponíveis no sistema. Cadastre, edite ou exclua tipos conforme necessário."
+            : "Consulte os tipos de caminhão e suas capacidades disponíveis no sistema."}
         </p>
       </header>
 
@@ -134,10 +139,12 @@ function VeiculosTiposPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Tipos cadastrados</CardTitle>
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="mr-2 size-4" />
-              Novo tipo
-            </Button>
+            {canManage && (
+              <Button size="sm" onClick={openCreate}>
+                <Plus className="mr-2 size-4" />
+                Novo tipo
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -161,19 +168,21 @@ function VeiculosTiposPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" onClick={() => openEdit(t)}>
-                      Editar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive"
-                      onClick={() => setDeleteConfirm(t)}
-                    >
-                      Excluir
-                    </Button>
-                  </div>
+                  {canManage && (
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => openEdit(t)}>
+                        Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive"
+                        onClick={() => setDeleteConfirm(t)}
+                      >
+                        Excluir
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

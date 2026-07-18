@@ -56,12 +56,123 @@ export type PagedResult<T> = {
 };
 
 export type Product = {
-  id: number;
-  sku: string;
+  id: string;
+  erpCode: string;
+  operationalCode: string;
   name: string;
-  price: number;
-  createdAt: string;
-  sourceFileJobId: number;
+  type: string;
+  unit: string;
+  groupCode: string;
+  netWeightKg: number | null;
+  grossWeightKg: number | null;
+  gtin: string;
+  inventory: ProductInventorySummary | null;
+};
+
+export type ProductInventorySummary = {
+  onHandQuantity: number;
+  committedQuantity: number;
+  availableQuantity: number;
+  stockValue: number;
+};
+
+export type ProductFilterOptions = {
+  types: string[];
+  groups: string[];
+};
+
+export type ProductDetailInventoryRow = ProductInventorySummary & {
+  branchCode: string;
+  warehouseCode: string;
+  committedValue?: number;
+  importCreatedAt?: string;
+};
+
+export type ProductDailyInventoryRow = {
+  date: string;
+  productionQuantity: number;
+  outboundQuantity: number;
+  adjustmentQuantity: number;
+  closingQuantity: number;
+  firstShiftProductionQuantity: number | null;
+  secondShiftProductionQuantity: number | null;
+  thirdShiftProductionQuantity: number | null;
+};
+
+export type ProductFiscalItem = {
+  id: string;
+  fiscalDocumentId: string;
+  issueDate: string;
+  documentNumber: string;
+  series: string;
+  customerName: string;
+  operationCategory: string;
+  quantity: number;
+  grossWeightKg: number;
+  unitValue: number | null;
+  calculatedAmount: number;
+};
+
+export type ProductDetails = {
+  product: Omit<Product, "inventory">;
+  latestInventory: ProductDetailInventoryRow[];
+  inventoryHistory: ProductDetailInventoryRow[];
+  dailyHistory: ProductDailyInventoryRow[];
+  fiscalItems: ProductFiscalItem[];
+};
+
+export type InventorySummary = {
+  stockouts: number;
+  stockoutProducts: number;
+  stockoutWarehousePositions: number;
+  committedPercent: number;
+  lastDailyDate: string | null;
+  lastProduction: number;
+  lastOutbound: number;
+  operationalBalance: number;
+};
+
+export type FiscalReturnRateSummary = {
+  periodDays: number;
+  dateFrom: string | null;
+  dateTo: string | null;
+  salesWeightKg: number;
+  returnWeightKg: number;
+  returnRatePercent: number;
+};
+
+export type InventoryItem = ProductInventorySummary & {
+  id: string;
+  productId: string;
+  erpCode: string;
+  operationalCode: string;
+  productName: string;
+  type: string;
+  unit: string;
+  groupCode: string;
+  branchCode: string;
+  warehouseCode: string;
+  committedPercent: number | null;
+};
+
+export type InventoryStockoutProduct = {
+  productId: string;
+  erpCode: string;
+  operationalCode: string;
+  productName: string;
+  type: string;
+  unit: string;
+  groupCode: string;
+  onHandQuantity: number;
+  committedQuantity: number;
+  availableQuantity: number;
+  stockValue: number;
+  affectedWarehousePositions: number;
+  warehousePositions: number;
+};
+
+export type InventoryFilterOptions = {
+  warehouses: string[];
 };
 
 export type CommercialTransaction = {
@@ -79,15 +190,6 @@ export type CommercialTransaction = {
   city: string;
   productGroup: string;
   grossWeightKg: number;
-  sourceFileJobId: number;
-};
-
-export type Product = {
-  id: number;
-  sku: string;
-  name: string;
-  price: number;
-  createdAt: string;
   sourceFileJobId: number;
 };
 
@@ -721,12 +823,9 @@ function demoCommercialTransactions(): CommercialTransaction[] {
 
 function demoProducts(): Product[] {
   return [
-    { id: 2001, sku: "PAN-104", name: "Pão Francês Congelado 60g", price: 27.9, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
-    { id: 2002, sku: "PAN-221", name: "Pão de Queijo Congelado 1kg", price: 8.7, createdAt: "2026-06-01T00:00:00Z", sourceFileJobId: DEMO_PRODUCT_JOB_ID },
-    { id: 2003, sku: "PAN-318", name: "Croissant Congelado 80g", price: 6.4, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
-    { id: 2004, sku: "PAN-512", name: "Massa para Pizza Congelada 400g", price: 12.9, createdAt: "2026-06-02T00:00:00Z", sourceFileJobId: 502 },
-    { id: 2005, sku: "EQP-411", name: "Freezer Comercial Expositor 410L", price: 18.5, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
-    { id: 2006, sku: "EQP-620", name: "Armário de Crescimento 20 Esteiras", price: 7_890, createdAt: "2026-06-03T00:00:00Z", sourceFileJobId: 503 },
+    { id: "2001", erpCode: "10000122", operationalCode: "6793", name: "Pão Francês Congelado 60g", type: "PA", unit: "UN", groupCode: "0022", netWeightKg: 0.8, grossWeightKg: 0.8, gtin: "", inventory: { onHandQuantity: 2539, committedQuantity: 483, availableQuantity: 2056, stockValue: 12800 } },
+    { id: "2002", erpCode: "10000123", operationalCode: "6792", name: "RAPIDO 70 GR PCT 8 K", type: "PA", unit: "UN", groupCode: "0022", netWeightKg: 0.7, grossWeightKg: 0.7, gtin: "", inventory: { onHandQuantity: 761, committedQuantity: 106, availableQuantity: 655, stockValue: 6400 } },
+    { id: "2003", erpCode: "10000124", operationalCode: "6901", name: "LENTO 80 GR PCT 8 K", type: "PA", unit: "UN", groupCode: "0023", netWeightKg: 0.8, grossWeightKg: 0.8, gtin: "", inventory: { onHandQuantity: 0, committedQuantity: 0, availableQuantity: 0, stockValue: 0 } },
   ];
 }
 
@@ -736,30 +835,45 @@ function normalizeDecimalQuery(value?: string): string {
 
 function filterDemoProducts(input: {
   search?: string;
-  priceMin?: string;
-  priceMax?: string;
+  type?: string;
+  group?: string;
+  stockStatus?: string;
 }): Product[] {
   const normalizedSearch = input.search?.trim().toLowerCase() ?? "";
-  const min = Number(normalizeDecimalQuery(input.priceMin) || Number.NEGATIVE_INFINITY);
-  const max = Number(normalizeDecimalQuery(input.priceMax) || Number.POSITIVE_INFINITY);
 
   return demoProducts().filter((item) => (
     (!normalizedSearch ||
-      item.sku.toLowerCase().includes(normalizedSearch) ||
+      item.erpCode.toLowerCase().includes(normalizedSearch) ||
+      item.operationalCode.toLowerCase().includes(normalizedSearch) ||
       item.name.toLowerCase().includes(normalizedSearch)) &&
-    item.price >= min &&
-    item.price <= max
+    (!input.type || item.type === input.type) &&
+    (!input.group || item.groupCode === input.group) &&
+    (!input.stockStatus ||
+      (input.stockStatus === "AVAILABLE" && (item.inventory?.availableQuantity ?? 0) > 0) ||
+      (input.stockStatus === "STOCKOUT" && item.inventory != null && item.inventory.availableQuantity <= 0) ||
+      (input.stockStatus === "NO_INFORMATION" && item.inventory == null))
   ));
 }
 
 function normalizeProduct(raw: any): Product {
+  const inventory = raw.inventory ?? raw.Inventory ?? null;
   return {
-    id: raw.id ?? raw.Id ?? 0,
-    sku: raw.sku ?? raw.Sku ?? "",
+    id: String(raw.id ?? raw.Id ?? ""),
+    erpCode: raw.erpCode ?? raw.ErpCode ?? "",
+    operationalCode: raw.operationalCode ?? raw.OperationalCode ?? "",
     name: raw.name ?? raw.Name ?? "",
-    price: raw.price ?? raw.Price ?? 0,
-    createdAt: raw.createdAt ?? raw.CreatedAt ?? "",
-    sourceFileJobId: raw.sourceFileJobId ?? raw.SourceFileJobId ?? 0,
+    type: raw.type ?? raw.Type ?? "",
+    unit: raw.unit ?? raw.Unit ?? "",
+    groupCode: raw.groupCode ?? raw.GroupCode ?? "",
+    netWeightKg: raw.netWeightKg ?? raw.NetWeightKg ?? null,
+    grossWeightKg: raw.grossWeightKg ?? raw.GrossWeightKg ?? null,
+    gtin: raw.gtin ?? raw.Gtin ?? "",
+    inventory: inventory ? {
+      onHandQuantity: Number(inventory.onHandQuantity ?? inventory.OnHandQuantity ?? 0),
+      committedQuantity: Number(inventory.committedQuantity ?? inventory.CommittedQuantity ?? 0),
+      availableQuantity: Number(inventory.availableQuantity ?? inventory.AvailableQuantity ?? 0),
+      stockValue: Number(inventory.stockValue ?? inventory.StockValue ?? 0),
+    } : null,
   };
 }
 
@@ -2289,22 +2403,18 @@ export async function fetchProducts(input: {
   page?: number;
   pageSize?: number;
   search?: string;
-  sku?: string;
-  name?: string;
-  priceMin?: string;
-  priceMax?: string;
+  type?: string;
+  group?: string;
+  stockStatus?: string;
 }): Promise<PagedResult<Product>> {
   const query = new URLSearchParams();
   query.set("page", String(input.page ?? 1));
   query.set("pageSize", String(input.pageSize ?? 20));
 
   if (input.search?.trim()) query.set("search", input.search.trim());
-  if (input.sku?.trim()) query.set("sku", input.sku.trim());
-  if (input.name?.trim()) query.set("name", input.name.trim());
-  const normalizedPriceMin = normalizeDecimalQuery(input.priceMin);
-  const normalizedPriceMax = normalizeDecimalQuery(input.priceMax);
-  if (normalizedPriceMin) query.set("priceMin", normalizedPriceMin);
-  if (normalizedPriceMax) query.set("priceMax", normalizedPriceMax);
+  if (input.type?.trim()) query.set("type", input.type.trim());
+  if (input.group?.trim()) query.set("group", input.group.trim());
+  if (input.stockStatus?.trim()) query.set("stockStatus", input.stockStatus.trim());
 
   let response: Response;
   try {
@@ -2343,6 +2453,176 @@ export async function fetchProducts(input: {
     total,
     items,
   };
+}
+
+export async function fetchProductFilters(): Promise<ProductFilterOptions> {
+  const response = await authFetch(`${API_URL}/api/products/filters`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar filtros de produtos."));
+  const raw = await response.json();
+  return {
+    types: raw.types ?? raw.Types ?? [],
+    groups: raw.groups ?? raw.Groups ?? [],
+  };
+}
+
+export async function fetchProductDetails(id: string): Promise<ProductDetails> {
+  const response = await authFetch(`${API_URL}/api/products/${id}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhe do produto."));
+  const raw = await response.json();
+  return {
+    product: normalizeProduct(raw.product ?? raw.Product ?? {}),
+    latestInventory: (raw.latestInventory ?? raw.LatestInventory ?? []).map(normalizeProductInventoryRow),
+    inventoryHistory: (raw.inventoryHistory ?? raw.InventoryHistory ?? []).map(normalizeProductInventoryRow),
+    dailyHistory: (raw.dailyHistory ?? raw.DailyHistory ?? []).map(normalizeProductDailyRow),
+    fiscalItems: (raw.fiscalItems ?? raw.FiscalItems ?? []).map(normalizeProductFiscalItem),
+  };
+}
+
+function normalizeProductInventoryRow(raw: any): ProductDetailInventoryRow {
+  return {
+    branchCode: raw.branchCode ?? raw.BranchCode ?? "",
+    warehouseCode: raw.warehouseCode ?? raw.WarehouseCode ?? "",
+    onHandQuantity: Number(raw.onHandQuantity ?? raw.OnHandQuantity ?? 0),
+    committedQuantity: Number(raw.committedQuantity ?? raw.CommittedQuantity ?? 0),
+    availableQuantity: Number(raw.availableQuantity ?? raw.AvailableQuantity ?? 0),
+    stockValue: Number(raw.stockValue ?? raw.StockValue ?? 0),
+    committedValue: Number(raw.committedValue ?? raw.CommittedValue ?? 0),
+    importCreatedAt: raw.importCreatedAt ?? raw.ImportCreatedAt ?? undefined,
+  };
+}
+
+function normalizeProductDailyRow(raw: any): ProductDailyInventoryRow {
+  return {
+    date: raw.date ?? raw.Date ?? "",
+    productionQuantity: Number(raw.productionQuantity ?? raw.ProductionQuantity ?? 0),
+    outboundQuantity: Number(raw.outboundQuantity ?? raw.OutboundQuantity ?? 0),
+    adjustmentQuantity: Number(raw.adjustmentQuantity ?? raw.AdjustmentQuantity ?? 0),
+    closingQuantity: Number(raw.closingQuantity ?? raw.ClosingQuantity ?? 0),
+    firstShiftProductionQuantity: raw.firstShiftProductionQuantity ?? raw.FirstShiftProductionQuantity ?? null,
+    secondShiftProductionQuantity: raw.secondShiftProductionQuantity ?? raw.SecondShiftProductionQuantity ?? null,
+    thirdShiftProductionQuantity: raw.thirdShiftProductionQuantity ?? raw.ThirdShiftProductionQuantity ?? null,
+  };
+}
+
+function normalizeProductFiscalItem(raw: any): ProductFiscalItem {
+  return {
+    id: String(raw.id ?? raw.Id ?? ""),
+    fiscalDocumentId: String(raw.fiscalDocumentId ?? raw.FiscalDocumentId ?? ""),
+    issueDate: raw.issueDate ?? raw.IssueDate ?? "",
+    documentNumber: raw.documentNumber ?? raw.DocumentNumber ?? "",
+    series: raw.series ?? raw.Series ?? "",
+    customerName: raw.customerName ?? raw.CustomerName ?? "",
+    operationCategory: raw.operationCategory ?? raw.OperationCategory ?? "",
+    quantity: Number(raw.quantity ?? raw.Quantity ?? 0),
+    grossWeightKg: Number(raw.grossWeightKg ?? raw.GrossWeightKg ?? 0),
+    unitValue: raw.unitValue ?? raw.UnitValue ?? null,
+    calculatedAmount: Number(raw.calculatedAmount ?? raw.CalculatedAmount ?? 0),
+  };
+}
+
+export async function fetchInventory(input: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  type?: string;
+  group?: string;
+  warehouse?: string;
+  status?: string;
+  sort?: string;
+}): Promise<PagedResult<InventoryItem>> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 25));
+  if (input.search?.trim()) query.set("search", input.search.trim());
+  if (input.type?.trim()) query.set("type", input.type.trim());
+  if (input.group?.trim()) query.set("group", input.group.trim());
+  if (input.warehouse?.trim()) query.set("warehouse", input.warehouse.trim());
+  if (input.status?.trim()) query.set("status", input.status.trim());
+  if (input.sort?.trim()) query.set("sort", input.sort.trim());
+  const response = await authFetch(`${API_URL}/api/inventory?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar estoque."));
+  const raw = await response.json();
+  return {
+    page: raw.page ?? raw.Page ?? 1,
+    pageSize: raw.pageSize ?? raw.PageSize ?? 25,
+    total: raw.total ?? raw.Total ?? 0,
+    items: (raw.items ?? raw.Items ?? []).map(normalizeInventoryItem),
+  };
+}
+
+function normalizeInventoryItem(raw: any): InventoryItem {
+  return {
+    id: String(raw.id ?? raw.Id ?? ""),
+    productId: String(raw.productId ?? raw.ProductId ?? ""),
+    erpCode: raw.erpCode ?? raw.ErpCode ?? "",
+    operationalCode: raw.operationalCode ?? raw.OperationalCode ?? "",
+    productName: raw.productName ?? raw.ProductName ?? "",
+    type: raw.type ?? raw.Type ?? "",
+    unit: raw.unit ?? raw.Unit ?? "",
+    groupCode: raw.groupCode ?? raw.GroupCode ?? "",
+    branchCode: raw.branchCode ?? raw.BranchCode ?? "",
+    warehouseCode: raw.warehouseCode ?? raw.WarehouseCode ?? "",
+    onHandQuantity: Number(raw.onHandQuantity ?? raw.OnHandQuantity ?? 0),
+    committedQuantity: Number(raw.committedQuantity ?? raw.CommittedQuantity ?? 0),
+    availableQuantity: Number(raw.availableQuantity ?? raw.AvailableQuantity ?? 0),
+    stockValue: Number(raw.stockValue ?? raw.StockValue ?? 0),
+    committedPercent: raw.committedPercent ?? raw.CommittedPercent ?? null,
+  };
+}
+
+export async function fetchInventorySummary(): Promise<InventorySummary> {
+  const response = await authFetch(`${API_URL}/api/inventory/summary`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de estoque."));
+  const raw = await response.json();
+  return {
+    stockouts: Number(raw.stockouts ?? raw.Stockouts ?? 0),
+    stockoutProducts: Number(raw.stockoutProducts ?? raw.StockoutProducts ?? raw.stockouts ?? raw.Stockouts ?? 0),
+    stockoutWarehousePositions: Number(raw.stockoutWarehousePositions ?? raw.StockoutWarehousePositions ?? 0),
+    committedPercent: Number(raw.committedPercent ?? raw.CommittedPercent ?? 0),
+    lastDailyDate: raw.lastDailyDate ?? raw.LastDailyDate ?? null,
+    lastProduction: Number(raw.lastProduction ?? raw.LastProduction ?? 0),
+    lastOutbound: Number(raw.lastOutbound ?? raw.LastOutbound ?? 0),
+    operationalBalance: Number(raw.operationalBalance ?? raw.OperationalBalance ?? 0),
+  };
+}
+
+export async function fetchInventoryStockouts(input: {
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<PagedResult<InventoryStockoutProduct>> {
+  const query = new URLSearchParams();
+  query.set("page", String(input.page ?? 1));
+  query.set("pageSize", String(input.pageSize ?? 20));
+  const response = await authFetch(`${API_URL}/api/inventory/stockouts?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar rupturas de estoque."));
+  const raw = await response.json();
+  return {
+    page: raw.page ?? raw.Page ?? 1,
+    pageSize: raw.pageSize ?? raw.PageSize ?? 20,
+    total: raw.total ?? raw.Total ?? 0,
+    items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
+      productId: String(item.productId ?? item.ProductId ?? ""),
+      erpCode: item.erpCode ?? item.ErpCode ?? "",
+      operationalCode: item.operationalCode ?? item.OperationalCode ?? "",
+      productName: item.productName ?? item.ProductName ?? "",
+      type: item.type ?? item.Type ?? "",
+      unit: item.unit ?? item.Unit ?? "",
+      groupCode: item.groupCode ?? item.GroupCode ?? "",
+      onHandQuantity: Number(item.onHandQuantity ?? item.OnHandQuantity ?? 0),
+      committedQuantity: Number(item.committedQuantity ?? item.CommittedQuantity ?? 0),
+      availableQuantity: Number(item.availableQuantity ?? item.AvailableQuantity ?? 0),
+      stockValue: Number(item.stockValue ?? item.StockValue ?? 0),
+      affectedWarehousePositions: Number(item.affectedWarehousePositions ?? item.AffectedWarehousePositions ?? 0),
+      warehousePositions: Number(item.warehousePositions ?? item.WarehousePositions ?? 0),
+    })),
+  };
+}
+
+export async function fetchInventoryFilters(): Promise<InventoryFilterOptions> {
+  const response = await authFetch(`${API_URL}/api/inventory/filters`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar filtros de estoque."));
+  const raw = await response.json();
+  return { warehouses: raw.warehouses ?? raw.Warehouses ?? [] };
 }
 
 export type ApiImportFileType = { id: string; name: string; code?: string; description?: string; allowedExtensions?: string };
@@ -2872,6 +3152,45 @@ export type AdminJobItem = {
   errorMessage: string | null;
 };
 
+export type OperationalJobDefinition = {
+  jobType: string;
+  displayName: string;
+  description: string;
+  manualRunAllowed: boolean;
+  scheduleAllowed: boolean;
+  allowConcurrentRuns: boolean;
+  currentlyRunning: boolean;
+};
+
+export type LogisticsMapCustomerItem = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  externalCode: string;
+  branchCode: string;
+  city: string;
+  stateCode: string;
+  type: string;
+  status: "Normal" | "Atenção" | "Crítico";
+  situation: "Atraso" | "Devolução" | "Ruptura" | "Ocorrência" | "Entrega normal";
+  route: string;
+  priority: "Baixa" | "Média" | "Alta";
+  lastDelivery: string;
+  nextDelivery: string;
+  locationPrecision: "Municipality";
+  lat: number;
+  lng: number;
+  municipalityLat: number;
+  municipalityLng: number;
+};
+
+export type LogisticsMapCustomersResponse = {
+  total: number;
+  visible: number;
+  withoutCoordinates: number;
+  items: LogisticsMapCustomerItem[];
+};
+
 // ─── API functions reais ────────────────────────────────────────────────
 
 export async function uploadImport(file: File): Promise<string> {
@@ -3120,6 +3439,42 @@ export type ImportedRouteDetail = ImportedRouteItem & {
   }[];
 };
 
+export type RouteOccupancySummary = {
+  occupancyRatePercent: number;
+  totalWeightKg: number;
+  totalCapacityKg: number;
+  routeCount: number;
+  routesWithCapacity: number;
+  routesWithoutCapacity: number;
+  snapshot: {
+    importId: string;
+    version: number;
+    fileName: string;
+    finishedAt: string | null;
+  } | null;
+};
+
+export async function fetchRouteOccupancySummary(): Promise<RouteOccupancySummary> {
+  const response = await authFetch(`${API_URL}/api/routes/occupancy-summary`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a taxa de ocupação."));
+  return (await response.json()) as RouteOccupancySummary;
+}
+
+export async function fetchFiscalReturnRate(periodDays: number): Promise<FiscalReturnRateSummary> {
+  const query = new URLSearchParams({ periodDays: String(periodDays) });
+  const response = await authFetch(`${API_URL}/api/fiscal-documents/return-rate?${query.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a taxa de devolução."));
+  const raw = await response.json();
+  return {
+    periodDays: Number(raw.periodDays ?? raw.PeriodDays ?? periodDays),
+    dateFrom: raw.dateFrom ?? raw.DateFrom ?? null,
+    dateTo: raw.dateTo ?? raw.DateTo ?? null,
+    salesWeightKg: Number(raw.salesWeightKg ?? raw.SalesWeightKg ?? 0),
+    returnWeightKg: Number(raw.returnWeightKg ?? raw.ReturnWeightKg ?? 0),
+    returnRatePercent: Number(raw.returnRatePercent ?? raw.ReturnRatePercent ?? 0),
+  };
+}
+
 export async function fetchImportedRoutes(
   page = 1,
   pageSize = 20,
@@ -3177,6 +3532,21 @@ export async function fetchAdminJobsSummary(): Promise<AdminJobSummary> {
   return (await response.json()) as AdminJobSummary;
 }
 
+export async function fetchOperationalJobDefinitions(): Promise<OperationalJobDefinition[]> {
+  const response = await authFetch(`${API_URL}/api/admin/jobs/definitions`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar jobs operacionais."));
+  return (await response.json()) as OperationalJobDefinition[];
+}
+
+export async function runOperationalJob(jobType: string): Promise<string> {
+  const response = await authFetch(`${API_URL}/api/admin/jobs/definitions/${encodeURIComponent(jobType)}/run`, {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao executar job operacional."));
+  const payload = (await response.json()) as { jobExecutionId: string };
+  return payload.jobExecutionId;
+}
+
 export async function fetchAdminJobs(
   page = 1,
   pageSize = 20,
@@ -3210,4 +3580,101 @@ export async function retryAdminJob(jobId: string): Promise<void> {
 export async function cancelAdminJob(jobId: string): Promise<void> {
   const response = await authFetch(`${API_URL}/api/admin/jobs/${jobId}/cancel`, { method: "POST" });
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao cancelar job."));
+}
+
+export async function fetchLogisticsMapCustomers(active?: string): Promise<LogisticsMapCustomersResponse> {
+  const query = active ? `?active=${encodeURIComponent(active)}` : "";
+  const response = await authFetch(`${API_URL}/api/logistics/map/customers${query}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar clientes do mapa."));
+  return (await response.json()) as LogisticsMapCustomersResponse;
+}
+
+export type ProductionSummary = {
+  lastDailyDate: string | null;
+  lastProduction: number;
+  lastOutbound: number;
+  operationalBalance: number;
+  totalProductionMonth: number;
+  totalOutboundMonth: number;
+};
+
+export type ProductionItem = {
+  id: string;
+  productId: string;
+  erpCode: string;
+  operationalCode: string;
+  productName: string;
+  groupCode: string;
+  type: string;
+  date: string;
+  productionQuantity: number;
+  outboundQuantity: number;
+  adjustmentQuantity: number;
+  closingQuantity: number;
+  firstShiftProductionQuantity: number | null;
+  secondShiftProductionQuantity: number | null;
+  thirdShiftProductionQuantity: number | null;
+};
+
+export type ProductionListResponse = {
+  page: number;
+  pageSize: number;
+  total: number;
+  items: ProductionItem[];
+};
+
+export type ProductionFilterOptions = {
+  types: string[];
+  groups: string[];
+};
+
+export async function fetchProductionSummary(): Promise<ProductionSummary> {
+  const response = await authFetch(`${API_URL}/api/production/summary`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de produção."));
+  const raw = await response.json();
+  return {
+    lastDailyDate: raw.lastDailyDate ?? null,
+    lastProduction: Number(raw.lastProduction ?? 0),
+    lastOutbound: Number(raw.lastOutbound ?? 0),
+    operationalBalance: Number(raw.operationalBalance ?? 0),
+    totalProductionMonth: Number(raw.totalProductionMonth ?? 0),
+    totalOutboundMonth: Number(raw.totalOutboundMonth ?? 0),
+  };
+}
+
+export async function fetchProduction(input: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sort?: string;
+}): Promise<ProductionListResponse> {
+  const params = new URLSearchParams();
+  if (input.page) params.set("page", String(input.page));
+  if (input.pageSize) params.set("pageSize", String(input.pageSize));
+  if (input.search) params.set("search", input.search);
+  if (input.dateFrom) params.set("dateFrom", input.dateFrom);
+  if (input.dateTo) params.set("dateTo", input.dateTo);
+  if (input.sort) params.set("sort", input.sort);
+  const response = await authFetch(`${API_URL}/api/production?${params}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produção."));
+  return (await response.json()) as ProductionListResponse;
+}
+
+export async function fetchProductionFilters(): Promise<ProductionFilterOptions> {
+  const response = await authFetch(`${API_URL}/api/production/filters`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar filtros de produção."));
+  const raw = await response.json();
+  return {
+    types: raw.types ?? [],
+    groups: raw.groups ?? [],
+  };
+}
+
+export async function fetchProductionDates(): Promise<string[]> {
+  const response = await authFetch(`${API_URL}/api/production/dates`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar datas de produção."));
+  const raw = await response.json();
+  return raw.dates ?? [];
 }

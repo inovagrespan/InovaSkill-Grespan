@@ -12,6 +12,8 @@ public sealed class RoutesController(ImportDbContext dbContext) : ControllerBase
 {
     private const int DefaultPageSize = 20;
     private const int MaximumPageSize = 100;
+    private const int OccupancyPercentScale = 100;
+    private const int OccupancyPercentDecimalPlaces = 1;
     private static readonly HashSet<string> SupportedOccupancyLevels =
     [
         "critical",
@@ -20,6 +22,62 @@ public sealed class RoutesController(ImportDbContext dbContext) : ControllerBase
         "idle",
         "unavailable"
     ];
+
+    [HttpGet("occupancy-summary")]
+    public async Task<ActionResult> GetOccupancySummary(CancellationToken cancellationToken)
+    {
+        var snapshot = await dbContext.DataSources.AsNoTracking()
+            .Where(source => source.Code == RouteImportCodes.DataSource)
+            .Select(source => source.CurrentImportId == null
+                ? null
+                : new
+                {
+                    ImportId = source.CurrentImport!.Id,
+                    source.CurrentImport.Version,
+                    source.CurrentImport.FileName,
+                    source.CurrentImport.FinishedAt
+                })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (snapshot is null)
+        {
+            return Ok(RouteOccupancySummaryResponse.Empty);
+        }
+
+        var routes = await dbContext.Routes.AsNoTracking()
+            .Where(route => route.ImportId == snapshot.ImportId)
+            .Select(route => new
+            {
+                route.TotalWeightKg,
+                CapacityKg = route.VehicleType!.CapacityKg
+            })
+            .ToListAsync(cancellationToken);
+
+        var routesWithCapacity = routes
+            .Where(route => route.CapacityKg is > 0)
+            .ToArray();
+        var totalWeightKg = routesWithCapacity.Sum(route => route.TotalWeightKg);
+        var totalCapacityKg = routesWithCapacity.Sum(route => route.CapacityKg!.Value);
+        var occupancyRatePercent = totalCapacityKg > 0
+            ? Math.Round(
+                totalWeightKg / totalCapacityKg * OccupancyPercentScale,
+                OccupancyPercentDecimalPlaces,
+                MidpointRounding.AwayFromZero)
+            : 0m;
+
+        return Ok(new RouteOccupancySummaryResponse(
+            occupancyRatePercent,
+            totalWeightKg,
+            totalCapacityKg,
+            routes.Count,
+            routesWithCapacity.Length,
+            routes.Count - routesWithCapacity.Length,
+            new RouteOccupancySnapshotResponse(
+                snapshot.ImportId,
+                snapshot.Version,
+                snapshot.FileName,
+                snapshot.FinishedAt)));
+    }
 
     [HttpGet]
     public async Task<ActionResult> List(
@@ -218,3 +276,21 @@ public sealed class RoutesController(ImportDbContext dbContext) : ControllerBase
             .FirstOrDefaultAsync(cancellationToken);
     }
 }
+
+public sealed record RouteOccupancySummaryResponse(
+    decimal OccupancyRatePercent,
+    decimal TotalWeightKg,
+    decimal TotalCapacityKg,
+    int RouteCount,
+    int RoutesWithCapacity,
+    int RoutesWithoutCapacity,
+    RouteOccupancySnapshotResponse? Snapshot)
+{
+    public static RouteOccupancySummaryResponse Empty { get; } = new(0, 0, 0, 0, 0, 0, null);
+}
+
+public sealed record RouteOccupancySnapshotResponse(
+    Guid ImportId,
+    long Version,
+    string FileName,
+    DateTime? FinishedAt);
