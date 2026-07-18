@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Activity, AlertTriangle, CheckCircle2, Clock, Database, Loader2, Play, RefreshCw, StopCircle } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardKpiCard } from "@/components/ui/dashboard-kpi-card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FeedbackMessage } from "@/components/ui/feedback-message";
 import { SkeletonMetricCard, SkeletonModalContent, SkeletonTable } from "@/components/ui/skeleton";
 import {
   cancelAdminJob,
@@ -77,6 +77,7 @@ function ProcessamentosPage() {
   const [jobs, setJobs] = useState<AdminJobItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"error" | "success">("success");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -107,6 +108,7 @@ function ProcessamentosPage() {
       setPage(jobsData.page);
       pageRef.current = jobsData.page;
     } catch (error) {
+      setMessageType("error");
       setMessage((error as Error).message);
     } finally {
       loadingRef.current = false;
@@ -130,6 +132,7 @@ function ProcessamentosPage() {
     setMessage("");
     try {
       await retryAdminJob(jobId);
+      setMessageType("success");
       setMessage("Job reenfileirado com sucesso.");
       await loadData(pageRef.current);
       if (selectedJob?.id === jobId) {
@@ -137,6 +140,7 @@ function ProcessamentosPage() {
         setSelectedJob(updated);
       }
     } catch (error) {
+      setMessageType("error");
       setMessage((error as Error).message);
     } finally {
       setRetryingId(null);
@@ -148,6 +152,7 @@ function ProcessamentosPage() {
     setMessage("");
     try {
       await cancelAdminJob(jobId);
+      setMessageType("success");
       setMessage("Job cancelado com sucesso.");
       await loadData(pageRef.current);
       if (selectedJob?.id === jobId || detailsOpen) {
@@ -155,6 +160,7 @@ function ProcessamentosPage() {
         setSelectedJob(null);
       }
     } catch (error) {
+      setMessageType("error");
       setMessage((error as Error).message);
     } finally {
       setCancellingId(null);
@@ -166,9 +172,11 @@ function ProcessamentosPage() {
     setMessage("");
     try {
       await runOperationalJob(jobType);
+      setMessageType("success");
       setMessage("Job operacional enfileirado com sucesso.");
       await loadData(pageRef.current);
     } catch (error) {
+      setMessageType("error");
       setMessage((error as Error).message);
     } finally {
       setRunningDefinitionType(null);
@@ -217,12 +225,7 @@ function ProcessamentosPage() {
         </div>
       </header>
 
-      {message && (
-        <Alert variant="destructive">
-          <AlertTriangle className="size-4" />
-          <AlertDescription>{message}</AlertDescription>
-        </Alert>
-      )}
+      <FeedbackMessage message={message} type={messageType} />
 
       <section className="metric-row">
         {loading && !summary

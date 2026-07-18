@@ -11,6 +11,8 @@ public sealed class QueryIndexModelTests
     [InlineData(typeof(Customer), "DataSourceId", "ExternalCode", "BranchCode")]
     [InlineData(typeof(CustomerSnapshot), "ImportId", "MunicipalityId")]
     [InlineData(typeof(CustomerSnapshot), "ImportId", "CustomerType")]
+    [InlineData(typeof(RouteCustomerAssignment), "RouteId", "CustomerId")]
+    [InlineData(typeof(RouteCustomerAssignment), "RouteId", "Source")]
     [InlineData(typeof(Product), "ErpCode")]
     [InlineData(typeof(Product), "OperationalCode")]
     [InlineData(typeof(InventorySnapshot), "ImportId", "AvailableQuantity")]

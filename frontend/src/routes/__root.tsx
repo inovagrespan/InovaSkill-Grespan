@@ -9,7 +9,6 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "../components/AppSidebar";
-import { NotificationCenter } from "../components/NotificationCenter";
 import { BusinessAssistant } from "../components/BusinessAssistant";
 import { getCurrentUserRole, isAuthenticated, redirectToLogin } from "../lib/auth";
 import { canRoleAccessPath, getDefaultPathForRole } from "../lib/access-control";
@@ -177,7 +176,6 @@ function RootComponent() {
             onToggleTheme={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
           />
         ) : null}
-        {canRenderPrivateApp ? <NotificationCenter /> : null}
         {canRenderPrivateApp && !isAssistantPage ? <BusinessAssistant /> : null}
         <main
           className={cn(

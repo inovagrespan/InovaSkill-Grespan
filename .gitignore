@@ -159,6 +159,9 @@ vite.config.ts.timestamp-*
 .DS_Store
 Thumbs.db
 
+# OSRM extracts and preprocessed routing graphs
+infra/osrm/
+
 # Monorepo local runtime data
 uploads/
 backend/uploads/

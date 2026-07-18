@@ -19,9 +19,6 @@ public sealed class ApiAccessPolicyTests
     [InlineData(AppUserRoles.Vendas, "/api/vehicle-types", "GET", true)]
     [InlineData(AppUserRoles.Vendas, "/api/vehicle-types", "PUT", false)]
     [InlineData(AppUserRoles.Diretor, "/api/vehicle-types", "PUT", false)]
-    [InlineData(AppUserRoles.Vendas, "/api/detectors", "GET", true)]
-    [InlineData(AppUserRoles.Logistica, "/api/detectors/abc/runs", "POST", false)]
-    [InlineData(AppUserRoles.Admin, "/api/detectors/abc/runs", "POST", true)]
     public void CanAccess_EnforcesRoleAndOperation(
         string role,
         string path,

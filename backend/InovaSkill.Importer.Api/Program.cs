@@ -1,10 +1,8 @@
 using InovaSkill.Importer.Api.Auth;
 using InovaSkill.Importer.Api.Assistant;
 using InovaSkill.Importer.Api.Hangfire;
-using InovaSkill.Importer.Application.Detection;
 using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Entities;
-using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.BackgroundJobs;
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
 using InovaSkill.Importer.Infrastructure.Persistence;
@@ -29,6 +27,21 @@ builder.Services.AddScoped<IChatTool, GetRouteDetailsChatTool>();
 builder.Services.AddScoped<IChatTool, GetCriticalRoutesChatTool>();
 builder.Services.AddScoped<IChatTool, ListRoutesByOccupancyChatTool>();
 builder.Services.AddScoped<IChatTool, GetRouteCitiesChatTool>();
+builder.Services.AddScoped<IChatTool, GetRouteCustomersChatTool>();
+builder.Services.AddScoped<IChatTool, GetLatestGlobalRouteOptimizationChatTool>();
+builder.Services.AddScoped<IChatTool, GetLatestRouteOptimizationChatTool>();
+builder.Services.AddScoped<IChatTool, RequestGlobalRouteOptimizationChatTool>();
+builder.Services.AddScoped<IChatTool, SearchCustomersChatTool>();
+builder.Services.AddScoped<IChatTool, GetCustomerConsumptionSummaryChatTool>();
+builder.Services.AddScoped<IChatTool, ListRecentFiscalDocumentsChatTool>();
+builder.Services.AddScoped<IChatTool, GetFiscalReturnRateChatTool>();
+builder.Services.AddScoped<IChatTool, SearchProductsChatTool>();
+builder.Services.AddScoped<IChatTool, GetProductDetailsChatTool>();
+builder.Services.AddScoped<IChatTool, GetInventorySummaryChatTool>();
+builder.Services.AddScoped<IChatTool, ListInventoryPositionsChatTool>();
+builder.Services.AddScoped<IChatTool, ListStockoutProductsChatTool>();
+builder.Services.AddScoped<IChatTool, GetProductionSummaryChatTool>();
+builder.Services.AddScoped<IChatTool, ListProductionRecordsChatTool>();
 builder.Services.AddScoped<BusinessAssistantService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddImportInfrastructure(builder.Configuration);
@@ -57,67 +70,6 @@ using (var scope = app.Services.CreateScope())
         db,
         scope.ServiceProvider.GetRequiredService<PasswordHasher<AppUser>>())
         .EnsureDefaultUsersAsync();
-
-    var existing = await db.DetectorDefinitions
-        .FirstOrDefaultAsync(x => x.Code == DetectorCodes.CustomerPurchaseDrop);
-    if (existing is null)
-    {
-        var now = DateTime.UtcNow;
-
-        var oldSample = await db.DetectorDefinitions
-            .FirstOrDefaultAsync(x => x.Code == "DEV_SAMPLE_DETECTOR");
-
-        if (oldSample is not null)
-        {
-            oldSample.Code = DetectorCodes.CustomerPurchaseDrop;
-            oldSample.Name = "Cliente fora do padrão de compra";
-            oldSample.Description = "Identifica clientes com volume de compras significativamente abaixo da média histórica mensal, considerando os últimos 30 dias contra os 60 dias anteriores.";
-            oldSample.UpdatedAt = now;
-        }
-        else
-        {
-            db.DetectorDefinitions.Add(new DetectorDefinition
-            {
-                Id = Guid.NewGuid(),
-                Code = DetectorCodes.CustomerPurchaseDrop,
-                Name = "Cliente fora do padrão de compra",
-                Description = "Identifica clientes com volume de compras significativamente abaixo da média histórica mensal, considerando os últimos 30 dias contra os 60 dias anteriores.",
-                Status = DetectorStatus.Active,
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-        }
-
-        await db.SaveChangesAsync();
-    }
-
-    var inactiveDetector = await db.DetectorDefinitions
-        .FirstOrDefaultAsync(x => x.Code == "INACTIVE_CUSTOMER");
-    if (inactiveDetector is not null)
-    {
-        inactiveDetector.Code = "__ARCHIVED_INACTIVE_CUSTOMER";
-        inactiveDetector.Status = DetectorStatus.Disabled;
-        inactiveDetector.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-    }
-
-    if (!await db.DetectorDefinitions.AnyAsync(x => x.Code == DetectorCodes.RouteOccupancyAnomaly))
-    {
-        var now = DateTime.UtcNow;
-        db.DetectorDefinitions.Add(new DetectorDefinition
-        {
-            Id = Guid.NewGuid(),
-            Code = DetectorCodes.RouteOccupancyAnomaly,
-            Name = "Rotas com ocupação crítica ou ociosa",
-            Description = "Identifica rotas com ocupação acima de 100% (crítica) ou abaixo de 60% (ociosa) em relação à capacidade do veículo.",
-            Status = DetectorStatus.Active,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        await db.SaveChangesAsync();
-    }
-
-
 }
 
 if (!builder.Configuration.GetValue<bool>("DisableHttpsRedirection"))

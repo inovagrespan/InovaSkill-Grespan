@@ -351,28 +351,20 @@ function AssistantResponseText({ text }: { text: string }) {
           );
         }
 
+        if (block.type === "entity-list") {
+          return (
+            <div key={`${block.type}-${index}`} className="space-y-2">
+              {block.items.map((item, itemIndex) => (
+                <EntityDisplayCard key={`${item.kind}-${item.title}-${itemIndex}`} item={item} index={itemIndex} />
+              ))}
+            </div>
+          );
+        }
+
         return (
           <div key={`${block.type}-${index}`} className="space-y-2">
             {block.routes.map((route, routeIndex) => (
-              <div key={`${route.name}-${routeIndex}`} className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                    {routeIndex + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 break-words font-semibold text-foreground">{route.name}</span>
-                  {route.occupancy && (
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                      {route.occupancy}
-                    </span>
-                  )}
-                  {route.status && (
-                    <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                      {route.status}
-                    </span>
-                  )}
-                </div>
-                {route.detail && <p className="mt-1 text-xs text-muted-foreground">{route.detail}</p>}
-              </div>
+              <RouteDisplayCard key={`${route.name}-${routeIndex}`} route={route} index={routeIndex} />
             ))}
           </div>
         );
@@ -385,6 +377,7 @@ type AssistantBlock =
   | { type: "heading"; text: string }
   | { type: "paragraph"; text: string }
   | { type: "bullet-list"; items: string[] }
+  | { type: "entity-list"; items: AssistantEntityDisplay[] }
   | { type: "route-list"; routes: AssistantRouteDisplay[] };
 
 type AssistantRouteDisplay = {
@@ -394,15 +387,27 @@ type AssistantRouteDisplay = {
   detail?: string;
 };
 
+type AssistantEntityDisplay = {
+  kind: "customer";
+  title: string;
+  badges: string[];
+  detail?: string;
+};
+
 function buildAssistantBlocks(lines: string[]): AssistantBlock[] {
   const blocks: AssistantBlock[] = [];
   let pendingBullets: string[] = [];
   let pendingRoutes: AssistantRouteDisplay[] = [];
+  let pendingEntities: AssistantEntityDisplay[] = [];
 
   function flushLists() {
     if (pendingRoutes.length > 0) {
       blocks.push({ type: "route-list", routes: pendingRoutes });
       pendingRoutes = [];
+    }
+    if (pendingEntities.length > 0) {
+      blocks.push({ type: "entity-list", items: pendingEntities });
+      pendingEntities = [];
     }
     if (pendingBullets.length > 0) {
       blocks.push({ type: "bullet-list", items: pendingBullets });
@@ -422,10 +427,28 @@ function buildAssistantBlocks(lines: string[]): AssistantBlock[] {
       continue;
     }
 
+    const entity = parseEntityLine(line);
+    if (entity) {
+      if (pendingRoutes.length > 0) {
+        blocks.push({ type: "route-list", routes: pendingRoutes });
+        pendingRoutes = [];
+      }
+      if (pendingBullets.length > 0) {
+        blocks.push({ type: "bullet-list", items: pendingBullets });
+        pendingBullets = [];
+      }
+      pendingEntities.push(entity);
+      continue;
+    }
+
     if (isBulletLine(line)) {
       if (pendingRoutes.length > 0) {
         blocks.push({ type: "route-list", routes: pendingRoutes });
         pendingRoutes = [];
+      }
+      if (pendingEntities.length > 0) {
+        blocks.push({ type: "entity-list", items: pendingEntities });
+        pendingEntities = [];
       }
       pendingBullets.push(cleanListMarker(line));
       continue;
@@ -441,6 +464,49 @@ function buildAssistantBlocks(lines: string[]): AssistantBlock[] {
 
   flushLists();
   return blocks;
+}
+
+function RouteDisplayCard({ route, index }: { route: AssistantRouteDisplay; index: number }) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+          {index + 1}
+        </span>
+        <span className="min-w-0 flex-1 break-words font-semibold text-foreground">{route.name}</span>
+        {route.occupancy && (
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+            {route.occupancy}
+          </span>
+        )}
+        {route.status && (
+          <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+            {route.status}
+          </span>
+        )}
+      </div>
+      {route.detail && <p className="mt-1 text-xs text-muted-foreground">{route.detail}</p>}
+    </div>
+  );
+}
+
+function EntityDisplayCard({ item, index }: { item: AssistantEntityDisplay; index: number }) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+          {index + 1}
+        </span>
+        <span className="min-w-0 flex-1 break-words font-semibold text-foreground">{item.title}</span>
+        {item.badges.map((badge) => (
+          <span key={badge} className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+            {badge}
+          </span>
+        ))}
+      </div>
+      {item.detail && <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>}
+    </div>
+  );
 }
 
 function parseRouteLine(line: string): AssistantRouteDisplay | null {
@@ -479,6 +545,33 @@ function parseRouteContract(value: string): AssistantRouteDisplay {
   }
 
   return route;
+}
+
+function parseEntityLine(line: string): AssistantEntityDisplay | null {
+  const customerMatch = line.match(/^(?:[-*]\s*)?\[CLIENTE\]\s*(.+)$/i);
+  if (!customerMatch) return null;
+
+  const parts = customerMatch[1].split("|").map((part) => part.trim()).filter(Boolean);
+  const item: AssistantEntityDisplay = {
+    kind: "customer",
+    title: parts[0] ?? "Cliente",
+    badges: [],
+  };
+
+  for (const part of parts.slice(1)) {
+    const [rawLabel, ...rawValueParts] = part.split(":");
+    const label = rawLabel.trim().toLowerCase();
+    const partValue = rawValueParts.join(":").trim();
+    if (!partValue) continue;
+
+    if (label === "código" || label === "codigo" || label === "cidade" || label === "tipo") {
+      item.badges.push(partValue);
+    } else if (label === "relação" || label === "relacao" || label === "observação" || label === "observacao") {
+      item.detail = partValue;
+    }
+  }
+
+  return item;
 }
 
 function isBulletLine(line: string) {

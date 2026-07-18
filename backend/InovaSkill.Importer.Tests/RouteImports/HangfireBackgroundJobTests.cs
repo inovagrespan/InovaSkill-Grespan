@@ -65,6 +65,38 @@ public sealed class HangfireBackgroundJobTests
     }
 
     [Fact]
+    public void EnqueueRouteOptimization_CreatesJobInOptimizationQueueWithRunIdOnly()
+    {
+        var client = new CapturingBackgroundJobClient();
+        var dispatcher = new HangfireBackgroundJobDispatcher(client);
+        var optimizationRunId = Guid.NewGuid();
+
+        dispatcher.Enqueue(optimizationRunId);
+
+        Assert.Equal(BackgroundJobQueues.RouteOptimization, Assert.IsType<EnqueuedState>(client.State).Queue);
+        Assert.Equal(typeof(ProcessRouteOptimizationJob), client.Job!.Type);
+        Assert.Equal(nameof(ProcessRouteOptimizationJob.ExecuteAsync), client.Job.Method.Name);
+        Assert.Collection(
+            client.Job.Args,
+            argument => Assert.Equal(optimizationRunId, argument),
+            argument => Assert.IsType<CancellationToken>(argument));
+    }
+
+    [Fact]
+    public async Task ProcessRouteOptimizationJob_DelegatesToProcessingServiceWithRunId()
+    {
+        var service = new CapturingRouteOptimizationProcessingService();
+        var job = new ProcessRouteOptimizationJob(service, NullLogger<ProcessRouteOptimizationJob>.Instance);
+        var optimizationRunId = Guid.NewGuid();
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        await job.ExecuteAsync(optimizationRunId, cancellationTokenSource.Token);
+
+        Assert.Equal(optimizationRunId, service.OptimizationRunId);
+        Assert.Equal(cancellationTokenSource.Token, service.CancellationToken);
+    }
+
+    [Fact]
     public async Task ProcessOperationalJob_DelegatesToProcessingServiceWithJobExecutionId()
     {
         var service = new CapturingOperationalJobProcessingService();
@@ -128,6 +160,20 @@ public sealed class HangfireBackgroundJobTests
             CancellationToken cancellationToken)
         {
             JobExecutionId = jobExecutionId;
+            CancellationToken = cancellationToken;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingRouteOptimizationProcessingService : IRouteOptimizationProcessingService
+    {
+        public Guid OptimizationRunId { get; private set; }
+
+        public CancellationToken CancellationToken { get; private set; }
+
+        public Task ProcessAsync(Guid optimizationRunId, CancellationToken cancellationToken)
+        {
+            OptimizationRunId = optimizationRunId;
             CancellationToken = cancellationToken;
             return Task.CompletedTask;
         }

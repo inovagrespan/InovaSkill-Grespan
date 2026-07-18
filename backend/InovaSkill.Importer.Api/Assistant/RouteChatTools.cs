@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using InovaSkill.Importer.Application.RouteImports;
+using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Domain.Enums;
 using Microsoft.Extensions.Options;
 
 namespace InovaSkill.Importer.Api.Assistant;
@@ -398,6 +400,288 @@ public sealed class GetRouteCitiesChatTool(
         {
             logger.LogError(ex, "Falha ao executar ferramenta {ToolName}.", Name);
             return ChatToolResult.Fail("Não foi possível listar cidades da rota agora.");
+        }
+    }
+}
+
+public sealed class GetRouteCustomersChatTool(
+    IRouteChatQueryService routeQueries,
+    IOptions<AssistantOptions> options,
+    ILogger<GetRouteCustomersChatTool> logger) : IChatTool
+{
+    private const int DefaultLimit = 20;
+    private const int MaximumCustomerLimit = 50;
+    private readonly AssistantOptions assistantOptions = options.Value;
+
+    public string Name => "get_route_customers";
+
+    public string Description =>
+        "Lista clientes vinculados a uma rota. Nesta versão, o vínculo é inferido pelos municípios dos clientes que aparecem nas cidades da rota.";
+
+    public object GetParameterSchema() => new
+    {
+        type = "object",
+        additionalProperties = false,
+        properties = new
+        {
+            routeId = new { type = "string", format = "uuid", description = "Identificador da rota." },
+            limit = new { type = "integer", minimum = 1, maximum = MaximumCustomerLimit }
+        },
+        required = new[] { "routeId", "limit" }
+    };
+
+    public async Task<ChatToolResult> ExecuteAsync(
+        string argumentsJson,
+        ChatExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            var routeIdValue = SearchRoutesChatTool.ReadString(document.RootElement, "routeId");
+            if (!Guid.TryParse(routeIdValue, out var routeId))
+            {
+                return ChatToolResult.Fail("Identificador de rota inválido.");
+            }
+
+            var limit = SearchRoutesChatTool.ReadLimit(
+                document.RootElement,
+                DefaultLimit,
+                Math.Min(MaximumCustomerLimit, assistantOptions.MaximumGeneralSearchResults));
+            var route = await routeQueries.GetRouteCustomersAsync(routeId, limit, cancellationToken);
+            object payload = route is null
+                ? new { found = false, message = "Rota não encontrada." }
+                : new { found = true, route };
+            var recordCount = route?.Customers.Count ?? 0;
+            logger.LogInformation(
+                "Chat tool {ToolName} executada para usuário {UserId} em {ElapsedMs} ms com {RecordCount} registros.",
+                Name,
+                context.UserId,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
+                recordCount);
+            return ChatToolResult.Ok(payload, recordCount);
+        }
+        catch (JsonException)
+        {
+            return ChatToolResult.Fail("Argumentos inválidos para listagem de clientes da rota.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Falha ao executar ferramenta {ToolName}.", Name);
+            return ChatToolResult.Fail("Não foi possível listar clientes da rota agora.");
+        }
+    }
+}
+
+public sealed class GetLatestRouteOptimizationChatTool(
+    IRouteOptimizationService optimizationService,
+    ILogger<GetLatestRouteOptimizationChatTool> logger) : IChatTool
+{
+    public string Name => "get_latest_route_optimization";
+
+    public string Description =>
+        "Consulta a recomendação persistida da última otimização global para uma rota específica. Não executa o algoritmo.";
+
+    public object GetParameterSchema() => new
+    {
+        type = "object",
+        additionalProperties = false,
+        properties = new
+        {
+            routeId = new { type = "string", format = "uuid", description = "Identificador da rota." }
+        },
+        required = new[] { "routeId" }
+    };
+
+    public async Task<ChatToolResult> ExecuteAsync(
+        string argumentsJson,
+        ChatExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            var routeIdValue = SearchRoutesChatTool.ReadString(document.RootElement, "routeId");
+            if (!Guid.TryParse(routeIdValue, out var routeId))
+            {
+                return ChatToolResult.Fail("Identificador de rota inválido.");
+            }
+
+            var result = await optimizationService.GetLatestRouteOptimizationAsync(routeId, null, cancellationToken);
+
+            logger.LogInformation(
+                "Chat tool {ToolName} consultou otimização de rota para usuário {UserId} em {ElapsedMs} ms.",
+                Name,
+                context.UserId,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+
+            return ChatToolResult.Ok(result, result.Route is null ? 0 : 1);
+        }
+        catch (JsonException)
+        {
+            return ChatToolResult.Fail("Argumentos inválidos para consulta de otimização.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Falha ao executar ferramenta {ToolName}.", Name);
+            return ChatToolResult.Fail("Não foi possível consultar a otimização agora.");
+        }
+    }
+}
+
+public sealed class GetLatestGlobalRouteOptimizationChatTool(
+    IRouteOptimizationService optimizationService,
+    ILogger<GetLatestGlobalRouteOptimizationChatTool> logger) : IChatTool
+{
+    public string Name => "get_latest_global_route_optimization";
+
+    public string Description =>
+        "Consulta o último resultado global persistido de otimização de rotas, com cenários, realocações, motivos e avisos. Não executa o algoritmo.";
+
+    public object GetParameterSchema() => new
+    {
+        type = "object",
+        additionalProperties = false,
+        properties = new
+        {
+            referenceDate = new
+            {
+                type = new[] { "string", "null" },
+                format = "date",
+                description = "Data de referência opcional, no formato YYYY-MM-DD."
+            }
+        },
+        required = Array.Empty<string>()
+    };
+
+    public async Task<ChatToolResult> ExecuteAsync(
+        string argumentsJson,
+        ChatExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            DateOnly? referenceDate = null;
+            using var document = JsonDocument.Parse(argumentsJson);
+            if (document.RootElement.TryGetProperty("referenceDate", out var referenceDateElement) &&
+                referenceDateElement.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(referenceDateElement.GetString()))
+            {
+                if (!DateOnly.TryParse(referenceDateElement.GetString(), out var parsedDate))
+                {
+                    return ChatToolResult.Fail("Data de referência inválida. Use o formato YYYY-MM-DD.");
+                }
+
+                referenceDate = parsedDate;
+            }
+
+            var result = await optimizationService.GetLatestGlobalOptimizationAsync(referenceDate, cancellationToken);
+
+            logger.LogInformation(
+                "Chat tool {ToolName} consultou otimização global para usuário {UserId} em {ElapsedMs} ms.",
+                Name,
+                context.UserId,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+
+            return result is null
+                ? ChatToolResult.Ok(new LatestGlobalRouteOptimizationChatPayload(false, null, "Ainda não existe otimização global concluída."), 0)
+                : ChatToolResult.Ok(
+                    new LatestGlobalRouteOptimizationChatPayload(true, result, null),
+                    result.Scenarios.Sum(item => item.CityReallocations.Count));
+        }
+        catch (JsonException)
+        {
+            return ChatToolResult.Fail("Argumentos inválidos para consulta de otimização global.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Falha ao executar ferramenta {ToolName}.", Name);
+            return ChatToolResult.Fail("Não foi possível consultar a otimização global agora.");
+        }
+    }
+}
+
+public sealed record LatestGlobalRouteOptimizationChatPayload(
+    bool Found,
+    RouteOptimizationRunDto? Run,
+    string? Message);
+
+public sealed class RequestGlobalRouteOptimizationChatTool(
+    IRouteOptimizationService optimizationService,
+    ILogger<RequestGlobalRouteOptimizationChatTool> logger) : IChatTool
+{
+    public string Name => "request_global_route_optimization";
+
+    public string Description =>
+        "Solicita uma nova otimização global em background para usuários autorizados. Não executa nem aguarda o algoritmo.";
+
+    public object GetParameterSchema() => new
+    {
+        type = "object",
+        additionalProperties = false,
+        properties = new
+        {
+            referenceDate = new { type = "string", format = "date", description = "Data de referência, no formato YYYY-MM-DD." }
+        },
+        required = new[] { "referenceDate" }
+    };
+
+    public async Task<ChatToolResult> ExecuteAsync(
+        string argumentsJson,
+        ChatExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        if (context.Role is not (AppUserRoles.Logistica or AppUserRoles.Admin or AppUserRoles.AdminSystem))
+        {
+            return ChatToolResult.Fail("Seu perfil não possui permissão para solicitar otimização global.");
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            var referenceDateValue = SearchRoutesChatTool.ReadString(document.RootElement, "referenceDate");
+            if (!DateOnly.TryParse(referenceDateValue, out var referenceDate))
+            {
+                return ChatToolResult.Fail("Data de referência inválida. Use o formato YYYY-MM-DD.");
+            }
+
+            var run = await optimizationService.StartOptimizationAsync(
+                new RouteOptimizationStartRequest(
+                    RouteOptimizationScope.AllRoutes,
+                    referenceDate,
+                    null,
+                    RouteOptimizationRequestedFrom.Chat,
+                    context.UserId),
+                cancellationToken);
+
+            logger.LogInformation(
+                "Chat tool {ToolName} solicitou otimização global {OptimizationRunId} para usuário {UserId} em {ElapsedMs} ms.",
+                Name,
+                run.Id,
+                context.UserId,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+
+            return ChatToolResult.Ok(new
+            {
+                run.Id,
+                run.Status,
+                run.ProgressStage,
+                run.ReferenceDate,
+                message = "A otimização global foi solicitada e será processada em background. Nenhuma alteração foi aplicada às rotas."
+            }, 1);
+        }
+        catch (JsonException)
+        {
+            return ChatToolResult.Fail("Argumentos inválidos para solicitação de otimização.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Falha ao executar ferramenta {ToolName}.", Name);
+            return ChatToolResult.Fail("Não foi possível solicitar a otimização agora.");
         }
     }
 }

@@ -20,6 +20,7 @@ const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
   { path: "/processamentos", roles: ADMIN_ROLES },
   { path: "/importacoes", roles: ADMIN_ROLES },
   { path: "/veiculos/tipos", roles: LOGISTICS_ROLES },
+  { path: "/logistica/rotas", roles: ROUTE_VIEW_ROLES },
   { path: "/logistica", roles: LOGISTICS_ROLES },
   { path: "/rotas", roles: ROUTE_VIEW_ROLES },
   { path: "/producao", roles: LOGISTICS_ROLES },
@@ -32,8 +33,6 @@ const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
   { path: "/notas-fiscais", roles: COMMERCIAL_CONTEXT_ROLES },
   { path: "/produtos", roles: COMMERCIAL_CONTEXT_ROLES },
   { path: "/estoque", roles: COMMERCIAL_CONTEXT_ROLES },
-  { path: "/detections", roles: ALL_ROLES },
-  { path: "/notificacoes", roles: ALL_ROLES },
   { path: "/dashboard", roles: ALL_ROLES },
 ];
 

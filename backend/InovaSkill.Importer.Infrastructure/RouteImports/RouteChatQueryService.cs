@@ -9,6 +9,9 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
 {
     private const int OccupancyPercentScale = 100;
     private const int OccupancyPercentDecimalPlaces = 1;
+    private const string InferredByMunicipalityRelationshipType = "InferredByMunicipality";
+    private const string InferredByMunicipalityRelationshipDescription =
+        "Enquanto não existir vínculo manual cliente-rota, o relacionamento é inferido pelo município do cliente e pelas cidades reconhecidas da rota.";
 
     public async Task<IReadOnlyList<RouteChatSummaryDto>> SearchRoutesAsync(
         string searchTerm,
@@ -57,7 +60,8 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
                 item.OverallOccupancy,
                 item.CreatedAt,
                 CityCount = item.Entries.Count,
-                CustomerCount = item.Entries.Sum(entry => entry.Deliveries)
+                DeliveryCount = item.Entries.Sum(entry => entry.Deliveries),
+                PotentialCustomerCount = item.CustomerAssignments.Count
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -69,7 +73,8 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
                 RouteOccupancyLevelPolicy.Label(RouteOccupancyLevelPolicy.Classify(route.OverallOccupancy)),
                 ToOccupancyPercentage(route.OverallOccupancy),
                 route.CityCount,
-                route.CustomerCount,
+                route.DeliveryCount,
+                route.PotentialCustomerCount,
                 route.CreatedAt);
     }
 
@@ -194,9 +199,76 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             : new RouteChatCitiesDto(route.Id, route.Name, route.Cities);
     }
 
+    public async Task<RouteChatRouteCustomersDto?> GetRouteCustomersAsync(
+        Guid routeId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var route = await dbContext.Routes.AsNoTracking()
+            .Where(item => item.Id == routeId)
+            .Select(item => new
+            {
+                item.Id,
+                item.Name
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (route is null)
+        {
+            return null;
+        }
+
+        var currentCustomerImportId = await GetCurrentCustomerImportIdAsync(cancellationToken);
+        if (!currentCustomerImportId.HasValue)
+        {
+            return new RouteChatRouteCustomersDto(
+                route.Id,
+                route.Name,
+                InferredByMunicipalityRelationshipType,
+                InferredByMunicipalityRelationshipDescription,
+                []);
+        }
+
+        var customers = await dbContext.RouteCustomerAssignments.AsNoTracking()
+            .Where(assignment => assignment.RouteId == route.Id)
+            .Join(
+                dbContext.CustomerSnapshots.AsNoTracking()
+                    .Where(snapshot => snapshot.ImportId == currentCustomerImportId.Value),
+                assignment => assignment.CustomerId,
+                snapshot => snapshot.CustomerId,
+                (assignment, snapshot) => new { assignment, snapshot })
+            .OrderBy(item => item.snapshot.Municipality!.Name)
+            .ThenBy(item => item.snapshot.Customer!.ExternalCode)
+            .ThenBy(item => item.snapshot.Customer!.BranchCode)
+            .Take(limit)
+            .Select(item => new RouteChatCustomerDto(
+                item.snapshot.CustomerId,
+                item.snapshot.Customer!.ExternalCode,
+                item.snapshot.Customer.BranchCode,
+                item.snapshot.LegalName,
+                item.snapshot.TradeName,
+                item.snapshot.Municipality!.Name,
+                item.snapshot.Municipality.StateCode,
+                item.snapshot.CustomerType))
+            .ToListAsync(cancellationToken);
+
+        return new RouteChatRouteCustomersDto(
+            route.Id,
+            route.Name,
+            InferredByMunicipalityRelationshipType,
+            InferredByMunicipalityRelationshipDescription,
+            customers);
+    }
+
     private async Task<Guid?> GetCurrentRouteImportIdAsync(CancellationToken cancellationToken) =>
         await dbContext.DataSources.AsNoTracking()
             .Where(source => source.Code == RouteImportCodes.DataSource)
+            .Select(source => source.CurrentImportId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+    private async Task<Guid?> GetCurrentCustomerImportIdAsync(CancellationToken cancellationToken) =>
+        await dbContext.DataSources.AsNoTracking()
+            .Where(source => source.Code == CustomerImportCodes.DataSource)
             .Select(source => source.CurrentImportId)
             .SingleOrDefaultAsync(cancellationToken);
 

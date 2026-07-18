@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { BarChart3, ChevronLeft, ChevronRight, FlaskConical, MapPin, Route as RouteIcon, Search, Truck } from "lucide-react";
+import { ArrowRight, BarChart3, CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, FlaskConical, Gauge, MapPin, Route as RouteIcon, Search, Sparkles, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,15 +8,21 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RouteSnapshotDateSelect } from "@/components/RouteSnapshotDateSelect";
 import { RouteOccupancyIndicator } from "@/components/RouteOccupancyIndicator";
+import { RouteOptimizationDialog } from "@/components/RouteOptimizationDialog";
 import { RouteVehicleSimulationDialog } from "@/components/RouteVehicleSimulationDialog";
+import { askBusinessAssistant } from "@/lib/assistant-api";
 import {
+  fetchLatestGlobalRouteOptimization,
   fetchImportedRouteDetail,
   fetchImportedRoutes,
   fetchVehicleTypes,
   type ImportedRouteDetail,
   type ImportedRouteItem,
+  type RouteOptimizationRun,
+  type RouteOptimizationScenario,
   type VehicleTypeItem,
 } from "@/lib/importer-api";
 import { formatCapacityKg, formatRouteLoadKg, type OccupancyLevel } from "@/lib/route-occupancy";
@@ -34,11 +40,379 @@ const weekdayLabels: Record<string, string> = {
 };
 
 const ALL_OCCUPANCY_LEVELS = "all";
+const OCCUPANCY_PERCENT_SCALE = 100;
+const OCCUPANCY_BAR_MAX_PERCENT = 160;
+const AI_PLAN_EXPLANATION_GROUP_LIMIT = 4;
 
-function formatDate(value: string): string {
-  if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString("pt-BR");
+type AiRoutePlanGroup = {
+  routeId: string;
+  occupancyAfter: number | null;
+  totalLoadKg: number;
+  cities: RouteOptimizationScenario["cityReallocations"];
+  referenceCityName: string;
+};
+
+const aiSuggestionStatusLabels: Record<string, string> = {
+  Pending: "Na fila",
+  LoadingData: "Carregando dados",
+  BuildingProblem: "Montando problema",
+  CalculatingDistanceMatrix: "Calculando distâncias",
+  SearchingSolutions: "Buscando cenários",
+  PersistingResult: "Salvando resultado",
+  Completed: "Concluída",
+  NoChangeRecommended: "Sem alteração recomendada",
+  InsufficientData: "Dados insuficientes",
+  NoFeasibleSolution: "Sem solução viável",
+  Cancelled: "Cancelada",
+  Failed: "Falhou",
+};
+
+function formatPercent(value: number | null): string {
+  return value == null ? "-" : `${(value * OCCUPANCY_PERCENT_SCALE).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+}
+
+function recommendedScenario(run: RouteOptimizationRun | null): RouteOptimizationScenario | null {
+  if (!run) return null;
+  return run.scenarios.find((scenario) => scenario.isRecommended) ?? run.scenarios[0] ?? null;
+}
+
+function scenarioTitle(scenario: RouteOptimizationScenario): string {
+  if (scenario.actionType === "BuildBalancedRoutePlan") return "Plano principal recomendado";
+  if (scenario.actionType === "ReallocateCities") return "Realocação emergencial";
+  if (scenario.actionType === "ChangeTruck") return "Troca de caminhão";
+  return "Cenário analisado";
+}
+
+function occupancyBarWidth(value: number | null): string {
+  if (value == null) return "0%";
+  const percent = Math.max(0, Math.min(value * OCCUPANCY_PERCENT_SCALE, OCCUPANCY_BAR_MAX_PERCENT));
+  return `${(percent / OCCUPANCY_BAR_MAX_PERCENT) * OCCUPANCY_PERCENT_SCALE}%`;
+}
+
+function OccupancyMiniBar({
+  label,
+  before,
+  after,
+  tone,
+}: {
+  label: string;
+  before: number | null;
+  after: number | null;
+  tone: "source" | "destination";
+}) {
+  const accent = tone === "source" ? "bg-emerald-500" : "bg-sky-500";
+  const beforeAccent = tone === "source" ? "bg-red-500" : "bg-muted-foreground/50";
+
+  return (
+    <div className="rounded-lg border border-border/70 bg-surface/60 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="truncate text-xs font-medium text-foreground">{label}</p>
+        <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+          {formatPercent(before)} → {formatPercent(after)}
+        </span>
+      </div>
+      <div className="mt-3 space-y-2">
+        <div className="h-2 rounded-full bg-muted">
+          <div className={`h-2 rounded-full ${beforeAccent}`} style={{ width: occupancyBarWidth(before) }} />
+        </div>
+        <div className="h-2 rounded-full bg-muted">
+          <div className={`h-2 rounded-full ${accent}`} style={{ width: occupancyBarWidth(after) }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AiScenarioSummary({
+  scenario,
+  run,
+  description,
+  tone,
+}: {
+  scenario: RouteOptimizationScenario;
+  run: RouteOptimizationRun;
+  description: string;
+  tone: "ideal" | "emergency";
+}) {
+  const afterTone = tone === "ideal"
+    ? "border-emerald-500/25 bg-emerald-500/5"
+    : "border-amber-500/25 bg-amber-500/5";
+  const afterIconTone = tone === "ideal" ? "text-emerald-500" : "text-amber-400";
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-xs">
+      <div className="border-b border-border bg-muted/20 px-4 py-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase text-muted-foreground">{scenarioTitle(scenario)}</p>
+            <p className="mt-1 text-sm leading-relaxed text-foreground">{description}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Badge variant="outline" className="gap-1.5 bg-surface">
+              <CheckCircle2 className="size-3.5 text-emerald-500" />
+              {aiSuggestionStatusLabels[run.status] ?? run.status}
+            </Badge>
+            <Badge variant="outline" className="bg-surface">Snapshot v{run.snapshotImportVersion ?? "-"}</Badge>
+            {run.completedAt && (
+              <Badge variant="outline" className="gap-1.5 bg-surface">
+                <CalendarClock className="size-3.5 text-muted-foreground" />
+                {new Date(run.completedAt).toLocaleString("pt-BR")}
+              </Badge>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-3 p-4 text-sm md:grid-cols-3">
+        <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <RouteIcon className="size-3.5" />
+            Rotas críticas antes
+          </div>
+          <p className="mt-1 text-lg font-semibold">{scenario.currentMetrics.occupancyLevel}</p>
+        </div>
+        <div className={`rounded-lg border p-3 ${afterTone}`}>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Gauge className={`size-3.5 ${afterIconTone}`} />
+            Rotas críticas depois
+          </div>
+          <p className="mt-1 text-lg font-semibold">{scenario.proposedMetrics.occupancyLevel}</p>
+        </div>
+        <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <MapPin className="size-3.5" />
+            Distância estimada
+          </div>
+          <p className="mt-1 text-lg font-semibold">
+            {scenario.estimatedDistanceChangeKm == null ? "-" : `${scenario.estimatedDistanceChangeKm.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km`}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AiScenarioReasons({
+  title,
+  scenario,
+}: {
+  title: string;
+  scenario: RouteOptimizationScenario;
+}) {
+  if (scenario.reasons.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium uppercase text-muted-foreground">{title}</p>
+      {scenario.reasons.map((reason) => (
+        <div key={reason.code} className="rounded-lg border border-border p-3 text-sm">
+          {reason.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AiScenarioMoves({
+  scenario,
+  title,
+  emptyMessage,
+  compact = false,
+}: {
+  scenario: RouteOptimizationScenario;
+  title: string;
+  emptyMessage: string;
+  compact?: boolean;
+}) {
+  if (scenario.cityReallocations.length === 0) {
+    return (
+      <p className="rounded-lg border border-border p-3 text-sm text-muted-foreground">
+        {emptyMessage}
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-border">
+      <div className="border-b border-border px-3 py-2">
+        <p className="text-xs font-medium uppercase text-muted-foreground">{title}</p>
+      </div>
+      <div className={compact ? "grid gap-2 p-3 md:grid-cols-2" : "divide-y divide-border"}>
+        {scenario.cityReallocations.map((move) => (
+          <div
+            key={`${scenario.id}-${move.cityId}-${move.sourceRouteId}-${move.destinationRouteId}`}
+            className={compact ? "rounded-lg border border-border/70 bg-surface/70 p-3 text-sm" : "p-4 text-sm"}
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className={compact ? "" : "bg-primary/10 text-primary"}>{move.cityName}</Badge>
+                  <span className="text-muted-foreground">de</span>
+                  <span className="font-medium">{move.sourceRouteName}</span>
+                  <ArrowRight className="size-4 text-muted-foreground" />
+                  <span className="font-medium">{move.destinationRouteName}</span>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Badge variant="outline">{formatRouteLoadKg(move.cityLoadKg)}</Badge>
+                <Badge variant="outline">
+                  {move.estimatedDistanceChangeKm.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km
+                </Badge>
+              </div>
+            </div>
+
+            {!compact && (
+              <>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <OccupancyMiniBar
+                    label="Origem melhora"
+                    before={move.sourceOccupancyBefore}
+                    after={move.sourceOccupancyAfter}
+                    tone="source"
+                  />
+                  <OccupancyMiniBar
+                    label="Destino permanece controlado"
+                    before={move.destinationOccupancyBefore}
+                    after={move.destinationOccupancyAfter}
+                    tone="destination"
+                  />
+                </div>
+
+                {move.reasons.length > 0 && (
+                  <div className="mt-3 grid gap-2 md:grid-cols-3">
+                    {move.reasons.map((reason) => (
+                      <p key={reason.code} className="rounded-lg border border-border/70 bg-muted/20 p-2 text-xs text-muted-foreground">
+                        {reason.message}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AiRoutePlanGroups({
+  scenario,
+}: {
+  scenario: RouteOptimizationScenario;
+}) {
+  if (scenario.cityReallocations.length === 0) {
+    return (
+      <p className="rounded-lg border border-border p-3 text-sm text-muted-foreground">
+        O plano ideal não encontrou mudanças para listar.
+      </p>
+    );
+  }
+
+  const groups = buildAiRoutePlanGroups(scenario);
+
+  return (
+    <div className="rounded-lg border border-border">
+      <div className="border-b border-border px-3 py-2">
+        <p className="text-xs font-medium uppercase text-muted-foreground">Rotas redesenhadas no plano ideal</p>
+      </div>
+      <div className="grid gap-3 p-3 lg:grid-cols-2">
+        {groups.map((group, index) => (
+          <div key={group.routeId} className="rounded-lg border border-border/70 bg-surface/70 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase text-muted-foreground">Rota sugerida</p>
+                <p className="truncate text-base font-semibold">
+                  Rota {String(index + 1).padStart(2, "0")} - {group.referenceCityName}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Badge variant="outline">{group.cities.length} cidade(s)</Badge>
+                <Badge variant="outline">{formatRouteLoadKg(group.totalLoadKg)}</Badge>
+                <Badge variant="outline">{formatPercent(group.occupancyAfter)}</Badge>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Cidades nesta rota</p>
+              <div className="flex flex-wrap gap-2">
+                {group.cities.map((move) => (
+                  <span
+                    key={`${group.routeId}-${move.cityId}`}
+                    className="rounded-md border border-border bg-muted/30 px-2 py-1 text-xs text-foreground"
+                  >
+                    {move.cityName}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AiPlanExplanation({
+  text,
+  loading,
+}: {
+  text: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+      <div className="flex items-center gap-2">
+        <Sparkles className="size-4 text-primary" />
+        <p className="text-xs font-medium uppercase text-primary">Análise da IA</p>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-foreground">
+        {loading ? "Gerando justificativa do plano com o assistente..." : text}
+      </p>
+    </div>
+  );
+}
+
+function buildAiRoutePlanGroups(scenario: RouteOptimizationScenario): AiRoutePlanGroup[] {
+  return Object.values(
+    scenario.cityReallocations.reduce<Record<string, Omit<AiRoutePlanGroup, "referenceCityName">>>((acc, move) => {
+      acc[move.destinationRouteId] ??= {
+        routeId: move.destinationRouteId,
+        occupancyAfter: move.destinationOccupancyAfter,
+        totalLoadKg: 0,
+        cities: [],
+      };
+      acc[move.destinationRouteId].totalLoadKg += move.cityLoadKg;
+      acc[move.destinationRouteId].cities.push(move);
+      return acc;
+    }, {}),
+  )
+    .map((group) => ({
+      ...group,
+      referenceCityName: [...group.cities]
+        .sort((a, b) => b.cityLoadKg - a.cityLoadKg || a.cityName.localeCompare(b.cityName, "pt-BR"))[0].cityName,
+    }))
+    .sort((a, b) => a.referenceCityName.localeCompare(b.referenceCityName, "pt-BR"));
+}
+
+function buildLocalPlanExplanation(scenario: RouteOptimizationScenario): string {
+  const groups = buildAiRoutePlanGroups(scenario);
+  const mainGroups = groups.slice(0, 3).map((group) => group.referenceCityName).join(", ");
+  return `O plano ideal redesenha a malha com ${groups.length} rota(s) sugerida(s), usando cidades de referência como ${mainGroups || "as maiores cargas"} para formar agrupamentos mais equilibrados. A proposta reduz as rotas críticas de ${scenario.currentMetrics.occupancyLevel} para ${scenario.proposedMetrics.occupancyLevel}, sem trocar caminhões nem aplicar alterações automaticamente.`;
+}
+
+function buildAssistantPlanPrompt(scenario: RouteOptimizationScenario): string {
+  const groups = buildAiRoutePlanGroups(scenario)
+    .slice(0, AI_PLAN_EXPLANATION_GROUP_LIMIT)
+    .map((group) => `${group.referenceCityName}: ${group.cities.length} cid, ${formatRouteLoadKg(group.totalLoadKg)}, ${formatPercent(group.occupancyAfter)}`)
+    .join("; ");
+  return `Reescreva em PT-BR, 1 parágrafo convincente e objetivo, sem bullets, por que este plano ideal de rotas faz sentido. Dados: críticas ${scenario.currentMetrics.occupancyLevel}->${scenario.proposedMetrics.occupancyLevel}; ${scenario.cityReallocations.length} cidades redesenhadas; distância ${scenario.estimatedDistanceChangeKm?.toLocaleString("pt-BR", { maximumFractionDigits: 1 }) ?? "-"} km; grupos: ${groups}. Diga que não aplica automaticamente e que usa caminhões atuais.`;
+}
+
+function normalizeAssistantPlanExplanation(value: string): string {
+  return value
+    .replace(/^[\s>*-]+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function LogisticaRotasPage() {
@@ -62,6 +436,14 @@ function LogisticaRotasPage() {
   const [simulationVehicleTypeId, setSimulationVehicleTypeId] = useState("");
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [simulationError, setSimulationError] = useState<string | null>(null);
+  const [optimizationOpen, setOptimizationOpen] = useState(false);
+  const [optimizationRoute, setOptimizationRoute] = useState<ImportedRouteItem | null>(null);
+  const [aiSuggestionOpen, setAiSuggestionOpen] = useState(false);
+  const [aiSuggestionRun, setAiSuggestionRun] = useState<RouteOptimizationRun | null>(null);
+  const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
+  const [aiSuggestionError, setAiSuggestionError] = useState<string | null>(null);
+  const [aiPlanExplanation, setAiPlanExplanation] = useState("");
+  const [aiPlanExplanationLoading, setAiPlanExplanationLoading] = useState(false);
 
   async function load(p: number = page) {
     setLoading(true);
@@ -126,7 +508,60 @@ function LogisticaRotasPage() {
     }
   }
 
+  function openOptimization(route: ImportedRouteItem | ImportedRouteDetail) {
+    setOptimizationRoute(route);
+    setOptimizationOpen(true);
+  }
+
+  async function openAiSuggestion() {
+    setAiSuggestionOpen(true);
+    setAiSuggestionLoading(true);
+    setAiSuggestionError(null);
+    setAiSuggestionRun(null);
+    setAiPlanExplanation("");
+    setAiPlanExplanationLoading(false);
+    try {
+      setAiSuggestionRun(await fetchLatestGlobalRouteOptimization(snapshotDate));
+    } catch (error) {
+      setAiSuggestionError((error as Error).message);
+    } finally {
+      setAiSuggestionLoading(false);
+    }
+  }
+
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const aiScenario = recommendedScenario(aiSuggestionRun);
+  const emergencyScenario = aiSuggestionRun?.scenarios.find((scenario) =>
+    scenario.actionType === "ReallocateCities" && scenario.id !== aiScenario?.id
+  ) ?? null;
+
+  useEffect(() => {
+    if (!aiSuggestionOpen || !aiScenario || aiScenario.actionType !== "BuildBalancedRoutePlan") {
+      setAiPlanExplanation("");
+      setAiPlanExplanationLoading(false);
+      return;
+    }
+
+    let active = true;
+    setAiPlanExplanation(buildLocalPlanExplanation(aiScenario));
+    setAiPlanExplanationLoading(true);
+    askBusinessAssistant(buildAssistantPlanPrompt(aiScenario))
+      .then((response) => {
+        if (active && response.answer.trim()) {
+          setAiPlanExplanation(normalizeAssistantPlanExplanation(response.answer));
+        }
+      })
+      .catch(() => {
+        if (active) setAiPlanExplanation(buildLocalPlanExplanation(aiScenario));
+      })
+      .finally(() => {
+        if (active) setAiPlanExplanationLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [aiSuggestionOpen, aiScenario?.id]);
 
   return (
     <div className="page-shell app-background space-y-6">
@@ -159,8 +594,18 @@ function LogisticaRotasPage() {
 
       <Card className="border-border bg-surface">
         <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Todas as rotas</CardTitle>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <CardTitle>Todas as rotas</CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void openAiSuggestion()}
+              >
+                <Sparkles className="mr-2 size-4" />
+                Sugestão de IA
+              </Button>
+            </div>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
               <RouteSnapshotDateSelect
                 value={snapshotDate}
@@ -230,6 +675,16 @@ function LogisticaRotasPage() {
                     type="button"
                     size="sm"
                     variant="outline"
+                    onClick={() => openOptimization(r)}
+                    aria-label={`Ver recomendação da rota ${r.name}`}
+                  >
+                    <Sparkles className="mr-1.5 size-3.5" />
+                    Ver recomendação
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
                     onClick={() => void openSimulation(r)}
                     aria-label={`Simular veículo para a rota ${r.name}`}
                   >
@@ -246,8 +701,6 @@ function LogisticaRotasPage() {
                   </span>
                   <span>{r.entryCount} cidade(s)</span>
                   <span>{r.totalDeliveries} entrega(s)</span>
-                  <span>Arquivo: {r.importFileName}</span>
-                  <span>Importado: {formatDate(r.createdAt)}</span>
                 </div>
                 <RouteOccupancyIndicator value={r.overallOccupancy} compact />
               </button>
@@ -307,6 +760,13 @@ function LogisticaRotasPage() {
                 />
               </div>
 
+              <div className="flex justify-end">
+                <Button type="button" onClick={() => openOptimization(selectedRoute)}>
+                  <Sparkles className="mr-2 size-4" />
+                  Ver recomendação
+                </Button>
+              </div>
+
               <div className="rounded-lg border border-border">
                 <div className="border-b border-border px-3 py-2">
                   <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -353,6 +813,119 @@ function LogisticaRotasPage() {
         loading={simulationLoading}
         error={simulationError}
       />
+      <RouteOptimizationDialog
+        open={optimizationOpen}
+        onOpenChange={setOptimizationOpen}
+        route={optimizationRoute}
+        referenceDate={snapshotDate}
+      />
+
+      <Dialog open={aiSuggestionOpen} onOpenChange={setAiSuggestionOpen}>
+        <DialogContent className="max-h-[90vh] max-w-5xl gap-0 overflow-y-auto border-border bg-surface p-0">
+          <DialogHeader className="border-b border-border bg-[linear-gradient(135deg,var(--soft-red-background),var(--surface)_58%,var(--surface-soft))] px-5 py-5 pr-14 text-left sm:px-7">
+            <div className="flex items-start gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary shadow-xs">
+                <Sparkles className="size-5" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <DialogTitle className="text-xl">Sugestão de IA</DialogTitle>
+                <DialogDescription className="max-w-3xl">
+                  Leitura do último job de otimização global já processado, com o cenário recomendado pronto para análise.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 px-5 py-5 sm:px-7">
+            {aiSuggestionLoading && <SkeletonModalContent />}
+
+            {!aiSuggestionLoading && aiSuggestionError && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                {aiSuggestionError}
+              </div>
+            )}
+
+            {!aiSuggestionLoading && aiSuggestionRun && (
+              <div className="space-y-4">
+                {aiScenario ? (
+                  <Tabs defaultValue="ideal" className="space-y-4">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="ideal" className="gap-2">
+                        <Sparkles className="size-4" />
+                        Plano ideal
+                      </TabsTrigger>
+                      <TabsTrigger value="emergency" className="gap-2">
+                        <FlaskConical className="size-4" />
+                        Ação emergencial
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="ideal" className="space-y-4">
+                      <AiScenarioSummary
+                        scenario={aiScenario}
+                        run={aiSuggestionRun}
+                        tone="ideal"
+                        description="A IA redesenha a distribuição sugerida usando as cidades existentes, os caminhões disponíveis e as distâncias pré-processadas, sem aplicar nenhuma mudança automaticamente."
+                      />
+                      <AiPlanExplanation
+                        text={aiPlanExplanation || buildLocalPlanExplanation(aiScenario)}
+                        loading={aiPlanExplanationLoading}
+                      />
+                      <AiRoutePlanGroups scenario={aiScenario} />
+                      {aiScenario.warnings.length > 0 && (
+                        <div className="space-y-1">
+                          {aiScenario.warnings.map((warning) => (
+                            <p key={warning} className="text-xs text-muted-foreground">{warning}</p>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="emergency" className="space-y-4">
+                      {emergencyScenario ? (
+                        <>
+                          <AiScenarioSummary
+                            scenario={emergencyScenario}
+                            run={aiSuggestionRun}
+                            tone="emergency"
+                            description="Essa aba mantém uma alternativa prática para aliviar rotas críticas agora, sem redesenhar toda a distribuição operacional."
+                          />
+                          <AiScenarioReasons title="Por que usar como paliativo" scenario={emergencyScenario} />
+                          <AiScenarioMoves
+                            scenario={emergencyScenario}
+                            title="Movimentos para execução manual"
+                            emptyMessage="A ação emergencial não encontrou movimentos para listar."
+                            compact
+                          />
+                          {emergencyScenario.warnings.length > 0 && (
+                            <div className="space-y-1">
+                              {emergencyScenario.warnings.map((warning) => (
+                                <p key={warning} className="text-xs text-muted-foreground">{warning}</p>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+                          O último job não encontrou uma ação emergencial separada do plano ideal.
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
+              ) : (
+                <p className="rounded-lg border border-border p-3 text-sm text-muted-foreground">
+                  O último job não possui cenário persistido para explicar.
+                </p>
+              )}
+
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setAiSuggestionOpen(false)}>Fechar</Button>
+              </div>
+            </div>
+          )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -66,14 +66,14 @@ public static class ProductCodeNormalizer
 public static class OperationalJobCodes
 {
     public const string MunicipalityCoordinateEnrichment = "MUNICIPALITY_COORDINATE_ENRICHMENT";
-    public const string InactiveCustomerDetection = "INACTIVE_CUSTOMER_DETECTION";
+    public const string RouteOptimization = RouteOptimizationCodes.JobType;
     public const int WorkerExecutionTimeoutMinutes = 30;
 }
 
 public static class BackgroundJobQueues
 {
     public const string Imports = "imports";
-    public const string Detectors = "detectors";
+    public const string RouteOptimization = "route-optimization";
     public const string Default = "default";
 }
 
@@ -95,16 +95,16 @@ public static class OperationalJobCatalog
         ScheduleAllowed: true,
         AllowConcurrentRuns: false);
 
-    public static readonly OperationalJobDefinition InactiveCustomerDetection = new(
-        OperationalJobCodes.InactiveCustomerDetection,
-        "Detectar clientes inativos",
-        "Identifica clientes sem compras nos últimos 45 dias e atualiza IsActive no cadastro.",
+    public static readonly OperationalJobDefinition RouteOptimization = new(
+        OperationalJobCodes.RouteOptimization,
+        "Otimizar todas as rotas",
+        "Calcula em background a recomendação global de realocação de cidades para o snapshot atual de rotas.",
         ManualRunAllowed: true,
         ScheduleAllowed: true,
         AllowConcurrentRuns: false);
 
     public static IReadOnlyList<OperationalJobDefinition> All { get; } =
-        [MunicipalityCoordinateEnrichment, InactiveCustomerDetection];
+        [MunicipalityCoordinateEnrichment, RouteOptimization];
 }
 
 public interface IDataSourceProcessor

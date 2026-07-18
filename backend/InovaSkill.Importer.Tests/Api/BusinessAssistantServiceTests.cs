@@ -129,6 +129,21 @@ public sealed class BusinessAssistantServiceTests
         Assert.Equal("Informe um termo maior.", response.Answer);
     }
 
+    [Fact]
+    public async Task AnswerAsync_InstructsModelToCalculateOnlySimpleMetricsFromReturnedData()
+    {
+        var model = new FakeModelClient([
+            new ChatModelResponse("response-1", "Resposta calculada.", [])
+        ]);
+        var service = CreateService(model, []);
+
+        await service.AnswerAsync(null, "Calcule uma média simples.", new ChatExecutionContext(1, "logistica"), default);
+
+        Assert.Contains("Você pode fazer cálculos simples na hora somente sobre dados retornados", model.Requests[0].Instructions);
+        Assert.Contains("Não faça cálculo na hora se faltar dado", model.Requests[0].Instructions);
+        Assert.Contains("Quando uma métrica recorrente ou executiva não estiver disponível", model.Requests[0].Instructions);
+    }
+
     private static BusinessAssistantService CreateService(
         FakeModelClient model,
         IReadOnlyList<IChatTool> tools,

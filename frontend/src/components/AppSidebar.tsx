@@ -13,7 +13,6 @@ import {
   Package,
   PackageCheck,
   Route,
-  ScanSearch,
   Settings,
   Sun,
   Truck,
@@ -46,7 +45,7 @@ const roleLabels: Record<string, string> = {
 const items = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/assistente", label: "Chat IA", icon: MessageCircle },
-  { to: "/rotas", label: "Rotas", icon: Route },
+  { to: "/logistica/rotas", label: "Rotas", icon: Route },
   { to: "/veiculos/tipos", label: "Tipos de Veículo", icon: Truck },
   { to: "/mapa", label: "Mapa", icon: Map },
   { to: "/clientes", label: "Clientes", icon: Users },
@@ -56,7 +55,6 @@ const items = [
   { to: "/producao", label: "Produção", icon: Factory },
   { to: "/importacoes/files", label: "Importações", icon: FileUp },
   { to: "/processamentos", label: "Processamento", icon: Settings },
-  { to: "/detections", label: "Detecção", icon: ScanSearch },
 ] as const;
 
 export function getVisibleSidebarItemsForRole(role: string | null) {

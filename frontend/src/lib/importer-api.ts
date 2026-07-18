@@ -3439,6 +3439,144 @@ export type ImportedRouteDetail = ImportedRouteItem & {
   }[];
 };
 
+export type RouteOptimizationStatus =
+  | "Pending"
+  | "LoadingData"
+  | "BuildingProblem"
+  | "CalculatingDistanceMatrix"
+  | "SearchingSolutions"
+  | "ComparingScenarios"
+  | "PersistingResult"
+  | "Completed"
+  | "NoChangeRecommended"
+  | "InsufficientData"
+  | "NoFeasibleSolution"
+  | "Cancelled"
+  | "Failed";
+
+export type RouteOptimizationConfidence = "High" | "Medium" | "Insufficient";
+export type RouteOptimizationActionType =
+  | "BuildBalancedRoutePlan"
+  | "ReallocateCities"
+  | "ChangeTruck"
+  | "NoChange"
+  | "NoFeasibleSolution";
+
+export type RouteOptimizationReason = {
+  code: string;
+  message: string;
+};
+
+export type RouteOptimizationMetrics = {
+  routeId: string;
+  routeName: string;
+  vehicleTypeName: string;
+  capacityKg: number | null;
+  loadKg: number;
+  occupancy: number | null;
+  occupancyLevel: string;
+  cities: string[];
+};
+
+export type RouteCityReallocation = {
+  cityId: string;
+  cityName: string;
+  sourceRouteId: string;
+  sourceRouteName: string;
+  destinationRouteId: string;
+  destinationRouteName: string;
+  cityLoadKg: number;
+  sourceOccupancyBefore: number | null;
+  sourceOccupancyAfter: number | null;
+  destinationOccupancyBefore: number | null;
+  destinationOccupancyAfter: number | null;
+  estimatedDistanceChangeKm: number;
+  reasons: RouteOptimizationReason[];
+};
+
+export type RouteTruckChange = {
+  currentTruckModelId: string;
+  currentTruckModelName: string;
+  currentCapacityKg: number | null;
+  proposedTruckModelId: string;
+  proposedTruckModelName: string;
+  proposedCapacityKg: number;
+  occupancyBefore: number | null;
+  occupancyAfter: number;
+  reasons: RouteOptimizationReason[];
+};
+
+export type RouteOptimizationScenario = {
+  id: string;
+  rank: number;
+  score: number;
+  actionType: RouteOptimizationActionType;
+  isRecommended: boolean;
+  confidence: RouteOptimizationConfidence;
+  estimatedDistanceChangeKm: number | null;
+  currentMetrics: RouteOptimizationMetrics;
+  proposedMetrics: RouteOptimizationMetrics;
+  reasons: RouteOptimizationReason[];
+  warnings: string[];
+  cityReallocations: RouteCityReallocation[];
+  truckChange: RouteTruckChange | null;
+};
+
+export type RouteOptimizationRun = {
+  id: string;
+  scope: "SingleRoute" | "AllRoutes";
+  targetRouteId: string | null;
+  referenceDate: string;
+  requestedFrom: string;
+  status: RouteOptimizationStatus;
+  progressStage: RouteOptimizationStatus;
+  progressPercentage: number | null;
+  algorithmVersion: string;
+  rulesVersion: string;
+  inputHash: string | null;
+  confidence: RouteOptimizationConfidence;
+  snapshotImportId: string | null;
+  snapshotImportVersion: number | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  scenarios: RouteOptimizationScenario[];
+};
+
+export type RouteOptimizationCityProjection = {
+  cityId: string;
+  cityName: string;
+  relatedRouteId: string;
+  relatedRouteName: string;
+  cityLoadKg: number;
+};
+
+export type RouteOptimizationRouteProjection = {
+  routeId: string;
+  routeName: string;
+  currentOccupancy: number | null;
+  proposedOccupancy: number | null;
+  currentCapacityKg: number | null;
+  proposedCapacityKg: number | null;
+  addedCities: RouteOptimizationCityProjection[];
+  removedCities: RouteOptimizationCityProjection[];
+  reasons: RouteOptimizationReason[];
+  warnings: string[];
+};
+
+export type RouteLatestOptimization = {
+  status: RouteOptimizationStatus;
+  runId: string | null;
+  calculatedAt: string | null;
+  snapshotImportId: string | null;
+  sourceVersion: number | null;
+  isStale: boolean;
+  route: RouteOptimizationRouteProjection | null;
+  message: string;
+};
+
 export type RouteOccupancySummary = {
   occupancyRatePercent: number;
   totalWeightKg: number;
@@ -3524,6 +3662,42 @@ export async function fetchImportedRouteDetail(id: string): Promise<ImportedRout
   const response = await authFetch(`${API_URL}/api/routes/${id}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes da rota."));
   return (await response.json()) as ImportedRouteDetail;
+}
+
+export async function requestGlobalRouteOptimizationRun(referenceDate: string): Promise<RouteOptimizationRun> {
+  const response = await authFetch(`${API_URL}/api/route-optimization-runs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scope: "AllRoutes", referenceDate, routeId: null }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao solicitar otimização global."));
+  return (await response.json()) as RouteOptimizationRun;
+}
+
+export async function fetchRouteOptimizationRun(id: string): Promise<RouteOptimizationRun> {
+  const response = await authFetch(`${API_URL}/api/route-optimization-runs/${id}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar otimização da rota."));
+  return (await response.json()) as RouteOptimizationRun;
+}
+
+export async function fetchLatestGlobalRouteOptimization(referenceDate?: string): Promise<RouteOptimizationRun> {
+  const params = new URLSearchParams();
+  if (referenceDate) params.set("referenceDate", referenceDate);
+  const query = params.toString();
+  const response = await authFetch(`${API_URL}/api/route-optimization-runs/latest${query ? `?${query}` : ""}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Nenhuma sugestão global de rotas foi encontrada."));
+  return (await response.json()) as RouteOptimizationRun;
+}
+
+export async function fetchLatestRouteOptimization(routeId: string, referenceDate?: string): Promise<RouteLatestOptimization> {
+  const params = new URLSearchParams();
+  if (referenceDate) params.set("referenceDate", referenceDate);
+  const query = params.toString();
+  const response = await authFetch(
+    `${API_URL}/api/routes/${routeId}/latest-optimization${query ? `?${query}` : ""}`,
+  );
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar recomendação da rota."));
+  return (await response.json()) as RouteLatestOptimization;
 }
 
 export async function fetchAdminJobsSummary(): Promise<AdminJobSummary> {

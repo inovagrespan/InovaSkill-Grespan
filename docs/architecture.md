@@ -119,8 +119,8 @@ painel de conversa; na página completa, permanece como diálogo centralizado.
 O acesso funcional usa os perfis `diretor`, `vendas`, `logistica`, `admin` e
 `admin_system`. A política compartilhada do frontend controla menu e navegação
 direta: Vendas recebe dashboard comercial e módulos de clientes, documentos,
-produtos, estoque, mapa e detecções; Logística recebe dashboard operacional,
-rotas, veículos, mapa, contexto comercial, estoque, produção e detecções;
+produtos, estoque e mapa; Logística recebe dashboard operacional, rotas,
+veículos, mapa, contexto comercial, estoque e produção;
 Diretor consulta os módulos gerenciais e operacionais, sem importações ou
 processamentos; administradores acessam todos os módulos. Usuários com o perfil
 genérico `gestor` não recebem acesso funcional até serem classificados em um
@@ -158,12 +158,36 @@ atual com `TotalWeightKg / capacidade selecionada`. O cálculo ocorre somente no
 frontend, mantém carga, cidades e entregas inalteradas e não envia comandos de
 criação ou atualização para a API.
 
+Na tela de rotas, a ação `Sugestão de IA` consulta
+`GET /api/route-optimization-runs/latest` para abrir o último cenário global já
+pré-processado. O cenário recomendado principal é um plano global de
+distribuição: dadas as cidades existentes, os caminhões atuais e as distâncias
+pré-calculadas, o solver propõe como as cidades deveriam ficar distribuídas
+entre as rotas do mesmo dia. Quando houver alternativa útil de curto prazo, o
+mesmo run também pode persistir um cenário secundário de realocação emergencial,
+tratado na UI em aba separada como medida paliativa para aliviar sobrecarga sem
+redesenhar toda a malha. Na aba do plano global, a UI não usa nomes das rotas
+antigas como identidade da rota sugerida; cada grupo é nomeado por uma cidade de
+referência do próprio agrupamento sugerido, preservando os nomes antigos apenas
+na lógica de origem/destino persistida. Cada grupo do plano ideal exibe uma
+análise operacional única gerada pelo endpoint `assistant/ask`, usando um prompt
+curto com o resumo do cenário persistido. Se o assistente estiver indisponível,
+a UI usa um texto local de fallback baseado nos mesmos números do job. Em cada card
+ou detalhe, `Ver recomendação` consulta
+`GET /api/routes/{routeId}/latest-optimization` e mostra somente o recorte
+persistido da última otimização global: cenário atual, cenário simulado, cidades
+adicionadas/removidas, versão dos dados, avisos e justificativas. Abrir uma rota
+nunca cria run nem recalcula matriz, realocação ou troca de veículo. A execução
+manual de otimização global fica na Central de Processamentos como job
+operacional, reutilizando `POST /api/route-optimization-runs` ou o catálogo de
+jobs administrativos para enfileirar o processamento.
+
 O card executivo `Taxa de Ocupação` do dashboard logístico usa somente o
 snapshot atual publicado de rotas, sem filtro de data ou comparação com período
 anterior. A API soma `Route.TotalWeightKg` das rotas com capacidade configurada
 e divide pela soma de `VehicleType.CapacityKg` dessas mesmas rotas; rotas sem
 capacidade ficam fora do numerador e denominador, mas são retornadas como
-contagem de alerta. O card usa as mesmas faixas visuais das rotas: abaixo de
+contagem operacional separada. O card usa as mesmas faixas visuais das rotas: abaixo de
 60% é `Ocioso`, de 60% até menos de 80% é `Médio`, de 80% até 100% é
 `Saudável`, e acima de 100% é `Crítico`.
 
@@ -191,6 +215,8 @@ Os controllers atuais atendem:
 - consulta, retry e cancelamento de jobs administrativos;
 - catálogo e execução manual de jobs operacionais declarados como executáveis;
 - consulta paginada dos clientes da importação atualmente publicada.
+- solicitação manual de otimização global de rotas e consulta dos resultados
+  persistidos por execução ou por rota.
 - consulta paginada e detalhe de documentos fiscais, além do resumo histórico de
   consumo em vendas por cliente e da taxa fiscal de devolução por peso.
 - consulta de clientes reais para mapa logístico, posicionados pela coordenada
@@ -199,8 +225,6 @@ Os controllers atuais atendem:
   estoque pelo mesmo endpoint genérico de importações.
 - consulta paginada de produtos, detalhe do produto, estoque atual e métricas
   operacionais de estoque/produção.
-- listagem de detectores disponíveis e execução manual de detecção;
-- consulta de execuções de detecção, findings e evidências.
 
 O middleware JWT libera endpoints públicos e valida as demais requisições antes
 de chegarem aos controllers.
@@ -212,8 +236,7 @@ e mapa atende os cinco perfis; importações e jobs administrativos são exclusi
 de `admin` e `admin_system`. Tipos de veículo são consultáveis pelos cinco
 perfis para sustentar consultas e simulações, mas a aba de cadastro permanece
 restrita a Diretor, Logística e administradores, e somente Logística e
-administradores podem alterá-los. Detecções são consultáveis pelos cinco perfis e sua execução manual
-é reservada aos administradores. Violações autenticadas retornam HTTP `403`.
+administradores podem alterá-los. Violações autenticadas retornam HTTP `403`.
 
 ### Assistente corporativo
 
@@ -243,8 +266,16 @@ por essas ferramentas. Ela nunca recebe connection string, SQL, schema completo,
 nomes internos de tabelas/colunas ou entidades do Entity Framework.
 
 As ferramentas do chat implementam `IChatTool` e são registradas como coleção no
-container. Nesta versão existem `search_routes`, `get_route_details`,
-`get_critical_routes`, `list_routes_by_occupancy` e `get_route_cities`.
+container. Nesta versão existem ferramentas de rotas (`search_routes`,
+`get_route_details`, `get_critical_routes`, `list_routes_by_occupancy`,
+`get_route_cities`, `get_route_customers`), otimização
+(`get_latest_route_optimization`, `request_global_route_optimization`) e
+consultas corporativas somente leitura (`search_customers`,
+`get_customer_consumption_summary`, `list_recent_fiscal_documents`,
+`get_fiscal_return_rate`, `search_products`, `get_product_details`,
+`get_inventory_summary`, `list_inventory_positions`,
+`list_stockout_products`, `get_production_summary` e
+`list_production_records`).
 `list_routes_by_occupancy` dá ao modelo uma consulta ampla, mas ainda limitada,
 para responder rankings e recortes como rotas ociosas, maiores ocupações,
 menores ocupações, rotas por classificação e faixas percentuais. Cada ferramenta
@@ -255,13 +286,50 @@ criar a classe, registrar no container e cobrir permissões/testes, sem alterar
 um bloco central de decisão do orquestrador. Os nomes das ferramentas ficam
 restritos aos logs operacionais e não são expostos no contrato público do chat.
 
-`IRouteChatQueryService`, em `Application/RouteImports`, define DTOs pequenos e
-seguros para exposição ao modelo. `RouteChatQueryService`, em `Infrastructure`,
-implementa essas consultas com `ImportDbContext`, sempre sobre o snapshot atual
-publicado de rotas. A busca reutiliza a normalização de município já existente e
-procura por nome de rota ou cidade. Rotas críticas usam
-`RouteOccupancyLevelPolicy`, a mesma política de classificação exibida nas telas
-de rotas e usada por detectores, mantendo a IA fora do cálculo de criticidade.
+As ferramentas corporativas chamam `IBusinessChatQueryService`, definido em
+`Application/RouteImports` e implementado em `Infrastructure`. Esse serviço
+reutiliza as mesmas fórmulas, fontes publicadas e limites das telas de clientes,
+notas fiscais, produtos e estoque: cadastro atual de clientes, histórico fiscal
+persistido, snapshot atual de `INVENTORY_CURRENT` e última data publicada de
+`DAILY_INVENTORY`. Os payloads para a OpenAI são DTOs reduzidos e não incluem
+documento cadastral de cliente, schema, SQL, conexão ou detalhes técnicos.
+Consultas de busca exigem termo mínimo e limite máximo; consultas fiscais,
+estoque, produção e ruptura retornam listas pequenas; a taxa de devolução limita
+o período a 365 dias. Produção no chat usa somente o controle diário publicado e
+pode ser consultada como resumo agregado ou como registros limitados por produto
+e período, sem cálculo pesado síncrono.
+
+O modelo pode fazer cálculos leves durante a resposta apenas sobre dados
+pequenos retornados pelas ferramentas na própria interação, como soma, média,
+menor/maior valor, diferença, percentual, variação, ranking pequeno ou
+comparação direta. Essa capacidade não substitui métricas oficiais: se a
+pergunta depender de fórmula de negócio não definida, histórico grande,
+consulta livre, previsão, otimização, margem, custo ou regra fiscal/financeira
+sensível, o assistente deve informar a limitação e não inventar o indicador.
+Métricas recorrentes ou executivas devem ser promovidas para query/serviço do
+backend com testes automatizados dedicados.
+
+`get_route_customers` prepara o contrato de vínculo cliente-rota. Enquanto não
+existir arquivo ou cadastro manual de associação entre cliente e rota, o
+backend materializa uma associação simulada em `route_customer_assignments`:
+todo cliente ativo do snapshot atual cujo município está entre as cidades
+reconhecidas da rota atual é vinculado à rota com origem
+`InferredByMunicipality`. A resposta identifica essa origem com descrição
+explícita de que é uma inferência por município. Quando a associação manual
+existir no domínio, ela deve reutilizar a mesma tabela e o mesmo contrato
+externo, alterando apenas a origem do vínculo para `Manual` ou `Imported`.
+
+`IRouteChatQueryService` e `IBusinessChatQueryService`, em
+`Application/RouteImports`, definem DTOs pequenos e seguros para exposição ao
+modelo. `RouteChatQueryService` e `BusinessChatQueryService`, em
+`Infrastructure`, implementam essas consultas com `ImportDbContext`. Consultas
+de rotas usam sempre o snapshot atual publicado de rotas. A busca reutiliza a
+normalização de município já existente e procura por nome de rota ou cidade.
+Rotas críticas usam `RouteOccupancyLevelPolicy`, a mesma política de
+classificação exibida nas telas de rotas, mantendo a IA fora do cálculo de
+criticidade. Consultas de estoque e consumo usam as fórmulas já publicadas nas
+telas de domínio, com testes dedicados para arredondamento, limites, bases
+zeradas, listas limitadas e exclusão de dados sensíveis.
 
 O histórico mínimo fica em `chat_sessions` e `chat_messages`, associado ao
 `AppUser` autenticado. Ele armazena apenas mensagens do usuário e respostas do
@@ -272,31 +340,75 @@ sensíveis não são persistidos no histórico.
 As respostas textuais do assistente seguem um contrato de apresentação simples
 para o frontend não inferir estrutura visual de forma ambígua. Registros de
 rotas devem sair em linhas iniciadas por `[ROTA]`, no formato
-`[ROTA] Nome | Ocupação: 97,4% | Status: Crítico | Motivo: ...`; o componente
-renderiza essas linhas como cartões compactos de rota. Recomendações e ações
-operacionais usam bullets simples e são renderizadas como lista textual normal.
-Parágrafos explicativos continuam como texto. O modelo não deve misturar rotas
-e ações na mesma lista nem usar marcadores técnicos ou markdown de destaque para
-representar dados estruturados.
+`[ROTA] Nome | Ocupação: 97,4% | Status: Crítico | Motivo: ...`; registros de
+clientes da rota devem sair como
+`[CLIENTE] Nome fantasia | Código: 0001/01 | Cidade: Marília-SP | Tipo: Mercado | Relação: inferido por município`.
+O componente renderiza essas linhas como cartões compactos do tipo adequado.
+Recomendações e ações operacionais usam bullets simples e são renderizadas como
+lista textual normal. Parágrafos explicativos continuam como texto. O modelo não
+deve misturar rotas, clientes e ações na mesma lista nem usar marcadores
+técnicos ou markdown de destaque para representar dados estruturados.
+Pedidos de recomendação feitos ao chat usam `get_latest_route_optimization`,
+quando a pergunta for sobre uma rota específica, ou
+`get_latest_global_route_optimization`, quando a pergunta for sobre a sugestão
+geral de rotas; ambas consultam apenas resultados já persistidos da última
+otimização global. Usuários autorizados podem solicitar novo processamento com
+`request_global_route_optimization`; essa ferramenta apenas cria ou reutiliza um
+run e enfileira `ProcessRouteOptimizationJob`. O modelo não decide realocação,
+caminhão, distância, ocupação ou motivos e não aguarda conclusão do job.
 
 ### Application e Domain
 
 `Application/RouteImports` contém os contratos do pipeline de importação, filas
 assíncronas, dispatcher de jobs em background, interfaces de
 storage/processadores, ciclo de vida, catálogo de jobs operacionais, cálculo de
-ocupação, política de capacidade dos veículos logísticos e resumo de execuções.
+ocupação, política de capacidade dos veículos logísticos, resumo de execuções e
+contratos de otimização de rotas. `RouteOptimizationProblem` é o snapshot
+imutável usado pelo solver e não depende de HTTP, chat, frontend, EF ou
+serviços externos.
 
-`Application/Detection` contém os contratos do módulo de detecção:
-`IDetector`, `IDetectorRegistry`, `IDetectionRunService`, `IDetectionJobDispatcher`,
-`DetectionContext`, `DetectionResult`, `FindingCandidate`, `FindingEvidenceCandidate`
-e `DetectorCodes` com as constantes de código dos detectores.
+Não existe mais módulo de detecção, findings, central de notificações ou
+alertas. Sinais operacionais que antes seriam exibidos como alertas devem ser
+consultados pelo chat ou pelas telas de domínio existentes, sem persistência ou
+fila paralela de alertas.
 
-`Domain/Entities` contém usuários, notificações, fontes de dados, importações,
-erros, execuções, tipos de veículo, rotas, entradas de rota, clientes, snapshots
-de clientes, municípios compartilhados, coordenadas municipais, produtos,
-snapshots de estoque, registros diários de estoque, além das entidades de
-detecção: `DetectorDefinition`, `DetectionRun`, `Finding` e `FindingEvidence`.
-Os estados da importação e da detecção ficam em `Domain/Enums`.
+`Domain/Entities` contém usuários, fontes de dados, importações,
+erros, execuções, tipos de veículo, rotas, entradas de rota, clientes, vínculos
+cliente-rota, snapshots de clientes, municípios compartilhados, coordenadas
+municipais, produtos, snapshots de estoque e registros diários de estoque.
+Simulações de otimização ficam em
+`RouteOptimizationRun` e `RouteOptimizationScenario`; cenários persistem JSON
+estruturado com métricas, motivos, avisos, realocações, plano global balanceado
+e troca simulada de caminhão, sem alterar `routes` ou `route_entries`. Os
+estados da importação, da otimização e a origem do vínculo cliente-rota ficam em
+`Domain/Enums`.
+
+`RouteCustomerAssignment` é a entidade de vínculo entre `Route` e `Customer`.
+Hoje ela é populada por `RouteCustomerAssignmentSynchronizer` com origem
+`InferredByMunicipality`, cruzando municípios das entradas da rota atual com
+municípios dos clientes ativos do snapshot atual. Quando a entrada de rota ainda
+não possui `MunicipalityId`, o sincronizador usa o nome normalizado da cidade da
+rota para encontrar o município do cliente e materializar o mesmo vínculo. O
+índice único
+`RouteId + CustomerId` evita duplicidade quando uma rota possui a mesma cidade
+mais de uma vez. Índices por `RouteId + Source`, `CustomerId + Source` e
+`RouteId + MunicipalityId` cobrem os padrões esperados de listagem por rota,
+auditoria da origem do vínculo e futuras consultas por cliente ou município.
+O pipeline de otimização usa `RouteEntry.MunicipalityId` quando disponível e,
+quando a planilha de rotas ainda não trouxe esse vínculo, resolve as coordenadas
+da cidade pelo município inferido em `route_customer_assignments`. Cidades que
+continuarem sem coordenadas são mantidas na rota atual no plano global e geram
+aviso no cenário; elas só tornam o run insuficiente quando nenhuma cidade útil
+possui coordenada. O solver global persiste primeiro o cenário
+`BuildBalancedRoutePlan`, que redistribui cidades entre rotas do mesmo dia
+priorizando redução de rotas críticas, menor pico de ocupação, respeito à
+capacidade dos caminhões e proximidade. O cenário `ReallocateCities` permanece
+como alternativa emergencial para execução manual pontual.
+O cálculo de distância é configurável por `RouteOptimization:DistanceProvider`.
+`Geographic` mantém a estimativa por latitude/longitude. `Osrm` consulta um
+serviço OSRM local com dados OpenStreetMap e grava no cenário o aviso de
+distância rodoviária estimada; se o serviço OSRM estiver indisponível, o job
+falha de forma explícita em vez de misturar metodologias silenciosamente.
 
 ### Infrastructure
 
@@ -309,6 +421,9 @@ dependências registra:
 - `RoutesByCityProcessor` como `IDataSourceProcessor`.
 - `CustomersSpreadsheetParser` e `CustomersProcessor` como segundo processador,
   reutilizando o mesmo ciclo de vida, storage, fila e publicação versionada.
+- `RouteCustomerAssignmentSynchronizer`, executado após a ativação de imports
+  atuais de rotas ou clientes, para recalcular os vínculos simulados
+  cliente-rota sem depender de consulta ad hoc no chat.
 - `FiscalMovementsSpreadsheetParser` e `FiscalMovementsProcessor` para a fonte
   `FISCAL_MOVEMENTS`, em modo `Upsert`, acumulando fatos históricos.
 - `ProductsSpreadsheetParser` e `ProductsProcessor` para a fonte `PRODUCTS`,
@@ -328,10 +443,11 @@ dependências registra:
   `ProcessOperationalJob` como camada fina de execução assíncrona. As regras
   permanecem em `ImportProcessingService`, `OperationalJobProcessingService` e
   processadores de aplicação/infraestrutura.
-- `DetectorRegistry` (implementa `IDetectorRegistry`), `HangfireDetectionJobDispatcher`
-  (implementa `IDetectionJobDispatcher`), `DetectionRunService` (implementa
-  `IDetectionRunService`), `ExecuteDetectionRunJob` e `SampleDetector` como
-  processadores do módulo de detecção.
+- `OsrmDistanceMatrixProvider`, ativado por `RouteOptimization:DistanceProvider
+  = Osrm`, consulta `RouteOptimization:OsrmBaseUrl` para obter distância
+  rodoviária estimada. O compose inclui o serviço opcional `osrm` no profile
+  `osrm`; o grafo local é preparado por `scripts/prepare-osrm-sudeste.sh` em
+  `infra/osrm`, diretório ignorado pelo git por conter arquivos grandes.
 
 Parsing, acesso a arquivos e persistência ficam nesta camada porque dependem de
 formatos ou tecnologias externas. As decisões de domínio extraídas desses dados
@@ -341,17 +457,15 @@ devem continuar testáveis sem depender do host HTTP.
 
 `InovaSkill.Importer.Worker/Program.cs` configura o mesmo acesso a banco e
 storage da API, registra o storage Hangfire em PostgreSQL e sobe servidores
-separados para as filas `imports`, `detectors` e `default`. A quantidade de
-workers de cada fila vem de `Hangfire:Workers:{Imports,Detectors,Default}`.
-`detectors` é a fila utilizada pelo módulo de detecção: o
-`ExecuteDetectionRunJob` é enfileirado nessa fila e o Worker a consome,
-executando o detector (via `IDetectorRegistry`) e persistindo os resultados
-(Findings/Evidences) no banco.
+separados para as filas `imports`, `route-optimization` e `default`. A
+quantidade de workers de cada fila vem de
+`Hangfire:Workers:{Imports,RouteOptimization,Default}`.
 
 O Worker é o local para parsing, consolidações e cálculos pesados. A API apenas
 registra/consulta o trabalho e enfileira o job no Hangfire após persistir o
 estado de negócio. Jobs de importação rodam na fila `imports`; jobs
-operacionais genéricos rodam na fila `default`. Retries técnicos são explícitos:
+de otimização rodam na fila dedicada `route-optimization`; jobs operacionais
+genéricos rodam na fila `default`. Retries técnicos são explícitos:
 5 segundos, 30 segundos e 2 minutos, preservando o total de quatro execuções
 incluindo a tentativa inicial.
 Processadores podem limpar o `ChangeTracker` entre lotes para limitar memória.
@@ -582,15 +696,15 @@ RMSE normalizado, meses ativos e qualidade:
 - `INSUFFICIENT`: menos de 4 meses ativos ou média histórica zerada.
 
 A projeção é explicável e exploratória, não uma garantia de demanda ou receita.
-O frontend mostra realizado, projetado e limites de 95%, e alerta quando a
+O frontend mostra realizado, projetado e limites de 95%, e destaca quando a
 qualidade é baixa ou insuficiente. Esta etapa não calcula risco de ruptura,
 ocupação futura de rota nem recomendação automática. O índice composto
 `CustomerId + IssueDate + MovementCategory` atende a consulta da janela.
 
 Os índices compostos em cliente, data e categoria atendem às agregações do
 resumo; índices por data/categoria, número de documento, documento do item e
-produto atendem listagem, detalhe e relacionamentos sem N+1. Não há previsão,
-alerta ou cálculo financeiro neste fluxo.
+produto atendem listagem, detalhe e relacionamentos sem N+1. Não há notificação
+ou cálculo financeiro neste fluxo.
 
 A Central de Processamentos consulta `/api/admin/jobs` e
 `/api/admin/jobs/summary` a cada cinco segundos, além da atualização manual. O
@@ -673,99 +787,15 @@ A extensão PostgreSQL `pg_trgm` é criada pela migration de índices. Novas
 consultas devem revisar seletividade, ordenação, joins e custo de escrita antes
 de adicionar ou dispensar um índice.
 
-### Detecção de inconformidades
+### Alertas e Detecções
 
-1. O frontend lista os detectores disponíveis via `GET /api/detectors`.
-2. O usuário clica em "Executar agora" → `POST /api/detectors/{id}/runs`.
-3. A API valida: detector ativo e sem execução concorrente (Queued/Running).
-4. Cria `DetectionRun` com status `Queued`, trigger `Manual`.
-5. Enfileira `ExecuteDetectionRunJob` no Hangfire na fila `detectors`.
-6. O Worker consome a fila `detectors`, carrega a `DetectionRun`,
-   `DetectorDefinition` e localiza o `IDetector` pelo `Code` no
-   `DetectorRegistry`.
-7. Marca a execução como `Running`, incrementa `AttemptCount`.
-8. Cria `DetectionContext` com o timestamp de referência.
-9. Executa `IDetector.DetectAsync`, que retorna `DetectionResult` com
-   `FindingCandidate[]`.
-10. Valida a integridade dos candidatos (fingerprints únicos, campos
-    obrigatórios).
-11. Em transação: persiste `Finding` e `FindingEvidence`, finaliza
-    `DetectionRun` como `Succeeded`.
-12. Em caso de erro: captura exceção, marca `DetectionRun` como `Failed`
-    com `StatusReason`, relança para o Hangfire registrar a falha.
-13. O frontend faz polling a cada 3 segundos via `GET /api/detection-runs/{runId}`
-    até o status ser `Succeeded` ou `Failed`.
-14. O usuário abre a execução e visualiza os Findings com suas evidências.
-
-O job Hangfire não possui retry automático (`[AutomaticRetry(Attempts = 0)]`):
-cada execução do Hangfire corresponde a uma única tentativa da `DetectionRun`.
-O reprocessamento manual será implementado em etapa futura.
-
-### Tabelas do módulo de detecção
-
-```text
-detector_definitions
-    id (uuid PK)
-    code (varchar 64, unique)
-    name (varchar 256)
-    description (varchar 1024)
-    status (varchar 32)
-    created_at (timestamptz)
-    updated_at (timestamptz)
-
-detection_runs
-    id (uuid PK)
-    detector_definition_id (uuid FK → detector_definitions)
-    status (varchar 32)
-    trigger (varchar 32)
-    requested_at (timestamptz)
-    started_at (timestamptz)
-    finished_at (timestamptz)
-    attempt_count (int)
-    analyzed_items (int)
-    findings_count (int)
-    status_reason (varchar 1024)
-    requested_by_user_id (uuid)
-    retry_of_run_id (uuid FK → detection_runs)
-
-findings
-    id (uuid PK)
-    detection_run_id (uuid FK → detection_runs)
-    fingerprint (varchar 256)
-    title (varchar 512)
-    description (varchar 2000)
-    subject_type (varchar 128)
-    subject_id (varchar 128)
-    subject_label (varchar 512)
-    detected_at (timestamptz)
-
-finding_evidences
-    id (uuid PK)
-    finding_id (uuid FK → findings)
-    name (varchar 256)
-    value (varchar 512)
-    reference_value (varchar 512)
-    unit (varchar 32)
-    description (varchar 1024)
-    source_type (varchar 128)
-    source_id (varchar 128)
-    observed_at (timestamptz)
-```
-
-Índices: `detection_runs` por `(DetectorDefinitionId, Status)` e
-`RequestedAt`; `findings` por `DetectionRunId`, `(SubjectType, SubjectId)`
-e unique `(DetectionRunId, Fingerprint)`; `finding_evidences` por `FindingId`.
-
-### Limitações intencionais desta etapa
-
-- Apenas o detector `DEV_SAMPLE_DETECTOR` (exemplo) está registrado.
-- Não há schedule, CRON, `DetectorSchedule`, alertas, notificações, IA,
-  deduplicação entre execuções, workflow de resolução, responsáveis ou
-  severidade.
-- Não há retry automático do job; cada falha é terminal na `DetectionRun`.
-- O frontend é intencionalmente simples: lista de detectores, cards de
-  execução, detalhe com findings e evidências em modal.
-- Não há WebSocket; o polling consulta o status a cada 3 segundos.
+O sistema não mantém mais a ideia de alertas, notificações, detecções,
+findings, evidências ou fila dedicada de detectores. A migration
+`202607180005_RemoveAlertsAndDetectionModule` remove as tabelas legadas
+`detector_definitions`, `detection_runs`, `findings`, `finding_evidences` e
+`Notifications` em bancos que já receberam essa funcionalidade. Novas
+capacidades de análise devem ser expostas pelo chat ou por consultas diretas dos
+módulos existentes, sem recriar central paralela de alertas.
 
 ## Dados e infraestrutura
 
@@ -831,8 +861,9 @@ Configurações essenciais:
 - `ConnectionStrings__ImportDb`: conexão PostgreSQL usada pela API e pelo Worker.
 - `Hangfire__Storage__ConnectionString`: conexão opcional específica do
   Hangfire; quando ausente, usa `ConnectionStrings__ImportDb`.
-- `Hangfire__Workers__Imports`, `Hangfire__Workers__Detectors` e
-  `Hangfire__Workers__Default`: concorrência por fila do Worker.
+- `Hangfire__Workers__Imports`, `Hangfire__Workers__RouteOptimization` e
+  `Hangfire__Workers__Default`:
+  concorrência por fila do Worker.
 - `Hangfire__Dashboard__AllowAnonymous`: libera acesso ao dashboard fora de
   desenvolvimento somente quando configurado explicitamente.
 - `Storage__ImportsPath`: caminho compartilhado dos arquivos importados.

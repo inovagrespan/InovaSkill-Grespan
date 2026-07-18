@@ -11,4 +11,5 @@ public sealed class Customer
     public DateTime? LastPurchaseAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public ICollection<CustomerSnapshot> Snapshots { get; set; } = [];
+    public ICollection<RouteCustomerAssignment> RouteAssignments { get; set; } = [];
 }
