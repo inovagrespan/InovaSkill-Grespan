@@ -18,6 +18,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<MunicipalityCoordinate> MunicipalityCoordinates => Set<MunicipalityCoordinate>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerSnapshot> CustomerSnapshots => Set<CustomerSnapshot>();
+    public DbSet<RouteCustomerAssignment> RouteCustomerAssignments => Set<RouteCustomerAssignment>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<InventorySnapshot> InventorySnapshots => Set<InventorySnapshot>();
     public DbSet<DailyInventoryRecord> DailyInventoryRecords => Set<DailyInventoryRecord>();
@@ -220,6 +221,23 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasOne(x => x.Import).WithMany().HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Customer).WithMany(x => x.Snapshots).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RouteCustomerAssignment>(entity =>
+        {
+            entity.ToTable("route_customer_assignments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Source).HasConversion<string>().HasMaxLength(32);
+            entity.HasIndex(x => new { x.RouteId, x.CustomerId }).IsUnique();
+            entity.HasIndex(x => new { x.RouteId, x.Source });
+            entity.HasIndex(x => new { x.CustomerId, x.Source });
+            entity.HasIndex(x => new { x.RouteId, x.MunicipalityId });
+            entity.HasOne(x => x.Route).WithMany(x => x.CustomerAssignments)
+                .HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Customer).WithMany(x => x.RouteAssignments)
+                .HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Municipality).WithMany()
+                .HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Product>(entity =>

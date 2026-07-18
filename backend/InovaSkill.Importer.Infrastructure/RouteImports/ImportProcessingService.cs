@@ -9,6 +9,7 @@ public sealed class ImportProcessingService(
     ImportDbContext dbContext,
     IEnumerable<IDataSourceProcessor> processors,
     IImportLifecycleService importLifecycle,
+    IRouteCustomerAssignmentSynchronizer routeCustomerAssignments,
     IOperationalJobQueue operationalJobQueue) : IImportProcessingService
 {
     private const int MaximumAttempts = 4;
@@ -51,6 +52,13 @@ public sealed class ImportProcessingService(
             job.FinishedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
             var activated = await importLifecycle.TryActivateAsync(import.Id, cancellationToken);
+            if (activated && (
+                string.Equals(import.DataSource!.Code, RouteImportCodes.DataSource, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(import.DataSource.Code, CustomerImportCodes.DataSource, StringComparison.OrdinalIgnoreCase)))
+            {
+                await routeCustomerAssignments.SyncInferredAssignmentsAsync(cancellationToken);
+            }
+
             if (activated && string.Equals(import.DataSource!.Code, CustomerImportCodes.DataSource,
                     StringComparison.OrdinalIgnoreCase))
             {

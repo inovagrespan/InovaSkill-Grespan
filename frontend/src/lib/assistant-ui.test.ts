@@ -23,8 +23,11 @@ describe("business assistant UI", () => {
     expect(component).toContain("messages.map");
     expect(component).toContain("AssistantResponseText");
     expect(component).toContain("parseRouteLine");
+    expect(component).toContain("parseEntityLine");
     expect(component).toContain("route-list");
+    expect(component).toContain("entity-list");
     expect(component).toContain("bullet-list");
+    expect(component).toContain("\\[CLIENTE\\]");
     expect(component).toContain("cleanListMarker");
     expect(component).toContain("backdrop-blur");
     expect(component).not.toContain("message.sources.map");

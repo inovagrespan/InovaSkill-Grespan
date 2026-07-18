@@ -29,6 +29,7 @@ builder.Services.AddScoped<IChatTool, GetRouteDetailsChatTool>();
 builder.Services.AddScoped<IChatTool, GetCriticalRoutesChatTool>();
 builder.Services.AddScoped<IChatTool, ListRoutesByOccupancyChatTool>();
 builder.Services.AddScoped<IChatTool, GetRouteCitiesChatTool>();
+builder.Services.AddScoped<IChatTool, GetRouteCustomersChatTool>();
 builder.Services.AddScoped<BusinessAssistantService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddImportInfrastructure(builder.Configuration);

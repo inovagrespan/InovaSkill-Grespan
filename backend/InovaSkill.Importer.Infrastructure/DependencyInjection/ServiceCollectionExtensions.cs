@@ -35,6 +35,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IImportProcessingService, ImportProcessingService>();
         services.AddScoped<IOperationalJobProcessingService, OperationalJobProcessingService>();
         services.AddScoped<IRouteChatQueryService, RouteChatQueryService>();
+        services.AddScoped<IRouteCustomerAssignmentSynchronizer, RouteCustomerAssignmentSynchronizer>();
         services.AddScoped<IDataSourceProcessor, RoutesByCityProcessor>();
         services.AddScoped<IDataSourceProcessor, CustomersProcessor>();
         services.AddScoped<IDataSourceProcessor, FiscalMovementsProcessor>();

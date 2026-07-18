@@ -244,7 +244,8 @@ nomes internos de tabelas/colunas ou entidades do Entity Framework.
 
 As ferramentas do chat implementam `IChatTool` e são registradas como coleção no
 container. Nesta versão existem `search_routes`, `get_route_details`,
-`get_critical_routes`, `list_routes_by_occupancy` e `get_route_cities`.
+`get_critical_routes`, `list_routes_by_occupancy`, `get_route_cities` e
+`get_route_customers`.
 `list_routes_by_occupancy` dá ao modelo uma consulta ampla, mas ainda limitada,
 para responder rankings e recortes como rotas ociosas, maiores ocupações,
 menores ocupações, rotas por classificação e faixas percentuais. Cada ferramenta
@@ -254,6 +255,16 @@ genérica de banco, SQL ou consulta livre. Adicionar uma nova ferramenta exige
 criar a classe, registrar no container e cobrir permissões/testes, sem alterar
 um bloco central de decisão do orquestrador. Os nomes das ferramentas ficam
 restritos aos logs operacionais e não são expostos no contrato público do chat.
+
+`get_route_customers` prepara o contrato de vínculo cliente-rota. Enquanto não
+existir arquivo ou cadastro manual de associação entre cliente e rota, o
+backend materializa uma associação simulada em `route_customer_assignments`:
+todo cliente ativo do snapshot atual cujo município está entre as cidades
+reconhecidas da rota atual é vinculado à rota com origem
+`InferredByMunicipality`. A resposta identifica essa origem com descrição
+explícita de que é uma inferência por município. Quando a associação manual
+existir no domínio, ela deve reutilizar a mesma tabela e o mesmo contrato
+externo, alterando apenas a origem do vínculo para `Manual` ou `Imported`.
 
 `IRouteChatQueryService`, em `Application/RouteImports`, define DTOs pequenos e
 seguros para exposição ao modelo. `RouteChatQueryService`, em `Infrastructure`,
@@ -272,12 +283,14 @@ sensíveis não são persistidos no histórico.
 As respostas textuais do assistente seguem um contrato de apresentação simples
 para o frontend não inferir estrutura visual de forma ambígua. Registros de
 rotas devem sair em linhas iniciadas por `[ROTA]`, no formato
-`[ROTA] Nome | Ocupação: 97,4% | Status: Crítico | Motivo: ...`; o componente
-renderiza essas linhas como cartões compactos de rota. Recomendações e ações
-operacionais usam bullets simples e são renderizadas como lista textual normal.
-Parágrafos explicativos continuam como texto. O modelo não deve misturar rotas
-e ações na mesma lista nem usar marcadores técnicos ou markdown de destaque para
-representar dados estruturados.
+`[ROTA] Nome | Ocupação: 97,4% | Status: Crítico | Motivo: ...`; registros de
+clientes da rota devem sair como
+`[CLIENTE] Nome fantasia | Código: 0001/01 | Cidade: Marília-SP | Tipo: Mercado | Relação: inferido por município`.
+O componente renderiza essas linhas como cartões compactos do tipo adequado.
+Recomendações e ações operacionais usam bullets simples e são renderizadas como
+lista textual normal. Parágrafos explicativos continuam como texto. O modelo não
+deve misturar rotas, clientes e ações na mesma lista nem usar marcadores
+técnicos ou markdown de destaque para representar dados estruturados.
 
 ### Application e Domain
 
@@ -292,11 +305,24 @@ ocupação, política de capacidade dos veículos logísticos e resumo de execu�
 e `DetectorCodes` com as constantes de código dos detectores.
 
 `Domain/Entities` contém usuários, notificações, fontes de dados, importações,
-erros, execuções, tipos de veículo, rotas, entradas de rota, clientes, snapshots
-de clientes, municípios compartilhados, coordenadas municipais, produtos,
-snapshots de estoque, registros diários de estoque, além das entidades de
-detecção: `DetectorDefinition`, `DetectionRun`, `Finding` e `FindingEvidence`.
-Os estados da importação e da detecção ficam em `Domain/Enums`.
+erros, execuções, tipos de veículo, rotas, entradas de rota, clientes, vínculos
+cliente-rota, snapshots de clientes, municípios compartilhados, coordenadas
+municipais, produtos, snapshots de estoque, registros diários de estoque, além
+das entidades de detecção: `DetectorDefinition`, `DetectionRun`, `Finding` e
+`FindingEvidence`. Os estados da importação, da detecção e a origem do vínculo
+cliente-rota ficam em `Domain/Enums`.
+
+`RouteCustomerAssignment` é a entidade de vínculo entre `Route` e `Customer`.
+Hoje ela é populada por `RouteCustomerAssignmentSynchronizer` com origem
+`InferredByMunicipality`, cruzando municípios das entradas da rota atual com
+municípios dos clientes ativos do snapshot atual. Quando a entrada de rota ainda
+não possui `MunicipalityId`, o sincronizador usa o nome normalizado da cidade da
+rota para encontrar o município do cliente e materializar o mesmo vínculo. O
+índice único
+`RouteId + CustomerId` evita duplicidade quando uma rota possui a mesma cidade
+mais de uma vez. Índices por `RouteId + Source`, `CustomerId + Source` e
+`RouteId + MunicipalityId` cobrem os padrões esperados de listagem por rota,
+auditoria da origem do vínculo e futuras consultas por cliente ou município.
 
 ### Infrastructure
 
@@ -309,6 +335,9 @@ dependências registra:
 - `RoutesByCityProcessor` como `IDataSourceProcessor`.
 - `CustomersSpreadsheetParser` e `CustomersProcessor` como segundo processador,
   reutilizando o mesmo ciclo de vida, storage, fila e publicação versionada.
+- `RouteCustomerAssignmentSynchronizer`, executado após a ativação de imports
+  atuais de rotas ou clientes, para recalcular os vínculos simulados
+  cliente-rota sem depender de consulta ad hoc no chat.
 - `FiscalMovementsSpreadsheetParser` e `FiscalMovementsProcessor` para a fonte
   `FISCAL_MOVEMENTS`, em modo `Upsert`, acumulando fatos históricos.
 - `ProductsSpreadsheetParser` e `ProductsProcessor` para a fonte `PRODUCTS`,

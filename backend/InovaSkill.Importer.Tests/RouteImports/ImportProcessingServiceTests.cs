@@ -37,6 +37,7 @@ public sealed class ImportProcessingServiceTests
             db,
             [new ClearingProcessor(db)],
             new NoOpLifecycle(),
+            new NoOpRouteCustomerAssignmentSynchronizer(),
             new NoOpOperationalJobQueue());
 
         await service.ProcessAsync(import.Id, job.Id, default);
@@ -75,6 +76,7 @@ public sealed class ImportProcessingServiceTests
             db,
             [processor],
             new NoOpLifecycle(),
+            new NoOpRouteCustomerAssignmentSynchronizer(),
             new NoOpOperationalJobQueue());
 
         await service.ProcessAsync(import.Id, job.Id, default);
@@ -124,6 +126,11 @@ public sealed class ImportProcessingServiceTests
     {
         public Task<Guid?> TryQueueAsync(string jobType, Guid relatedEntityId, CancellationToken cancellationToken) =>
             Task.FromResult<Guid?>(null);
+    }
+
+    private sealed class NoOpRouteCustomerAssignmentSynchronizer : IRouteCustomerAssignmentSynchronizer
+    {
+        public Task SyncInferredAssignmentsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
 }

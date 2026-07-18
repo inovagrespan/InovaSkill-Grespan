@@ -23,6 +23,11 @@ public interface IRouteChatQueryService
         Guid routeId,
         int limit,
         CancellationToken cancellationToken);
+
+    Task<RouteChatRouteCustomersDto?> GetRouteCustomersAsync(
+        Guid routeId,
+        int limit,
+        CancellationToken cancellationToken);
 }
 
 public sealed record RouteChatOccupancyQuery(
@@ -44,7 +49,8 @@ public sealed record RouteChatDetailsDto(
     string Status,
     decimal? OccupancyPercentage,
     int CityCount,
-    int CustomerCount,
+    int DeliveryCount,
+    int PotentialCustomerCount,
     DateTime UpdatedAt);
 
 public sealed record RouteChatCriticalDto(
@@ -60,3 +66,20 @@ public sealed record RouteChatCitiesDto(
     IReadOnlyList<RouteChatCityDto> Cities);
 
 public sealed record RouteChatCityDto(string Name, string? State);
+
+public sealed record RouteChatRouteCustomersDto(
+    Guid RouteId,
+    string RouteName,
+    string RelationshipType,
+    string RelationshipDescription,
+    IReadOnlyList<RouteChatCustomerDto> Customers);
+
+public sealed record RouteChatCustomerDto(
+    Guid Id,
+    string Code,
+    string BranchCode,
+    string Name,
+    string TradeName,
+    string MunicipalityName,
+    string State,
+    string CustomerType);

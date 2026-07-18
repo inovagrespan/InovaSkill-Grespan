@@ -401,3 +401,73 @@ public sealed class GetRouteCitiesChatTool(
         }
     }
 }
+
+public sealed class GetRouteCustomersChatTool(
+    IRouteChatQueryService routeQueries,
+    IOptions<AssistantOptions> options,
+    ILogger<GetRouteCustomersChatTool> logger) : IChatTool
+{
+    private const int DefaultLimit = 20;
+    private const int MaximumCustomerLimit = 50;
+    private readonly AssistantOptions assistantOptions = options.Value;
+
+    public string Name => "get_route_customers";
+
+    public string Description =>
+        "Lista clientes vinculados a uma rota. Nesta versão, o vínculo é inferido pelos municípios dos clientes que aparecem nas cidades da rota.";
+
+    public object GetParameterSchema() => new
+    {
+        type = "object",
+        additionalProperties = false,
+        properties = new
+        {
+            routeId = new { type = "string", format = "uuid", description = "Identificador da rota." },
+            limit = new { type = "integer", minimum = 1, maximum = MaximumCustomerLimit }
+        },
+        required = new[] { "routeId", "limit" }
+    };
+
+    public async Task<ChatToolResult> ExecuteAsync(
+        string argumentsJson,
+        ChatExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            var routeIdValue = SearchRoutesChatTool.ReadString(document.RootElement, "routeId");
+            if (!Guid.TryParse(routeIdValue, out var routeId))
+            {
+                return ChatToolResult.Fail("Identificador de rota inválido.");
+            }
+
+            var limit = SearchRoutesChatTool.ReadLimit(
+                document.RootElement,
+                DefaultLimit,
+                Math.Min(MaximumCustomerLimit, assistantOptions.MaximumGeneralSearchResults));
+            var route = await routeQueries.GetRouteCustomersAsync(routeId, limit, cancellationToken);
+            object payload = route is null
+                ? new { found = false, message = "Rota não encontrada." }
+                : new { found = true, route };
+            var recordCount = route?.Customers.Count ?? 0;
+            logger.LogInformation(
+                "Chat tool {ToolName} executada para usuário {UserId} em {ElapsedMs} ms com {RecordCount} registros.",
+                Name,
+                context.UserId,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
+                recordCount);
+            return ChatToolResult.Ok(payload, recordCount);
+        }
+        catch (JsonException)
+        {
+            return ChatToolResult.Fail("Argumentos inválidos para listagem de clientes da rota.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Falha ao executar ferramenta {ToolName}.", Name);
+            return ChatToolResult.Fail("Não foi possível listar clientes da rota agora.");
+        }
+    }
+}
