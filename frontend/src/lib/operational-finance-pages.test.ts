@@ -85,8 +85,8 @@ describe("operational, finance and reports pages", () => {
     expect(source).not.toContain('to="/logistica/rotas"');
     expect(source).not.toContain("Clientes, rotas e trânsito");
     expect(source).not.toContain("Rotas com mais atrasos por congestionamento");
-    expect(source).toContain("Ocupação real");
-    expect(source).toContain("Demais KPIs demonstrativos");
+    expect(source).toContain("Dados reais quando disponíveis");
+    expect(source).toContain("Base demonstrativa complementar");
     expect(helper).toContain("calculateLogisticsKpis");
     expect(helper).toContain("filterLogisticsDashboardSource");
     expect(helper).toContain("selectLatestInventoryBySku");
@@ -137,26 +137,28 @@ describe("operational, finance and reports pages", () => {
     expect(source).not.toContain("currencyFormatter.format");
   });
 
-  it("marca metricas logisticas nao liberadas como em breve sem exibir dados", () => {
+  it("libera os KPIs logísticos calculados pela base demonstrativa", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
 
-    expect(source).toContain('const LOGISTICS_METRIC_UNDER_DEVELOPMENT = "em breve";');
-    expect(source).toContain('new Set(["returns", "occupancy", "stockout"])');
-    expect(source).toContain("resolveExecutiveMetricValue(card.id, card.value)");
+    expect(source).not.toContain('LOGISTICS_METRIC_UNDER_DEVELOPMENT');
+    expect(source).not.toContain('"em breve"');
+    expect(source).toContain('"loading",');
+    expect(source).toContain('"fill-rate",');
     expect(source).toContain("const released = isReleasedLogisticsMetric(card.id)");
     expect(source).toContain("onClick={released ? onSelect : undefined}");
     expect(source).toContain("released && card.showStatus !== false");
     expect(source).toContain('title: "Taxa de Ocupação", value: occupancyValue');
     expect(source).toContain('title: "Taxa de Devolução", value: returnRateValue');
-    expect(source).toContain("A taxa de devolução usa documentos fiscais importados");
+    expect(source).toContain("Devolução, ocupação e ruptura usam as importações disponíveis");
     expect(source).toContain("Importação de rotas");
     expect(source).toContain("MEDIUM_OCCUPANCY_LIMIT_PERCENT = 60");
-    expect(source).toContain("GOOD_OCCUPANCY_LIMIT_PERCENT = 80");
-    expect(source).toContain("CRITICAL_OCCUPANCY_LIMIT_PERCENT = 100");
+    expect(source).toContain("GOOD_OCCUPANCY_LIMIT_PERCENT = 85");
+    expect(source).toContain("CRITICAL_OCCUPANCY_LIMIT_PERCENT = 95");
     expect(source).toContain("Rotas abaixo de 60% estão ociosas");
+    expect(source).toContain("Rotas de 85% até 95% ficam saudáveis");
     expect(source).toContain("fetchInventorySummary");
     expect(source).toContain('title: "Rupturas de Estoque", value: stockoutValue');
-    expect(source).toContain('Ruptura real');
+    expect(source).toContain('Base demonstrativa complementar');
     expect(source).toContain('stockoutValue = inventorySummaryLoading ? "Carregando"');
     expect(source).toContain('`${stockoutMetric} produtos`');
   });
@@ -182,9 +184,9 @@ describe("operational, finance and reports pages", () => {
     expect(source).toContain("Filial");
     expect(source).toContain("recommendationContext");
     expect(source).toContain("routeOccupancyPresentation");
-    expect(source).toContain("No limite");
     expect(source).toContain("Saudável");
-    expect(source).toContain("Folga");
+    expect(source).toContain("Médio");
+    expect(source).toContain("Ocioso");
     expect(source).toContain("de ocupação");
     expect(source).not.toContain("Distribuição regional dos clientes");
     expect(source).not.toContain("LogisticsRegionMap");

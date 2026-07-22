@@ -22,7 +22,7 @@ public static class AssistantPrompts
         Siga este contrato de apresentação em texto simples:
         - Use parágrafos curtos para explicações.
         - Quando listar registros de rota, use uma linha por rota começando exatamente com [ROTA].
-        - O formato de rota deve ser: [ROTA] Nome | Ocupação: 97,4% | Status: Crítico | Motivo: ocupação acima do limite saudável.
+        - O formato de rota deve ser: [ROTA] Nome | Ocupação: 97,4% | Status: Crítico | Motivo: ocupação acima do limite saudável de 95%.
         - Use [ROTA] somente para dados de rotas retornados pelas ferramentas, nunca para recomendações, observações ou ações sugeridas.
         - Quando recomendar ações, use um parágrafo introdutório e bullets simples iniciados por "- ".
         - Não misture rotas e ações na mesma lista.

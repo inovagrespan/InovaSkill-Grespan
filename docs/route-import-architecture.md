@@ -117,9 +117,9 @@ entre as dimensões disponíveis. Se nenhuma capacidade estiver configurada, o
 status fica `MissingCapacity` e a ocupação geral permanece nula.
 
 O frontend representa a taxa com barra e círculo percentual. Abaixo de 60% a
-rota é `Ocioso`; entre 60% e menos de 80%, `Médio`; entre 80% e 100%,
-`Saudável`; e acima de 100%, `Crítico` por sobrecarga. A barra visual termina
-em 100%, mas o valor e a sobrecarga continuam exibindo o percentual real.
+rota é `Ocioso`; entre 60% e menos de 85%, `Médio`; entre 85% e 95%,
+`Saudável`; e acima de 95% até 100%, `Crítico`. O cálculo e a apresentação são
+limitados a 100%, inclusive quando a carga informada supera a capacidade.
 
 ## Métricas dos jobs
 

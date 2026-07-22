@@ -99,19 +99,25 @@ type ExecutiveCard = {
   showStatus?: boolean;
 };
 
-const LOGISTICS_METRIC_UNDER_DEVELOPMENT = "em breve";
-const RELEASED_LOGISTICS_METRICS: ReadonlySet<ExecutiveMetricId> = new Set(["returns", "occupancy", "stockout"]);
+const RELEASED_LOGISTICS_METRICS: ReadonlySet<ExecutiveMetricId> = new Set([
+  "returns",
+  "occupancy",
+  "loading",
+  "transit",
+  "total-cost",
+  "route-cost",
+  "inventory-accuracy",
+  "stockout",
+  "occurrences",
+  "fill-rate",
+]);
 const MEDIUM_OCCUPANCY_LIMIT_PERCENT = 60;
-const GOOD_OCCUPANCY_LIMIT_PERCENT = 80;
-const CRITICAL_OCCUPANCY_LIMIT_PERCENT = 100;
+const GOOD_OCCUPANCY_LIMIT_PERCENT = 85;
+const CRITICAL_OCCUPANCY_LIMIT_PERCENT = 95;
 const STOCKOUT_PRODUCTS_PAGE_SIZE = 10;
 
 function isReleasedLogisticsMetric(metricId: ExecutiveMetricId): boolean {
   return RELEASED_LOGISTICS_METRICS.has(metricId);
-}
-
-function resolveExecutiveMetricValue(metricId: ExecutiveMetricId, calculatedValue: string): string {
-  return isReleasedLogisticsMetric(metricId) ? calculatedValue : LOGISTICS_METRIC_UNDER_DEVELOPMENT;
 }
 
 type InvestigationEvidence = {
@@ -245,10 +251,10 @@ function costStatus(change: number | null): MetricStatus {
 }
 
 function routeOccupancyPresentation(occupancyPercent: number): { label: string; tone: "healthy" | "attention" | "critical" | "neutral" } {
-  if (occupancyPercent >= 95) return { label: "Crítico", tone: "critical" };
-  if (occupancyPercent >= 90) return { label: "No limite", tone: "attention" };
-  if (occupancyPercent >= 80) return { label: "Saudável", tone: "healthy" };
-  return { label: "Folga", tone: "neutral" };
+  if (occupancyPercent > CRITICAL_OCCUPANCY_LIMIT_PERCENT) return { label: "Crítico", tone: "critical" };
+  if (occupancyPercent >= GOOD_OCCUPANCY_LIMIT_PERCENT) return { label: "Saudável", tone: "healthy" };
+  if (occupancyPercent >= MEDIUM_OCCUPANCY_LIMIT_PERCENT) return { label: "Médio", tone: "attention" };
+  return { label: "Ocioso", tone: "neutral" };
 }
 
 function occupancyToneClass(tone: "healthy" | "attention" | "critical" | "neutral"): string {
@@ -313,7 +319,7 @@ function buildExecutiveCards(
 
   return [
     { id: "returns", area: "Qualidade", title: "Taxa de Devolução", value: returnRateValue, rawValue: returnRateMetric, status: lowerIsBetterStatus(returnRateMetric, 2, 4), change: null, lowerIsBetter: true, insight: returnRateError ? "A taxa de devolução não pôde ser consultada na API fiscal." : "A taxa de devolução reflete os documentos fiscais importados no período.", icon: RotateCcw, description: "Percentual de devoluções sobre o volume vendido.", meaning: "Mostra quanto do peso vendido retornou como devolução no período selecionado.", formula: "(Peso devolvido ÷ peso vendido) × 100", calculation: "O sistema soma o peso bruto das devoluções e divide pelo peso bruto das vendas no período.", dataUsed: ["Peso vendido", "Peso devolvido", "Período"], factors: ["Devoluções registradas nos documentos fiscais", "Vendas registradas nos documentos fiscais"], recommendations: ["Acompanhar a evolução da taxa no período", "Investigar clientes ou produtos apenas em análises complementares"], detailMetric: "returns", unavailableReason: returnRateError, showStatus: !returnRateLoading && !returnRateError },
-    { id: "occupancy", area: "Operação", title: "Taxa de Ocupação", value: occupancyValue, rawValue: occupancyMetric, status: occupancyStatus(occupancyMetric), change: null, lowerIsBetter: false, insight: "A ocupação reflete a base atual de rotas, sem comparação com períodos anteriores.", icon: Gauge, description: "Capacidade dos veículos utilizada pelas cargas.", meaning: "Indica se a frota está sendo bem aproveitada e revela rotas subutilizadas ou acima do limite.", formula: "(Peso carregado ÷ capacidade total dos veículos) × 100", calculation: "O sistema soma o peso das rotas com capacidade configurada na base atual e divide pela soma da capacidade desses veículos.", dataUsed: ["Peso carregado", "Capacidade do veículo", "Veículo", "Rota"], factors: ["Rotas abaixo de 60% estão ociosas", "Rotas de 60% até menos de 80% ficam médias", "Rotas de 80% até 100% ficam saudáveis", "Rotas acima de 100% ficam críticas"], recommendations: ["Consolidar rotas ociosas", "Readequar o tipo de veículo à demanda", "Configurar capacidade dos veículos sem base"], detailMetric: "occupancy-load", occupancySummary, unavailableReason: occupancyError, showStatus: !occupancyLoading && !occupancyError },
+    { id: "occupancy", area: "Operação", title: "Taxa de Ocupação", value: occupancyValue, rawValue: occupancyMetric, status: occupancyStatus(occupancyMetric), change: null, lowerIsBetter: false, insight: "A ocupação reflete a base atual de rotas, sem comparação com períodos anteriores.", icon: Gauge, description: "Capacidade dos veículos utilizada pelas cargas.", meaning: "Indica se a frota está sendo bem aproveitada e revela rotas subutilizadas ou acima do limite.", formula: "(Peso carregado ÷ capacidade total dos veículos) × 100", calculation: "O sistema soma o peso das rotas com capacidade configurada na base atual e divide pela soma da capacidade desses veículos.", dataUsed: ["Peso carregado", "Capacidade do veículo", "Veículo", "Rota"], factors: ["Rotas abaixo de 60% estão ociosas", "Rotas de 60% até menos de 85% ficam médias", "Rotas de 85% até 95% ficam saudáveis", "Rotas acima de 95% ficam críticas"], recommendations: ["Consolidar rotas ociosas", "Readequar o tipo de veículo à demanda", "Configurar capacidade dos veículos sem base"], detailMetric: "occupancy-load", occupancySummary, unavailableReason: occupancyError, showStatus: !occupancyLoading && !occupancyError },
     { id: "loading", area: "Operação", title: "Tempo de Carregamento", value: formatLogisticsDuration(metrics.averageLoadingMinutes), rawValue: metrics.averageLoadingMinutes, status: lowerIsBetterStatus(metrics.averageLoadingMinutes, 50, 60), change: changes.averageLoadingMinutes, lowerIsBetter: true, insight: changePhrase("O tempo de carregamento", changes.averageLoadingMinutes, true), icon: Timer, description: "Tempo médio necessário para liberar uma carga.", meaning: "Mede a eficiência do pátio desde o início da carga até a liberação do veículo.", formula: "Horário final do carregamento − horário inicial", calculation: "O sistema calculou a duração de cada carregamento e obteve a média das viagens do período.", dataUsed: ["Início do carregamento", "Fim do carregamento", "Veículo", "Equipe", "Tipo de carga"], factors: ["Fila no pátio", "Separação incompleta", "Carga mista de congelados e equipamentos"], recommendations: ["Pré-separar cargas antes da doca", "Balancear equipes nos horários de pico", "Criar janela específica para maquinários"], detailMetric: "loading" },
     { id: "transit", area: "Transporte", title: "Tempo de Trânsito", value: formatLogisticsDuration(metrics.averageTransitMinutes), rawValue: metrics.averageTransitMinutes, status: transitStatus(metrics.averageTransitMinutes), change: changes.averageTransitMinutes, lowerIsBetter: true, insight: changePhrase("O tempo de trânsito", changes.averageTransitMinutes, true), icon: Clock, description: "Tempo médio entre saída e entrega.", meaning: "Revela a duração real das viagens e o risco de atraso por rota, veículo ou transportadora.", formula: "Horário de entrega − horário de saída", calculation: "A duração das viagens concluídas foi somada e dividida pela quantidade de viagens analisadas.", dataUsed: ["Horário de saída", "Horário de entrega", "Rota", "Veículo", "Transportadora"], factors: ["Congestionamento", "Excesso de paradas", "Janelas restritas de recebimento"], recommendations: ["Replanejar sequenciamento das rotas críticas", "Antecipar saídas em horários de pico", "Negociar janelas com clientes recorrentes"], detailMetric: "route-time" },
     { id: "total-cost", area: "Custos", title: "Custo Logístico Total", value: formatLogisticsCurrency(metrics.totalLogisticsCost), rawValue: metrics.totalLogisticsCost, status: costStatus(changes.totalLogisticsCost), change: changes.totalLogisticsCost, lowerIsBetter: true, insight: changePhrase("O custo logístico", changes.totalLogisticsCost, true), icon: WalletCards, description: "Custo consolidado da operação logística.", meaning: "Consolida o valor gasto para armazenar, preparar e transportar os pedidos no período.", formula: "Transporte + combustível + manutenção + pedágio + armazenagem + operação", calculation: "O sistema somou os custos registrados em todas as viagens do período selecionado.", dataUsed: ["Custo de transporte", "Combustível", "Manutenção", "Pedágio", "Armazenagem", "Operação"], factors: ["Rotas longas ou ociosas", "Aumento do tempo de trânsito", "Devoluções e reentregas"], recommendations: ["Atacar as rotas de maior participação", "Reduzir viagens com baixa ocupação", "Monitorar custo de reentrega"], detailMetric: "route-cost" },
@@ -322,7 +328,7 @@ function buildExecutiveCards(
     { id: "stockout", area: "Estoque", title: "Rupturas de Estoque", value: stockoutValue, rawValue: stockoutMetric, status: stockoutStatus(stockoutMetric), change: null, lowerIsBetter: true, insight: inventorySummaryError ? "A ruptura não pôde ser consultada na API de estoque." : "A ruptura reflete a última importação publicada de estoque.", icon: PackageX, description: "Produtos cuja disponibilidade atual está zerada ou negativa.", meaning: "Mostra quantos produtos podem impedir o atendimento integral dos pedidos.", formula: "Contagem de produtos com saldo disponível total menor ou igual a zero", calculation: "O sistema agrupa o estoque atual por produto e soma o saldo disponível de todos os armazéns.", dataUsed: ["Saldo disponível", "Produto", "Armazém", "Última importação publicada de estoque"], factors: ["Empenho maior que saldo físico", "Reposição atrasada", "Divergências de inventário"], recommendations: ["Priorizar reposição dos produtos em ruptura", "Revisar empenhos e reservas", "Realocar saldo entre armazéns"], detailMetric: "affected-products", unavailableReason: inventorySummaryError, showStatus: !inventorySummaryLoading && !inventorySummaryError },
     { id: "occurrences", area: "Qualidade", title: "Índice de Ocorrências", value: formatPercent(metrics.damageRatePercent), rawValue: metrics.damageRatePercent, status: occurrenceStatus(metrics.damageRatePercent), change: changes.damageRatePercent, lowerIsBetter: true, insight: changePhrase("O índice de ocorrências", changes.damageRatePercent, true), icon: AlertTriangle, description: "Incidência de avarias sobre o volume expedido.", meaning: "Aponta problemas como danos, descongelamento, atraso, divergência e ausência do cliente.", formula: "(Unidades com ocorrência ÷ unidades expedidas) × 100", calculation: "Na base disponível, o sistema consolidou as unidades avariadas e comparou com o volume expedido.", dataUsed: ["Unidades expedidas", "Avarias", "Motivo", "Produto", "Rota", "Cliente"], factors: ["Embalagem inadequada", "Movimentação incorreta", "Variação de temperatura"], recommendations: ["Reforçar padrão de acondicionamento", "Treinar equipes de movimentação", "Monitorar temperatura por rota"], detailMetric: "damage" },
     { id: "fill-rate", area: "Atendimento", title: "Nível de Atendimento / Fill Rate", value: formatPercent(metrics.fillRatePercent), rawValue: metrics.fillRatePercent, status: higherIsBetterStatus(metrics.fillRatePercent, 95, 90), change: changes.fillRatePercent, lowerIsBetter: false, insight: changePhrase("O Fill Rate", changes.fillRatePercent, false), icon: PackageCheck, description: "Percentual da quantidade solicitada que foi entregue.", meaning: "Mede quanto a Grespan conseguiu atender sem falta de produtos ou cortes no pedido.", formula: "(Quantidade entregue ÷ quantidade solicitada) × 100", calculation: "As unidades entregues foram somadas e divididas pelo total solicitado pelos clientes.", dataUsed: ["Quantidade solicitada", "Quantidade entregue", "Cliente", "Produto", "Rota"], factors: ["Ruptura de estoque", "Cortes na separação", "Divergências de inventário"], recommendations: ["Relacionar cortes aos SKUs em ruptura", "Priorizar clientes com recorrência", "Aumentar acuracidade e estoque de segurança"], detailMetric: "fill-rate" },
-  ].map((card) => ({ ...card, value: resolveExecutiveMetricValue(card.id, card.value) }));
+  ];
 }
 
 function buildInvestigationFactors(
@@ -549,7 +555,7 @@ export function LogisticsDashboardMetrics() {
     <div className="page-shell app-background space-y-6">
       <header className="animate-fade-in flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="flex flex-wrap items-center gap-2"><span className="page-header-kicker">Dashboard</span><Badge variant="outline">Devolução real</Badge><Badge variant="outline">Ocupação real</Badge><Badge variant="outline">Ruptura real</Badge><Badge variant="outline">Demais KPIs demonstrativos</Badge></div>
+          <div className="flex flex-wrap items-center gap-2"><span className="page-header-kicker">Dashboard</span><Badge variant="outline">Dados reais quando disponíveis</Badge><Badge variant="outline">Base demonstrativa complementar</Badge></div>
           <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Dashboard logístico</h1>
           <p className="mt-1 text-sm text-muted-foreground">Identifique o sinal, encontre a causa raiz e receba uma ação específica sem sair da tela.</p>
         </div>
@@ -564,7 +570,7 @@ export function LogisticsDashboardMetrics() {
         {executiveCards.map((card) => <ExecutiveMetricCard key={card.id} card={card} onSelect={() => openMetric(card.id)} />)}
       </section>
 
-      <p className="text-center text-xs text-muted-foreground">A taxa de devolução usa documentos fiscais importados, a ocupação usa a base atual de rotas e a ruptura usa a última importação publicada de estoque; os demais KPIs continuam demonstrativos até a API expor os eventos logísticos necessários.</p>
+      <p className="text-center text-xs text-muted-foreground">Devolução, ocupação e ruptura usam as importações disponíveis; os demais KPIs são calculados sobre uma base demonstrativa de congelados, salgados e movimentação de fornos e freezers alugados.</p>
 
       <Dialog open={selectedCard != null && selectedFactor == null} onOpenChange={(open) => !open && selectedFactor == null && setSelectedMetric(null)}>
         <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-5xl overflow-y-auto p-5 sm:p-6">

@@ -203,7 +203,7 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
     private static decimal? ToOccupancyPercentage(decimal? occupancy) =>
         occupancy.HasValue
             ? Math.Round(
-                occupancy.Value * OccupancyPercentScale,
+                Math.Min(occupancy.Value, 1m) * OccupancyPercentScale,
                 OccupancyPercentDecimalPlaces,
                 MidpointRounding.AwayFromZero)
             : null;

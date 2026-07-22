@@ -20,15 +20,15 @@ public sealed class RouteOccupancyCalculatorTests
     }
 
     [Fact]
-    public void Calculate_DoesNotLimitOverloadToOneHundredPercent()
+    public void Calculate_LimitsOccupancyToOneHundredPercent()
     {
         var result = RouteOccupancyCalculator.Calculate(new RouteOccupancyInput(
             12_500m, 10_000m,
             null, null,
             null, null));
 
-        Assert.Equal(1.25m, result.WeightOccupancy);
-        Assert.Equal(1.25m, result.OverallOccupancy);
+        Assert.Equal(1m, result.WeightOccupancy);
+        Assert.Equal(1m, result.OverallOccupancy);
     }
 
     [Fact]

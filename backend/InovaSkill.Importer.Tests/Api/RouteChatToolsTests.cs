@@ -31,7 +31,7 @@ public sealed class RouteChatToolsTests
 
         Assert.True(result.Success);
         Assert.Equal(route.Id, json.RootElement[0].GetProperty("id").GetGuid());
-        Assert.Equal("Saudável", json.RootElement[0].GetProperty("status").GetString());
+        Assert.Equal("Crítico", json.RootElement[0].GetProperty("status").GetString());
         Assert.Equal(97.4m, json.RootElement[0].GetProperty("occupancyPercentage").GetDecimal());
     }
 
@@ -85,7 +85,7 @@ public sealed class RouteChatToolsTests
         Assert.True(json.RootElement.GetProperty("found").GetBoolean());
         var routeJson = json.RootElement.GetProperty("route");
         Assert.Equal("Crítico", routeJson.GetProperty("status").GetString());
-        Assert.Equal(112.0m, routeJson.GetProperty("occupancyPercentage").GetDecimal());
+        Assert.Equal(100m, routeJson.GetProperty("occupancyPercentage").GetDecimal());
         Assert.Equal(1, routeJson.GetProperty("cityCount").GetInt32());
         Assert.Equal(3, routeJson.GetProperty("customerCount").GetInt32());
     }
@@ -109,8 +109,8 @@ public sealed class RouteChatToolsTests
     public async Task GetCriticalRoutes_UsesExistingOccupancyPolicy()
     {
         await using var db = CreateDbContext();
-        await SeedRouteAsync(db, "Rota Crítica", 1.01m);
-        await SeedRouteAsync(db, "Rota Saudável", 1.00m);
+        await SeedRouteAsync(db, "Rota Crítica", 0.9501m);
+        await SeedRouteAsync(db, "Rota Saudável", 0.95m);
         var tool = new GetCriticalRoutesChatTool(
             new RouteChatQueryService(db),
             Options.Create(new AssistantOptions()),

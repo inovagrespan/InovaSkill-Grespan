@@ -66,11 +66,11 @@ public sealed class RouteOccupancyDetector(
 
         foreach (var route in criticalRoutes)
         {
-            var occupancyPercent = Math.Round(route.OverallOccupancy!.Value * 100, OccupancyPercentDecimalPlaces);
+            var occupancyPercent = Math.Min(100m, Math.Round(route.OverallOccupancy!.Value * 100, OccupancyPercentDecimalPlaces));
             findings.Add(new FindingCandidate(
                 Fingerprint: $"{Code}:CRITICAL:{route.Id}",
                 Title: "Rota com ocupação crítica",
-                Description: $"A rota '{route.Name}' ({route.Weekday}) está com {occupancyPercent}% de ocupação, excedendo a capacidade do veículo {route.VehicleTypeName} ({route.CapacityKg} kg).",
+                Description: $"A rota '{route.Name}' ({route.Weekday}) está com {occupancyPercent}% de ocupação, acima do limite crítico de 95% para o veículo {route.VehicleTypeName} ({route.CapacityKg} kg).",
                 SubjectType: "Route",
                 SubjectId: route.Id.ToString(),
                 SubjectLabel: $"{route.Name} ({route.Weekday})",

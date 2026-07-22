@@ -178,4 +178,21 @@ describe("logistics dashboard metrics", () => {
     expect(buildDemoLogisticsMetricHistory("returns", 30).map((point) => point.label)).toEqual(["26/05", "31/05", "05/06", "10/06", "14/06", "19/06", "24/06"]);
     expect(buildDemoLogisticsMetricHistory("total-cost", 90).map((point) => point.label)).toEqual(["27/03", "11/04", "26/04", "11/05", "25/05", "09/06", "24/06"]);
   });
+
+  it("mantém uma base demonstrativa coerente com congelados e equipamentos alugados", async () => {
+    const { demoLogisticsDashboardSource } = await import("./logistics-dashboard");
+    const productNames = demoLogisticsDashboardSource.inventory.map((item) => item.productName);
+    const rentals = demoLogisticsDashboardSource.equipmentRentals ?? [];
+
+    expect(productNames).toEqual(expect.arrayContaining([
+      expect.stringContaining("Pão Francês Congelado"),
+      expect.stringContaining("Pão de Queijo Congelado"),
+      expect.stringContaining("Croissant Congelado"),
+      expect.stringContaining("Coxinha de Frango Congelada"),
+      expect.stringContaining("Esfiha de Carne Congelada"),
+    ]));
+    expect(rentals.map((item) => item.equipmentType)).toEqual(expect.arrayContaining(["Forno", "Freezer"]));
+    expect(rentals.every((item) => item.monthlyRentalAmount > 0 && item.serviceRouteId.length > 0)).toBe(true);
+    expect(rentals.reduce((total, item) => total + item.monthlyRentalAmount, 0)).toBe(4_270);
+  });
 });

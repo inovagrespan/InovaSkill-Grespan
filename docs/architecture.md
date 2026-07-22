@@ -147,9 +147,9 @@ consulta, acompanhando a normalização dos nomes armazenados pelas planilhas.
 
 Cada rota apresenta a ocupação com uma barra e um indicador circular. A
 classificação visual usa faixas explícitas de eficiência logística: abaixo de
-60% é `Ocioso` (azul), de 60% até menos de 80% é `Médio` (amarelo), de 80% até
-100% é `Saudável` (verde), e acima de 100% é `Crítico` (vermelho) por sobrecarga.
-Sobrecargas preservam e exibem o percentual excedente;
+60% é `Ocioso` (azul), de 60% até menos de 85% é `Médio` (amarelo), de 85% até
+95% é `Saudável` (verde), e acima de 95% até 100% é `Crítico` (vermelho).
+O cálculo e a apresentação são limitados a 100%;
 ausência de capacidade aparece como `Indisponível`, sem ser convertida em zero.
 Na tela principal de rotas, a ação `Simular`, visível para Vendas, Logística e
 administradores, consulta o detalhe da rota e o
@@ -158,19 +158,46 @@ atual com `TotalWeightKg / capacidade selecionada`. O cálculo ocorre somente no
 frontend, mantém carga, cidades e entregas inalteradas e não envia comandos de
 criação ou atualização para a API.
 
+Ao abrir o detalhe de uma rota, `RouteDecisionSupport` classifica os veículos
+cadastrados capazes de transportar a carga, priorizando ocupação próxima de 90%
+e respeitando as faixas operacionais e o teto de 100%. A tela apresenta até três
+cenários, com capacidade, ocupação, justificativa e risco. Opcionalmente, o
+usuário pode enviar esses cenários calculados ao assistente existente para obter
+uma explicação comparativa. A IA é instruída a não inventar custos, distâncias
+ou tempos ausentes e responde em até 80 palavras, separadas em recomendação,
+motivo, risco e próximo passo; essa análise não altera rota, veículo nem
+persistência. O prompt usa a contagem de cidades e nomes truncados, e o frontend
+impõe o mesmo limite máximo de 800 caracteres configurado pela API.
+O apoio à decisão, seu cálculo e a análise por IA reutilizam exatamente a mesma
+permissão da simulação de veículo: `vendas`, `logistica`, `admin` e
+`admin_system`. Para os demais perfis, esses componentes não são renderizados e
+o catálogo de veículos não é consultado ao abrir o detalhe.
+
 O card executivo `Taxa de Ocupação` do dashboard logístico usa somente o
 snapshot atual publicado de rotas, sem filtro de data ou comparação com período
 anterior. A API soma `Route.TotalWeightKg` das rotas com capacidade configurada
 e divide pela soma de `VehicleType.CapacityKg` dessas mesmas rotas; rotas sem
 capacidade ficam fora do numerador e denominador, mas são retornadas como
 contagem de alerta. O card usa as mesmas faixas visuais das rotas: abaixo de
-60% é `Ocioso`, de 60% até menos de 80% é `Médio`, de 80% até 100% é
-`Saudável`, e acima de 100% é `Crítico`.
+60% é `Ocioso`, de 60% até menos de 85% é `Médio`, de 85% até 95% é
+`Saudável`, e acima de 95% até 100% é `Crítico`. O resumo consolidado também é
+limitado a 100%, mesmo quando o peso informado supera a capacidade disponível.
 
 Alguns clientes de `frontend/src/lib/importer-api.ts` representam contratos de
 serviços do ecossistema que não estão implementados neste backend. Ao alterar um
 contrato realmente atendido por este repositório, frontend e backend devem ser
 atualizados juntos.
+
+O dashboard logístico combina indicadores integrados e demonstrativos. Taxa de
+devolução, ocupação e ruptura consultam as importações reais disponíveis. Tempo
+de carregamento e trânsito, custos, acuracidade, ocorrências e Fill Rate são
+calculados no frontend sobre a base demonstrativa tipada de
+`frontend/src/lib/logistics-dashboard.ts`. Essa base representa viagens,
+estoques de pães e salgados congelados e contratos de locação de fornos e
+freezers vinculados às rotas de atendimento. Ela é explícita e isolada da
+persistência PostgreSQL: não cria registros falsos nas tabelas operacionais e
+deve ser substituída pelos contratos da API quando esses eventos forem
+persistidos.
 
 ## Backend
 
@@ -602,6 +629,11 @@ permite executar manualmente somente os que possuem `ManualRunAllowed`. Jobs de
 importação de planilha não entram nesse catálogo porque dependem de upload,
 arquivo e import específico; eles continuam sendo criados por upload,
 reprocessamento ou retry técnico.
+
+Antes do enfileiramento manual, a API resolve a publicação exigida pelo job:
+o enriquecimento municipal usa a importação atual de clientes e a detecção de
+clientes inativos usa a importação fiscal atual. Se a fonte necessária ainda
+não tiver uma publicação, a API retorna conflito sem criar uma execução órfã.
 
 ### Mapa de clientes por município
 

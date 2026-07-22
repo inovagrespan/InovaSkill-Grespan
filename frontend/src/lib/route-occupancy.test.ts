@@ -11,8 +11,8 @@ describe("route occupancy formatting", () => {
     expect(formatOccupancy(0.6)).toBe("60%");
   });
 
-  it("preserves overload above one hundred percent", () => {
-    expect(formatOccupancy(1.25)).toBe("125%");
+  it("limits displayed occupancy to one hundred percent", () => {
+    expect(formatOccupancy(1.25)).toBe("100%");
   });
 
   it("rounds only the displayed percentage to one decimal place", () => {
@@ -34,9 +34,10 @@ describe("route occupancy formatting", () => {
     [0.558182, "idle", "Ocioso"],
     [0.5999, "idle", "Ocioso"],
     [0.6, "medium", "Médio"],
-    [0.7999, "medium", "Médio"],
-    [0.8, "good", "Saudável"],
-    [1, "good", "Saudável"],
+    [0.8499, "medium", "Médio"],
+    [0.85, "good", "Saudável"],
+    [0.95, "good", "Saudável"],
+    [0.9501, "critical", "Crítico"],
     [1.25, "critical", "Crítico"],
   ] as const)("classifies %s with explicit boundaries", (value, level, label) => {
     expect(classifyOccupancy(value)).toMatchObject({ level, label });

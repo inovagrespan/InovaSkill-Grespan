@@ -58,8 +58,8 @@ public sealed class RoutesByCityProcessorTests
         var currentRoute = await db.Routes.SingleAsync(route => route.ImportId == candidateImport.Id);
         Assert.Equal("HISTÓRICA", historicalRoute.Name);
         Assert.Equal(12_500m, currentRoute.TotalWeightKg);
-        Assert.Equal(1.25m, currentRoute.WeightOccupancy);
-        Assert.Equal(1.25m, currentRoute.OverallOccupancy);
+        Assert.Equal(1m, currentRoute.WeightOccupancy);
+        Assert.Equal(1m, currentRoute.OverallOccupancy);
         Assert.Equal(RouteOccupancyStatus.Calculated, currentRoute.OccupancyStatus);
         Assert.Equal(
             currentRoute.Entries.Sum(entry => entry.AveragePerDay),

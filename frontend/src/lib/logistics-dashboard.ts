@@ -31,9 +31,22 @@ export type LogisticsInventoryRecord = {
   availableUnits: number;
 };
 
+export type LogisticsEquipmentRentalRecord = {
+  equipmentId: string;
+  equipmentType: "Forno" | "Freezer";
+  model: string;
+  customer: string;
+  city: string;
+  monthlyRentalAmount: number;
+  installedAt: string;
+  status: "Ativo" | "Manutenção";
+  serviceRouteId: string;
+};
+
 export type LogisticsDashboardSource = {
   routes: LogisticsRouteRecord[];
   inventory: LogisticsInventoryRecord[];
+  equipmentRentals?: LogisticsEquipmentRentalRecord[];
 };
 
 export type LogisticsKpis = {
@@ -440,10 +453,18 @@ export const demoLogisticsDashboardSource: LogisticsDashboardSource = {
     { date: "2026-06-24", sku: "PAN-104", productName: "Pão Francês Congelado 60g", warehouse: "CD Central", systemStock: 318, countedStock: 310, demandUnits: 560, availableUnits: 310 },
     { date: "2026-06-24", sku: "PAN-221", productName: "Pão de Queijo Congelado 1kg", warehouse: "CD Campinas", systemStock: 138, countedStock: 134, demandUnits: 250, availableUnits: 134 },
     { date: "2026-06-24", sku: "PAN-318", productName: "Croissant Congelado 80g", warehouse: "CD Ribeirão", systemStock: 88, countedStock: 86, demandUnits: 78, availableUnits: 86 },
+    { date: "2026-06-24", sku: "SAL-410", productName: "Coxinha de Frango Congelada 120g", warehouse: "CD Central", systemStock: 224, countedStock: 218, demandUnits: 310, availableUnits: 218 },
+    { date: "2026-06-24", sku: "SAL-522", productName: "Esfiha de Carne Congelada 100g", warehouse: "CD Campinas", systemStock: 196, countedStock: 192, demandUnits: 180, availableUnits: 192 },
     { date: "2026-06-23", sku: "PAN-104", productName: "Pão Francês Congelado 60g", warehouse: "CD Central", systemStock: 332, countedStock: 320, demandUnits: 580, availableUnits: 320 },
     { date: "2026-06-23", sku: "PAN-221", productName: "Pão de Queijo Congelado 1kg", warehouse: "CD Campinas", systemStock: 145, countedStock: 140, demandUnits: 260, availableUnits: 140 },
     { date: "2026-06-23", sku: "PAN-318", productName: "Croissant Congelado 80g", warehouse: "CD Ribeirão", systemStock: 94, countedStock: 90, demandUnits: 80, availableUnits: 90 },
     { date: "2026-06-08", sku: "PAN-104", productName: "Pão Francês Congelado 60g", warehouse: "CD Central", systemStock: 420, countedStock: 414, demandUnits: 390, availableUnits: 414 },
     { date: "2026-05-10", sku: "PAN-221", productName: "Pão de Queijo Congelado 1kg", warehouse: "CD Campinas", systemStock: 310, countedStock: 302, demandUnits: 290, availableUnits: 302 },
+  ],
+  equipmentRentals: [
+    { equipmentId: "FOR-018", equipmentType: "Forno", model: "Turbo 5 Esteiras", customer: "Padaria Avenida", city: "Campinas", monthlyRentalAmount: 1_480, installedAt: "2025-08-12", status: "Ativo", serviceRouteId: "ROT-01" },
+    { equipmentId: "FOR-027", equipmentType: "Forno", model: "Lastro Compacto", customer: "Rede Primavera", city: "Ribeirão Preto", monthlyRentalAmount: 1_260, installedAt: "2026-01-20", status: "Ativo", serviceRouteId: "ROT-03" },
+    { equipmentId: "FRZ-011", equipmentType: "Freezer", model: "Horizontal 503 L", customer: "Mercado Central", city: "Sorocaba", monthlyRentalAmount: 690, installedAt: "2025-11-03", status: "Ativo", serviceRouteId: "ROT-04" },
+    { equipmentId: "FRZ-024", equipmentType: "Freezer", model: "Expositor 572 L", customer: "Atacado União", city: "Santo André", monthlyRentalAmount: 840, installedAt: "2026-02-16", status: "Manutenção", serviceRouteId: "ROT-02" },
   ],
 };

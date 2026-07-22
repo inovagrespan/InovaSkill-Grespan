@@ -62,6 +62,25 @@ public sealed class RoutesControllerTests
     }
 
     [Fact]
+    public async Task GetOccupancySummary_LimitsOverCapacityResultToOneHundredPercent()
+    {
+        await using var db = CreateDbContext();
+        var source = CreateSource();
+        var currentImport = CreateImport(source.Id, 1, RouteImportStatus.Completed, DateTime.UtcNow);
+        source.CurrentImportId = currentImport.Id;
+        source.CurrentImport = currentImport;
+        var vehicle = CreateVehicle(capacityKg: 1_000m);
+        db.AddRange(source, currentImport, vehicle);
+        db.Add(CreateRoute(currentImport.Id, vehicle.Id, "Rota acima da capacidade", 1m, totalWeightKg: 1_250m));
+        await db.SaveChangesAsync();
+
+        var response = await new RoutesController(db).GetOccupancySummary(default);
+        var json = SerializeOkResult(response);
+
+        Assert.Equal(100m, json.RootElement.GetProperty("OccupancyRatePercent").GetDecimal());
+    }
+
+    [Fact]
     public async Task List_WithArbitraryDate_SelectsLatestSnapshotAvailableByEndOfDay()
     {
         await using var db = CreateDbContext();
@@ -107,8 +126,8 @@ public sealed class RoutesControllerTests
         var vehicle = CreateVehicle();
         db.AddRange(source, routeImport, vehicle);
         db.AddRange(
-            CreateRoute(routeImport.Id, vehicle.Id, "Crítico", 1.0001m),
-            CreateRoute(routeImport.Id, vehicle.Id, "Saudável", 1.00m),
+            CreateRoute(routeImport.Id, vehicle.Id, "Crítico", 0.9501m),
+            CreateRoute(routeImport.Id, vehicle.Id, "Saudável", 0.95m),
             CreateRoute(routeImport.Id, vehicle.Id, "Médio", 0.60m),
             CreateRoute(routeImport.Id, vehicle.Id, "Ocioso", 0.5999m),
             CreateRoute(routeImport.Id, vehicle.Id, "Indisponível", null));

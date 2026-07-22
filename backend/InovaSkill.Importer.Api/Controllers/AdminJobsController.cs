@@ -74,7 +74,7 @@ public sealed class AdminJobsController(
         {
             return Conflict(new
             {
-                message = "Não existe importação de clientes publicada para enriquecer coordenadas."
+                message = "Não existe importação publicada para executar este job."
             });
         }
         var queuedJobId = await operationalJobQueue.TryQueueAsync(
@@ -238,11 +238,15 @@ public sealed class AdminJobsController(
         string jobType,
         CancellationToken cancellationToken)
     {
-        if (jobType != OperationalJobCodes.MunicipalityCoordinateEnrichment)
-            throw new InvalidOperationException($"Job operacional sem resolvedor: {jobType}.");
+        var dataSourceCode = jobType switch
+        {
+            OperationalJobCodes.MunicipalityCoordinateEnrichment => CustomerImportCodes.DataSource,
+            OperationalJobCodes.InactiveCustomerDetection => FiscalImportCodes.DataSource,
+            _ => throw new InvalidOperationException($"Job operacional sem resolvedor: {jobType}.")
+        };
 
         var currentImportId = await dbContext.DataSources.AsNoTracking()
-            .Where(source => source.Code == CustomerImportCodes.DataSource)
+            .Where(source => source.Code == dataSourceCode)
             .Select(source => source.CurrentImportId)
             .SingleOrDefaultAsync(cancellationToken);
 

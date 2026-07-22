@@ -1,3 +1,4 @@
+using System.Globalization;
 using InovaSkill.Importer.Application.RouteImports;
 
 namespace InovaSkill.Importer.Tests.RouteImports;
@@ -14,7 +15,9 @@ public sealed class RouteLoadPolicyTests
         string input,
         string expected)
     {
-        Assert.Equal(decimal.Parse(expected), RouteLoadPolicy.Normalize(decimal.Parse(input)));
+        Assert.Equal(
+            decimal.Parse(expected, CultureInfo.InvariantCulture),
+            RouteLoadPolicy.Normalize(decimal.Parse(input, CultureInfo.InvariantCulture)));
     }
 
     [Fact]

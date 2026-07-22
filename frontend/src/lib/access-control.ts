@@ -14,6 +14,7 @@ const ROUTE_VIEW_ROLES: readonly ApplicationRole[] = ALL_ROLES;
 const LOGISTICS_ROLES: readonly ApplicationRole[] = ["diretor", "logistica", "admin", "admin_system"];
 const COMMERCIAL_CONTEXT_ROLES: readonly ApplicationRole[] = ALL_ROLES;
 const ADMIN_ROLES: readonly ApplicationRole[] = ["admin", "admin_system"];
+const ROUTE_SIMULATION_ROLES: readonly ApplicationRole[] = ["vendas", "logistica", "admin", "admin_system"];
 
 const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
   { path: "/assistente", roles: ALL_ROLES },
@@ -45,6 +46,11 @@ export function canRoleAccessPath(role: string | null, pathname: string): boolea
 
   if (!rule) return false;
   return rule.roles.includes(normalizedRole as ApplicationRole);
+}
+
+export function canRoleUseRouteSimulation(role: string | null): boolean {
+  const normalizedRole = normalizeUserRole(role);
+  return ROUTE_SIMULATION_ROLES.includes(normalizedRole as ApplicationRole);
 }
 
 export function getDefaultPathForRole(role: string | null): string {

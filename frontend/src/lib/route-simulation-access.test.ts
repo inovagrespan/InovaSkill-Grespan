@@ -16,10 +16,12 @@ describe("route simulation access", () => {
   });
 
   it("exibe o botão para vendas, logística e administradores", () => {
-    expect(source).toContain('currentRole === "vendas"');
-    expect(source).toContain('currentRole === "logistica"');
-    expect(source).toContain('currentRole === "admin"');
-    expect(source).toContain('currentRole === "admin_system"');
+    const accessControl = fs.readFileSync(
+      path.resolve(process.cwd(), "src/lib/access-control.ts"),
+      "utf8",
+    );
+    expect(source).toContain("canRoleUseRouteSimulation(currentRole)");
+    expect(accessControl).toContain('["vendas", "logistica", "admin", "admin_system"]');
     expect(source).toContain("{canSimulate && (");
   });
 });

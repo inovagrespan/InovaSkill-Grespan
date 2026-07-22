@@ -1,4 +1,5 @@
 import {
+  MAXIMUM_OCCUPANCY,
   MEDIUM_OCCUPANCY_THRESHOLD,
   classifyOccupancy,
   formatOccupancy,
@@ -18,7 +19,7 @@ export function RouteOccupancyIndicator({
 }: RouteOccupancyIndicatorProps) {
   const presentation = classifyOccupancy(value);
   const isAvailable = value !== null && Number.isFinite(value);
-  const percentage = isAvailable ? value * 100 : 0;
+  const percentage = isAvailable ? Math.min(MAXIMUM_OCCUPANCY, Math.max(0, value)) * 100 : 0;
   const visualPercentage = Math.min(100, Math.max(0, percentage));
 
   return (
@@ -76,11 +77,6 @@ export function RouteOccupancyIndicator({
             }}
           />
         </div>
-        {percentage > 100 && (
-          <p className="text-xs font-medium text-red-600">
-            Sobrecarga de {formatOccupancy(value! - 1)}
-          </p>
-        )}
         {isAvailable && value < MEDIUM_OCCUPANCY_THRESHOLD && (
           <p className="text-xs font-medium" style={{ color: presentation.color }}>
             Ociosidade: {formatOccupancy(1 - value)} da capacidade livre

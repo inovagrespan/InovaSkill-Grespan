@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
 import { RouteSnapshotDateSelect } from "@/components/RouteSnapshotDateSelect";
 import { RouteOccupancyIndicator } from "@/components/RouteOccupancyIndicator";
+import { RouteDecisionSupport } from "@/components/RouteDecisionSupport";
 import { RouteVehicleSimulationDialog } from "@/components/RouteVehicleSimulationDialog";
 import {
   fetchImportedRouteDetail,
@@ -20,6 +21,8 @@ import {
   type VehicleTypeItem,
 } from "@/lib/importer-api";
 import { formatCapacityKg, formatRouteLoadKg, type OccupancyLevel } from "@/lib/route-occupancy";
+import { getCurrentUserRole } from "@/lib/auth";
+import { canRoleUseRouteSimulation } from "@/lib/access-control";
 import { getCurrentLocalDate } from "@/lib/route-snapshot-history";
 import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
 
@@ -42,6 +45,7 @@ function formatDate(value: string): string {
 }
 
 function LogisticaRotasPage() {
+  const canSimulate = canRoleUseRouteSimulation(getCurrentUserRole());
   const [routes, setRoutes] = useState<ImportedRouteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -56,6 +60,8 @@ function LogisticaRotasPage() {
   const [selectedRoute, setSelectedRoute] = useState<ImportedRouteDetail | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailVehicleTypes, setDetailVehicleTypes] = useState<VehicleTypeItem[]>([]);
+  const [decisionSupportError, setDecisionSupportError] = useState<string | null>(null);
   const [simulationOpen, setSimulationOpen] = useState(false);
   const [simulationRoute, setSimulationRoute] = useState<ImportedRouteDetail | null>(null);
   const [simulationVehicleTypes, setSimulationVehicleTypes] = useState<VehicleTypeItem[]>([]);
@@ -90,11 +96,20 @@ function LogisticaRotasPage() {
   async function openDetails(route: ImportedRouteItem) {
     setDetailsOpen(true);
     setDetailsLoading(true);
+    setDecisionSupportError(null);
     try {
       const detail = await fetchImportedRouteDetail(route.id);
       setSelectedRoute(detail);
+      try {
+        if (!canSimulate) return;
+        setDetailVehicleTypes(await fetchVehicleTypes());
+      } catch {
+        setDetailVehicleTypes([]);
+        setDecisionSupportError("Não foi possível carregar os veículos para calcular as alternativas.");
+      }
     } catch {
       setSelectedRoute(null);
+      setDetailVehicleTypes([]);
     } finally {
       setDetailsLoading(false);
     }
@@ -226,16 +241,18 @@ function LogisticaRotasPage() {
                 </button>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <Badge variant="outline">{weekdayLabels[r.weekday] ?? r.weekday}</Badge>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void openSimulation(r)}
-                    aria-label={`Simular veículo para a rota ${r.name}`}
-                  >
-                    <FlaskConical className="mr-1.5 size-3.5" />
-                    Simular
-                  </Button>
+                  {canSimulate && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void openSimulation(r)}
+                      aria-label={`Simular veículo para a rota ${r.name}`}
+                    >
+                      <FlaskConical className="mr-1.5 size-3.5" />
+                      Simular
+                    </Button>
+                  )}
                 </div>
               </div>
               <button type="button" onClick={() => openDetails(r)} className="w-full text-left">
@@ -334,6 +351,15 @@ function LogisticaRotasPage() {
                 </div>
               </div>
 
+              {canSimulate && (
+                <RouteDecisionSupport
+                  route={selectedRoute}
+                  vehicleTypes={detailVehicleTypes}
+                  loading={detailsLoading}
+                  error={decisionSupportError}
+                />
+              )}
+
             </div>
           )}
 
@@ -343,16 +369,18 @@ function LogisticaRotasPage() {
         </DialogContent>
       </Dialog>
 
-      <RouteVehicleSimulationDialog
-        open={simulationOpen}
-        onOpenChange={setSimulationOpen}
-        route={simulationRoute}
-        vehicleTypes={simulationVehicleTypes}
-        selectedVehicleTypeId={simulationVehicleTypeId}
-        onVehicleTypeChange={setSimulationVehicleTypeId}
-        loading={simulationLoading}
-        error={simulationError}
-      />
+      {canSimulate && (
+        <RouteVehicleSimulationDialog
+          open={simulationOpen}
+          onOpenChange={setSimulationOpen}
+          route={simulationRoute}
+          vehicleTypes={simulationVehicleTypes}
+          selectedVehicleTypeId={simulationVehicleTypeId}
+          onVehicleTypeChange={setSimulationVehicleTypeId}
+          loading={simulationLoading}
+          error={simulationError}
+        />
+      )}
     </div>
   );
 }

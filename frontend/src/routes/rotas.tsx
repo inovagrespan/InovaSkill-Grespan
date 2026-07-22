@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
 import { RouteSnapshotDateSelect } from "@/components/RouteSnapshotDateSelect";
 import { RouteOccupancyIndicator } from "@/components/RouteOccupancyIndicator";
+import { RouteDecisionSupport } from "@/components/RouteDecisionSupport";
 import { RouteVehicleSimulationDialog } from "@/components/RouteVehicleSimulationDialog";
 import {
   fetchImportedRoutes,
@@ -24,6 +25,7 @@ import {
   type VehicleTypeItem,
 } from "@/lib/importer-api";
 import { getCurrentUserRole } from "@/lib/auth";
+import { canRoleUseRouteSimulation } from "@/lib/access-control";
 import { formatCapacityKg, formatRouteLoadKg, type OccupancyLevel } from "@/lib/route-occupancy";
 import { getCurrentLocalDate } from "@/lib/route-snapshot-history";
 import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
@@ -42,10 +44,7 @@ const ALL_OCCUPANCY_LEVELS = "all";
 
 function RotasPage() {
   const currentRole = getCurrentUserRole();
-  const canSimulate = currentRole === "vendas"
-    || currentRole === "logistica"
-    || currentRole === "admin"
-    || currentRole === "admin_system";
+  const canSimulate = canRoleUseRouteSimulation(currentRole);
   const [routes, setRoutes] = useState<ImportedRouteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -60,6 +59,8 @@ function RotasPage() {
   const [selectedRoute, setSelectedRoute] = useState<ImportedRouteDetail | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailVehicleTypes, setDetailVehicleTypes] = useState<VehicleTypeItem[]>([]);
+  const [decisionSupportError, setDecisionSupportError] = useState<string | null>(null);
   const [simulationOpen, setSimulationOpen] = useState(false);
   const [simulationRoute, setSimulationRoute] = useState<ImportedRouteDetail | null>(null);
   const [simulationVehicleTypes, setSimulationVehicleTypes] = useState<VehicleTypeItem[]>([]);
@@ -94,11 +95,20 @@ function RotasPage() {
   async function openDetails(route: ImportedRouteItem) {
     setDetailsOpen(true);
     setDetailsLoading(true);
+    setDecisionSupportError(null);
     try {
       const detail = await fetchImportedRouteDetail(route.id);
       setSelectedRoute(detail);
+      try {
+        if (!canSimulate) return;
+        setDetailVehicleTypes(await fetchVehicleTypes());
+      } catch {
+        setDetailVehicleTypes([]);
+        setDecisionSupportError("Não foi possível carregar os veículos para calcular as alternativas.");
+      }
     } catch {
       setSelectedRoute(null);
+      setDetailVehicleTypes([]);
     } finally {
       setDetailsLoading(false);
     }
@@ -320,6 +330,15 @@ function RotasPage() {
                   ))}
                 </div>
               </div>
+
+              {canSimulate && (
+                <RouteDecisionSupport
+                  route={selectedRoute}
+                  vehicleTypes={detailVehicleTypes}
+                  loading={detailsLoading}
+                  error={decisionSupportError}
+                />
+              )}
 
             </div>
           )}
