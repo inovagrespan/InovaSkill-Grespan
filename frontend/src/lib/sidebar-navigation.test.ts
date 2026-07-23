@@ -25,7 +25,6 @@ describe("sidebar navigation", () => {
       "Produtos",
       "Estoque",
       "Produção",
-      "Detecção",
     ]);
     expect(vendasItems).toEqual([
       "Dashboard",
@@ -36,7 +35,6 @@ describe("sidebar navigation", () => {
       "Notas Fiscais",
       "Produtos",
       "Estoque",
-      "Detecção",
     ]);
     expect(getVisibleSidebarItemsForRole("logistica").map((item) => item.label)).toEqual([
       "Dashboard",
@@ -49,9 +47,8 @@ describe("sidebar navigation", () => {
       "Produtos",
       "Estoque",
       "Produção",
-      "Detecção",
     ]);
-    expect(adminItems).toHaveLength(13);
+    expect(adminItems).toHaveLength(12);
     expect(adminItems).toContain("Importações");
     expect(adminItems).toContain("Processamento");
     expect(adminSystemItems).toEqual(adminItems);
@@ -67,7 +64,7 @@ describe("sidebar navigation", () => {
     expect(source).toContain('label: "Chat IA"');
     expect(source).not.toContain('to: "/alertas"');
     expect(source).not.toContain('label: "Alertas"');
-    expect(source).toContain('to: "/rotas"');
+    expect(source).toContain('to: "/logistica/rotas"');
     expect(source).toContain('label: "Rotas"');
     expect(source).toContain('to: "/mapa"');
     expect(source).toContain('label: "Mapa"');
@@ -85,8 +82,10 @@ describe("sidebar navigation", () => {
     expect(source).toContain('label: "Importações"');
     expect(source).toContain('to: "/processamentos"');
     expect(source).toContain('label: "Processamento"');
-    expect(source).toContain('to: "/detections"');
-    expect(source).toContain('label: "Detecção"');
+    expect(source).not.toContain('to: "/detections"');
+    expect(source).not.toContain('label: "Detecção"');
+    expect(source).not.toContain('to: "/notificacoes"');
+    expect(source).not.toContain('label: "Notificações"');
     expect(source).not.toContain('to: "/administrativo"');
     expect(source).not.toContain('label: "Administrativo"');
     expect(source).not.toContain('to: "/relatorios"');

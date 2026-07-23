@@ -21,8 +21,9 @@ describe("access control", () => {
   });
 
   it("aplica a mesma regra às subrotas", () => {
-    expect(canRoleAccessPath("vendas", "/detections/123")).toBe(true);
-    expect(canRoleAccessPath("vendas", "/logistica/rotas")).toBe(false);
+    expect(canRoleAccessPath("vendas", "/detections/123")).toBe(false);
+    expect(canRoleAccessPath("vendas", "/notificacoes")).toBe(false);
+    expect(canRoleAccessPath("vendas", "/logistica/rotas")).toBe(true);
   });
 
   it("bloqueia perfis genéricos, ausentes e caminhos desconhecidos", () => {

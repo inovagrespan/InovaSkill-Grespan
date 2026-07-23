@@ -17,6 +17,18 @@
       retries: 10
     restart: unless-stopped
 
+  osrm:
+    image: osrm/osrm-backend:latest
+    container_name: inovaskill-osrm
+    profiles:
+      - osrm
+    command: osrm-routed --algorithm mld /data/sudeste-latest.osrm
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./infra/osrm:/data
+    restart: unless-stopped
+
   api:
     container_name: inovaskill-api
     build:
@@ -27,6 +39,8 @@
     environment:
       ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
       Storage__ImportsPath: /data/route-imports
+      RouteOptimization__DistanceProvider: Osrm
+      RouteOptimization__OsrmBaseUrl: http://osrm:5000
     volumes:
       - route_imports_data:/data/route-imports
     depends_on:
@@ -44,6 +58,8 @@
     environment:
       ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
       Storage__ImportsPath: /data/route-imports
+      RouteOptimization__DistanceProvider: Osrm
+      RouteOptimization__OsrmBaseUrl: http://osrm:5000
     volumes:
       - route_imports_data:/data/route-imports
     depends_on:

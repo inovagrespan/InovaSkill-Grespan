@@ -11,7 +11,6 @@ public sealed class AdminJobsControllerTests
 {
     [Theory]
     [InlineData(OperationalJobCodes.MunicipalityCoordinateEnrichment, CustomerImportCodes.DataSource)]
-    [InlineData(OperationalJobCodes.InactiveCustomerDetection, FiscalImportCodes.DataSource)]
     public async Task RunDefinition_QueuesJobWithCurrentImportFromRequiredSource(
         string jobType,
         string sourceCode)
@@ -23,7 +22,7 @@ public sealed class AdminJobsControllerTests
         var queue = new CapturingOperationalJobQueue();
         var controller = new AdminJobsController(dbContext, new NoOpBackgroundJobDispatcher());
 
-        var result = await controller.RunDefinition(jobType, queue, default);
+        var result = await controller.RunDefinition(jobType, queue, null!, default);
 
         Assert.IsType<AcceptedResult>(result);
         Assert.Equal(jobType, queue.JobType);
@@ -38,8 +37,9 @@ public sealed class AdminJobsControllerTests
         var controller = new AdminJobsController(dbContext, new NoOpBackgroundJobDispatcher());
 
         var result = await controller.RunDefinition(
-            OperationalJobCodes.InactiveCustomerDetection,
+            OperationalJobCodes.MunicipalityCoordinateEnrichment,
             queue,
+            null!,
             default);
 
         Assert.IsType<ConflictObjectResult>(result);

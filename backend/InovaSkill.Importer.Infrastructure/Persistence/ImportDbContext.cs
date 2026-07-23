@@ -6,7 +6,6 @@ namespace InovaSkill.Importer.Infrastructure.Persistence;
 public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) : DbContext(options)
 {
     public DbSet<AppUser> AppUsers => Set<AppUser>();
-    public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<DataSource> DataSources => Set<DataSource>();
     public DbSet<RouteImport> RouteImports => Set<RouteImport>();
     public DbSet<RouteImportError> RouteImportErrors => Set<RouteImportError>();
@@ -18,17 +17,16 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<MunicipalityCoordinate> MunicipalityCoordinates => Set<MunicipalityCoordinate>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerSnapshot> CustomerSnapshots => Set<CustomerSnapshot>();
+    public DbSet<RouteCustomerAssignment> RouteCustomerAssignments => Set<RouteCustomerAssignment>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<InventorySnapshot> InventorySnapshots => Set<InventorySnapshot>();
     public DbSet<DailyInventoryRecord> DailyInventoryRecords => Set<DailyInventoryRecord>();
     public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
     public DbSet<FiscalDocumentItem> FiscalDocumentItems => Set<FiscalDocumentItem>();
-    public DbSet<DetectorDefinition> DetectorDefinitions => Set<DetectorDefinition>();
-    public DbSet<DetectionRun> DetectionRuns => Set<DetectionRun>();
-    public DbSet<Finding> Findings => Set<Finding>();
-    public DbSet<FindingEvidence> FindingEvidences => Set<FindingEvidence>();
     public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<RouteOptimizationRun> RouteOptimizationRuns => Set<RouteOptimizationRun>();
+    public DbSet<RouteOptimizationScenario> RouteOptimizationScenarios => Set<RouteOptimizationScenario>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -99,7 +97,51 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.ErrorMessage).HasMaxLength(1024);
             entity.HasIndex(x => new { x.Status, x.CreatedAt });
             entity.HasOne(x => x.Import).WithMany(x => x.JobExecutions)
-                .HasForeignKey(x => x.RelatedEntityId).OnDelete(DeleteBehavior.Cascade);
+                .HasForeignKey(x => x.RelatedEntityId).OnDelete(DeleteBehavior.NoAction)
+                .IsRequired(false);
+        });
+
+        modelBuilder.Entity<RouteOptimizationRun>(entity =>
+        {
+            entity.ToTable("route_optimization_runs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Scope).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.RequestedFrom).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.ProgressStage).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.Confidence).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.AlgorithmVersion).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.RulesVersion).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.InputHash).HasMaxLength(64);
+            entity.Property(x => x.ErrorCode).HasMaxLength(64);
+            entity.Property(x => x.ErrorMessage).HasMaxLength(1024);
+            entity.Property(x => x.ProgressPercentage).HasPrecision(5, 2);
+            entity.HasIndex(x => new { x.Scope, x.ReferenceDate, x.Status });
+            entity.HasIndex(x => new { x.TargetRouteId, x.ReferenceDate, x.CreatedAt });
+            entity.HasIndex(x => x.InputHash);
+            entity.HasOne(x => x.TargetRoute).WithMany()
+                .HasForeignKey(x => x.TargetRouteId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.SnapshotImport).WithMany()
+                .HasForeignKey(x => x.SnapshotImportId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<RouteOptimizationScenario>(entity =>
+        {
+            entity.ToTable("route_optimization_scenarios");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ActionType).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.Confidence).HasConversion<string>().HasMaxLength(32);
+            entity.Property(x => x.Score).HasPrecision(12, 4);
+            entity.Property(x => x.EstimatedDistanceChangeKm).HasPrecision(12, 2);
+            entity.Property(x => x.CurrentMetricsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.ProposedMetricsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.WarningsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.ReasonsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.CityReallocationsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.TruckChangeJson).HasColumnType("jsonb");
+            entity.HasIndex(x => new { x.RunId, x.Rank }).IsUnique();
+            entity.HasOne(x => x.Run).WithMany(x => x.Scenarios)
+                .HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChatSession>(entity =>
@@ -222,6 +264,23 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<RouteCustomerAssignment>(entity =>
+        {
+            entity.ToTable("route_customer_assignments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Source).HasConversion<string>().HasMaxLength(32);
+            entity.HasIndex(x => new { x.RouteId, x.CustomerId }).IsUnique();
+            entity.HasIndex(x => new { x.RouteId, x.Source });
+            entity.HasIndex(x => new { x.CustomerId, x.Source });
+            entity.HasIndex(x => new { x.RouteId, x.MunicipalityId });
+            entity.HasOne(x => x.Route).WithMany(x => x.CustomerAssignments)
+                .HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Customer).WithMany(x => x.RouteAssignments)
+                .HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Municipality).WithMany()
+                .HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<Product>(entity =>
         {
             entity.ToTable("products");
@@ -338,78 +397,5 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.SetNull);
         });
 
-        modelBuilder.Entity<DetectorDefinition>(entity =>
-        {
-            entity.ToTable("detector_definitions");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Code).HasMaxLength(64).IsRequired();
-            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(1024);
-            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
-            entity.HasIndex(x => x.Code).IsUnique();
-        });
-
-        modelBuilder.Entity<DetectionRun>(entity =>
-        {
-            entity.ToTable("detection_runs");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
-            entity.Property(x => x.Trigger).HasConversion<string>().HasMaxLength(32).IsRequired();
-            entity.Property(x => x.StatusReason).HasMaxLength(1024);
-            entity.HasIndex(x => new { x.DetectorDefinitionId, x.Status });
-            entity.HasIndex(x => x.RequestedAt);
-            entity.HasOne(x => x.DetectorDefinition).WithMany()
-                .HasForeignKey(x => x.DetectorDefinitionId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<DetectionRun>().WithMany()
-                .HasForeignKey(x => x.RetryOfRunId).OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<Finding>(entity =>
-        {
-            entity.ToTable("findings");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Fingerprint).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.Title).HasMaxLength(512).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(2000).IsRequired();
-            entity.Property(x => x.SubjectType).HasMaxLength(128).IsRequired();
-            entity.Property(x => x.SubjectId).HasMaxLength(128).IsRequired();
-            entity.Property(x => x.SubjectLabel).HasMaxLength(512);
-            entity.HasIndex(x => x.DetectionRunId);
-            entity.HasIndex(x => new { x.SubjectType, x.SubjectId });
-            entity.HasIndex(x => new { x.DetectionRunId, x.Fingerprint }).IsUnique();
-            entity.HasOne(x => x.DetectionRun).WithMany()
-                .HasForeignKey(x => x.DetectionRunId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<FindingEvidence>(entity =>
-        {
-            entity.ToTable("finding_evidences");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.Value).HasMaxLength(512).IsRequired();
-            entity.Property(x => x.ReferenceValue).HasMaxLength(512);
-            entity.Property(x => x.Unit).HasMaxLength(32);
-            entity.Property(x => x.Description).HasMaxLength(1024);
-            entity.Property(x => x.SourceType).HasMaxLength(128);
-            entity.Property(x => x.SourceId).HasMaxLength(128);
-            entity.HasIndex(x => x.FindingId);
-            entity.HasOne(x => x.Finding).WithMany()
-                .HasForeignKey(x => x.FindingId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<Notification>(entity =>
-        {
-            entity.ToTable("Notifications");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Title).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.Message).HasMaxLength(2000).IsRequired();
-            entity.Property(x => x.Type).HasMaxLength(64).IsRequired();
-            entity.Property(x => x.Priority).HasMaxLength(32).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
-            entity.Property(x => x.RelatedLink).HasMaxLength(1024).IsRequired();
-            entity.Property(x => x.RelatedEntity).HasMaxLength(128).IsRequired();
-            entity.HasIndex(x => new { x.UserId, x.Status, x.CreatedAt });
-            entity.HasIndex(x => new { x.UserId, x.CreatedAt });
-        });
     }
 }

@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  ChevronLeft, ChevronRight, FlaskConical, MapPin, Search, Truck,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Search, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +13,6 @@ import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
 import { RouteSnapshotDateSelect } from "@/components/RouteSnapshotDateSelect";
 import { RouteOccupancyIndicator } from "@/components/RouteOccupancyIndicator";
 import { RouteDecisionSupport } from "@/components/RouteDecisionSupport";
-import { RouteVehicleSimulationDialog } from "@/components/RouteVehicleSimulationDialog";
 import {
   fetchImportedRoutes,
   fetchImportedRouteDetail,
@@ -61,12 +58,6 @@ function RotasPage() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailVehicleTypes, setDetailVehicleTypes] = useState<VehicleTypeItem[]>([]);
   const [decisionSupportError, setDecisionSupportError] = useState<string | null>(null);
-  const [simulationOpen, setSimulationOpen] = useState(false);
-  const [simulationRoute, setSimulationRoute] = useState<ImportedRouteDetail | null>(null);
-  const [simulationVehicleTypes, setSimulationVehicleTypes] = useState<VehicleTypeItem[]>([]);
-  const [simulationVehicleTypeId, setSimulationVehicleTypeId] = useState("");
-  const [simulationLoading, setSimulationLoading] = useState(false);
-  const [simulationError, setSimulationError] = useState<string | null>(null);
 
   async function load(p: number = page) {
     setLoading(true);
@@ -111,32 +102,6 @@ function RotasPage() {
       setDetailVehicleTypes([]);
     } finally {
       setDetailsLoading(false);
-    }
-  }
-
-  async function openSimulation(route: ImportedRouteItem) {
-    setSimulationOpen(true);
-    setSimulationLoading(true);
-    setSimulationError(null);
-    setSimulationRoute(null);
-    setSimulationVehicleTypes([]);
-    setSimulationVehicleTypeId("");
-    try {
-      const [detail, vehicleTypes] = await Promise.all([
-        fetchImportedRouteDetail(route.id),
-        fetchVehicleTypes(),
-      ]);
-      setSimulationRoute(detail);
-      setSimulationVehicleTypes(vehicleTypes);
-      const currentVehicle = vehicleTypes.find((vehicle) => vehicle.id === detail.vehicleTypeId);
-      const initialVehicle = currentVehicle?.capacityKg
-        ? currentVehicle
-        : vehicleTypes.find((vehicle) => vehicle.capacityKg !== null && vehicle.capacityKg > 0);
-      setSimulationVehicleTypeId(initialVehicle?.id ?? "");
-    } catch (error) {
-      setSimulationError((error as Error).message || "Não foi possível carregar os dados da simulação.");
-    } finally {
-      setSimulationLoading(false);
     }
   }
 
@@ -219,18 +184,6 @@ function RotasPage() {
                 </button>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <Badge variant="outline">{weekdayLabels[r.weekday] ?? r.weekday}</Badge>
-                  {canSimulate && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void openSimulation(r)}
-                      aria-label={`Simular veículo para a rota ${r.name}`}
-                    >
-                      <FlaskConical className="mr-1.5 size-3.5" />
-                      Simular
-                    </Button>
-                  )}
                 </div>
               </div>
               <button type="button" onClick={() => openDetails(r)} className="w-full text-left">
@@ -349,18 +302,6 @@ function RotasPage() {
         </DialogContent>
       </Dialog>
 
-      {canSimulate && (
-        <RouteVehicleSimulationDialog
-          open={simulationOpen}
-          onOpenChange={setSimulationOpen}
-          route={simulationRoute}
-          vehicleTypes={simulationVehicleTypes}
-          selectedVehicleTypeId={simulationVehicleTypeId}
-          onVehicleTypeChange={setSimulationVehicleTypeId}
-          loading={simulationLoading}
-          error={simulationError}
-        />
-      )}
     </div>
   );
 }

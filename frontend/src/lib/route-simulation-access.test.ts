@@ -8,14 +8,14 @@ describe("route simulation access", () => {
     "utf8",
   );
 
-  it("mantém a simulação na tela principal de rotas", () => {
-    expect(source).toContain("RouteVehicleSimulationDialog");
+  it("não exibe a ação individual de simulação na tela principal de rotas", () => {
+    expect(source).not.toContain("RouteVehicleSimulationDialog");
     expect(source).toContain("fetchVehicleTypes()");
-    expect(source).toContain("Simular");
-    expect(source).toContain("openSimulation(r)");
+    expect(source).not.toContain("Simular");
+    expect(source).not.toContain("openSimulation(r)");
   });
 
-  it("exibe o botão para vendas, logística e administradores", () => {
+  it("mantém o apoio à decisão para vendas, logística e administradores", () => {
     const accessControl = fs.readFileSync(
       path.resolve(process.cwd(), "src/lib/access-control.ts"),
       "utf8",

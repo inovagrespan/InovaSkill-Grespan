@@ -21,4 +21,5 @@ public sealed class Route
     public RouteOccupancyStatus OccupancyStatus { get; set; }
     public DateTime CreatedAt { get; set; }
     public ICollection<RouteEntry> Entries { get; set; } = [];
+    public ICollection<RouteCustomerAssignment> CustomerAssignments { get; set; } = [];
 }

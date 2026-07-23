@@ -14,9 +14,9 @@ public sealed class BusinessAssistantService(
     private static readonly IReadOnlyList<string> DefaultSuggestions =
     [
         "Quais rotas estão críticas?",
-        "Quais são as 3 rotas mais ociosas?",
-        "Procure a rota Marília.",
-        "Quais rotas estão acima de 140%?"
+        "Procure o cliente Marília.",
+        "Quais produtos estão em ruptura?",
+        "Qual é a taxa de devolução dos últimos 30 dias?"
     ];
 
     private readonly AssistantOptions assistantOptions = options.Value;

@@ -249,7 +249,7 @@ function LandingPage() {
                 </span>
                 <div>
                   <p className="text-sm font-semibold text-white">Gestão 360</p>
-                  <p className="text-xs text-white/50">Indicadores, alertas e execução</p>
+                  <p className="text-xs text-white/50">Indicadores, chat e execução</p>
                 </div>
               </div>
               <div className="relative mt-6 grid gap-4 sm:grid-cols-2">

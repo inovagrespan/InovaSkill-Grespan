@@ -59,6 +59,7 @@ public sealed class AdminJobsController(
     public async Task<ActionResult> RunDefinition(
         string jobType,
         [FromServices] IOperationalJobQueue operationalJobQueue,
+        [FromServices] IRouteOptimizationService routeOptimizationService,
         CancellationToken cancellationToken)
     {
         var definition = OperationalJobCatalog.All.SingleOrDefault(item =>
@@ -66,6 +67,20 @@ public sealed class AdminJobsController(
         if (definition is null) return NotFound();
         if (!definition.ManualRunAllowed)
             return Conflict(new { message = "Este job não permite execução manual." });
+
+        if (definition.JobType == OperationalJobCodes.RouteOptimization)
+        {
+            var run = await routeOptimizationService.StartOptimizationAsync(
+                new RouteOptimizationStartRequest(
+                    RouteOptimizationScope.AllRoutes,
+                    DateOnly.FromDateTime(DateTime.UtcNow),
+                    null,
+                    RouteOptimizationRequestedFrom.RouteScreen,
+                    0),
+                cancellationToken);
+
+            return Accepted(new { jobExecutionId = run.Id, status = run.Status.ToString() });
+        }
 
         var relatedEntityId = await ResolveOperationalJobRelatedEntityIdAsync(
             definition.JobType,
@@ -114,7 +129,7 @@ public sealed class AdminJobsController(
                 x.JobType,
                 status = x.Status.ToString(),
                 importId = x.RelatedEntityId,
-                importFileName = x.Import!.FileName,
+                importFileName = x.Import == null ? "Otimização de rotas" : x.Import.FileName,
                 x.Attempts,
                 x.CreatedAt,
                 x.StartedAt,
@@ -137,7 +152,7 @@ public sealed class AdminJobsController(
                 x.JobType,
                 status = x.Status.ToString(),
                 importId = x.RelatedEntityId,
-                x.Import!.FileName,
+                fileName = x.Import == null ? "Otimização de rotas" : x.Import.FileName,
                 x.Attempts,
                 x.CreatedAt,
                 x.StartedAt,
@@ -241,7 +256,6 @@ public sealed class AdminJobsController(
         var dataSourceCode = jobType switch
         {
             OperationalJobCodes.MunicipalityCoordinateEnrichment => CustomerImportCodes.DataSource,
-            OperationalJobCodes.InactiveCustomerDetection => FiscalImportCodes.DataSource,
             _ => throw new InvalidOperationException($"Job operacional sem resolvedor: {jobType}.")
         };
 

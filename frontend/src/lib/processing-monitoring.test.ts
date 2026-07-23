@@ -167,6 +167,9 @@ describe("processing monitoring", () => {
     expect(routeSource).toContain("fetchOperationalJobDefinitions");
     expect(routeSource).toContain("runOperationalJob");
     expect(routeSource).toContain("retryAdminJob");
+    expect(routeSource).toContain("FeedbackMessage");
+    expect(routeSource).toContain('setMessageType("success")');
+    expect(routeSource).toContain('setMessageType("error")');
     expect(routeSource).toContain("Jobs operacionais");
     expect(routeSource).toContain("Executar agora");
     expect(routeSource).toContain("DashboardKpiCard");

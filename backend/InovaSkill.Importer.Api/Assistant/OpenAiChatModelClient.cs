@@ -45,7 +45,14 @@ public sealed class OpenAiChatModelClient(
         using var response = await httpClientFactory.CreateClient().SendAsync(httpRequest, timeout.Token);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("OpenAI retornou status {StatusCode} para o assistente.", response.StatusCode);
+            var providerError = ReadProviderError(
+                await response.Content.ReadAsStringAsync(timeout.Token));
+            logger.LogWarning(
+                "OpenAI retornou status {StatusCode} para o assistente. Code={ErrorCode} Param={ErrorParam} Message={ErrorMessage}",
+                response.StatusCode,
+                providerError.Code,
+                providerError.Param,
+                providerError.Message);
             throw new HttpRequestException("OpenAI indisponível.");
         }
 
@@ -125,4 +132,35 @@ public sealed class OpenAiChatModelClient(
 
         return calls;
     }
+
+    public static OpenAiProviderError ReadProviderError(string responseBody)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            if (!document.RootElement.TryGetProperty("error", out var error))
+            {
+                return OpenAiProviderError.Unknown;
+            }
+
+            return new OpenAiProviderError(
+                ReadString(error, "code"),
+                ReadString(error, "param"),
+                ReadString(error, "message"));
+        }
+        catch (JsonException)
+        {
+            return OpenAiProviderError.Unknown;
+        }
+    }
+
+    private static string ReadString(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString() ?? string.Empty
+            : string.Empty;
+}
+
+public sealed record OpenAiProviderError(string Code, string Param, string Message)
+{
+    public static readonly OpenAiProviderError Unknown = new("unknown", "unknown", "Resposta de erro sem detalhes.");
 }
