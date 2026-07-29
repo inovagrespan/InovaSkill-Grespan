@@ -9,8 +9,12 @@ namespace InovaSkill.Importer.Api.Controllers;
 [Route("api/assistant")]
 public sealed class AssistantController(
     BusinessAssistantService assistantService,
+    IChatHistoryStore historyStore,
     IOptions<AssistantOptions> options) : ControllerBase
 {
+    private const int MaximumConversationHistoryMessages = 100;
+    private const int MaximumConversationHistorySessions = 20;
+
     [HttpPost("ask")]
     public async Task<ActionResult<AssistantAnswerResponse>> Ask(
         AssistantQuestionRequest request,
@@ -41,5 +45,50 @@ public sealed class AssistantController(
             question,
             new ChatExecutionContext(userId, role),
             cancellationToken));
+    }
+
+    [HttpGet("sessions")]
+    public async Task<ActionResult<IReadOnlyList<AssistantConversationSummaryResponse>>> ListSessions(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var sessions = await historyStore.ListAsync(
+            userId,
+            MaximumConversationHistorySessions,
+            cancellationToken);
+        return Ok(sessions.Select(session => new AssistantConversationSummaryResponse(
+            session.SessionId,
+            session.Preview,
+            session.UpdatedAt)));
+    }
+
+    [HttpGet("sessions/{sessionId:guid}")]
+    public async Task<ActionResult<AssistantConversationResponse>> GetSession(
+        Guid sessionId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var session = await historyStore.LoadAsync(
+            sessionId,
+            userId,
+            MaximumConversationHistoryMessages,
+            cancellationToken);
+        if (session is null) return NotFound();
+
+        return Ok(new AssistantConversationResponse(
+            session.SessionId,
+            session.Messages.Select(message => new AssistantConversationMessageResponse(
+                message.Id,
+                message.Role,
+                message.Content,
+                message.CreatedAt)).ToList()));
+    }
+
+    private bool TryGetUserId(out long userId)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        return long.TryParse(userIdValue, out userId);
     }
 }

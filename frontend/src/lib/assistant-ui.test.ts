@@ -31,6 +31,9 @@ describe("business assistant UI", () => {
     expect(component).toContain("cleanListMarker");
     expect(component).toContain("backdrop-blur");
     expect(component).not.toContain("message.sources.map");
+    expect(component).toContain('aria-label="Histórico de conversas"');
+    expect(component).toContain("loadConversationHistory");
+    expect(component).toContain("selectConversation");
   });
 
   it("mantém o acionador recolhido e expande no hover ou foco", () => {
@@ -52,6 +55,9 @@ describe("business assistant UI", () => {
     expect(component).toContain("setClearConfirmationOpen(true)");
     expect(component).toContain('role="alertdialog"');
     expect(component).toContain("!isPage && clearConfirmationOpen");
+    expect(component).toContain("function startNewConversation()");
+    expect(component).toContain('aria-label="Nova conversa"');
+    expect(component).toContain("<MessageSquarePlus");
   });
 
   it("limita a pergunta e envia com autenticação pelo cliente dedicado", () => {
@@ -63,5 +69,7 @@ describe("business assistant UI", () => {
     expect(client).toContain("authFetch");
     expect(client).toContain('buildGatewayUrl("assistant/ask")');
     expect(client).toContain("sessionId");
+    expect(client).toContain('buildGatewayUrl("assistant/sessions")');
+    expect(client).toContain("getAssistantConversation");
   });
 });

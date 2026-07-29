@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, RotateCcw, Send, Sparkles, UserRound, X } from "lucide-react";
+import { Bot, ChevronDown, MessageSquarePlus, RotateCcw, Send, Sparkles, UserRound, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
@@ -10,7 +10,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { askBusinessAssistant, type AssistantSource } from "@/lib/assistant-api";
+import {
+  askBusinessAssistant,
+  getAssistantConversation,
+  listAssistantConversations,
+  type AssistantConversationSummary,
+  type AssistantSource,
+} from "@/lib/assistant-api";
 import { getCurrentUserRole } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +54,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
   const [loading, setLoading] = useState(false);
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
+  const [conversations, setConversations] = useState<AssistantConversationSummary[]>([]);
   const [suggestions, setSuggestions] = useState(DEFAULT_SUGGESTIONS);
   const [messages, setMessages] = useState<AssistantMessage[]>([WELCOME_MESSAGE]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -55,6 +62,41 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    void loadConversationHistory();
+  }, []);
+
+  async function loadConversationHistory() {
+    try {
+      const history = await listAssistantConversations();
+      setConversations(history);
+    } catch {
+      // O chat continua disponível mesmo se o histórico não puder ser carregado.
+    }
+  }
+
+  async function selectConversation(selectedSessionId: string) {
+    if (loading || selectedSessionId === sessionId) return;
+
+    try {
+      const conversation = await getAssistantConversation(selectedSessionId);
+      setSessionId(conversation.sessionId);
+      setMessages(conversation.messages.map((message) => ({
+        id: message.id,
+        author: message.role,
+        text: message.content,
+      })));
+      setSuggestions(DEFAULT_SUGGESTIONS);
+    } catch (error) {
+      setMessages((current) => [...current, {
+        id: crypto.randomUUID(),
+        author: "assistant",
+        text: (error as Error).message,
+        mode: "Não foi possível carregar o histórico",
+      }]);
+    }
+  }
 
   async function sendQuestion(value: string) {
     const trimmed = value.trim();
@@ -80,6 +122,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
         },
       ]);
       setSuggestions(response.suggestions);
+      void loadConversationHistory();
     } catch (error) {
       setMessages((current) => [
         ...current,
@@ -106,6 +149,11 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
     setQuestion("");
     setSessionId(undefined);
     setClearConfirmationOpen(false);
+  }
+
+  function startNewConversation() {
+    if (loading) return;
+    clearConversation();
   }
 
   const assistantPanel = (
@@ -135,6 +183,33 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={startNewConversation}
+              disabled={loading}
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-3 text-xs font-medium text-slate-200 transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Nova conversa"
+              title="Nova conversa"
+            >
+              <MessageSquarePlus className="size-3.5" />
+              <span className="hidden sm:inline">Nova</span>
+            </button>
+            {conversations.length > 0 && (
+              <select
+                value={sessionId ?? ""}
+                onChange={(event) => void selectConversation(event.target.value)}
+                disabled={loading}
+                aria-label="Histórico de conversas"
+                className="max-w-32 rounded-full bg-white/10 px-2 py-1 text-xs text-slate-200 outline-none disabled:opacity-50 sm:max-w-48"
+              >
+                <option value="" disabled>Histórico</option>
+                {conversations.map((conversation) => (
+                  <option key={conversation.sessionId} value={conversation.sessionId} className="text-foreground">
+                    {conversation.preview.slice(0, 48)}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               onClick={() => setClearConfirmationOpen(true)}

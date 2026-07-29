@@ -17,9 +17,23 @@ public interface IChatHistoryStore
         string role,
         string content,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ChatSessionSummary>> ListAsync(
+        long userId,
+        int maximumSessions,
+        CancellationToken cancellationToken);
+
+    Task<ChatSessionHistory?> LoadAsync(
+        Guid sessionId,
+        long userId,
+        int maximumMessages,
+        CancellationToken cancellationToken);
 }
 
 public sealed record ChatSessionSnapshot(Guid SessionId, IReadOnlyList<ChatModelInputMessage> Messages);
+public sealed record ChatSessionSummary(Guid SessionId, string Preview, DateTime UpdatedAt);
+public sealed record ChatHistoryMessage(Guid Id, string Role, string Content, DateTime CreatedAt);
+public sealed record ChatSessionHistory(Guid SessionId, IReadOnlyList<ChatHistoryMessage> Messages);
 
 public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistoryStore
 {
@@ -93,5 +107,48 @@ public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistorySt
                 setters => setters.SetProperty(session => session.UpdatedAt, now),
                 cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ChatSessionSummary>> ListAsync(
+        long userId,
+        int maximumSessions,
+        CancellationToken cancellationToken) =>
+        await dbContext.ChatSessions.AsNoTracking()
+            .Where(session => session.UserId == userId)
+            .OrderByDescending(session => session.UpdatedAt)
+            .Take(maximumSessions)
+            .Select(session => new ChatSessionSummary(
+                session.Id,
+                session.Messages
+                    .Where(message => message.Role == UserRole)
+                    .OrderBy(message => message.CreatedAt)
+                    .Select(message => message.Content)
+                    .FirstOrDefault() ?? "Nova conversa",
+                session.UpdatedAt))
+            .ToListAsync(cancellationToken);
+
+    public async Task<ChatSessionHistory?> LoadAsync(
+        Guid sessionId,
+        long userId,
+        int maximumMessages,
+        CancellationToken cancellationToken)
+    {
+        var exists = await dbContext.ChatSessions.AsNoTracking()
+            .AnyAsync(session => session.Id == sessionId && session.UserId == userId, cancellationToken);
+        if (!exists) return null;
+
+        var messages = await dbContext.ChatMessages.AsNoTracking()
+            .Where(message => message.ChatSessionId == sessionId)
+            .OrderByDescending(message => message.CreatedAt)
+            .Take(maximumMessages)
+            .OrderBy(message => message.CreatedAt)
+            .Select(message => new ChatHistoryMessage(
+                message.Id,
+                message.Role,
+                message.Content,
+                message.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+        return new ChatSessionHistory(sessionId, messages);
     }
 }

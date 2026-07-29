@@ -98,8 +98,11 @@ tema e barra lateral. Requisições autenticadas passam pelos clientes de
 `src/lib`, que centralizam a URL da API e o token JWT.
 
 Todas as telas privadas também renderizam o painel flutuante `Conecta IA`. O
-painel mantém o histórico apenas na sessão atual do navegador, oferece perguntas
-sugeridas e envia perguntas autenticadas para `POST /api/assistant/ask`. As
+painel mantém o histórico persistido do usuário autenticado: lista as 20
+conversas mais recentes e permite retomar suas últimas 100 mensagens. Oferece
+perguntas sugeridas e envia perguntas autenticadas para `POST /api/assistant/ask`. As
+O botão `Nova conversa` mantém o registro anterior e reinicia o estado visual sem
+`sessionId`; assim, a próxima pergunta cria uma nova sessão persistida.
 respostas exibem os conjuntos de dados consultados e informam se foram redigidas
 diretamente pelo catálogo demonstrativo ou com auxílio do modelo configurado.
 Nesta primeira etapa, o cabeçalho, a mensagem inicial e o rodapé identificam
@@ -263,7 +266,9 @@ administradores podem alterá-los. Violações autenticadas retornam HTTP `403`.
 ### Assistente corporativo
 
 `AssistantController` expõe `POST /api/assistant/ask` como uma operação somente
-leitura para o chat. O request aceita `sessionId` opcional e `message`; `question`
+leitura para o chat, além de `GET /api/assistant/sessions` e
+`GET /api/assistant/sessions/{sessionId}` para consultar o histórico do próprio
+usuário autenticado. O request aceita `sessionId` opcional e `message`; `question`
 continua aceito apenas por compatibilidade com clientes antigos. O controller
 valida tamanho e vazio, obtém `sub` e `role` do JWT e não aceita identidade,
 empresa, perfil ou permissão vindos do frontend ou da OpenAI.

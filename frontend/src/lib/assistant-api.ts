@@ -14,6 +14,24 @@ export type AssistantAnswer = {
   mode: string;
 };
 
+export type AssistantConversationSummary = {
+  sessionId: string;
+  preview: string;
+  updatedAt: string;
+};
+
+export type AssistantConversationMessage = {
+  id: string;
+  role: "assistant" | "user";
+  content: string;
+  createdAt: string;
+};
+
+export type AssistantConversation = {
+  sessionId: string;
+  messages: AssistantConversationMessage[];
+};
+
 export async function askBusinessAssistant(message: string, sessionId?: string): Promise<AssistantAnswer> {
   const response = await authFetch(buildGatewayUrl("assistant/ask"), {
     method: "POST",
@@ -27,4 +45,16 @@ export async function askBusinessAssistant(message: string, sessionId?: string):
   }
 
   return response.json() as Promise<AssistantAnswer>;
+}
+
+export async function listAssistantConversations(): Promise<AssistantConversationSummary[]> {
+  const response = await authFetch(buildGatewayUrl("assistant/sessions"));
+  if (!response.ok) throw new Error("Não foi possível carregar o histórico de conversas.");
+  return response.json() as Promise<AssistantConversationSummary[]>;
+}
+
+export async function getAssistantConversation(sessionId: string): Promise<AssistantConversation> {
+  const response = await authFetch(buildGatewayUrl(`assistant/sessions/${sessionId}`));
+  if (!response.ok) throw new Error("Não foi possível carregar esta conversa.");
+  return response.json() as Promise<AssistantConversation>;
 }

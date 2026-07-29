@@ -188,6 +188,19 @@ public sealed class BusinessAssistantServiceTests
             cancellationToken.ThrowIfCancellationRequested();
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<ChatSessionSummary>> ListAsync(
+            long userId,
+            int maximumSessions,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ChatSessionSummary>>([]);
+
+        public Task<ChatSessionHistory?> LoadAsync(
+            Guid sessionId,
+            long userId,
+            int maximumMessages,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<ChatSessionHistory?>(null);
     }
 
     private sealed class FakeTool(string name, ChatToolResult result) : IChatTool
