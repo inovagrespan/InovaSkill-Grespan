@@ -42,9 +42,12 @@ const DEFAULT_SUGGESTIONS = [
 const WELCOME_MESSAGE: AssistantMessage = {
   id: "welcome",
   author: "assistant",
-  text: "Olá! Eu consulto os dados reais de rotas disponíveis na aplicação. O que você gostaria de perguntar?",
-  mode: "IA com dados reais de rotas",
+  text: "Olá! Eu consulto os dados disponíveis na aplicação e separo fatos de interpretações. O que você gostaria de perguntar?",
+  mode: "IA orientada por dados reais",
 };
+
+const ASSISTANT_TRANSPARENCY_NOTICE =
+  "As respostas devem informar o período consultado e separar dados reais de interpretações. Se faltarem dados ou contexto, a IA deve avisar ou pedir esclarecimento.";
 
 export function BusinessAssistant({ variant = "floating" }: BusinessAssistantProps) {
   const isPage = variant === "page";
@@ -300,9 +303,9 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
             <Send className="size-4" />
           </button>
         </form>
-        <p className="mt-2 flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
+        <p className="mt-2 flex items-start justify-center gap-1 text-center text-[10px] leading-relaxed text-muted-foreground">
           <ChevronDown className="size-3 rotate-90" />
-          Nesta versão, a IA consulta somente informações de rotas.
+          {ASSISTANT_TRANSPARENCY_NOTICE}
         </p>
       </footer>
       {!isPage && clearConfirmationOpen && (

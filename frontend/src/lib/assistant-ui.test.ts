@@ -17,8 +17,11 @@ describe("business assistant UI", () => {
   it("oferece painel moderno, sugestões e histórico visual", () => {
     expect(component).toContain("Conecta IA");
     expect(component).toContain("Pergunte aos seus dados");
-    expect(component).toContain("dados reais de rotas");
-    expect(component).toContain("consulta somente informações de rotas");
+    expect(component).toContain("IA orientada por dados reais");
+    expect(component).toContain("ASSISTANT_TRANSPARENCY_NOTICE");
+    expect(component).toContain("informar o período consultado");
+    expect(component).toContain("separar dados reais de interpretações");
+    expect(component).toContain("pedir esclarecimento");
     expect(component).toContain("suggestions.map");
     expect(component).toContain("messages.map");
     expect(component).toContain("AssistantResponseText");

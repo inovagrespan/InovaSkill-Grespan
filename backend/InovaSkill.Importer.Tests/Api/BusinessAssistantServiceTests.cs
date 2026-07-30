@@ -144,6 +144,25 @@ public sealed class BusinessAssistantServiceTests
         Assert.Contains("Quando uma métrica recorrente ou executiva não estiver disponível", model.Requests[0].Instructions);
     }
 
+    [Fact]
+    public async Task AnswerAsync_RequiresEvidencePeriodAndClarificationForAmbiguousQuestions()
+    {
+        var model = new FakeModelClient([
+            new ChatModelResponse("response-1", "Qual cliente e período você deseja analisar?", [])
+        ]);
+        var service = CreateService(model, []);
+
+        await service.AnswerAsync(null, "Analise o resultado.", new ChatExecutionContext(1, "logistica"), default);
+
+        var instructions = model.Requests[0].Instructions;
+        Assert.Contains("Nunca complete lacunas", instructions);
+        Assert.Contains("Dados insuficientes", instructions);
+        Assert.Contains("Dados reais:", instructions);
+        Assert.Contains("Interpretação da IA:", instructions);
+        Assert.Contains("Período dos dados:", instructions);
+        Assert.Contains("Faça uma pergunta curta de esclarecimento", instructions);
+    }
+
     private static BusinessAssistantService CreateService(
         FakeModelClient model,
         IReadOnlyList<IChatTool> tools,

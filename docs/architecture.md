@@ -100,13 +100,15 @@ tema e barra lateral. Requisições autenticadas passam pelos clientes de
 Todas as telas privadas também renderizam o painel flutuante `Conecta IA`. O
 painel mantém o histórico persistido do usuário autenticado: lista as 20
 conversas mais recentes e permite retomar suas últimas 100 mensagens. Oferece
-perguntas sugeridas e envia perguntas autenticadas para `POST /api/assistant/ask`. As
+perguntas sugeridas e envia perguntas autenticadas para `POST /api/assistant/ask`.
+As respostas seguem um contrato de confiabilidade: não completam lacunas, declaram
+quando os dados são insuficientes, identificam o período ou snapshot consultado
+e separam dados reais de interpretações da IA. Perguntas com mais de uma
+interpretação relevante exigem esclarecimento antes da consulta; o contexto da
+conversa pode resolver a ambiguidade quando isso não exigir suposição. O rodapé
+do chat torna essas regras visíveis ao usuário.
 O botão `Nova conversa` mantém o registro anterior e reinicia o estado visual sem
 `sessionId`; assim, a próxima pergunta cria uma nova sessão persistida.
-respostas exibem os conjuntos de dados consultados e informam se foram redigidas
-diretamente pelo catálogo demonstrativo ou com auxílio do modelo configurado.
-Nesta primeira etapa, o cabeçalho, a mensagem inicial e o rodapé identificam
-explicitamente que todos os números são fictícios.
 O mesmo componente possui uma variante de página completa em `/assistente`,
 disponível para todos os perfis pelo item `Chat IA` da navegação principal. Essa
 rota usa toda a área útil para histórico, fontes, sugestões e composição da
