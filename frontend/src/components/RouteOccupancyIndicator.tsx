@@ -1,5 +1,4 @@
 import {
-  MAXIMUM_OCCUPANCY,
   MEDIUM_OCCUPANCY_THRESHOLD,
   classifyOccupancy,
   formatOccupancy,
@@ -19,7 +18,7 @@ export function RouteOccupancyIndicator({
 }: RouteOccupancyIndicatorProps) {
   const presentation = classifyOccupancy(value);
   const isAvailable = value !== null && Number.isFinite(value);
-  const percentage = isAvailable ? Math.min(MAXIMUM_OCCUPANCY, Math.max(0, value)) * 100 : 0;
+  const percentage = isAvailable ? Math.max(0, value) * 100 : 0;
   const visualPercentage = Math.min(100, Math.max(0, percentage));
 
   return (

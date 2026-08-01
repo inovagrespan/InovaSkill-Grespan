@@ -19,8 +19,6 @@ public sealed record RouteOccupancyResult(
 
 public static class RouteOccupancyCalculator
 {
-    private const decimal MaximumOccupancy = 1m;
-
     public static RouteOccupancyResult Calculate(RouteOccupancyInput input)
     {
         var weight = DivideWhenCapacityIsAvailable(input.TotalWeightKg, input.WeightCapacityKg);
@@ -40,11 +38,11 @@ public static class RouteOccupancyCalculator
 
     private static decimal? DivideWhenCapacityIsAvailable(decimal? total, decimal? capacity) =>
         total.HasValue && capacity is > 0
-            ? Math.Min(MaximumOccupancy, Math.Max(0m, total.Value / capacity.Value))
+            ? Math.Max(0m, total.Value / capacity.Value)
             : null;
 
     private static decimal? DivideWhenCapacityIsAvailable(int? total, int? capacity) =>
         total.HasValue && capacity is > 0
-            ? Math.Min(MaximumOccupancy, Math.Max(0m, (decimal)total.Value / capacity.Value))
+            ? Math.Max(0m, (decimal)total.Value / capacity.Value)
             : null;
 }

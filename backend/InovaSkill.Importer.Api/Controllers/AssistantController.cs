@@ -10,10 +10,11 @@ namespace InovaSkill.Importer.Api.Controllers;
 public sealed class AssistantController(
     BusinessAssistantService assistantService,
     IChatHistoryStore historyStore,
-    IOptions<AssistantOptions> options) : ControllerBase
+    IOptions<AssistantOptions> options,
+    AiConsumptionService? consumptionService = null) : ControllerBase
 {
-    private const int MaximumConversationHistoryMessages = 100;
-    private const int MaximumConversationHistorySessions = 20;
+    private const int MaximumConversationHistoryMessages = 1000;
+    private const int ConversationHistoryPageSize = 20;
 
     [HttpPost("ask")]
     public async Task<ActionResult<AssistantAnswerResponse>> Ask(
@@ -40,27 +41,50 @@ public sealed class AssistantController(
             return Unauthorized(new ProblemDetails { Detail = "Usuário autenticado inválido." });
         }
 
-        return Ok(await assistantService.AnswerAsync(
-            request.SessionId,
-            question,
-            new ChatExecutionContext(userId, role),
-            cancellationToken));
+        var admission = consumptionService is null
+            ? new AiUsageAdmission(true, 0, 0)
+            : await consumptionService.BeginAsync(userId, role, cancellationToken);
+        if (!admission.Allowed)
+        {
+            return StatusCode(StatusCodes.Status429TooManyRequests, new ProblemDetails
+            {
+                Detail = "Seu limite mensal de uso do assistente foi atingido. Procure um administrador para ajustar o limite."
+            });
+        }
+
+        var succeeded = false;
+        try
+        {
+            var answer = await assistantService.AnswerAsync(
+                request.SessionId, question, new ChatExecutionContext(userId, role), cancellationToken);
+            succeeded = true;
+            return Ok(answer);
+        }
+        finally
+        {
+            if (consumptionService is not null)
+                await consumptionService.CompleteAsync(succeeded, CancellationToken.None);
+        }
     }
 
     [HttpGet("sessions")]
-    public async Task<ActionResult<IReadOnlyList<AssistantConversationSummaryResponse>>> ListSessions(
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<AssistantConversationPageResponse>> ListSessions(
+        CancellationToken cancellationToken,
+        [FromQuery] int offset = 0)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
 
         var sessions = await historyStore.ListAsync(
             userId,
-            MaximumConversationHistorySessions,
+            Math.Max(0, offset),
+            ConversationHistoryPageSize + 1,
             cancellationToken);
-        return Ok(sessions.Select(session => new AssistantConversationSummaryResponse(
+        var hasMore = sessions.Count > ConversationHistoryPageSize;
+        var items = sessions.Take(ConversationHistoryPageSize).Select(session => new AssistantConversationSummaryResponse(
             session.SessionId,
             session.Preview,
-            session.UpdatedAt)));
+            session.UpdatedAt)).ToList();
+        return Ok(new AssistantConversationPageResponse(items, hasMore, Math.Max(0, offset) + items.Count));
     }
 
     [HttpGet("sessions/{sessionId:guid}")]

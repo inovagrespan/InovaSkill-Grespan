@@ -21,7 +21,10 @@ builder.Services.Configure<AssistantOptions>(options =>
     options.OpenAiApiKey = builder.Configuration["OPENAI_API_KEY"] ?? options.OpenAiApiKey;
 });
 builder.Services.AddScoped<IChatModelClient, OpenAiChatModelClient>();
+builder.Services.AddScoped<AiConsumptionService>();
 builder.Services.AddScoped<IChatHistoryStore, ChatHistoryStore>();
+builder.Services.AddScoped<AssistantScopeClassifier>();
+builder.Services.AddScoped<KnowledgeMemoryService>();
 builder.Services.AddScoped<IChatTool, SearchRoutesChatTool>();
 builder.Services.AddScoped<IChatTool, GetRouteDetailsChatTool>();
 builder.Services.AddScoped<IChatTool, GetCriticalRoutesChatTool>();

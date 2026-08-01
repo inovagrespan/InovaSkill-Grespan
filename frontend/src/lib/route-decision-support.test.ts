@@ -55,11 +55,11 @@ describe("route decision support", () => {
     expect(result.summary).toContain("inválida ou está zerada");
   });
 
-  it("mantém ocupação entre zero e cem por cento e sinaliza baixa margem", () => {
+  it("mantém ocupação não negativa e sinaliza baixa margem", () => {
     const result = buildRouteDecisionSupport({ ...route, totalWeightKg: 9_800 }, vehicles);
     const truck = result.alternatives.find((item) => item.vehicleTypeId === "truck");
 
-    expect(result.alternatives.every((item) => item.occupancy >= 0 && item.occupancy <= 1)).toBe(true);
+    expect(result.alternatives.every((item) => item.occupancy >= 0)).toBe(true);
     expect(truck).toEqual(expect.objectContaining({ occupancy: 0.98 }));
     expect(truck?.risk).toContain("Baixa margem");
   });

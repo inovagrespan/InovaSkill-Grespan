@@ -48,9 +48,11 @@ describe("sidebar navigation", () => {
       "Estoque",
       "Produção",
     ]);
-    expect(adminItems).toHaveLength(12);
+    expect(adminItems).toHaveLength(14);
     expect(adminItems).toContain("Importações");
     expect(adminItems).toContain("Processamento");
+    expect(adminItems).toContain("Consumo de IA");
+    expect(adminItems).toContain("Memórias da IA");
     expect(adminSystemItems).toEqual(adminItems);
     expect(getVisibleSidebarItemsForRole("gestor")).toEqual([]);
   });

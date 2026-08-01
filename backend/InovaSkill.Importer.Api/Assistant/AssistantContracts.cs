@@ -16,6 +16,11 @@ public sealed record AssistantConversationSummaryResponse(
     string Preview,
     DateTime UpdatedAt);
 
+public sealed record AssistantConversationPageResponse(
+    IReadOnlyList<AssistantConversationSummaryResponse> Items,
+    bool HasMore,
+    int NextOffset);
+
 public sealed record AssistantConversationMessageResponse(
     Guid Id,
     string Role,

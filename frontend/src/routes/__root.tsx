@@ -103,7 +103,7 @@ function RootComponent() {
   const isAssistantPage = pathname === "/assistente";
 
   useEffect(() => {
-    document.title = "AAI Seguri - ERP Corporativo";
+    document.title = "Conecta360";
     document.documentElement.lang = "pt-BR";
   }, []);
 

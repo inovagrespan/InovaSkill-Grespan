@@ -22,7 +22,8 @@ describe("assistant full page", () => {
     expect(route).toContain('<BusinessAssistant variant="page" />');
     expect(route).toContain("h-dvh");
     expect(component).toContain('variant?: "floating" | "page"');
-    expect(component).toContain('? "h-full min-h-0 w-full rounded-2xl"');
+    expect(component).toContain('? "h-full min-h-0 w-full"');
+    expect(route).not.toContain("p-3 pt-16");
   });
 
   it("remove o assistente flutuante quando a página dedicada está ativa", () => {

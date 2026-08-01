@@ -27,6 +27,13 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<RouteOptimizationRun> RouteOptimizationRuns => Set<RouteOptimizationRun>();
     public DbSet<RouteOptimizationScenario> RouteOptimizationScenarios => Set<RouteOptimizationScenario>();
+    public DbSet<AiResponseExecution> AiResponseExecutions => Set<AiResponseExecution>();
+    public DbSet<AiProviderCall> AiProviderCalls => Set<AiProviderCall>();
+    public DbSet<AiModelPrice> AiModelPrices => Set<AiModelPrice>();
+    public DbSet<AiConsumptionSettings> AiConsumptionSettings => Set<AiConsumptionSettings>();
+    public DbSet<AiUserLimit> AiUserLimits => Set<AiUserLimit>();
+    public DbSet<AiConsumptionAlert> AiConsumptionAlerts => Set<AiConsumptionAlert>();
+    public DbSet<KnowledgeMemory> KnowledgeMemories => Set<KnowledgeMemory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -162,6 +169,73 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasIndex(x => new { x.ChatSessionId, x.CreatedAt });
             entity.HasOne(x => x.ChatSession).WithMany(x => x.Messages)
                 .HasForeignKey(x => x.ChatSessionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AiResponseExecution>(entity =>
+        {
+            entity.ToTable("ai_response_executions"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AiProviderCall>(entity =>
+        {
+            entity.ToTable("ai_provider_calls"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.ProviderResponseId).HasMaxLength(128);
+            entity.Property(x => x.Model).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Purpose).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.InputPricePerMillionUsd).HasPrecision(18, 8);
+            entity.Property(x => x.OutputPricePerMillionUsd).HasPrecision(18, 8);
+            entity.Property(x => x.InputCostUsd).HasPrecision(18, 8);
+            entity.Property(x => x.OutputCostUsd).HasPrecision(18, 8);
+            entity.HasIndex(x => new { x.ResponseExecutionId, x.CreatedAt });
+            entity.HasIndex(x => new { x.Model, x.CreatedAt });
+            entity.HasOne(x => x.ResponseExecution).WithMany(x => x.Calls).HasForeignKey(x => x.ResponseExecutionId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AiModelPrice>(entity =>
+        {
+            entity.ToTable("ai_model_prices"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Model).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.InputPricePerMillionUsd).HasPrecision(18, 8);
+            entity.Property(x => x.OutputPricePerMillionUsd).HasPrecision(18, 8);
+            entity.HasIndex(x => new { x.Model, x.EffectiveFrom }).IsUnique();
+        });
+        modelBuilder.Entity<AiConsumptionSettings>(entity =>
+        {
+            entity.ToTable("ai_consumption_settings"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Model).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.DefaultAlertPercentage).HasPrecision(5, 2);
+        });
+        modelBuilder.Entity<AiUserLimit>(entity =>
+        {
+            entity.ToTable("ai_user_limits"); entity.HasKey(x => x.UserId);
+            entity.Property(x => x.AlertPercentage).HasPrecision(5, 2);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AiConsumptionAlert>(entity =>
+        {
+            entity.ToTable("ai_consumption_alerts"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Level).HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => new { x.UserId, x.PeriodMonth, x.Level }).IsUnique();
+            entity.HasIndex(x => new { x.ReadAt, x.CreatedAt });
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<KnowledgeMemory>(entity =>
+        {
+            entity.ToTable("knowledge_memories");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Scope).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Subject).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Content).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.EmbeddingJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(x => new { x.Scope, x.OwnerUserId, x.IsActive, x.UpdatedAt });
+            entity.HasIndex(x => new { x.Subject, x.Scope, x.OwnerUserId, x.IsActive });
+            entity.HasOne(x => x.OwnerUser).WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SourceChatMessage).WithMany().HasForeignKey(x => x.SourceChatMessageId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SupersedesMemory).WithMany().HasForeignKey(x => x.SupersedesMemoryId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<VehicleType>(entity =>

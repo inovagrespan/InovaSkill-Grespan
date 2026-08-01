@@ -3,7 +3,6 @@ import type { ImportedRouteDetail, VehicleTypeItem } from "@/lib/importer-api";
 const TARGET_OCCUPANCY = 0.9;
 const HEALTHY_MINIMUM_OCCUPANCY = 0.85;
 const CRITICAL_MINIMUM_EXCLUSIVE = 0.95;
-const MAXIMUM_OCCUPANCY = 1;
 const MAXIMUM_RECOMMENDATIONS = 3;
 const MAXIMUM_AI_QUESTION_CHARACTERS = 800;
 const MAXIMUM_AI_ROUTE_NAME_CHARACTERS = 80;
@@ -28,7 +27,7 @@ export type RouteDecisionSupport = {
 };
 
 function clampOccupancy(value: number): number {
-  return Math.min(MAXIMUM_OCCUPANCY, Math.max(0, value));
+  return Math.max(0, value);
 }
 
 function round(value: number): number {

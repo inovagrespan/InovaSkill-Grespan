@@ -23,6 +23,36 @@ public sealed class BusinessAssistantServiceTests
     }
 
     [Fact]
+    public async Task AnswerAsync_AllowsPersonalIntroductionWithoutScopeClassification()
+    {
+        var model = new FakeModelClient([
+            new ChatModelResponse("response-1", "Prazer, Leonardo! Como posso ajudar?", [])
+        ], scopeDecision: "OUT_OF_SCOPE");
+        var service = CreateService(model, []);
+
+        var response = await service.AnswerAsync(null, "Meu nome é Leonardo", new ChatExecutionContext(1, "logistica"), default);
+
+        Assert.Equal("Prazer, Leonardo! Como posso ajudar?", response.Answer);
+        Assert.Empty(model.ScopeRequests);
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task AnswerAsync_AllowsAmbiguousMessageSoAssistantCanAskForContext()
+    {
+        var model = new FakeModelClient([
+            new ChatModelResponse("response-1", "Claro. Quer me contar um pouco mais?", [])
+        ], scopeDecision: "AMBIGUOUS");
+        var service = CreateService(model, []);
+
+        var response = await service.AnswerAsync(null, "Aconteceu uma coisa hoje", new ChatExecutionContext(1, "logistica"), default);
+
+        Assert.Equal("Claro. Quer me contar um pouco mais?", response.Answer);
+        Assert.Single(model.ScopeRequests);
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
     public async Task AnswerAsync_ExecutesOneToolAndReturnsFinalAnswer()
     {
         var model = new FakeModelClient([
@@ -94,7 +124,7 @@ public sealed class BusinessAssistantServiceTests
     }
 
     [Fact]
-    public async Task AnswerAsync_ReturnsControlledMessageWhenModelTimesOut()
+    public async Task AnswerAsync_ReturnsControlledTimeoutWhenScopeClassificationFails()
     {
         var model = new FakeModelClient([], throwOnSend: new OperationCanceledException());
         var service = CreateService(model, []);
@@ -102,6 +132,7 @@ public sealed class BusinessAssistantServiceTests
         var response = await service.AnswerAsync(null, "Olá", new ChatExecutionContext(1, "logistica"), default);
 
         Assert.Contains("demorou mais que o esperado", response.Answer);
+        Assert.Empty(model.Requests);
     }
 
     [Fact]
@@ -127,6 +158,22 @@ public sealed class BusinessAssistantServiceTests
         var response = await service.AnswerAsync(null, "R", new ChatExecutionContext(1, "logistica"), default);
 
         Assert.Equal("Informe um termo maior.", response.Answer);
+    }
+
+    [Fact]
+    public async Task AnswerAsync_IncludesGrespanBusinessContextInModelInstructions()
+    {
+        var model = new FakeModelClient([
+            new ChatModelResponse("response-1", "Resposta contextualizada.", [])
+        ]);
+        var service = CreateService(model, []);
+
+        await service.AnswerAsync(null, "Qual é o contexto da empresa?", new ChatExecutionContext(1, "logistica"), default);
+
+        var instructions = model.Requests[0].Instructions;
+        Assert.Contains("Grespan", instructions);
+        Assert.Contains("fabricação de pães congelados", instructions);
+        Assert.Contains("Considere esse contexto empresarial", instructions);
     }
 
     [Fact]
@@ -163,6 +210,62 @@ public sealed class BusinessAssistantServiceTests
         Assert.Contains("Faça uma pergunta curta de esclarecimento", instructions);
     }
 
+    [Fact]
+    public async Task AnswerAsync_BlocksQuestionsExplicitlyOutsideGrespanScope()
+    {
+        var model = new FakeModelClient([], scopeDecision: "OUT_OF_SCOPE");
+        var service = CreateService(model, []);
+
+        var response = await service.AnswerAsync(null, "Quem ganhou a eleição?", new ChatExecutionContext(1, "logistica"), default);
+
+        Assert.Contains("fora do contexto da Grespan", response.Answer);
+        Assert.Empty(model.Requests);
+        Assert.Single(model.ScopeRequests);
+        Assert.NotNull(model.ScopeRequests[0].TextFormat);
+        Assert.Contains("política", model.ScopeRequests[0].Instructions);
+        Assert.Contains(model.ScopeRequests[0].Messages, message => message.Content == "Quem ganhou a eleição?");
+    }
+
+    [Fact]
+    public async Task AnswerAsync_AllowsInvalidScopeResultSoAssistantCanRecover()
+    {
+        var model = new FakeModelClient([
+            new ChatModelResponse("response-1", "Pode me dar um pouco mais de contexto?", [])
+        ], scopeDecision: "INVALID");
+        var service = CreateService(model, []);
+
+        var response = await service.AnswerAsync(null, "Quero conversar sobre uma situação", new ChatExecutionContext(1, "logistica"), default);
+
+        Assert.Equal("Pode me dar um pouco mais de contexto?", response.Answer);
+        Assert.Single(model.ScopeRequests);
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task AnswerAsync_UsesIsolatedWebSearchAndReturnsDeduplicatedSources()
+    {
+        var model = new FakeModelClient([
+            new ChatModelResponse("response-1", null, [
+                new ChatModelToolCall("research-1", "request_external_research", "{\"publicQuery\":\"normas atuais para armazenamento de pães congelados\"}")
+            ]),
+            new ChatModelResponse("web-1", "Resumo público.", [], [
+                new ChatModelSource("Fonte oficial", "https://example.org/norma"),
+                new ChatModelSource("Duplicada", "https://example.org/norma")
+            ]),
+            new ChatModelResponse("response-2", "Informações externas:\nResumo aplicado à Grespan.\nInterpretação da IA:\nValidar internamente.", [])
+        ]);
+        var service = CreateService(model, []);
+
+        var response = await service.AnswerAsync(null, "Quais normas atuais podem ajudar o armazenamento da Grespan?", new ChatExecutionContext(1, "logistica"), default);
+
+        Assert.Single(response.Sources);
+        Assert.Equal("https://example.org/norma", response.Sources[0].Value);
+        var webRequest = Assert.Single(model.Requests, request => request.Purpose == ChatModelRequestPurpose.ExternalResearch);
+        Assert.True(webRequest.EnableWebSearch);
+        Assert.Single(webRequest.Messages);
+        Assert.DoesNotContain("Grespan", webRequest.Messages[0].Content, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static BusinessAssistantService CreateService(
         FakeModelClient model,
         IReadOnlyList<IChatTool> tools,
@@ -172,20 +275,29 @@ public sealed class BusinessAssistantServiceTests
             new FakeHistoryStore(),
             tools,
             Options.Create(options ?? new AssistantOptions()),
-            NullLogger<BusinessAssistantService>.Instance);
+            NullLogger<BusinessAssistantService>.Instance,
+            new AssistantScopeClassifier(model, NullLogger<AssistantScopeClassifier>.Instance));
 
     private sealed class FakeModelClient(
         IReadOnlyList<ChatModelResponse> responses,
-        Exception? throwOnSend = null) : IChatModelClient
+        Exception? throwOnSend = null,
+        string scopeDecision = "IN_SCOPE") : IChatModelClient
     {
         private int index;
         public List<ChatModelRequest> Requests { get; } = [];
+        public List<ChatModelRequest> ScopeRequests { get; } = [];
 
         public Task<ChatModelResponse> SendAsync(ChatModelRequest request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Requests.Add(request);
             if (throwOnSend is not null) throw throwOnSend;
+            if (request.Purpose == ChatModelRequestPurpose.ScopeClassification)
+            {
+                ScopeRequests.Add(request);
+                var text = scopeDecision == "INVALID" ? "not-json" : $"{{\"decision\":\"{scopeDecision}\"}}";
+                return Task.FromResult(new ChatModelResponse("scope-1", text, []));
+            }
+            Requests.Add(request);
             return Task.FromResult(responses[index++]);
         }
     }
@@ -210,6 +322,7 @@ public sealed class BusinessAssistantServiceTests
 
         public Task<IReadOnlyList<ChatSessionSummary>> ListAsync(
             long userId,
+            int offset,
             int maximumSessions,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<ChatSessionSummary>>([]);

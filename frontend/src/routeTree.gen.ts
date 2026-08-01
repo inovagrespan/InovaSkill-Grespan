@@ -33,6 +33,8 @@ import { Route as VeiculosTiposRouteImport } from './routes/veiculos.tipos'
 import { Route as LogisticaRotasRouteImport } from './routes/logistica.rotas'
 import { Route as LogisticaMapaRouteImport } from './routes/logistica.mapa'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
+import { Route as AdministracaoMemoriasRouteImport } from './routes/administracao.memorias'
+import { Route as AdministracaoConsumoIaRouteImport } from './routes/administracao.consumo-ia'
 
 const VendasRoute = VendasRouteImport.update({
   id: '/vendas',
@@ -154,6 +156,16 @@ const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
   path: '/files',
   getParentRoute: () => ImportacoesRoute,
 } as any)
+const AdministracaoMemoriasRoute = AdministracaoMemoriasRouteImport.update({
+  id: '/administracao/memorias',
+  path: '/administracao/memorias',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdministracaoConsumoIaRoute = AdministracaoConsumoIaRouteImport.update({
+  id: '/administracao/consumo-ia',
+  path: '/administracao/consumo-ia',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -174,6 +186,8 @@ export interface FileRoutesByFullPath {
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
+  '/administracao/memorias': typeof AdministracaoMemoriasRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
@@ -198,6 +212,8 @@ export interface FileRoutesByTo {
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
+  '/administracao/memorias': typeof AdministracaoMemoriasRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
@@ -225,6 +241,8 @@ export interface FileRoutesById {
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
   '/vendas': typeof VendasRoute
+  '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
+  '/administracao/memorias': typeof AdministracaoMemoriasRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
@@ -253,6 +271,8 @@ export interface FileRouteTypes {
     | '/rotas'
     | '/simulacao'
     | '/vendas'
+    | '/administracao/consumo-ia'
+    | '/administracao/memorias'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
@@ -277,6 +297,8 @@ export interface FileRouteTypes {
     | '/rotas'
     | '/simulacao'
     | '/vendas'
+    | '/administracao/consumo-ia'
+    | '/administracao/memorias'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
@@ -303,6 +325,8 @@ export interface FileRouteTypes {
     | '/rotas'
     | '/simulacao'
     | '/vendas'
+    | '/administracao/consumo-ia'
+    | '/administracao/memorias'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
@@ -330,6 +354,8 @@ export interface RootRouteChildren {
   RotasRoute: typeof RotasRoute
   SimulacaoRoute: typeof SimulacaoRoute
   VendasRoute: typeof VendasRoute
+  AdministracaoConsumoIaRoute: typeof AdministracaoConsumoIaRoute
+  AdministracaoMemoriasRoute: typeof AdministracaoMemoriasRoute
   VeiculosTiposRoute: typeof VeiculosTiposRoute
 }
 
@@ -503,6 +529,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacoesFilesRouteImport
       parentRoute: typeof ImportacoesRoute
     }
+    '/administracao/memorias': {
+      id: '/administracao/memorias'
+      path: '/administracao/memorias'
+      fullPath: '/administracao/memorias'
+      preLoaderRoute: typeof AdministracaoMemoriasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administracao/consumo-ia': {
+      id: '/administracao/consumo-ia'
+      path: '/administracao/consumo-ia'
+      fullPath: '/administracao/consumo-ia'
+      preLoaderRoute: typeof AdministracaoConsumoIaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -555,6 +595,8 @@ const rootRouteChildren: RootRouteChildren = {
   RotasRoute: RotasRoute,
   SimulacaoRoute: SimulacaoRoute,
   VendasRoute: VendasRoute,
+  AdministracaoConsumoIaRoute: AdministracaoConsumoIaRoute,
+  AdministracaoMemoriasRoute: AdministracaoMemoriasRoute,
   VeiculosTiposRoute: VeiculosTiposRoute,
 }
 export const routeTree = rootRouteImport

@@ -14,6 +14,8 @@ import {
   PackageCheck,
   Route,
   Settings,
+  Gauge,
+  Brain,
   Sun,
   Truck,
   UserRound,
@@ -55,6 +57,8 @@ const items = [
   { to: "/producao", label: "Produção", icon: Factory },
   { to: "/importacoes/files", label: "Importações", icon: FileUp },
   { to: "/processamentos", label: "Processamento", icon: Settings },
+  { to: "/administracao/consumo-ia", label: "Consumo de IA", icon: Gauge },
+  { to: "/administracao/memorias", label: "Memórias da IA", icon: Brain },
 ] as const;
 
 export function getVisibleSidebarItemsForRole(role: string | null) {

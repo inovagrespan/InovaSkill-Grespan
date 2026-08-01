@@ -1,6 +1,8 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using InovaSkill.Importer.Domain.Entities;
 using Microsoft.Extensions.Options;
 
 namespace InovaSkill.Importer.Api.Assistant;
@@ -8,9 +10,13 @@ namespace InovaSkill.Importer.Api.Assistant;
 public sealed class OpenAiChatModelClient(
     IHttpClientFactory httpClientFactory,
     IOptions<AssistantOptions> options,
-    ILogger<OpenAiChatModelClient> logger) : IChatModelClient
+    ILogger<OpenAiChatModelClient> logger,
+    AiConsumptionService consumptionService) : IChatModelClient
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
     private readonly AssistantOptions assistantOptions = options.Value;
 
     public async Task<ChatModelResponse> SendAsync(ChatModelRequest request, CancellationToken cancellationToken)
@@ -31,18 +37,23 @@ public sealed class OpenAiChatModelClient(
             instructions = request.Instructions,
             previous_response_id = request.PreviousResponseId,
             input = request.Messages.Select(ToOpenAiInputItem),
-            tools = request.Tools.Select(tool => new
-            {
-                type = "function",
-                name = tool.Name,
-                description = tool.Description,
-                parameters = tool.Parameters,
-                strict = true
-            }),
+            tools = BuildTools(request),
+            text = request.TextFormat is null ? null : new { format = request.TextFormat },
             tool_choice = "auto"
         }, options: SerializerOptions);
 
-        using var response = await httpClientFactory.CreateClient().SendAsync(httpRequest, timeout.Token);
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClientFactory.CreateClient().SendAsync(httpRequest, timeout.Token);
+        }
+        catch
+        {
+            await consumptionService.RecordCallAsync(request.Model, request.Purpose, AiConsumptionStatuses.Failed, string.Empty, 0, 0, CancellationToken.None);
+            throw;
+        }
+        using (response)
+        {
         if (!response.IsSuccessStatusCode)
         {
             var providerError = ReadProviderError(
@@ -53,6 +64,7 @@ public sealed class OpenAiChatModelClient(
                 providerError.Code,
                 providerError.Param,
                 providerError.Message);
+            await consumptionService.RecordCallAsync(request.Model, request.Purpose, AiConsumptionStatuses.Failed, string.Empty, 0, 0, CancellationToken.None);
             throw new HttpRequestException("OpenAI indisponível.");
         }
 
@@ -60,8 +72,34 @@ public sealed class OpenAiChatModelClient(
         var responseId = document.RootElement.GetProperty("id").GetString() ?? string.Empty;
         var outputText = ReadOutputText(document.RootElement);
         var toolCalls = ReadToolCalls(document.RootElement);
+        var sources = ReadSources(document.RootElement);
+        var (inputTokens, outputTokens) = ReadUsage(document.RootElement);
+        await consumptionService.RecordCallAsync(request.Model, request.Purpose, AiConsumptionStatuses.Completed, responseId, inputTokens, outputTokens, CancellationToken.None);
 
-        return new ChatModelResponse(responseId, outputText, toolCalls);
+        return new ChatModelResponse(responseId, outputText, toolCalls, sources, inputTokens, outputTokens);
+        }
+    }
+
+    public static (int InputTokens, int OutputTokens) ReadUsage(JsonElement root)
+    {
+        if (!root.TryGetProperty("usage", out var usage)) return (0, 0);
+        var input = usage.TryGetProperty("input_tokens", out var inputElement) && inputElement.TryGetInt32(out var inputValue) ? inputValue : 0;
+        var output = usage.TryGetProperty("output_tokens", out var outputElement) && outputElement.TryGetInt32(out var outputValue) ? outputValue : 0;
+        return (Math.Max(0, input), Math.Max(0, output));
+    }
+
+    private static IReadOnlyList<object> BuildTools(ChatModelRequest request)
+    {
+        var tools = request.Tools.Select(tool => (object)new
+        {
+            type = "function",
+            name = tool.Name,
+            description = tool.Description,
+            parameters = tool.Parameters,
+            strict = true
+        }).ToList();
+        if (request.EnableWebSearch) tools.Add(new { type = "web_search" });
+        return tools;
     }
 
     private static object ToOpenAiInputItem(ChatModelInputMessage message)
@@ -131,6 +169,31 @@ public sealed class OpenAiChatModelClient(
         }
 
         return calls;
+    }
+
+    private static IReadOnlyList<ChatModelSource> ReadSources(JsonElement root)
+    {
+        if (!root.TryGetProperty("output", out var outputCollection)) return [];
+        var sources = new Dictionary<string, ChatModelSource>(StringComparer.OrdinalIgnoreCase);
+        foreach (var output in outputCollection.EnumerateArray())
+        {
+            if (!output.TryGetProperty("content", out var content)) continue;
+            foreach (var item in content.EnumerateArray())
+            {
+                if (!item.TryGetProperty("annotations", out var annotations)) continue;
+                foreach (var annotation in annotations.EnumerateArray())
+                {
+                    if (!annotation.TryGetProperty("type", out var type) || type.GetString() != "url_citation") continue;
+                    var url = ReadString(annotation, "url");
+                    if (string.IsNullOrWhiteSpace(url) ||
+                        !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                        (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) continue;
+                    var title = ReadString(annotation, "title");
+                    sources.TryAdd(url, new ChatModelSource(string.IsNullOrWhiteSpace(title) ? uri.Host : title, url));
+                }
+            }
+        }
+        return sources.Values.ToList();
     }
 
     public static OpenAiProviderError ReadProviderError(string responseBody)

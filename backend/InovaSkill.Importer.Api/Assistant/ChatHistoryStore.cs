@@ -20,6 +20,7 @@ public interface IChatHistoryStore
 
     Task<IReadOnlyList<ChatSessionSummary>> ListAsync(
         long userId,
+        int offset,
         int maximumSessions,
         CancellationToken cancellationToken);
 
@@ -111,11 +112,14 @@ public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistorySt
 
     public async Task<IReadOnlyList<ChatSessionSummary>> ListAsync(
         long userId,
+        int offset,
         int maximumSessions,
         CancellationToken cancellationToken) =>
         await dbContext.ChatSessions.AsNoTracking()
             .Where(session => session.UserId == userId)
             .OrderByDescending(session => session.UpdatedAt)
+            .ThenByDescending(session => session.Id)
+            .Skip(offset)
             .Take(maximumSessions)
             .Select(session => new ChatSessionSummary(
                 session.Id,

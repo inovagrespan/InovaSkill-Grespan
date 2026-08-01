@@ -43,7 +43,7 @@ public static class ApiAccessPolicy
         var normalizedRole = role.Trim().ToLowerInvariant();
         var isMutation = !HttpMethods.IsGet(method) && !HttpMethods.IsHead(method);
 
-        if (StartsWithAny(path, "/api/admin/jobs", "/api/route-imports", "/api/import-errors"))
+        if (StartsWithAny(path, "/api/admin/jobs", "/api/admin/ai-consumption", "/api/admin/knowledge-memories", "/api/route-imports", "/api/import-errors"))
         {
             return AdministratorRoles.Contains(normalizedRole);
         }

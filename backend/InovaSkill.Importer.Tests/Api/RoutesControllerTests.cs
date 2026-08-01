@@ -62,7 +62,7 @@ public sealed class RoutesControllerTests
     }
 
     [Fact]
-    public async Task GetOccupancySummary_LimitsOverCapacityResultToOneHundredPercent()
+    public async Task GetOccupancySummary_PreservesOverCapacityResult()
     {
         await using var db = CreateDbContext();
         var source = CreateSource();
@@ -77,7 +77,7 @@ public sealed class RoutesControllerTests
         var response = await new RoutesController(db).GetOccupancySummary(default);
         var json = SerializeOkResult(response);
 
-        Assert.Equal(100m, json.RootElement.GetProperty("OccupancyRatePercent").GetDecimal());
+        Assert.Equal(125m, json.RootElement.GetProperty("OccupancyRatePercent").GetDecimal());
     }
 
     [Fact]

@@ -1,4 +1,6 @@
 using InovaSkill.Importer.Application.RouteImports;
+using InovaSkill.Importer.Application.Caching;
+using InovaSkill.Importer.Infrastructure.Caching;
 using InovaSkill.Importer.Infrastructure.BackgroundJobs;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.RouteImports;
@@ -19,6 +21,9 @@ public static class ServiceCollectionExtensions
             ?? throw new InvalidOperationException("ConnectionStrings:ImportDb não foi configurada.");
 
         services.AddDbContext<ImportDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddMemoryCache();
+        services.AddSingleton<ICacheStore, MemoryCacheStore>();
+        services.AddSingleton<IApplicationCache, ResilientApplicationCache>();
         services.Configure<RouteOptimizationOptions>(
             configuration.GetSection(RouteOptimizationOptions.SectionName));
         services.AddHttpClient<OsrmDistanceMatrixProvider>((serviceProvider, client) =>

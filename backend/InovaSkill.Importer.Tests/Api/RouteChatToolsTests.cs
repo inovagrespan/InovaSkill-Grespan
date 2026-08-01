@@ -98,7 +98,7 @@ public sealed class RouteChatToolsTests
         Assert.True(json.RootElement.GetProperty("found").GetBoolean());
         var routeJson = json.RootElement.GetProperty("route");
         Assert.Equal("Crítico", routeJson.GetProperty("status").GetString());
-        Assert.Equal(100m, routeJson.GetProperty("occupancyPercentage").GetDecimal());
+        Assert.Equal(112m, routeJson.GetProperty("occupancyPercentage").GetDecimal());
         Assert.Equal(1, routeJson.GetProperty("cityCount").GetInt32());
         Assert.Equal(3, routeJson.GetProperty("deliveryCount").GetInt32());
         Assert.Equal(0, routeJson.GetProperty("potentialCustomerCount").GetInt32());

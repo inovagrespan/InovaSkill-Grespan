@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, MessageSquarePlus, RotateCcw, Send, Sparkles, UserRound, X } from "lucide-react";
+import { Bot, ChevronDown, ExternalLink, History, MessageSquare, MessageSquarePlus, PanelLeft, RotateCcw, Send, Sparkles, UserRound, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
@@ -56,8 +56,11 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(true);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [conversations, setConversations] = useState<AssistantConversationSummary[]>([]);
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
+  const [loadingConversationHistory, setLoadingConversationHistory] = useState(false);
   const [suggestions, setSuggestions] = useState(DEFAULT_SUGGESTIONS);
   const [messages, setMessages] = useState<AssistantMessage[]>([WELCOME_MESSAGE]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -70,12 +73,19 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
     void loadConversationHistory();
   }, []);
 
-  async function loadConversationHistory() {
+  async function loadConversationHistory(loadPrevious = false) {
+    if (loadingConversationHistory) return;
+    setLoadingConversationHistory(true);
     try {
-      const history = await listAssistantConversations();
-      setConversations(history);
+      const page = await listAssistantConversations(loadPrevious ? conversations.length : 0);
+      setConversations((current) => loadPrevious
+        ? [...current, ...page.items.filter(item => !current.some(existing => existing.sessionId === item.sessionId))]
+        : page.items);
+      setHasMoreConversations(page.hasMore);
     } catch {
       // O chat continua disponível mesmo se o histórico não puder ser carregado.
+    } finally {
+      setLoadingConversationHistory(false);
     }
   }
 
@@ -163,10 +173,10 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
     <section
       onMouseDown={(event) => event.stopPropagation()}
       className={cn(
-        "flex flex-col overflow-hidden border border-border/80 bg-surface shadow-2xl",
+        "flex flex-col overflow-hidden bg-surface",
         isPage
-          ? "h-full min-h-0 w-full rounded-2xl"
-          : "absolute inset-x-0 bottom-0 h-[min(88dvh,760px)] sm:bottom-5 sm:left-auto sm:right-5 sm:w-[min(440px,calc(100vw-40px))] sm:rounded-3xl",
+          ? "h-full min-h-0 w-full"
+          : "absolute inset-x-0 bottom-0 h-[min(88dvh,760px)] border border-border/80 shadow-2xl sm:bottom-5 sm:left-auto sm:right-5 sm:w-[min(440px,calc(100vw-40px))] sm:rounded-3xl",
       )}
       aria-label="Assistente inteligente"
     >
@@ -179,13 +189,25 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-display text-lg font-semibold">Conecta IA</h2>
+                <h2 className="font-display text-lg font-semibold">CONECTA360</h2>
                 <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">ONLINE</span>
               </div>
               <p className="text-xs text-slate-300">Consulta segura aos dados reais de rotas</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isPage && (
+              <button
+                type="button"
+                onClick={() => setHistoryOpen((current) => !current)}
+                className="inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-3 text-xs font-medium text-slate-200 transition-colors hover:bg-white/20"
+                aria-label={historyOpen ? "Fechar histórico" : "Abrir histórico"}
+                aria-expanded={historyOpen}
+              >
+                <PanelLeft className="size-3.5" />
+                <span className="hidden sm:inline">Histórico</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={startNewConversation}
@@ -197,8 +219,8 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
               <MessageSquarePlus className="size-3.5" />
               <span className="hidden sm:inline">Nova</span>
             </button>
-            {conversations.length > 0 && (
-              <select
+            {!isPage && conversations.length > 0 && (
+              <div className="flex items-center gap-2"><select
                 value={sessionId ?? ""}
                 onChange={(event) => void selectConversation(event.target.value)}
                 disabled={loading}
@@ -211,7 +233,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
                     {conversation.preview.slice(0, 48)}
                   </option>
                 ))}
-              </select>
+              </select>{hasMoreConversations && <button type="button" disabled={loadingConversationHistory} onClick={() => void loadConversationHistory(true)} className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">Carregar anteriores</button>}</div>
             )}
             <button
               type="button"
@@ -262,6 +284,27 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
                   <Sparkles className="size-3" />
                   {message.mode}
                 </p>
+              )}
+              {message.author === "assistant" && message.sources && message.sources.length > 0 && (
+                <ul className="space-y-1" aria-label="Fontes externas">
+                  {message.sources.map((source) => {
+                    const sourceUrl = normalizeExternalSourceUrl(source.value);
+                    if (!sourceUrl) return null;
+                    return (
+                      <li key={sourceUrl}>
+                        <a
+                          href={sourceUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
+                        >
+                          <ExternalLink className="size-3" />
+                          {source.label}
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
           </article>
@@ -351,7 +394,35 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
   if (isPage) {
     return (
       <>
-        {assistantPanel}
+        <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-surface">
+          {historyOpen && <button type="button" aria-label="Fechar histórico" className="absolute inset-0 z-20 bg-black/40 md:hidden" onClick={() => setHistoryOpen(false)} />}
+          <div className="relative min-w-0 flex-1">
+            {assistantPanel}
+          </div>
+          {historyOpen && (
+            <aside className="absolute inset-y-0 right-0 z-30 flex w-[min(84vw,320px)] shrink-0 flex-col border-l border-border bg-muted/40 md:static md:w-72" aria-label="Conversas anteriores">
+              <div className="flex items-center gap-2 border-b border-border p-3">
+                <button type="button" onClick={startNewConversation} disabled={loading} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                  <MessageSquarePlus className="size-4" /> Nova conversa
+                </button>
+                <button type="button" className="grid size-10 place-items-center rounded-xl border" aria-label="Fechar histórico" onClick={() => setHistoryOpen(false)}><X className="size-4" /></button>
+              </div>
+              <div className="flex items-center gap-2 px-4 pb-2 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><History className="size-3.5" />Histórico</div>
+              <nav className="custom-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-4" aria-label="Histórico de conversas">
+                {conversations.length === 0 ? <p className="px-3 py-5 text-sm text-muted-foreground">Suas conversas aparecerão aqui.</p> : conversations.map(conversation => (
+                  <button key={conversation.sessionId} type="button" disabled={loading} onClick={() => void selectConversation(conversation.sessionId)} className={cn(
+                    "group flex w-full items-start gap-2.5 rounded-xl px-3 py-3 text-left transition-colors hover:bg-background disabled:opacity-50",
+                    sessionId === conversation.sessionId && "bg-background shadow-sm ring-1 ring-border",
+                  )} aria-current={sessionId === conversation.sessionId ? "page" : undefined}>
+                    <MessageSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{conversation.preview}</span><span className="mt-1 block text-[11px] text-muted-foreground">{formatConversationDate(conversation.updatedAt)}</span></span>
+                  </button>
+                ))}
+                {hasMoreConversations && <button type="button" disabled={loadingConversationHistory} onClick={() => void loadConversationHistory(true)} className="mt-2 w-full rounded-xl border border-border px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50">{loadingConversationHistory ? "Carregando..." : "Carregar conversas anteriores"}</button>}
+              </nav>
+            </aside>
+          )}
+        </div>
         <ClearConversationDialog
           open={clearConfirmationOpen}
           onOpenChange={setClearConfirmationOpen}
@@ -381,7 +452,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
           <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-primary bg-emerald-400" />
         </span>
         <span className="ml-3 min-w-[146px] translate-x-2 pr-2 text-left opacity-0 transition-[opacity,transform] delay-75 duration-200 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] opacity-75">Conecta IA</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] opacity-75">CONECTA360</span>
           <span className="block text-sm font-semibold">Pergunte aos seus dados</span>
         </span>
       </button>
@@ -393,6 +464,22 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
       )}
     </>
   );
+}
+
+function formatConversationDate(value: string) {
+  const date = new Date(value);
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+
+function normalizeExternalSourceUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function AssistantResponseText({ text }: { text: string }) {

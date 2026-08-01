@@ -15,7 +15,7 @@ describe("business assistant UI", () => {
   });
 
   it("oferece painel moderno, sugestões e histórico visual", () => {
-    expect(component).toContain("Conecta IA");
+    expect(component).toContain("CONECTA360");
     expect(component).toContain("Pergunte aos seus dados");
     expect(component).toContain("IA orientada por dados reais");
     expect(component).toContain("ASSISTANT_TRANSPARENCY_NOTICE");
@@ -33,10 +33,23 @@ describe("business assistant UI", () => {
     expect(component).toContain("\\[CLIENTE\\]");
     expect(component).toContain("cleanListMarker");
     expect(component).toContain("backdrop-blur");
-    expect(component).not.toContain("message.sources.map");
+    expect(component).toContain("message.sources.map");
+    expect(component).toContain('aria-label="Fontes externas"');
+    expect(component).toContain("normalizeExternalSourceUrl");
+    expect(component).toContain('rel="noreferrer noopener"');
     expect(component).toContain('aria-label="Histórico de conversas"');
     expect(component).toContain("loadConversationHistory");
+    expect(component).toContain("Carregar conversas anteriores");
+    expect(component).toContain("hasMoreConversations");
+    expect(component).toContain("listAssistantConversations(loadPrevious ? conversations.length : 0)");
     expect(component).toContain("selectConversation");
+    expect(component).toContain('aria-label="Conversas anteriores"');
+    expect(component).toContain('aria-current={sessionId === conversation.sessionId ? "page" : undefined}');
+    expect(component).toContain("formatConversationDate");
+    expect(component).toContain("historyOpen");
+    expect(component).toContain("absolute inset-y-0 right-0");
+    expect(component).toContain('aria-expanded={historyOpen}');
+    expect(component).toContain('aria-label={historyOpen ? "Fechar histórico" : "Abrir histórico"}');
   });
 
   it("mantém o acionador recolhido e expande no hover ou foco", () => {
@@ -72,7 +85,7 @@ describe("business assistant UI", () => {
     expect(client).toContain("authFetch");
     expect(client).toContain('buildGatewayUrl("assistant/ask")');
     expect(client).toContain("sessionId");
-    expect(client).toContain('buildGatewayUrl("assistant/sessions")');
+    expect(client).toContain('buildGatewayUrl(`assistant/sessions?offset=${offset}`)');
     expect(client).toContain("getAssistantConversation");
   });
 });

@@ -20,6 +20,12 @@ export type AssistantConversationSummary = {
   updatedAt: string;
 };
 
+export type AssistantConversationPage = {
+  items: AssistantConversationSummary[];
+  hasMore: boolean;
+  nextOffset: number;
+};
+
 export type AssistantConversationMessage = {
   id: string;
   role: "assistant" | "user";
@@ -47,10 +53,10 @@ export async function askBusinessAssistant(message: string, sessionId?: string):
   return response.json() as Promise<AssistantAnswer>;
 }
 
-export async function listAssistantConversations(): Promise<AssistantConversationSummary[]> {
-  const response = await authFetch(buildGatewayUrl("assistant/sessions"));
+export async function listAssistantConversations(offset = 0): Promise<AssistantConversationPage> {
+  const response = await authFetch(buildGatewayUrl(`assistant/sessions?offset=${offset}`));
   if (!response.ok) throw new Error("Não foi possível carregar o histórico de conversas.");
-  return response.json() as Promise<AssistantConversationSummary[]>;
+  return response.json() as Promise<AssistantConversationPage>;
 }
 
 export async function getAssistantConversation(sessionId: string): Promise<AssistantConversation> {

@@ -97,9 +97,20 @@ O layout raiz fornece o `QueryClient`, controla autenticação das rotas privada
 tema e barra lateral. Requisições autenticadas passam pelos clientes de
 `src/lib`, que centralizam a URL da API e o token JWT.
 
-Todas as telas privadas também renderizam o painel flutuante `Conecta IA`. O
-painel mantém o histórico persistido do usuário autenticado: lista as 20
-conversas mais recentes e permite retomar suas últimas 100 mensagens. Oferece
+Todas as telas privadas também renderizam o painel flutuante `CONECTA360`. O
+painel mantém o histórico persistido e isolado pelo usuário autenticado. Na
+página completa, o chat ocupa toda a área de conteúdo sem moldura externa e uma
+coluna recolhível à direita carrega inicialmente as 20 conversas mais recentes,
+destaca a sessão ativa e permite buscar blocos anteriores de 20 sob demanda; ela
+permite retomar até 1.000 mensagens de cada sessão. O posicionamento à direita
+evita competir visualmente com a navegação principal da aplicação. Em telas
+menores, a coluna abre como painel sobreposto. O seletor compacto permanece
+apenas na variante flutuante, que também permite carregar blocos anteriores. A
+consulta usa paginação por deslocamento sobre o índice existente de usuário e
+data de atualização; nenhum índice adicional é necessário para esse padrão de
+acesso. Esses limites protegem a API contra respostas ilimitadas e
+não alteram o contexto enviado ao modelo, que continua restrito às mensagens
+recentes configuradas em `Assistant:MaximumHistoryMessages`. Oferece
 perguntas sugeridas e envia perguntas autenticadas para `POST /api/assistant/ask`.
 As respostas seguem um contrato de confiabilidade: não completam lacunas, declaram
 quando os dados são insuficientes, identificam o período ou snapshot consultado
@@ -107,6 +118,12 @@ e separam dados reais de interpretações da IA. Perguntas com mais de uma
 interpretação relevante exigem esclarecimento antes da consulta; o contexto da
 conversa pode resolver a ambiguidade quando isso não exigir suposição. O rodapé
 do chat torna essas regras visíveis ao usuário.
+O assistente aceita cumprimentos, apresentações, preferências, fatos pessoais e
+interações sociais breves sem exigir vínculo empresarial. Declarações pessoais
+comuns seguem diretamente para a conversa, enquanto classificações ambíguas não
+são bloqueadas e podem resultar em um pedido natural de contexto. Somente temas
+classificados explicitamente como alheios à Grespan são redirecionados, mantendo
+o foco corporativo sem recusar conversa casual inofensiva.
 O botão `Nova conversa` mantém o registro anterior e reinicia o estado visual sem
 `sessionId`; assim, a próxima pergunta cria uma nova sessão persistida.
 O mesmo componente possui uma variante de página completa em `/assistente`,
@@ -153,8 +170,10 @@ consulta, acompanhando a normalização dos nomes armazenados pelas planilhas.
 Cada rota apresenta a ocupação com uma barra e um indicador circular. A
 classificação visual usa faixas explícitas de eficiência logística: abaixo de
 60% é `Ocioso` (azul), de 60% até menos de 85% é `Médio` (amarelo), de 85% até
-95% é `Saudável` (verde), e acima de 95% até 100% é `Crítico` (vermelho).
-O cálculo e a apresentação são limitados a 100%;
+95% é `Saudável` (verde), e acima de 95% é `Crítico` (vermelho).
+O cálculo, a persistência e o texto apresentado preservam a ocupação real acima
+de 100%; somente o preenchimento visual da barra e do círculo termina em 100%,
+permitindo exibir e ordenar sobrecargas como 140% sem distorcer o indicador.
 ausência de capacidade aparece como `Indisponível`, sem ser convertida em zero.
 Na tela principal de rotas, os cards não exibem ações individuais de simulação
 ou recomendação. O detalhe mantém o apoio à decisão calculado sobre o catálogo
@@ -204,8 +223,8 @@ e divide pela soma de `VehicleType.CapacityKg` dessas mesmas rotas; rotas sem
 capacidade ficam fora do numerador e denominador, mas são retornadas como
 contagem de alerta. O card usa as mesmas faixas visuais das rotas: abaixo de
 60% é `Ocioso`, de 60% até menos de 85% é `Médio`, de 85% até 95% é
-`Saudável`, e acima de 95% até 100% é `Crítico`. O resumo consolidado também é
-limitado a 100%, mesmo quando o peso informado supera a capacidade disponível.
+`Saudável`, e acima de 95% é `Crítico`. O resumo consolidado preserva valores
+acima de 100% quando o peso informado supera a capacidade disponível.
 
 Alguns clientes de `frontend/src/lib/importer-api.ts` representam contratos de
 serviços do ecossistema que não estão implementados neste backend. Ao alterar um
@@ -224,6 +243,40 @@ deve ser substituída pelos contratos da API quando esses eventos forem
 persistidos.
 
 ## Backend
+
+### Cache de aplicação
+
+O contrato genérico `IApplicationCache` fica em `Application/Caching` e expõe o
+padrão cache-aside por `GetOrCreateAsync`: o consumidor fornece uma chave, uma
+política de expiração e a função de fallback que consulta o PostgreSQL. Casos de
+uso e controllers não conhecem o provedor nem tratam indisponibilidade de cache.
+
+`Infrastructure/Caching` implementa `ResilientApplicationCache`. Um hit é
+desserializado e retornado; em miss, erro de leitura ou conteúdo inválido, o
+fallback é executado. Falhas ao preencher ou remover o cache são registradas e
+não derrubam a operação principal. Cancelamentos solicitados pelo consumidor
+continuam sendo propagados. Misses concorrentes da mesma chave dentro do mesmo
+processo compartilham uma única execução do fallback; cada chamador ainda pode
+cancelar sua própria espera.
+
+O provedor inicial é `MemoryCacheStore`, registrado por `AddImportInfrastructure`.
+`ICacheStore` isola armazenamento de bytes e permite adicionar Redis depois sem
+alterar casos de uso. Como o cache em memória é local a cada processo, somente a
+API compartilha entradas entre suas próprias requisições; ele não substitui
+persistência nem coordenação entre API e Worker.
+
+Chaves devem ser criadas por `CacheKey.Create(area, contractVersion, parts)`.
+Elas recebem prefixo da aplicação, normalização determinística, versão explícita
+do contrato e hash SHA-256 quando excedem o limite legível. Dados versionados
+devem incluir o identificador da importação publicada na chave, permitindo que
+uma nova publicação deixe a versão anterior naturalmente inacessível. Nenhuma
+chave deve conter senha, token, documento pessoal ou outro conteúdo sensível.
+
+Cada aplicação futura do cache deve declarar uma `CachePolicy` nomeada, testar
+hit, miss, fallback, expiração e invalidação e manter o acesso ao banco dentro
+da função fornecida. Resultados nulos não são armazenados por padrão. Nesta
+primeira etapa nenhum endpoint foi cacheado; a estrutura foi criada isoladamente
+para que a adoção aconteça por consulta, com medição e política próprias.
 
 ### API
 
@@ -286,6 +339,26 @@ fica indisponível, excede timeout, devolve resposta vazia ou tenta executar uma
 ferramenta inválida. Detalhes técnicos ficam em logs; a resposta HTTP expõe
 somente texto final, `sessionId`, sugestões, fontes resumidas e nomes públicos
 em `consultedTools`.
+
+Antes do ciclo de resposta, `AssistantScopeClassifier` faz uma classificação
+estruturada em `InScope`, `OutOfScope` ou `Ambiguous`, considerando a pergunta e
+o histórico limitado da sessão. Declarações pessoais comuns são admitidas
+localmente; resultados ambíguos, inválidos, timeout ou falha também seguem para
+o modelo de resposta, que pode conversar brevemente ou pedir contexto. Somente
+`OutOfScope` bloqueia a pergunta antes do ciclo, impedindo a execução de
+ferramentas internas ou pesquisa externa para temas claramente alheios.
+
+Pesquisa externa é opcional por `Assistant:ExternalResearchEnabled`, limitada
+por `Assistant:MaximumExternalResearchesPerMessage` e pelo timeout
+`Assistant:ExternalResearchTimeoutSeconds`. O modelo principal pode solicitá-la
+somente para complementar uma necessidade da Grespan que os dados internos não
+resolvam. `ExternalResearchQuerySanitizer` remove documentos, códigos, valores e
+textos presentes nos payloads internos; consulta insegura ou vazia é bloqueada.
+A busca usa `web_search` em uma chamada isolada da Responses API que recebe
+somente a consulta pública sanitizada, sem histórico ou resultados internos. O
+resultado volta ao ciclo principal como saída de ferramenta para síntese sem
+web habilitada. As citações HTTP/HTTPS são deduplicadas, retornadas em `sources`
+e exibidas como links no frontend; não são persistidas no histórico.
 Falhas HTTP do provedor registram somente status, código, parâmetro e mensagem
 de validação retornados pela OpenAI; chave, payload, prompts e dados consultados
 não são incluídos nesse diagnóstico.
@@ -296,6 +369,71 @@ enviada ao frontend. O modelo padrão vem de `Assistant:Model`. A OpenAI recebe
 apenas definições de ferramentas com JSON Schema e payloads pequenos retornados
 por essas ferramentas. Ela nunca recebe connection string, SQL, schema completo,
 nomes internos de tabelas/colunas ou entidades do Entity Framework.
+
+### Memória semântica do assistente
+
+O chat mantém conhecimento aprendido automaticamente nas conversas em
+`knowledge_memories`. Cada memória possui escopo `company`, compartilhado por
+todos os usuários autenticados, ou `user`, recuperado apenas quando
+`OwnerUserId` corresponde ao usuário da conversa. Administradores acessam os
+dois escopos em `/administracao/memorias` e podem pesquisar, corrigir,
+desativar e reativar registros; versões substituídas permanecem inativas e
+ligadas por `SupersedesMemoryId` para auditoria.
+
+Antes da resposta, `KnowledgeMemoryService` gera um embedding da pergunta com
+`text-embedding-3-small`, limita os candidatos no PostgreSQL pelo escopo e
+calcula similaridade cosseno, injetando somente as memórias mais relevantes
+como dados não executáveis. Depois da resposta, uma chamada estruturada extrai
+até cinco fatos duráveis explicitamente informados pelo usuário, classifica o
+escopo e atualiza assuntos equivalentes preservando a versão anterior. Senhas,
+tokens, chaves de API e chaves privadas detectadas não são persistidos. Falhas
+de recuperação ou aprendizado não impedem a resposta principal do assistente.
+
+A recuperação é híbrida para não perder fatos curtos de perfil em perguntas
+também curtas. Além do corte semântico geral, memórias do próprio usuário podem
+ser recuperadas pela correspondência entre assuntos estáveis (como nome, cargo,
+localização e preferência) e os termos da pergunta, ou por um corte semântico
+específico quando a pergunta contém referência pessoal explícita. O corte geral
+continua valendo para memórias corporativas, e o filtro por `OwnerUserId` é
+aplicado antes do ranqueamento.
+
+Os embeddings ficam serializados em `jsonb`. A busca limita-se aos 500 registros
+ativos mais recentes autorizados antes do cálculo em memória; essa decisão evita
+uma dependência de extensão do PostgreSQL na primeira versão. Ao ultrapassar
+esse volume operacional, a evolução prevista é migrar a coluna para `pgvector`
+e criar índice vetorial sustentado por medições reais de consulta.
+
+### Gestão de consumo da IA
+
+Cada pergunta admitida cria uma execução em `ai_response_executions`, vinculada
+ao `AppUser` e, depois da criação do histórico, à sessão do chat. Todas as
+chamadas técnicas necessárias para entregar a resposta — classificação de
+escopo, ciclos de ferramentas, resposta e pesquisa externa — são registradas em
+`ai_provider_calls`. O cliente da OpenAI captura `usage.input_tokens` e
+`usage.output_tokens`; tentativas sem `usage` permanecem auditáveis com consumo
+zero. A soma das chamadas forma o custo e o consumo da resposta visível.
+
+Os preços em USD por milhão de tokens ficam versionados em
+`ai_model_prices`. Cada chamada preserva o preço vigente e os custos de entrada
+e saída calculados, portanto mudanças futuras não alteram relatórios antigos.
+O modelo global, limite mensal padrão e percentual padrão de alerta ficam em
+`ai_consumption_settings`; `Assistant:Model` serve apenas como valor inicial.
+Exceções opcionais por usuário ficam em `ai_user_limits`.
+
+O limite considera o mês-calendário no fuso `America/Sao_Paulo` e é verificado
+antes da pergunta. A resposta que cruza o teto é concluída, pois o uso só é
+conhecido depois da resposta do provedor; perguntas seguintes recebem `429`.
+`admin_system` é contabilizado, mas não bloqueado. Alertas preventivos e de
+limite atingido são persistidos em `ai_consumption_alerts`, deduplicados por
+usuário, mês e nível, e podem ser marcados como lidos.
+
+`/api/admin/ai-consumption` expõe relatório, configurações, preços, exceções e
+alertas somente para `admin` e `admin_system`. O frontend apresenta esses dados
+em `/administracao/consumo-ia`. As consultas usam índices por usuário/período,
+execução/período, modelo/período e estado/data do alerta; esses índices atendem
+os filtros reais sem adicionar índices a campos de baixa seletividade isolados.
+Alertas de consumo não usam `job_executions`, pois não representam processamento
+assíncrono ou administrativo.
 
 As ferramentas do chat implementam `IChatTool` e são registradas como coleção no
 container. Nesta versão existem ferramentas de rotas (`search_routes`,

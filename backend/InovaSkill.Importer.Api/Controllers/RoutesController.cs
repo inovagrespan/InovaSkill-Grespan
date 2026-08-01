@@ -59,10 +59,10 @@ public sealed class RoutesController(ImportDbContext dbContext) : ControllerBase
         var totalWeightKg = routesWithCapacity.Sum(route => route.TotalWeightKg);
         var totalCapacityKg = routesWithCapacity.Sum(route => route.CapacityKg!.Value);
         var occupancyRatePercent = totalCapacityKg > 0
-            ? Math.Min(OccupancyPercentScale, Math.Round(
+            ? Math.Round(
                 totalWeightKg / totalCapacityKg * OccupancyPercentScale,
                 OccupancyPercentDecimalPlaces,
-                MidpointRounding.AwayFromZero))
+                MidpointRounding.AwayFromZero)
             : 0m;
 
         return Ok(new RouteOccupancySummaryResponse(

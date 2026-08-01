@@ -17,6 +17,8 @@ const ADMIN_ROLES: readonly ApplicationRole[] = ["admin", "admin_system"];
 const ROUTE_SIMULATION_ROLES: readonly ApplicationRole[] = ["vendas", "logistica", "admin", "admin_system"];
 
 const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
+  { path: "/administracao/consumo-ia", roles: ADMIN_ROLES },
+  { path: "/administracao/memorias", roles: ADMIN_ROLES },
   { path: "/assistente", roles: ALL_ROLES },
   { path: "/processamentos", roles: ADMIN_ROLES },
   { path: "/importacoes", roles: ADMIN_ROLES },

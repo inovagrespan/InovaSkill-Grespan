@@ -1,7 +1,6 @@
 export const MEDIUM_OCCUPANCY_THRESHOLD = 0.6;
 export const GOOD_OCCUPANCY_THRESHOLD = 0.85;
 export const CRITICAL_OCCUPANCY_THRESHOLD = 0.95;
-export const MAXIMUM_OCCUPANCY = 1;
 
 export type OccupancyLevel = "idle" | "good" | "medium" | "critical" | "unavailable";
 
@@ -63,7 +62,7 @@ export function classifyOccupancy(value: number | null): OccupancyPresentation {
 
 export function formatOccupancy(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "Capacidade não configurada";
-  return Math.min(MAXIMUM_OCCUPANCY, Math.max(0, value)).toLocaleString("pt-BR", {
+  return Math.max(0, value).toLocaleString("pt-BR", {
     style: "percent",
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,
