@@ -22,7 +22,6 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
-import { BrandLogo } from "@/components/BrandLogo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getCurrentUser, getCurrentUserRole, logout } from "@/lib/auth";
@@ -180,26 +179,6 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
     );
   }
 
-  function renderBrandHeader(compact = collapsed) {
-    return (
-      <Link
-        to="/dashboard"
-        aria-label="Conecta360"
-        className={cn(
-          "flex min-w-0 items-center rounded-md outline-none ring-primary/40 focus-visible:ring-2",
-          compact ? "justify-center" : "flex-1",
-        )}
-      >
-        <BrandLogo
-          compact={compact}
-          markClassName={compact ? "size-10" : "size-9"}
-          textClassName="text-lg"
-          taglineClassName="hidden"
-        />
-      </Link>
-    );
-  }
-
   return (
     <TooltipProvider delayDuration={120}>
       <div className="fixed left-3 top-3 z-30 md:hidden">
@@ -215,9 +194,6 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
           </SheetTrigger>
           <SheetContent side="left" hideClose className="w-[280px] border-r border-border bg-surface p-0">
             <div className="flex h-dvh flex-col">
-              <div className="shrink-0 border-b border-border px-4 py-4">
-                <BrandLogo markClassName="size-9" textClassName="text-lg" taglineClassName="hidden" />
-              </div>
               <div className="shrink-0 border-b border-border px-3 py-3">
                 {renderUserHeader(false)}
               </div>
@@ -267,7 +243,6 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
         {renderNav(collapsed)}
 
         <div className={cn("sticky bottom-0 z-10 shrink-0 border-t border-border bg-surface px-3 pb-3 pt-3", collapsed ? "flex flex-col items-center gap-2" : "space-y-2")}>
-          {renderBrandHeader()}
           <button
             onClick={onToggleTheme}
             className={cn(

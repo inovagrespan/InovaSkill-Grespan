@@ -204,10 +204,20 @@ public sealed class BusinessAssistantServiceTests
         var instructions = model.Requests[0].Instructions;
         Assert.Contains("Nunca complete lacunas", instructions);
         Assert.Contains("Dados insuficientes", instructions);
-        Assert.Contains("Dados reais:", instructions);
-        Assert.Contains("Interpretação da IA:", instructions);
+        Assert.Contains("apresente o resultado diretamente", instructions);
+        Assert.Contains("sem rótulos ou ressalvas sobre a origem dos dados", instructions);
+        Assert.DoesNotContain("Dados reais:", instructions);
+        Assert.Contains("priorize o nome preferido", instructions);
+        Assert.Contains("cargo ou função", instructions);
         Assert.Contains("Período dos dados:", instructions);
         Assert.Contains("Faça uma pergunta curta de esclarecimento", instructions);
+        Assert.Contains("ausência de um campo neles não prova que o dado não existe", instructions);
+        Assert.Contains("Faça a consulta primeiro", instructions);
+        Assert.Contains("consulte novamente list_recent_fiscal_documents", instructions);
+        Assert.Contains("[TABELA]", instructions);
+        Assert.Contains("[COLUNAS]", instructions);
+        Assert.Contains("[LINHA]", instructions);
+        Assert.Contains("mesma quantidade e ordem de células", instructions);
     }
 
     [Fact]

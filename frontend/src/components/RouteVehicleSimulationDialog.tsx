@@ -131,7 +131,7 @@ export function RouteVehicleSimulationDialog({
                 <div className="flex items-center gap-2">
                   <FlaskConical className="size-4 text-primary" />
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Cenário simulado</p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Resultado do cenário</p>
                     <p className="font-semibold">{selectedVehicle?.name ?? "Selecione um veículo"}</p>
                   </div>
                 </div>

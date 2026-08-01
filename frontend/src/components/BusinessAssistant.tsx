@@ -42,12 +42,15 @@ const DEFAULT_SUGGESTIONS = [
 const WELCOME_MESSAGE: AssistantMessage = {
   id: "welcome",
   author: "assistant",
-  text: "Olá! Eu consulto os dados disponíveis na aplicação e separo fatos de interpretações. O que você gostaria de perguntar?",
-  mode: "IA orientada por dados reais",
+  text: "Olá! Eu consulto os dados disponíveis na aplicação para apoiar suas decisões. O que você gostaria de perguntar?",
+  mode: "Análise empresarial",
 };
 
 const ASSISTANT_TRANSPARENCY_NOTICE =
-  "As respostas devem informar o período consultado e separar dados reais de interpretações. Se faltarem dados ou contexto, a IA deve avisar ou pedir esclarecimento.";
+  "As respostas consideram o período consultado e o contexto da pergunta.";
+const ASSISTANT_TABLE_MIN_COLUMNS = 2;
+const ASSISTANT_TABLE_MAX_COLUMNS = 8;
+const ASSISTANT_TABLE_MAX_ROWS = 50;
 
 export function BusinessAssistant({ variant = "floating" }: BusinessAssistantProps) {
   const isPage = variant === "page";
@@ -180,27 +183,37 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
       )}
       aria-label="Assistente inteligente"
     >
-      <header className="relative overflow-hidden border-b border-white/10 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.55),transparent_42%),linear-gradient(135deg,#111827,#172554)] px-5 py-4 text-white">
-        <div className="absolute -right-10 -top-16 size-40 rounded-full bg-primary/20 blur-3xl" />
-        <div className="relative flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-2xl border border-white/15 bg-white/10 shadow-inner">
-              <Sparkles className="size-5 text-cyan-300" />
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-display text-lg font-semibold">CONECTA360</h2>
-                <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">ONLINE</span>
+      <header
+        data-variant={isPage ? "page" : "floating"}
+        className={cn(
+          "relative overflow-hidden border-b px-5 text-white",
+          isPage
+            ? "border-border bg-surface py-3"
+            : "border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(224,47,69,0.42),transparent_42%),linear-gradient(135deg,#171717,#050505)] py-4",
+        )}
+      >
+        {!isPage && <div className="absolute -right-10 -top-16 size-40 rounded-full bg-primary/20 blur-3xl" />}
+        <div className={cn("relative flex items-center gap-3", isPage ? "justify-end" : "justify-between")}>
+          {!isPage && (
+            <div className="flex items-center gap-3">
+              <span className="grid size-11 place-items-center rounded-2xl border border-white/15 bg-white/10 shadow-inner">
+                <Sparkles className="size-5 text-cyan-300" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-display text-lg font-semibold">CONECTA360</h2>
+                  <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">ONLINE</span>
+                </div>
+                <p className="text-xs text-slate-300">Consulta aos dados de rotas</p>
               </div>
-              <p className="text-xs text-slate-300">Consulta segura aos dados reais de rotas</p>
             </div>
-          </div>
+          )}
           <div className="flex items-center gap-2">
             {isPage && (
               <button
                 type="button"
                 onClick={() => setHistoryOpen((current) => !current)}
-                className="inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-3 text-xs font-medium text-slate-200 transition-colors hover:bg-white/20"
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-border bg-muted/60 px-3 text-xs font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10"
                 aria-label={historyOpen ? "Fechar histórico" : "Abrir histórico"}
                 aria-expanded={historyOpen}
               >
@@ -212,7 +225,12 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
               type="button"
               onClick={startNewConversation}
               disabled={loading}
-              className="inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-3 text-xs font-medium text-slate-200 transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+              className={cn(
+                "inline-flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                isPage
+                  ? "border border-border bg-muted/60 text-foreground hover:border-primary/40 hover:bg-primary/10"
+                  : "bg-white/10 text-slate-200 hover:bg-white/20",
+              )}
               aria-label="Nova conversa"
               title="Nova conversa"
             >
@@ -239,7 +257,12 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
               type="button"
               onClick={() => setClearConfirmationOpen(true)}
               disabled={loading || messages.length <= 1}
-              className="inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-3 text-xs font-medium text-slate-200 transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+              className={cn(
+                "inline-flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                isPage
+                  ? "border border-border bg-muted/60 text-foreground hover:border-primary/40 hover:bg-primary/10"
+                  : "bg-white/10 text-slate-200 hover:bg-white/20",
+              )}
               aria-label="Limpar conversa"
               title="Limpar conversa"
             >
@@ -516,6 +539,10 @@ function AssistantResponseText({ text }: { text: string }) {
           );
         }
 
+        if (block.type === "table") {
+          return <AssistantDataTable key={`${block.type}-${index}`} table={block} />;
+        }
+
         if (block.type === "entity-list") {
           return (
             <div key={`${block.type}-${index}`} className="space-y-2">
@@ -542,6 +569,7 @@ type AssistantBlock =
   | { type: "heading"; text: string }
   | { type: "paragraph"; text: string }
   | { type: "bullet-list"; items: string[] }
+  | { type: "table"; columns: string[]; rows: string[][] }
   | { type: "entity-list"; items: AssistantEntityDisplay[] }
   | { type: "route-list"; routes: AssistantRouteDisplay[] };
 
@@ -559,7 +587,7 @@ type AssistantEntityDisplay = {
   detail?: string;
 };
 
-function buildAssistantBlocks(lines: string[]): AssistantBlock[] {
+export function buildAssistantBlocks(lines: string[]): AssistantBlock[] {
   const blocks: AssistantBlock[] = [];
   let pendingBullets: string[] = [];
   let pendingRoutes: AssistantRouteDisplay[] = [];
@@ -580,8 +608,28 @@ function buildAssistantBlocks(lines: string[]): AssistantBlock[] {
     }
   }
 
-  for (const rawLine of lines) {
-    const line = sanitizeAssistantText(rawLine);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const rawLine = lines[lineIndex];
+    let line = sanitizeAssistantText(rawLine);
+
+    if (line === "[TABELA]") {
+      const tableEndIndex = lines.findIndex((candidate, candidateIndex) => (
+        candidateIndex > lineIndex && sanitizeAssistantText(candidate) === "[/TABELA]"
+      ));
+      if (tableEndIndex !== -1) {
+        const table = parseAssistantTable(lines.slice(lineIndex + 1, tableEndIndex));
+        if (table) {
+          flushLists();
+          blocks.push(table);
+          lineIndex = tableEndIndex;
+          continue;
+        }
+      }
+      continue;
+    }
+
+    if (line === "[/TABELA]") continue;
+    line = line.replace(/^\[(?:COLUNAS|LINHA)\]\s*/i, "");
     const route = parseRouteLine(line);
     if (route) {
       if (pendingBullets.length > 0) {
@@ -629,6 +677,55 @@ function buildAssistantBlocks(lines: string[]): AssistantBlock[] {
 
   flushLists();
   return blocks;
+}
+
+function parseAssistantTable(lines: string[]): Extract<AssistantBlock, { type: "table" }> | null {
+  const columnsLine = lines.find((line) => /^\[COLUNAS\]\s*/i.test(sanitizeAssistantText(line)));
+  if (!columnsLine) return null;
+
+  const columns = splitAssistantTableCells(columnsLine.replace(/^\[COLUNAS\]\s*/i, ""));
+  if (columns.length < ASSISTANT_TABLE_MIN_COLUMNS || columns.length > ASSISTANT_TABLE_MAX_COLUMNS) return null;
+
+  const rows = lines
+    .filter((line) => /^\[LINHA\]\s*/i.test(sanitizeAssistantText(line)))
+    .slice(0, ASSISTANT_TABLE_MAX_ROWS)
+    .map((line) => splitAssistantTableCells(line.replace(/^\[LINHA\]\s*/i, "")));
+
+  if (rows.length === 0 || rows.some((row) => row.length !== columns.length)) return null;
+  return { type: "table", columns, rows };
+}
+
+function splitAssistantTableCells(value: string): string[] {
+  return value.split("|").map((cell) => sanitizeAssistantText(cell)).filter(Boolean);
+}
+
+function AssistantDataTable({ table }: { table: Extract<AssistantBlock, { type: "table" }> }) {
+  return (
+    <div className="custom-scrollbar overflow-x-auto rounded-xl border border-border" role="region" aria-label="Dados em tabela" tabIndex={0}>
+      <table className="w-full min-w-max border-collapse text-left text-xs">
+        <thead className="bg-muted/70 text-muted-foreground">
+          <tr>
+            {table.columns.map((column) => (
+              <th key={column} scope="col" className="border-b border-border px-3 py-2.5 font-semibold uppercase tracking-wide">
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/70">
+          {table.rows.map((row, rowIndex) => (
+            <tr key={`${row.join("-")}-${rowIndex}`} className="transition-colors hover:bg-muted/35">
+              {row.map((cell, cellIndex) => (
+                <td key={`${cell}-${cellIndex}`} className={cn("whitespace-nowrap px-3 py-2.5", cellIndex === 0 && "font-medium text-foreground")}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function RouteDisplayCard({ route, index }: { route: AssistantRouteDisplay; index: number }) {

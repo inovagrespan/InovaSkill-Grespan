@@ -102,7 +102,7 @@ describe("processing monitoring", () => {
     const dashboard = await fetchProcessingMonitoringDashboard();
 
     expect(dashboard.summary.runningJobs).toBeGreaterThan(0);
-    expect(dashboard.jobs[0]).toEqual(expect.objectContaining({ fileName: "clientes-base-demo.xlsx" }));
+    expect(dashboard.jobs[0]).toEqual(expect.objectContaining({ fileName: "clientes-base.xlsx" }));
     expect(dashboard.jobs[1].canRunManualActions).toBe(true);
     expect(dashboard.workers[0]).toEqual(expect.objectContaining({ status: "Online" }));
   });

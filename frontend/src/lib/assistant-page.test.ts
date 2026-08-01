@@ -26,6 +26,16 @@ describe("assistant full page", () => {
     expect(route).not.toContain("p-3 pt-16");
   });
 
+  it("mantém o cabeçalho da página limpo, somente com as ações à direita", () => {
+    expect(component).toContain('data-variant={isPage ? "page" : "floating"}');
+    expect(component).toContain('isPage ? "justify-end" : "justify-between"');
+    expect(component).toContain("{!isPage && (");
+    expect(component).toContain("CONECTA360");
+    expect(component).toContain('aria-label={historyOpen ? "Fechar histórico" : "Abrir histórico"}');
+    expect(component).toContain('aria-label="Nova conversa"');
+    expect(component).toContain('aria-label="Limpar conversa"');
+  });
+
   it("remove o assistente flutuante quando a página dedicada está ativa", () => {
     expect(root).toContain('const isAssistantPage = pathname === "/assistente"');
     expect(root).toContain("canRenderPrivateApp && !isAssistantPage");

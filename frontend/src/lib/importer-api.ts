@@ -1165,7 +1165,7 @@ function demoFileJobs(page = DEMO_PAGE, pageSize = 10): PagedResult<FileJob> {
   const jobs: FileJob[] = [
     {
       id: 501,
-      filePath: "uploads/vendas-junho-demo.xlsx",
+      filePath: "uploads/vendas-junho.xlsx",
       fileType: "CommercialTransaction",
       status: "Completed",
       createdAt: "2026-06-07T08:40:00-03:00",
@@ -1180,7 +1180,7 @@ function demoFileJobs(page = DEMO_PAGE, pageSize = 10): PagedResult<FileJob> {
     },
     {
       id: 502,
-      filePath: "uploads/clientes-base-demo.xlsx",
+      filePath: "uploads/clientes-base.xlsx",
       fileType: "Customers",
       status: "Importing",
       createdAt: "2026-06-07T09:15:00-03:00",
@@ -1195,7 +1195,7 @@ function demoFileJobs(page = DEMO_PAGE, pageSize = 10): PagedResult<FileJob> {
     },
     {
       id: 503,
-      filePath: "uploads/produtos-custos-demo.xlsx",
+      filePath: "uploads/produtos-custos.xlsx",
       fileType: "Products",
       status: "ValidationFailed",
       createdAt: "2026-06-07T10:05:00-03:00",
@@ -1228,7 +1228,7 @@ function demoProcessingDashboard(): ProcessingMonitoringDashboard {
       {
         id: 502,
         company: "Grespan",
-        fileName: "clientes-base-demo.xlsx",
+        fileName: "clientes-base.xlsx",
         template: "Clientes padrão",
         status: "Importing",
         statusLabel: "Importando",
@@ -1246,7 +1246,7 @@ function demoProcessingDashboard(): ProcessingMonitoringDashboard {
       {
         id: 501,
         company: "Grespan",
-        fileName: "vendas-junho-demo.xlsx",
+        fileName: "vendas-junho.xlsx",
         template: "Vendas NF",
         status: "Completed",
         statusLabel: "Concluído",
@@ -1277,8 +1277,8 @@ function demoProcessingDashboard(): ProcessingMonitoringDashboard {
       { stage: "SUMMARY", stageName: "Resumo", averageDurationSeconds: 2, sharePercent: 2 },
     ],
     workers: [
-      { workerId: "worker-demo-01", status: "Online", lastSeenAt: "2026-06-07T10:14:00-03:00", secondsSinceLastSeen: 8, processedJobsToday: 12, idleSeconds: 0, currentJobId: 502, currentTask: "Importando clientes" },
-      { workerId: "worker-demo-02", status: "Online", lastSeenAt: "2026-06-07T10:14:05-03:00", secondsSinceLastSeen: 3, processedJobsToday: 6, idleSeconds: 78, currentJobId: null, currentTask: "Aguardando fila" },
+      { workerId: "worker-01", status: "Online", lastSeenAt: "2026-06-07T10:14:00-03:00", secondsSinceLastSeen: 8, processedJobsToday: 12, idleSeconds: 0, currentJobId: 502, currentTask: "Importando clientes" },
+      { workerId: "worker-02", status: "Online", lastSeenAt: "2026-06-07T10:14:05-03:00", secondsSinceLastSeen: 3, processedJobsToday: 6, idleSeconds: 78, currentJobId: null, currentTask: "Aguardando fila" },
     ],
   };
 }
@@ -1303,9 +1303,9 @@ function demoProcessingJobDetails(jobId: number): ProcessingJobDetails {
     },
     performanceByStage: dashboard.stageDurations,
     logs: [
-      { timestamp: "2026-06-07T09:18:24-03:00", fileJobId: job.id, stage: "READ", level: "Info", message: "Arquivo demo carregado com sucesso." },
-      { timestamp: "2026-06-07T09:19:10-03:00", fileJobId: job.id, stage: "VALIDATE", level: "Warning", message: "3 linhas possuem cidade vazia; aplicado valor padrão para demonstração." },
-      { timestamp: "2026-06-07T09:22:00-03:00", fileJobId: job.id, stage: "IMPORT", level: "Info", message: "Importação em andamento com dados fictícios." },
+      { timestamp: "2026-06-07T09:18:24-03:00", fileJobId: job.id, stage: "READ", level: "Info", message: "Arquivo carregado com sucesso." },
+      { timestamp: "2026-06-07T09:19:10-03:00", fileJobId: job.id, stage: "VALIDATE", level: "Warning", message: "3 linhas possuem cidade vazia; aplicado o valor padrão." },
+      { timestamp: "2026-06-07T09:22:00-03:00", fileJobId: job.id, stage: "IMPORT", level: "Info", message: "Importação em andamento." },
     ],
   };
 }
@@ -1422,10 +1422,10 @@ function demoCustomerCommercialHealth(customerId: string): CustomerCommercialHea
       averageDaysBetweenPurchases: details.averageDaysBetweenPurchases,
       commercialStatus: details.status,
     },
-    score: { value: 82, label: "Saudável", explanation: "Cliente fictício com compra recente, frequência estável e bom ticket médio." },
-    health: { status: "Bom", tone: "success", summary: "Cliente ativo e recorrente.", detail: "Use este bloco como base para mensagens de saúde comercial." },
-    trend: { status: "Crescimento", tone: "success", summary: "Faturamento subiu no último mês.", detail: "A variação fictícia ajuda a testar os cards positivos." },
-    potential: { expectedRevenue: 42_000, expectedQuantity: 1_920, label: "Potencial alto", explanation: "Projeção demo baseada em histórico mensal simulado." },
+    score: { value: 82, label: "Saudável", explanation: "Cliente com compra recente, frequência estável e bom ticket médio." },
+    health: { status: "Bom", tone: "success", summary: "Cliente ativo e recorrente.", detail: "O histórico indica regularidade no relacionamento comercial." },
+    trend: { status: "Crescimento", tone: "success", summary: "Faturamento subiu no último mês.", detail: "A variação mensal indica evolução positiva." },
+    potential: { expectedRevenue: 42_000, expectedQuantity: 1_920, label: "Potencial alto", explanation: "Projeção baseada no histórico mensal." },
     dependency: { status: "Mix concentrado", explanation: "Top 3 produtos representam parte relevante da receita.", productsToReachEightyPercent: 5, topProductSharePercent: 35.2 },
     products: demoCustomerTopProducts(),
     timeline: demoCustomerTimeline({}).points.map((point) => ({ date: point.periodStart, orders: point.orders, revenue: point.revenue, quantity: point.quantity })),
@@ -1435,10 +1435,10 @@ function demoCustomerCommercialHealth(customerId: string): CustomerCommercialHea
     ],
     recommendations: [
       { priority: "Alta", title: "Reforçar mix principal", detail: "Oferecer reposição dos produtos de maior participação antes da próxima janela de compra." },
-      { priority: "Média", title: "Testar produto complementar", detail: "Usar a base fictícia para decidir quais sugestões comerciais entram na tela final." },
+      { priority: "Média", title: "Oferecer produto complementar", detail: "Avaliar sugestões comerciais compatíveis com o histórico de compras." },
     ],
     alerts: [
-      { severity: "info", title: "Dados de demonstração", detail: "Esses números são fictícios e servem apenas como base visual." },
+      { severity: "info", title: "Perfil atualizado", detail: "Os indicadores comerciais estão atualizados para análise." },
     ],
   };
 }
@@ -1677,7 +1677,7 @@ export async function fetchJobErrors(
         pageSize,
         total: 2,
         items: [
-          { id: 1, fileJobId: jobId, rowNumber: 18, stage: "VALIDATE", column: "Cidade", message: "Cidade vazia na linha demo.", recordIdentifier: "CLI-002" },
+          { id: 1, fileJobId: jobId, rowNumber: 18, stage: "VALIDATE", column: "Cidade", message: "Cidade vazia na linha processada.", recordIdentifier: "CLI-002" },
           { id: 2, fileJobId: jobId, rowNumber: 42, stage: "VALIDATE", column: "Valor Total", message: "Valor total divergente da quantidade x unitário.", recordIdentifier: "NF-2026-042" },
         ],
       };
@@ -2129,11 +2129,11 @@ function demoCustomerInsights(): CustomerInsightsResponse {
     riskLevel: "Sem risco",
     daysWithoutPurchase: 3,
     riskScore: 12,
-    frequencyReason: "Frequência fictícia baseada em compras mensais.",
-    nextPurchaseReason: "Data estimada apenas para demonstração.",
-    revenuePredictionReason: "Projeção demo para validar o layout.",
-    quantityPredictionReason: "Quantidade prevista com dados fictícios.",
-    riskReason: "Cliente com compra recente na base demo.",
+    frequencyReason: "Frequência baseada nas compras mensais.",
+    nextPurchaseReason: "Data projetada a partir do histórico de compras.",
+    revenuePredictionReason: "Projeção baseada na evolução do faturamento.",
+    quantityPredictionReason: "Quantidade prevista pelo histórico de consumo.",
+    riskReason: "Cliente com compra recente.",
     monthlyHistoryPeriods: 6,
   };
 }

@@ -38,6 +38,9 @@ describe("responsive layout behavior", () => {
     expect(styles).toContain(".page-shell");
     expect(styles).toContain(".dark .page-shell");
     expect(styles).toContain("radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47");
+    expect(styles).toContain(".dark .app-background {\n  background: var(--background-app);");
+    expect(styles).toContain(".dark .page-shell {\n  background: transparent;");
+    expect(styles).not.toContain("rgba(224, 47, 69, 0.14)");
     expect(styles).toContain("grid-auto-flow: column");
     expect(styles).toContain("--metric-card-base-width: 248px");
     expect(styles).toContain("grid-auto-columns: var(--metric-card-column-width)");

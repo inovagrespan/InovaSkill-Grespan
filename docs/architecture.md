@@ -112,12 +112,12 @@ acesso. Esses limites protegem a API contra respostas ilimitadas e
 não alteram o contexto enviado ao modelo, que continua restrito às mensagens
 recentes configuradas em `Assistant:MaximumHistoryMessages`. Oferece
 perguntas sugeridas e envia perguntas autenticadas para `POST /api/assistant/ask`.
-As respostas seguem um contrato de confiabilidade: não completam lacunas, declaram
-quando os dados são insuficientes, identificam o período ou snapshot consultado
-e separam dados reais de interpretações da IA. Perguntas com mais de uma
+As respostas não completam lacunas, declaram quando os dados são insuficientes,
+identificam o período ou snapshot consultado e apresentam resultados e análises
+diretamente, sem rótulos sobre a origem dos dados. Perguntas com mais de uma
 interpretação relevante exigem esclarecimento antes da consulta; o contexto da
 conversa pode resolver a ambiguidade quando isso não exigir suposição. O rodapé
-do chat torna essas regras visíveis ao usuário.
+do chat informa de forma concisa que período e contexto são considerados.
 O assistente aceita cumprimentos, apresentações, preferências, fatos pessoais e
 interações sociais breves sem exigir vínculo empresarial. Declarações pessoais
 comuns seguem diretamente para a conversa, enquanto classificações ambíguas não
@@ -397,6 +397,17 @@ específico quando a pergunta contém referência pessoal explícita. O corte ge
 continua valendo para memórias corporativas, e o filtro por `OwnerUserId` é
 aplicado antes do ranqueamento.
 
+Em toda resposta, a seleção reserva até três das oito posições de contexto para
+memórias pessoais que definem como se referir ao usuário, na ordem: nome
+preferido (`preferred name`), nome informado (`name`) e cargo ou função (`role`).
+Essas memórias são incluídas mesmo quando a pergunta atual pertence a outro
+assunto; as posições restantes seguem o ranqueamento semântico normal. O modelo
+usa o nome preferido quando disponível e o cargo apenas para adequar o contexto,
+sem recitar o perfil em cada resposta. A extração usa esses três assuntos
+canônicos para substituir informações anteriores corretamente. A consulta ao
+banco, o limite de 500 candidatos e os índices permanecem inalterados porque a
+reserva ocorre após o filtro de autorização e o cálculo já existente.
+
 Os embeddings ficam serializados em `jsonb`. A busca limita-se aos 500 registros
 ativos mais recentes autorizados antes do cálculo em memória; essa decisão evita
 uma dependência de extensão do PostgreSQL na primeira versão. Ao ultrapassar
@@ -461,13 +472,41 @@ As ferramentas corporativas chamam `IBusinessChatQueryService`, definido em
 reutiliza as mesmas fórmulas, fontes publicadas e limites das telas de clientes,
 notas fiscais, produtos e estoque: cadastro atual de clientes, histórico fiscal
 persistido, snapshot atual de `INVENTORY_CURRENT` e última data publicada de
-`DAILY_INVENTORY`. Os payloads para a OpenAI são DTOs reduzidos e não incluem
-documento cadastral de cliente, schema, SQL, conexão ou detalhes técnicos.
+`DAILY_INVENTORY`. Os payloads para a OpenAI são DTOs de negócio delimitados.
+Eles preservam os campos operacionais necessários para responder sem nova perda
+de contexto: produto inclui descrição, códigos externo/ERP/operacional, GTIN e
+pesos; estoque inclui quantidades e valores físico e comprometido; itens fiscais
+incluem grupo, quantidade, peso, valores, despesas, tributos, CFOP, TES, pedido e
+armazém. Documento cadastral de cliente, números de linha/planilha,
+identificadores de importação, schema, SQL, conexão e demais metadados técnicos
+ou sensíveis ficam deliberadamente fora desses DTOs.
 Consultas de busca exigem termo mínimo e limite máximo; consultas fiscais,
 estoque, produção e ruptura retornam listas pequenas; a taxa de devolução limita
 o período a 365 dias. Produção no chat usa somente o controle diário publicado e
 pode ser consultada como resumo agregado ou como registros limitados por produto
 e período, sem cálculo pesado síncrono.
+
+Resultados anteriores da conversa não são considerados prova de inexistência de
+um campo. Quando a pergunta atual exigir dados ausentes no histórico, o modelo
+deve executar a ferramenta corporativa mais adequada antes de declarar
+insuficiência; ele não deve pedir autorização para uma consulta que já pode
+executar. `list_recent_fiscal_documents` inclui `PricingItems` com identificação
+do produto, grupo, quantidade, peso, valores, despesas, tributos e referências
+operacionais. Para cada item,
+`CalculatedAmount` preserva `SourceTotalValue` quando disponível e, na ausência,
+usa `Quantity * UnitValue`; se ambos os valores de preço estiverem ausentes, o
+resultado permanece nulo. Isso permite somas e médias pequenas sobre as notas
+retornadas sem criar uma consulta paralela ou inferir peso como preço. A projeção
+usa o relacionamento já consultado entre nota e itens, portanto não requer índice
+adicional e mantém o limite existente de resultados fiscais.
+
+As buscas de produto em `search_products` e `list_inventory_positions` aceitam
+nome, descrição, código externo, código ERP, código operacional e GTIN. Essas
+consultas continuam sobre o snapshot atual, com limites pequenos e sem nova
+ordenação ou agregação persistida; por isso não foi criado índice especializado
+nesta alteração. Se o volume ou a telemetria indicar degradação, a busca textual
+deverá migrar para uma estratégia indexada específica em vez de multiplicar
+índices B-tree de baixa utilidade para `Contains`.
 
 O modelo pode fazer cálculos leves durante a resposta apenas sobre dados
 pequenos retornados pelas ferramentas na própria interação, como soma, média,
@@ -514,6 +553,13 @@ rotas devem sair em linhas iniciadas por `[ROTA]`, no formato
 clientes da rota devem sair como
 `[CLIENTE] Nome fantasia | Código: 0001/01 | Cidade: Marília-SP | Tipo: Mercado | Relação: inferido por município`.
 O componente renderiza essas linhas como cartões compactos do tipo adequado.
+Listas com três ou mais registros comparáveis de notas fiscais, produtos,
+estoque, produção ou consumo usam o contrato delimitado `[TABELA]`, uma linha
+`[COLUNAS]` com 2 a 8 células separadas por ` | `, até 50 linhas `[LINHA]` com a
+mesma quantidade e ordem de células e o fechamento `[/TABELA]`. O frontend só
+renderiza a tabela quando o contrato estiver completo e consistente; contratos
+inválidos permanecem legíveis como texto, evitando perda de conteúdo. A tabela
+usa cabeçalhos semânticos e rolagem horizontal em telas estreitas.
 Recomendações e ações operacionais usam bullets simples e são renderizadas como
 lista textual normal. Parágrafos explicativos continuam como texto. O modelo não
 deve misturar rotas, clientes e ações na mesma lista nem usar marcadores

@@ -270,7 +270,31 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 document.MovementCategory.ToString(),
                 document.OperationDescription,
                 document.Items.Count,
-                document.Items.Sum(item => item.GrossWeightKg)))
+                document.Items.Sum(item => item.GrossWeightKg),
+                document.Items
+                    .OrderBy(item => item.ItemNumber)
+                    .Select(item => new BusinessChatFiscalDocumentPricingItemDto(
+                        item.ItemNumber,
+                        item.ProductCode,
+                        item.ProductDescription,
+                        item.ProductGroupCode,
+                        item.ProductGroupDescription,
+                        item.Quantity,
+                        item.GrossWeightKg,
+                        item.UnitValue,
+                        item.SourceTotalValue,
+                        item.SourceTotalValue ?? (item.UnitValue.HasValue ? item.Quantity * item.UnitValue.Value : null),
+                        item.Expenses,
+                        item.Ipi,
+                        item.Icms,
+                        item.Iss,
+                        item.CfopCode,
+                        item.CfopDescription,
+                        item.TesCode,
+                        item.TesDescription,
+                        item.OrderNumber,
+                        item.WarehouseCode))
+                    .ToList()))
             .ToListAsync(cancellationToken);
     }
 
@@ -327,14 +351,19 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
         var products = await dbContext.Products.AsNoTracking()
             .Where(product =>
                 product.Name.ToUpper().Contains(term) ||
+                product.Description.ToUpper().Contains(term) ||
+                product.ExternalCode.ToUpper().Contains(term) ||
                 product.ErpCode.ToUpper().Contains(term) ||
-                product.OperationalCode.ToUpper().Contains(term))
+                product.OperationalCode.ToUpper().Contains(term) ||
+                product.Gtin.ToUpper().Contains(term))
             .OrderBy(product => product.Name)
             .ThenBy(product => product.ErpCode)
             .Take(limit)
             .Select(product => new
             {
                 product.Id,
+                product.ExternalCode,
+                product.Description,
                 product.ErpCode,
                 product.OperationalCode,
                 product.Name,
@@ -343,6 +372,7 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 product.GroupCode,
                 product.NetWeightKg,
                 product.GrossWeightKg,
+                product.Gtin,
                 Inventory = inventoryImportId.HasValue
                     ? dbContext.InventorySnapshots
                         .Where(snapshot =>
@@ -353,7 +383,8 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                             group.Sum(snapshot => snapshot.OnHandQuantity),
                             group.Sum(snapshot => snapshot.CommittedQuantity),
                             group.Sum(snapshot => snapshot.AvailableQuantity),
-                            group.Sum(snapshot => snapshot.StockValue)))
+                            group.Sum(snapshot => snapshot.StockValue),
+                            group.Sum(snapshot => snapshot.CommittedValue)))
                         .SingleOrDefault()
                     : null
             })
@@ -362,6 +393,8 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
         return products
             .Select(product => new BusinessChatProductDto(
                 product.Id,
+                product.ExternalCode,
+                product.Description,
                 product.ErpCode,
                 product.OperationalCode,
                 product.Name,
@@ -370,6 +403,7 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 product.GroupCode,
                 product.NetWeightKg,
                 product.GrossWeightKg,
+                product.Gtin,
                 product.Inventory))
             .ToList();
     }
@@ -387,6 +421,8 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
             .Where(item => item.Id == productId)
             .Select(item => new BusinessChatProductCoreDto(
                 item.Id,
+                item.ExternalCode,
+                item.Description,
                 item.ErpCode,
                 item.OperationalCode,
                 item.Name,
@@ -395,6 +431,7 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 item.GroupCode,
                 item.NetWeightKg,
                 item.GrossWeightKg,
+                item.Gtin,
                 item.UpdatedAt))
             .SingleOrDefaultAsync(cancellationToken);
         if (product is null)
@@ -424,7 +461,8 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 snapshot.OnHandQuantity,
                 snapshot.CommittedQuantity,
                 snapshot.AvailableQuantity,
-                snapshot.StockValue))
+                snapshot.StockValue,
+                snapshot.CommittedValue))
             .ToListAsync(cancellationToken);
 
         var productionHistory = dailyImportId.HasValue
@@ -453,7 +491,16 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 item.Quantity,
                 item.GrossWeightKg,
                 item.UnitValue,
-                item.UnitValue.HasValue ? item.Quantity * item.UnitValue.Value : 0))
+                item.SourceTotalValue,
+                item.SourceTotalValue ?? (item.UnitValue.HasValue ? item.Quantity * item.UnitValue.Value : null),
+                item.Expenses,
+                item.Ipi,
+                item.Icms,
+                item.Iss,
+                item.CfopCode,
+                item.TesCode,
+                item.OrderNumber,
+                item.WarehouseCode))
             .ToListAsync(cancellationToken);
 
         return new BusinessChatProductDetailsDto(
@@ -470,6 +517,11 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
         var dailyImportId = await CurrentImportIdAsync(DailyInventoryImportCodes.DataSource, cancellationToken);
         var stockoutProducts = 0;
         var stockoutWarehousePositions = 0;
+        decimal totalOnHandQuantity = 0;
+        decimal totalCommittedQuantity = 0;
+        decimal totalAvailableQuantity = 0;
+        decimal totalStockValue = 0;
+        decimal totalCommittedValue = 0;
         decimal committedPercent = 0;
         DateOnly? lastDailyDate = null;
         decimal lastProduction = 0;
@@ -492,12 +544,20 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 .Select(group => new
                 {
                     Committed = group.Sum(snapshot => snapshot.CommittedQuantity),
-                    OnHand = group.Sum(snapshot => snapshot.OnHandQuantity)
+                    OnHand = group.Sum(snapshot => snapshot.OnHandQuantity),
+                    Available = group.Sum(snapshot => snapshot.AvailableQuantity),
+                    StockValue = group.Sum(snapshot => snapshot.StockValue),
+                    CommittedValue = group.Sum(snapshot => snapshot.CommittedValue)
                 })
                 .SingleOrDefaultAsync(cancellationToken);
             committedPercent = totals is null || totals.OnHand == 0
                 ? 0
                 : Math.Round(totals.Committed / totals.OnHand * PercentScale, 2);
+            totalOnHandQuantity = totals?.OnHand ?? 0;
+            totalCommittedQuantity = totals?.Committed ?? 0;
+            totalAvailableQuantity = totals?.Available ?? 0;
+            totalStockValue = totals?.StockValue ?? 0;
+            totalCommittedValue = totals?.CommittedValue ?? 0;
         }
 
         if (dailyImportId.HasValue)
@@ -526,6 +586,11 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
         return new BusinessChatInventorySummaryDto(
             stockoutProducts,
             stockoutWarehousePositions,
+            totalOnHandQuantity,
+            totalCommittedQuantity,
+            totalAvailableQuantity,
+            totalStockValue,
+            totalCommittedValue,
             committedPercent,
             lastDailyDate,
             lastProduction,
@@ -561,8 +626,11 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
             var term = inventoryQuery.SearchTerm.Trim().ToUpperInvariant();
             query = query.Where(snapshot =>
                 snapshot.Product!.Name.ToUpper().Contains(term) ||
+                snapshot.Product.Description.ToUpper().Contains(term) ||
+                snapshot.Product.ExternalCode.ToUpper().Contains(term) ||
                 snapshot.Product.ErpCode.ToUpper().Contains(term) ||
-                snapshot.Product.OperationalCode.ToUpper().Contains(term));
+                snapshot.Product.OperationalCode.ToUpper().Contains(term) ||
+                snapshot.Product.Gtin.ToUpper().Contains(term));
         }
 
         if (!string.IsNullOrWhiteSpace(inventoryQuery.Status))
@@ -622,6 +690,7 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 CommittedQuantity = group.Sum(snapshot => snapshot.CommittedQuantity),
                 AvailableQuantity = group.Sum(snapshot => snapshot.AvailableQuantity),
                 StockValue = group.Sum(snapshot => snapshot.StockValue),
+                CommittedValue = group.Sum(snapshot => snapshot.CommittedValue),
                 AffectedWarehousePositions = group.Count(snapshot => snapshot.AvailableQuantity <= 0),
                 WarehousePositions = group.Count()
             })
@@ -645,6 +714,7 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 item.CommittedQuantity,
                 item.AvailableQuantity,
                 item.StockValue,
+                item.CommittedValue,
                 item.AffectedWarehousePositions,
                 item.WarehousePositions))
             .ToList();
@@ -778,6 +848,7 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
             snapshot.CommittedQuantity,
             snapshot.AvailableQuantity,
             snapshot.StockValue,
+            snapshot.CommittedValue,
             snapshot.OnHandQuantity == 0
                 ? null
                 : Math.Round(snapshot.CommittedQuantity / snapshot.OnHandQuantity * PercentScale, 2)));

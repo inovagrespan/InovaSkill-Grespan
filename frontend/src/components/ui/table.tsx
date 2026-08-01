@@ -60,7 +60,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-11 bg-[linear-gradient(180deg,rgba(248,249,252,1),rgba(244,246,250,1))] px-4 text-left align-middle text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground dark:bg-[linear-gradient(180deg,rgba(34,41,52,1),rgba(30,37,48,1))] [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      "h-11 bg-[linear-gradient(180deg,rgba(248,249,252,1),rgba(244,246,250,1))] px-4 text-left align-middle text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground dark:bg-[linear-gradient(180deg,rgba(31,31,31,1),rgba(24,24,24,1))] [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className,
     )}
     {...props}

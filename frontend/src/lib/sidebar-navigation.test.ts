@@ -127,11 +127,11 @@ describe("sidebar navigation", () => {
     expect(source).not.toContain("Central de atenção");
   });
 
-  it("usa Conecta360 como marca principal depois do login", () => {
+  it("mantém o menu lateral limpo, sem repetir a marca da aplicação", () => {
     const source = readSidebar();
 
-    expect(source).toContain('import { BrandLogo } from "@/components/BrandLogo";');
-    expect(source).toContain('aria-label="Conecta360"');
-    expect(source).toContain("renderBrandHeader");
+    expect(source).not.toContain('import { BrandLogo } from "@/components/BrandLogo";');
+    expect(source).not.toContain('aria-label="Conecta360"');
+    expect(source).not.toContain("renderBrandHeader");
   });
 });

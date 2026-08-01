@@ -140,7 +140,7 @@ public sealed class ListRecentFiscalDocumentsChatTool(
     public string Name => "list_recent_fiscal_documents";
 
     public string Description =>
-        "Lista notas fiscais recentes por cliente, número, cidade, período ou categoria de movimento.";
+        "Lista notas fiscais recentes por cliente, número, cidade, período ou categoria de movimento, incluindo quantidade, valor unitário, valor total de origem e valor calculável dos itens para análises de preço.";
 
     public object GetParameterSchema() => new
     {
@@ -270,7 +270,7 @@ public sealed class SearchProductsChatTool(
     public string Name => "search_products";
 
     public string Description =>
-        "Pesquisa produtos por nome, código ERP ou código operacional, retornando estoque consolidado atual quando disponível.";
+        "Pesquisa produtos por nome, descrição, código externo, código ERP, código operacional ou GTIN, retornando cadastro e estoque consolidado atual com quantidades e valores quando disponíveis.";
 
     public object GetParameterSchema() => new
     {
@@ -278,7 +278,7 @@ public sealed class SearchProductsChatTool(
         additionalProperties = false,
         properties = new
         {
-            searchTerm = new { type = "string", description = "Nome, código ERP ou código operacional do produto." },
+            searchTerm = new { type = "string", description = "Nome, descrição, código externo, código ERP, código operacional ou GTIN do produto." },
             limit = new { type = "integer", minimum = 1, maximum = assistantOptions.MaximumGeneralSearchResults }
         },
         required = new[] { "searchTerm", "limit" }
@@ -329,7 +329,7 @@ public sealed class GetProductDetailsChatTool(
     public string Name => "get_product_details";
 
     public string Description =>
-        "Consulta cadastro, estoque atual por filial/armazém, histórico recente de estoque, produção diária recente e itens fiscais recentes de um produto.";
+        "Consulta o cadastro completo do produto, estoque atual e histórico com quantidades e valores, produção diária recente e itens fiscais recentes com preço, total, tributos e referências operacionais.";
 
     public object GetParameterSchema() => new
     {
@@ -388,7 +388,7 @@ public sealed class GetInventorySummaryChatTool(
     public string Name => "get_inventory_summary";
 
     public string Description =>
-        "Consulta rupturas, comprometimento, última produção, saída e saldo operacional do estoque atual.";
+        "Consulta totais de quantidade e valor do estoque atual, rupturas, comprometimento, última produção, saída e saldo operacional.";
 
     public object GetParameterSchema() => new
     {
@@ -436,7 +436,7 @@ public sealed class ListInventoryPositionsChatTool(
     public string Name => "list_inventory_positions";
 
     public string Description =>
-        "Lista posições do estoque atual por produto, busca, armazém, status de saldo ou ordenação operacional.";
+        "Lista posições do estoque atual por produto, busca, armazém, status de saldo ou ordenação, incluindo quantidades, valor em estoque e valor comprometido.";
 
     public object GetParameterSchema() => new
     {
@@ -444,7 +444,7 @@ public sealed class ListInventoryPositionsChatTool(
         additionalProperties = false,
         properties = new
         {
-            searchTerm = new { type = new[] { "string", "null" }, description = "Nome, código ERP ou código operacional do produto." },
+            searchTerm = new { type = new[] { "string", "null" }, description = "Nome, descrição, código externo, código ERP, código operacional ou GTIN do produto." },
             productId = new { type = new[] { "string", "null" }, format = "uuid" },
             warehouse = new { type = new[] { "string", "null" }, description = "Código do armazém." },
             status = new { type = new[] { "string", "null" }, @enum = new object?[] { "AVAILABLE", "STOCKOUT", null } },
@@ -515,7 +515,7 @@ public sealed class ListStockoutProductsChatTool(
     public string Name => "list_stockout_products";
 
     public string Description =>
-        "Lista produtos em ruptura no estoque atual, consolidados por produto em todos os armazéns.";
+        "Lista produtos em ruptura no estoque atual, consolidados por produto em todos os armazéns, com quantidades, valores e posições afetadas.";
 
     public object GetParameterSchema() => new
     {

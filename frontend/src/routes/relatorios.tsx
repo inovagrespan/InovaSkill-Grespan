@@ -133,7 +133,7 @@ function RelatoriosPage() {
               {printableMetrics.map((metric) => (
                 <li key={metric} className="flex items-center justify-between rounded-md bg-background px-3 py-2">
                   <span>{metric}</span>
-                  <span className="text-xs text-muted-foreground">Dado fictício filtrado</span>
+                  <span className="text-xs text-muted-foreground">Indicador selecionado</span>
                 </li>
               ))}
               {printableMetrics.length === 0 ? (

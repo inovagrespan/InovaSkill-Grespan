@@ -28,6 +28,18 @@ describe("design system tokens", () => {
     expect(css).toContain("--dashboard-card-shadow-hover:");
   });
 
+  it("usa uma paleta escura neutra com texto claro e destaque vermelho", () => {
+    const css = read("src/styles.css");
+
+    expect(css).toContain(":root.dark {");
+    expect(css).toContain("--background-app: #050505;");
+    expect(css).toContain("--background-card: #111111;");
+    expect(css).toContain("--text-primary: #f7f7f7;");
+    expect(css).toContain("--primary-red: #e02f45;");
+    expect(css).not.toContain("--background-app: #0e1116;");
+    expect(css).not.toContain("--background-card: #161b23;");
+  });
+
   it("define estilo de scrollbar customizado", () => {
     const css = read("src/styles.css");
 

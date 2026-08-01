@@ -137,13 +137,16 @@
 }
 
 :root.dark {
-  --background-app: #0e1116;
-  --background-card: #161b23;
-  --soft-red-background: #2a1518;
-  --border-subtle: #2b3340;
-  --text-primary: #e6e9ef;
-  --text-secondary: #c5cbd7;
-  --text-muted: #93a0b4;
+  --primary-red: #e02f45;
+  --primary-red-hover: #ef4055;
+  --primary-red-active: #bd2034;
+  --background-app: #050505;
+  --background-card: #111111;
+  --soft-red-background: #250d11;
+  --border-subtle: #2a2a2a;
+  --text-primary: #f7f7f7;
+  --text-secondary: #d4d4d4;
+  --text-muted: #a3a3a3;
 
   --background: var(--background-app);
   --surface: var(--background-card);
@@ -153,15 +156,16 @@
   --card-foreground: var(--text-primary);
   --popover: var(--surface);
   --popover-foreground: var(--text-primary);
-  --secondary: #1f2630;
-  --secondary-foreground: #d6dbe5;
-  --muted: #1b222c;
+  --secondary: #1c1c1c;
+  --secondary-foreground: #ededed;
+  --muted: #191919;
   --muted-foreground: var(--text-muted);
-  --accent: #1d2530;
+  --accent: #202020;
   --accent-foreground: var(--text-primary);
-  --input: #313c4b;
-  --ring: #d54b56;
-  --surface-soft: #1a2029;
+  --input: #333333;
+  --ring: #ef4055;
+  --surface-elevated: #171717;
+  --surface-soft: #151515;
   --scrollbar-track: rgba(255, 255, 255, 0.05);
   --scrollbar-thumb: rgba(213, 75, 86, 0.62);
   --scrollbar-thumb-hover: rgba(224, 82, 94, 0.88);
@@ -217,7 +221,7 @@
 }
 
 .dark .skeleton-shimmer {
-  background: #222b37;
+  background: #242424;
 }
 
 .dark .skeleton-shimmer::after {
@@ -265,7 +269,7 @@
 }
 
 .dark .glass-card {
-  background: linear-gradient(165deg, rgba(22, 28, 37, 0.98), rgba(18, 23, 32, 0.97));
+  background: linear-gradient(165deg, rgba(20, 20, 20, 0.98), rgba(13, 13, 13, 0.97));
 }
 
 .app-background {
@@ -348,8 +352,8 @@
   --finance-chart-fill: rgba(255, 49, 88, 0.34);
   --finance-chart-fill-end: rgba(255, 49, 88, 0.03);
   --finance-chart-cursor: rgba(255, 49, 88, 0.24);
-  --finance-chart-select-bg: #0b1020;
-  --finance-chart-select-border: #1d2a44;
+  --finance-chart-select-bg: #101010;
+  --finance-chart-select-border: #303030;
 }
 
 .sales-chart-card {
@@ -374,8 +378,8 @@
   --sales-chart-fill: rgba(255, 49, 88, 0.34);
   --sales-chart-fill-end: rgba(255, 49, 88, 0.03);
   --sales-chart-cursor: rgba(255, 49, 88, 0.24);
-  --sales-chart-select-bg: #0b1020;
-  --sales-chart-select-border: #1d2a44;
+  --sales-chart-select-bg: #101010;
+  --sales-chart-select-border: #303030;
 }
 
 .sales-financial-chart {
@@ -404,10 +408,10 @@
   --sales-financial-expenses: #f59e0b;
   --sales-financial-expenses-fill: #f97316;
   --sales-financial-cursor: rgba(148, 163, 184, 0.2);
-  --sales-financial-control: rgba(9, 14, 27, 0.86);
-  --sales-financial-tooltip: rgba(10, 15, 28, 0.98);
-  --sales-financial-tooltip-border: rgba(71, 85, 105, 0.5);
-  --sales-financial-border: rgba(71, 85, 105, 0.28);
+  --sales-financial-control: rgba(17, 17, 17, 0.9);
+  --sales-financial-tooltip: rgba(12, 12, 12, 0.98);
+  --sales-financial-tooltip-border: rgba(82, 82, 82, 0.55);
+  --sales-financial-border: rgba(82, 82, 82, 0.3);
 }
 
 .delivery-map-marker {
@@ -554,10 +558,10 @@
   --logistics-modal-chart-axis: #98a4b8;
   --logistics-modal-chart-grid: rgba(148, 163, 184, 0.1);
   --logistics-modal-chart-line: #e02f45;
-  --logistics-modal-chart-tooltip-bg: rgba(15, 20, 30, 0.98);
-  --logistics-modal-chart-tooltip-border: rgba(71, 85, 105, 0.5);
-  background: linear-gradient(180deg, rgba(17, 22, 32, 0.98), rgba(12, 17, 26, 0.98));
-  border-color: rgba(51, 65, 85, 0.55);
+  --logistics-modal-chart-tooltip-bg: rgba(12, 12, 12, 0.98);
+  --logistics-modal-chart-tooltip-border: rgba(82, 82, 82, 0.55);
+  background: linear-gradient(180deg, rgba(20, 20, 20, 0.98), rgba(10, 10, 10, 0.98));
+  border-color: rgba(64, 64, 64, 0.6);
 }
 
 .dark .logistics-city-chart-card {
@@ -565,14 +569,14 @@
   --logistics-city-chart-grid: rgba(148, 163, 184, 0.11);
   --logistics-city-chart-axis: #98a4b8;
   --logistics-city-chart-text: #e5e7eb;
-  --logistics-city-chart-tooltip-bg: rgba(15, 20, 30, 0.98);
-  --logistics-city-chart-tooltip-border: rgba(71, 85, 105, 0.5);
+  --logistics-city-chart-tooltip-bg: rgba(12, 12, 12, 0.98);
+  --logistics-city-chart-tooltip-border: rgba(82, 82, 82, 0.55);
 }
 
 .dark .leaflet-control-zoom a,
 .dark .leaflet-popup-content-wrapper,
 .dark .leaflet-popup-tip {
-  background: #111827;
+  background: #111111;
   color: #e5e7eb;
 }
 
@@ -581,21 +585,15 @@
 }
 
 .dark .logistics-map-popup hr {
-  border-color: #334155;
+  border-color: #404040;
 }
 
 .dark .app-background {
-  background:
-    radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47, 0.16), transparent 36%),
-    radial-gradient(800px circle at 100% 100%, rgba(7, 10, 16, 0.45), transparent 35%),
-    var(--background-app);
+  background: var(--background-app);
 }
 
 .dark .page-shell {
-  background:
-    radial-gradient(900px circle at 0% 0%, rgba(180, 35, 47, 0.16), transparent 36%),
-    radial-gradient(800px circle at 100% 100%, rgba(7, 10, 16, 0.45), transparent 35%),
-    transparent;
+  background: transparent;
 }
 
 @layer base {

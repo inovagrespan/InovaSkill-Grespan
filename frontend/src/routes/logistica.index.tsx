@@ -555,7 +555,7 @@ export function LogisticsDashboardMetrics() {
     <div className="page-shell app-background space-y-6">
       <header className="animate-fade-in flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="flex flex-wrap items-center gap-2"><span className="page-header-kicker">Dashboard</span><Badge variant="outline">Dados reais quando disponíveis</Badge><Badge variant="outline">Base demonstrativa complementar</Badge></div>
+          <div className="flex flex-wrap items-center gap-2"><span className="page-header-kicker">Dashboard</span></div>
           <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Dashboard logístico</h1>
           <p className="mt-1 text-sm text-muted-foreground">Identifique o sinal, encontre a causa raiz e receba uma ação específica sem sair da tela.</p>
         </div>
@@ -570,7 +570,7 @@ export function LogisticsDashboardMetrics() {
         {executiveCards.map((card) => <ExecutiveMetricCard key={card.id} card={card} onSelect={() => openMetric(card.id)} />)}
       </section>
 
-      <p className="text-center text-xs text-muted-foreground">Devolução, ocupação e ruptura usam as importações disponíveis; os demais KPIs são calculados sobre uma base demonstrativa de congelados, salgados e movimentação de fornos e freezers alugados.</p>
+      <p className="text-center text-xs text-muted-foreground">Indicadores de devolução, ocupação, ruptura, movimentação de produtos e equipamentos.</p>
 
       <Dialog open={selectedCard != null && selectedFactor == null} onOpenChange={(open) => !open && selectedFactor == null && setSelectedMetric(null)}>
         <DialogContent className="custom-scrollbar max-h-[90vh] w-[94vw] max-w-5xl overflow-y-auto p-5 sm:p-6">

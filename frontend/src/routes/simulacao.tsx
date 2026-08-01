@@ -44,7 +44,7 @@ function Simulacao() {
         <Card>
           <CardHeader><CardTitle>2. Diagnóstico de Impacto</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm">Demanda simulada: <strong>+{demand}%</strong></p>
+            <p className="text-sm">Demanda projetada: <strong>+{demand}%</strong></p>
             <p className="text-sm">Necessidade operacional: <strong>{impacto.necessidade}</strong></p>
             <p className="text-sm text-muted-foreground">Estimativa de risco de atraso: {impacto.atraso}% sem ação corretiva.</p>
             <div className="flex justify-between"><Button variant="outline" onClick={() => setStep("demanda")}><ArrowLeft className="size-4" /> Voltar</Button><Button onClick={() => setStep("cenarios")}>Ver cenários <ArrowRight className="size-4" /></Button></div>

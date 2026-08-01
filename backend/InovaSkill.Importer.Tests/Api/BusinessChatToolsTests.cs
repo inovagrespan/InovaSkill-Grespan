@@ -84,6 +84,39 @@ public sealed class BusinessChatToolsTests
         Assert.Single(json.RootElement.EnumerateArray());
         Assert.Equal("201", json.RootElement[0].GetProperty("documentNumber").GetString());
         Assert.Equal("Return", json.RootElement[0].GetProperty("operationCategory").GetString());
+        Assert.Equal(0m, json.RootElement[0].GetProperty("pricingItems")[0].GetProperty("calculatedAmount").GetDecimal());
+        Assert.Equal("5102", json.RootElement[0].GetProperty("pricingItems")[0].GetProperty("cfopCode").GetString());
+        Assert.Equal("501", json.RootElement[0].GetProperty("pricingItems")[0].GetProperty("tesCode").GetString());
+        Assert.Equal("PED-1", json.RootElement[0].GetProperty("pricingItems")[0].GetProperty("orderNumber").GetString());
+        Assert.Equal(1.5m, json.RootElement[0].GetProperty("pricingItems")[0].GetProperty("expenses").GetDecimal());
+    }
+
+    [Fact]
+    public async Task ListRecentFiscalDocuments_ReturnsPricingWithSourceTotalPrecedenceAndSafeFallbacks()
+    {
+        await using var db = CreateDbContext();
+        var (dataSourceId, customerId, municipalityId) = await SeedCustomerAsync(db, "0033", "01", "Cliente Preço");
+        await SeedFiscalDocumentAsync(db, dataSourceId, customerId, municipalityId, "501", new DateOnly(2026, 7, 10), FiscalMovementCategory.Sale, 10m, 5m, quantity: 10m, sourceTotalValue: 42m);
+        await SeedFiscalDocumentAsync(db, dataSourceId, customerId, municipalityId, "502", new DateOnly(2026, 7, 11), FiscalMovementCategory.Sale, 10m, 4m, quantity: 3m);
+        await SeedFiscalDocumentAsync(db, dataSourceId, customerId, municipalityId, "503", new DateOnly(2026, 7, 12), FiscalMovementCategory.Sale, 10m, null);
+        await SeedFiscalDocumentAsync(db, dataSourceId, customerId, municipalityId, "504", new DateOnly(2026, 7, 13), FiscalMovementCategory.Return, 10m, -3m, quantity: 2m);
+        var tool = new ListRecentFiscalDocumentsChatTool(
+            new BusinessChatQueryService(db),
+            Options.Create(new AssistantOptions()),
+            NullLogger<ListRecentFiscalDocumentsChatTool>.Instance);
+
+        var result = await tool.ExecuteAsync(
+            """{"searchTerm":null,"operationCategory":null,"dateFrom":null,"dateTo":null,"customerId":null,"limit":10}""",
+            Context(),
+            default);
+        var documents = Serialize(result.Payload).RootElement.EnumerateArray()
+            .ToDictionary(item => item.GetProperty("documentNumber").GetString()!, item => item.GetProperty("pricingItems")[0]);
+
+        Assert.Equal(42m, documents["501"].GetProperty("calculatedAmount").GetDecimal());
+        Assert.Equal(42m, documents["501"].GetProperty("sourceTotalValue").GetDecimal());
+        Assert.Equal(12m, documents["502"].GetProperty("calculatedAmount").GetDecimal());
+        Assert.Equal(JsonValueKind.Null, documents["503"].GetProperty("calculatedAmount").ValueKind);
+        Assert.Equal(-6m, documents["504"].GetProperty("calculatedAmount").GetDecimal());
     }
 
     [Fact]
@@ -116,13 +149,17 @@ public sealed class BusinessChatToolsTests
             NullLogger<SearchProductsChatTool>.Instance);
 
         var result = await tool.ExecuteAsync(
-            """{"searchTerm":"PA001","limit":10}""",
+            """{"searchTerm":"7891234567890","limit":10}""",
             Context(),
             default);
         var json = Serialize(result.Payload);
 
         Assert.Equal(product.Id, json.RootElement[0].GetProperty("id").GetGuid());
+        Assert.Equal("PA001", json.RootElement[0].GetProperty("externalCode").GetString());
+        Assert.Equal("Produto Acabado - descrição comercial", json.RootElement[0].GetProperty("description").GetString());
+        Assert.Equal("7891234567890", json.RootElement[0].GetProperty("gtin").GetString());
         Assert.Equal(40m, json.RootElement[0].GetProperty("inventory").GetProperty("availableQuantity").GetDecimal());
+        Assert.Equal(100m, json.RootElement[0].GetProperty("inventory").GetProperty("committedValue").GetDecimal());
     }
 
     [Fact]
@@ -142,7 +179,8 @@ public sealed class BusinessChatToolsTests
             FiscalMovementCategory.Sale,
             18m,
             7m,
-            product.Id);
+            product.Id,
+            sourceTotalValue: 55m);
         var tool = new GetProductDetailsChatTool(
             new BusinessChatQueryService(db),
             NullLogger<GetProductDetailsChatTool>.Instance);
@@ -153,9 +191,14 @@ public sealed class BusinessChatToolsTests
 
         Assert.True(root.GetProperty("found").GetBoolean());
         Assert.Equal("DET", details.GetProperty("product").GetProperty("erpCode").GetString());
+        Assert.Equal("Produto Detalhado - descrição comercial", details.GetProperty("product").GetProperty("description").GetString());
         Assert.Single(details.GetProperty("latestInventory").EnumerateArray());
+        Assert.Equal(200m, details.GetProperty("latestInventory")[0].GetProperty("committedValue").GetDecimal());
         Assert.Single(details.GetProperty("productionHistory").EnumerateArray());
         Assert.Single(details.GetProperty("recentFiscalItems").EnumerateArray());
+        Assert.Equal(55m, details.GetProperty("recentFiscalItems")[0].GetProperty("sourceTotalValue").GetDecimal());
+        Assert.Equal(55m, details.GetProperty("recentFiscalItems")[0].GetProperty("calculatedAmount").GetDecimal());
+        Assert.Equal("5102", details.GetProperty("recentFiscalItems")[0].GetProperty("cfopCode").GetString());
     }
 
     [Fact]
@@ -178,6 +221,7 @@ public sealed class BusinessChatToolsTests
         Assert.Single(json.RootElement.EnumerateArray());
         Assert.Equal(available.Id, json.RootElement[0].GetProperty("productId").GetGuid());
         Assert.Equal(10.0m, json.RootElement[0].GetProperty("committedPercent").GetDecimal());
+        Assert.Equal(50m, json.RootElement[0].GetProperty("committedValue").GetDecimal());
     }
 
     [Fact]
@@ -198,11 +242,17 @@ public sealed class BusinessChatToolsTests
         var stockouts = Serialize((await stockoutTool.ExecuteAsync("""{"limit":10}""", Context(), default)).Payload).RootElement;
 
         Assert.Equal(1, summary.GetProperty("stockoutProducts").GetInt32());
+        Assert.Equal(120m, summary.GetProperty("totalOnHandQuantity").GetDecimal());
+        Assert.Equal(55m, summary.GetProperty("totalCommittedQuantity").GetDecimal());
+        Assert.Equal(65m, summary.GetProperty("totalAvailableQuantity").GetDecimal());
+        Assert.Equal(650m, summary.GetProperty("totalStockValue").GetDecimal());
+        Assert.Equal(550m, summary.GetProperty("totalCommittedValue").GetDecimal());
         Assert.Equal(45.83m, summary.GetProperty("committedPercent").GetDecimal());
         Assert.Equal(40m, summary.GetProperty("lastProduction").GetDecimal());
         Assert.Equal(25m, summary.GetProperty("operationalBalance").GetDecimal());
         Assert.Single(stockouts.EnumerateArray());
         Assert.Equal(stockout.Id, stockouts[0].GetProperty("productId").GetGuid());
+        Assert.Equal(300m, stockouts[0].GetProperty("committedValue").GetDecimal());
     }
 
     [Fact]
@@ -210,7 +260,8 @@ public sealed class BusinessChatToolsTests
     {
         await using var db = CreateDbContext();
         var product = await SeedProductWithInventoryAsync(db, "PROD", "Produto Produzido", 10m, 1m, 9m);
-        var currentMonthDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        var now = DateOnly.FromDateTime(DateTime.UtcNow);
+        var currentMonthDate = new DateOnly(now.Year, now.Month, 15);
         await SeedDailyInventoryAsync(db, product.Id, currentMonthDate.AddDays(-1), 25m, 8m);
         await SeedDailyInventoryAsync(db, product.Id, currentMonthDate, 40m, 15m);
         var service = new BusinessChatQueryService(db);
@@ -294,14 +345,14 @@ public sealed class BusinessChatToolsTests
             ExternalCode = erpCode,
             ErpCode = erpCode,
             OperationalCode = $"OP-{erpCode}",
-            Description = name,
+            Description = $"{name} - descrição comercial",
             Name = name,
             Type = "PA",
             Unit = "UN",
             GroupCode = "G1",
             NetWeightKg = 1,
             GrossWeightKg = 1.2m,
-            Gtin = string.Empty,
+            Gtin = "7891234567890",
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -360,8 +411,10 @@ public sealed class BusinessChatToolsTests
         DateOnly issueDate,
         FiscalMovementCategory category,
         decimal grossWeightKg,
-        decimal unitValue,
-        Guid? productId = null)
+        decimal? unitValue,
+        Guid? productId = null,
+        decimal quantity = 1,
+        decimal? sourceTotalValue = null)
     {
         var now = DateTime.UtcNow;
         var import = await EnsureCurrentImportAsync(
@@ -401,9 +454,20 @@ public sealed class BusinessChatToolsTests
             ProductDescription = "Produto",
             ProductGroupCode = "G1",
             ProductGroupDescription = "Grupo",
-            Quantity = 1,
+            Quantity = quantity,
             GrossWeightKg = grossWeightKg,
             UnitValue = unitValue,
+            SourceTotalValue = sourceTotalValue,
+            Expenses = 1.5m,
+            Ipi = 2m,
+            Icms = 3m,
+            Iss = 0.5m,
+            CfopCode = "5102",
+            CfopDescription = "Venda",
+            TesCode = "501",
+            TesDescription = "Venda padrão",
+            OrderNumber = "PED-1",
+            WarehouseCode = "01",
             CreatedAt = now,
             UpdatedAt = now
         });

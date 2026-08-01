@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { buildAssistantBlocks } from "@/components/BusinessAssistant";
 
 describe("business assistant UI", () => {
   const component = fs.readFileSync(
@@ -17,11 +18,9 @@ describe("business assistant UI", () => {
   it("oferece painel moderno, sugestões e histórico visual", () => {
     expect(component).toContain("CONECTA360");
     expect(component).toContain("Pergunte aos seus dados");
-    expect(component).toContain("IA orientada por dados reais");
+    expect(component).toContain("Análise empresarial");
     expect(component).toContain("ASSISTANT_TRANSPARENCY_NOTICE");
-    expect(component).toContain("informar o período consultado");
-    expect(component).toContain("separar dados reais de interpretações");
-    expect(component).toContain("pedir esclarecimento");
+    expect(component).toContain("consideram o período consultado");
     expect(component).toContain("suggestions.map");
     expect(component).toContain("messages.map");
     expect(component).toContain("AssistantResponseText");
@@ -30,6 +29,8 @@ describe("business assistant UI", () => {
     expect(component).toContain("route-list");
     expect(component).toContain("entity-list");
     expect(component).toContain("bullet-list");
+    expect(component).toContain("AssistantDataTable");
+    expect(component).toContain('aria-label="Dados em tabela"');
     expect(component).toContain("\\[CLIENTE\\]");
     expect(component).toContain("cleanListMarker");
     expect(component).toContain("backdrop-blur");
@@ -50,6 +51,38 @@ describe("business assistant UI", () => {
     expect(component).toContain("absolute inset-y-0 right-0");
     expect(component).toContain('aria-expanded={historyOpen}');
     expect(component).toContain('aria-label={historyOpen ? "Fechar histórico" : "Abrir histórico"}');
+  });
+
+  it("mapeia o contrato tabular quando colunas e linhas são consistentes", () => {
+    const blocks = buildAssistantBlocks([
+      "[TABELA]",
+      "[COLUNAS] Data | Nota fiscal | Peso bruto",
+      "[LINHA] 13/05/2026 | 000482718 | 210,0 kg",
+      "[LINHA] 08/05/2026 | 000481842 | 160,0 kg",
+      "[/TABELA]",
+    ]);
+
+    expect(blocks).toEqual([{
+      type: "table",
+      columns: ["Data", "Nota fiscal", "Peso bruto"],
+      rows: [
+        ["13/05/2026", "000482718", "210,0 kg"],
+        ["08/05/2026", "000481842", "160,0 kg"],
+      ],
+    }]);
+  });
+
+  it("preserva como texto um contrato tabular com quantidade desigual de células", () => {
+    const blocks = buildAssistantBlocks([
+      "[TABELA]",
+      "[COLUNAS] Data | Nota fiscal | Peso bruto",
+      "[LINHA] 13/05/2026 | 000482718",
+      "[/TABELA]",
+    ]);
+
+    expect(blocks).not.toContainEqual(expect.objectContaining({ type: "table" }));
+    expect(blocks).toContainEqual({ type: "paragraph", text: "Data | Nota fiscal | Peso bruto" });
+    expect(blocks).toContainEqual({ type: "paragraph", text: "13/05/2026 | 000482718" });
   });
 
   it("mantém o acionador recolhido e expande no hover ou foco", () => {

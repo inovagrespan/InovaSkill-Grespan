@@ -22,6 +22,7 @@ public sealed class KnowledgeMemoryService(
     ILogger<KnowledgeMemoryService> logger)
 {
     private const int MaximumRecalledMemories = 8;
+    private const int MaximumUserReferenceMemories = 3;
     private const double MinimumSimilarity = 0.35;
     private const double MinimumPersonalQuerySimilarity = 0.20;
     private static readonly IReadOnlyDictionary<string, string[]> PersonalSubjectTerms =
@@ -35,6 +36,12 @@ public sealed class KnowledgeMemoryService(
         };
     private static readonly HashSet<string> PersonalReferenceTerms =
         new(["eu", "meu", "minha", "meus", "minhas", "me", "mim"], StringComparer.Ordinal);
+    private static readonly IReadOnlyList<string[]> UserReferenceSubjectTerms =
+    [
+        ["preferred", "preferido", "apelido", "chamar"],
+        ["name", "nome"],
+        ["role", "cargo", "funcao", "trabalho", "profissao"]
+    ];
     private static readonly Regex SecretPattern = new(
         @"(?ix)(password|senha|token|api[_ -]?key|secret|chave\s+privada)\s*[:=]\s*\S+|-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -56,11 +63,32 @@ public sealed class KnowledgeMemoryService(
             .Select(memory => new { memory.Id, memory.Scope, memory.Subject, memory.Content, memory.EmbeddingJson })
             .ToListAsync(cancellationToken);
 
-        return candidates.Select(memory => new RecalledMemory(
+        var scoredMemories = candidates.Select(memory => new RecalledMemory(
                 memory.Id, memory.Scope, memory.Subject, memory.Content,
                 CosineSimilarity(queryEmbedding, DeserializeEmbedding(memory.EmbeddingJson))))
+            .ToList();
+
+        return SelectMemoriesForRecall(query, scoredMemories);
+    }
+
+    public static IReadOnlyList<RecalledMemory> SelectMemoriesForRecall(
+        string query, IReadOnlyList<RecalledMemory> scoredMemories)
+    {
+        var userReferenceMemories = scoredMemories
+            .Where(memory => memory.Scope == KnowledgeMemoryScopes.User && GetUserReferencePriority(memory.Subject) >= 0)
+            .OrderBy(memory => GetUserReferencePriority(memory.Subject))
+            .ThenByDescending(memory => memory.Similarity)
+            .Take(MaximumUserReferenceMemories)
+            .ToList();
+        var selectedIds = userReferenceMemories.Select(memory => memory.Id).ToHashSet();
+        var relevantMemories = scoredMemories
+            .Where(memory => !selectedIds.Contains(memory.Id))
             .Where(memory => IsRelevantForRecall(query, memory.Scope, memory.Subject, memory.Similarity))
             .OrderByDescending(memory => memory.Similarity)
+            .ToList();
+
+        return userReferenceMemories
+            .Concat(relevantMemories)
             .Take(MaximumRecalledMemories)
             .ToList();
     }
@@ -78,6 +106,7 @@ public sealed class KnowledgeMemoryService(
             """
             Extraia apenas fatos duráveis explicitamente informados pelo usuário e úteis em conversas futuras.
             Classifique como company quando o fato for sobre a Grespan e como user quando for preferência, função ou contexto pessoal do autor.
+            Para fatos de identificação pessoal, use exatamente os subjects estáveis: "preferred name" para como o usuário prefere ser chamado, "name" para o nome informado e "role" para cargo ou função. Extraia cada um separadamente quando estiver explícito.
             Ignore perguntas, hipóteses, inferências, dados operacionais transitórios, conteúdo da resposta do assistente e qualquer senha, token, chave ou segredo.
             Use um subject curto e estável para que uma informação posterior sobre o mesmo assunto substitua a anterior.
             Retorne somente o JSON solicitado.
@@ -156,6 +185,16 @@ public sealed class KnowledgeMemoryService(
         }
 
         return similarity >= MinimumPersonalQuerySimilarity && queryTerms.Overlaps(PersonalReferenceTerms);
+    }
+
+    private static int GetUserReferencePriority(string subject)
+    {
+        var subjectTerms = Tokenize(subject);
+        for (var index = 0; index < UserReferenceSubjectTerms.Count; index++)
+        {
+            if (UserReferenceSubjectTerms[index].Any(subjectTerms.Contains)) return index;
+        }
+        return -1;
     }
 
     private static HashSet<string> Tokenize(string value) =>

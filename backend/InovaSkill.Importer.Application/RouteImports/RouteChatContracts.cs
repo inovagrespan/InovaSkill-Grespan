@@ -205,7 +205,30 @@ public sealed record BusinessChatFiscalDocumentDto(
     string OperationCategory,
     string OperationDescription,
     int ItemCount,
-    decimal GrossWeightKg);
+    decimal GrossWeightKg,
+    IReadOnlyList<BusinessChatFiscalDocumentPricingItemDto> PricingItems);
+
+public sealed record BusinessChatFiscalDocumentPricingItemDto(
+    string ItemNumber,
+    string ProductCode,
+    string ProductDescription,
+    string ProductGroupCode,
+    string ProductGroupDescription,
+    decimal Quantity,
+    decimal GrossWeightKg,
+    decimal? UnitValue,
+    decimal? SourceTotalValue,
+    decimal? CalculatedAmount,
+    decimal? Expenses,
+    decimal? Ipi,
+    decimal? Icms,
+    decimal? Iss,
+    string? CfopCode,
+    string? CfopDescription,
+    string? TesCode,
+    string? TesDescription,
+    string? OrderNumber,
+    string? WarehouseCode);
 
 public sealed record BusinessChatFiscalReturnRateDto(
     int PeriodDays,
@@ -217,6 +240,8 @@ public sealed record BusinessChatFiscalReturnRateDto(
 
 public sealed record BusinessChatProductDto(
     Guid Id,
+    string ExternalCode,
+    string Description,
     string ErpCode,
     string OperationalCode,
     string Name,
@@ -225,13 +250,15 @@ public sealed record BusinessChatProductDto(
     string GroupCode,
     decimal? NetWeightKg,
     decimal? GrossWeightKg,
+    string Gtin,
     BusinessChatProductInventoryDto? Inventory);
 
 public sealed record BusinessChatProductInventoryDto(
     decimal OnHandQuantity,
     decimal CommittedQuantity,
     decimal AvailableQuantity,
-    decimal StockValue);
+    decimal StockValue,
+    decimal CommittedValue);
 
 public sealed record BusinessChatProductDetailsDto(
     BusinessChatProductCoreDto Product,
@@ -242,6 +269,8 @@ public sealed record BusinessChatProductDetailsDto(
 
 public sealed record BusinessChatProductCoreDto(
     Guid Id,
+    string ExternalCode,
+    string Description,
     string ErpCode,
     string OperationalCode,
     string Name,
@@ -250,6 +279,7 @@ public sealed record BusinessChatProductCoreDto(
     string GroupCode,
     decimal? NetWeightKg,
     decimal? GrossWeightKg,
+    string Gtin,
     DateTime UpdatedAt);
 
 public sealed record BusinessChatInventoryPositionQuery(
@@ -275,6 +305,7 @@ public sealed record BusinessChatInventoryPositionDto(
     decimal CommittedQuantity,
     decimal AvailableQuantity,
     decimal StockValue,
+    decimal CommittedValue,
     decimal? CommittedPercent);
 
 public sealed record BusinessChatInventoryHistoryDto(
@@ -285,7 +316,8 @@ public sealed record BusinessChatInventoryHistoryDto(
     decimal OnHandQuantity,
     decimal CommittedQuantity,
     decimal AvailableQuantity,
-    decimal StockValue);
+    decimal StockValue,
+    decimal CommittedValue);
 
 public sealed record BusinessChatProductFiscalItemDto(
     Guid Id,
@@ -298,11 +330,25 @@ public sealed record BusinessChatProductFiscalItemDto(
     decimal Quantity,
     decimal GrossWeightKg,
     decimal? UnitValue,
-    decimal CalculatedAmount);
+    decimal? SourceTotalValue,
+    decimal? CalculatedAmount,
+    decimal? Expenses,
+    decimal? Ipi,
+    decimal? Icms,
+    decimal? Iss,
+    string? CfopCode,
+    string? TesCode,
+    string? OrderNumber,
+    string? WarehouseCode);
 
 public sealed record BusinessChatInventorySummaryDto(
     int StockoutProducts,
     int StockoutWarehousePositions,
+    decimal TotalOnHandQuantity,
+    decimal TotalCommittedQuantity,
+    decimal TotalAvailableQuantity,
+    decimal TotalStockValue,
+    decimal TotalCommittedValue,
     decimal CommittedPercent,
     DateOnly? LastDailyDate,
     decimal LastProduction,
@@ -321,6 +367,7 @@ public sealed record BusinessChatStockoutProductDto(
     decimal CommittedQuantity,
     decimal AvailableQuantity,
     decimal StockValue,
+    decimal CommittedValue,
     int AffectedWarehousePositions,
     int WarehousePositions);
 
