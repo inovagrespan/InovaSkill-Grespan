@@ -17,7 +17,7 @@ public sealed class SearchRoutesChatTool(
     private readonly AssistantOptions assistantOptions = options.Value;
 
     public string Name => "search_routes";
-    public string Description => "Pesquisa rotas pelo nome da rota ou pelo nome de uma cidade atendida.";
+    public string Description => "Pesquisa rotas pelo nome ou cidade atendida e retorna dia, veículo, carga e ocupações geral, por peso, volume e paletes.";
 
     public object GetParameterSchema() => new
     {
@@ -89,7 +89,7 @@ public sealed class GetRouteDetailsChatTool(
     ILogger<GetRouteDetailsChatTool> logger) : IChatTool
 {
     public string Name => "get_route_details";
-    public string Description => "Consulta o resumo seguro de uma rota específica pelo identificador.";
+    public string Description => "Consulta dia, veículo e capacidades, carga, ocupações por dimensão, cidades, entregas e clientes potenciais de uma rota.";
 
     public object GetParameterSchema() => new
     {
@@ -151,7 +151,7 @@ public sealed class GetCriticalRoutesChatTool(
     private readonly AssistantOptions assistantOptions = options.Value;
 
     public string Name => "get_critical_routes";
-    public string Description => "Lista rotas críticas, classificadas pela regra de ocupação logística já existente.";
+    public string Description => "Lista rotas críticas com dia, veículo, carga e ocupações geral, por peso, volume e paletes.";
 
     public object GetParameterSchema() => new
     {
@@ -214,7 +214,7 @@ public sealed class ListRoutesByOccupancyChatTool(
     public string Name => "list_routes_by_occupancy";
 
     public string Description =>
-        "Lista rotas por classificação ou faixa de ocupação. Use para perguntas sobre rotas críticas, ociosas, saudáveis, médias, sem ocupação, maiores ou menores ocupações.";
+        "Lista rotas por classificação ou faixa de ocupação, incluindo dia, veículo, carga e ocupações por dimensão. Use para rotas críticas, ociosas, saudáveis, médias, sem ocupação, maiores ou menores ocupações.";
 
     public object GetParameterSchema() => new
     {
@@ -346,7 +346,7 @@ public sealed class GetRouteCitiesChatTool(
     private readonly AssistantOptions assistantOptions = options.Value;
 
     public string Name => "get_route_cities";
-    public string Description => "Lista as cidades vinculadas a uma rota específica.";
+    public string Description => "Lista as cidades da rota na sequência operacional, com entregas, média diária e observações.";
 
     public object GetParameterSchema() => new
     {

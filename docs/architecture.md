@@ -350,6 +350,12 @@ ferramenta inválida. Detalhes técnicos ficam em logs; a resposta HTTP expõe
 somente texto final, `sessionId`, sugestões, fontes resumidas e nomes públicos
 em `consultedTools`.
 
+O prompt permite combinar várias ferramentas na mesma resposta quando consultas
+complementares aumentam a cobertura, a comparação ou a confiabilidade. Essa
+liberdade continua limitada ao escopo da pergunta e ao teto configurado pelo
+orquestrador: cada consulta deve ter finalidade clara, consultas equivalentes não
+devem ser repetidas e o ciclo deve parar assim que houver evidência suficiente.
+
 Antes do ciclo de resposta, `AssistantScopeClassifier` faz uma classificação
 estruturada em `InScope`, `OutOfScope` ou `Ambiguous`, considerando a pergunta e
 o histórico limitado da sessão. Declarações pessoais comuns são admitidas
@@ -477,6 +483,13 @@ criar a classe, registrar no container e cobrir permissões/testes, sem alterar
 um bloco central de decisão do orquestrador. Os nomes das ferramentas ficam
 restritos aos logs operacionais e não são expostos no contrato público do chat.
 
+Os DTOs de rota preservam dia da semana, veículo, capacidades, carga total e as
+ocupações geral, por peso, volume e paletes. O detalhamento de cidades mantém a
+sequência operacional, entregas, média diária e observações importadas. Campos de
+origem técnica da planilha continuam excluídos. As projeções reutilizam o snapshot
+atual e os relacionamentos já indexados de rota, veículo e entradas, sem criar
+consulta ou índice persistido adicional.
+
 As ferramentas corporativas chamam `IBusinessChatQueryService`, definido em
 `Application/RouteImports` e implementado em `Infrastructure`. Esse serviço
 reutiliza as mesmas fórmulas, fontes publicadas e limites das telas de clientes,
@@ -490,6 +503,11 @@ incluem grupo, quantidade, peso, valores, despesas, tributos, CFOP, TES, pedido 
 armazém. Documento cadastral de cliente, números de linha/planilha,
 identificadores de importação, schema, SQL, conexão e demais metadados técnicos
 ou sensíveis ficam deliberadamente fora desses DTOs.
+O cabeçalho fiscal preserva tipo e movimento do documento, código e descrição da
+operação e referência ao documento original. Produção preserva identificação
+completa do produto, produção por turno, saída, ajustes e fechamento, tanto nos
+registros quanto no resumo da última data; o resumo mensal inclui produção, saída
+e ajustes.
 Consultas de busca exigem termo mínimo e limite máximo; consultas fiscais,
 estoque, produção e ruptura retornam listas pequenas; a taxa de devolução limita
 o período a 365 dias. Produção no chat usa somente o controle diário publicado e
@@ -699,6 +717,27 @@ Por isso, o serviço de processamento sempre recarrega `JobExecution` após o
 processador retornar e antes de persistir o estado terminal, evitando divergência entre um import
 `Completed` e um job ainda `Processing`.
 
+Enquanto houver uma importação `Queued` ou `Processing`, a tela de Importações
+consulta a listagem a cada dez segundos. A API expõe `StartedAt` no contrato da
+listagem e calcula a duração no servidor no instante de cada consulta. O
+frontend não mantém relógio nem estima progresso localmente: exibe somente o
+último estado recebido, que pode ficar defasado em até um ciclo de polling. Os
+contadores parciais persistidos alimentam a barra percentual; sem total conhecido,
+a barra permanece indeterminada.
+
+A importação fiscal não usa o modelo em memória do ClosedXML no caminho de
+produção. `FiscalMovementsSpreadsheetParser` percorre `sheet1.xml` com
+`OpenXmlReader`, mantendo somente a linha corrente e a pequena tabela de strings
+compartilhadas. `FiscalMovementsProcessor` acumula lotes de 2.000 linhas,
+persiste produtos, documentos e itens e limpa o rastreamento do EF entre lotes.
+Os dados fiscais continuam dentro de uma única transação para impedir consultas
+de observarem uma importação parcial. A cada aproximadamente dez segundos, um
+contexto separado atualiza somente `TotalRows` e `ImportedRows`; esses contadores
+operacionais podem sobreviver ao rollback dos dados e são substituídos pelo
+estado terminal quando a execução conclui ou falha. O lote sustenta o acesso por
+códigos de produto, número/chave de documento e itens já cobertos pelos índices
+de unicidade e consulta existentes; nenhum índice adicional é necessário.
+
 ### Versionamento e publicação
 
 Cada upload cria um import com versão crescente por `DataSource`. A fonte possui
@@ -733,7 +772,16 @@ normaliza cada produto + data das abas mensais em uma linha com produção, saí
 ajuste e estoque final. A planilha operacional é vinculada ao produto pelo
 código operacional normalizado. Células vazias de produção, saída e ajuste viram
 zero; fórmulas simples de soma/subtração são aceitas; erros de fórmula são
-registrados em `import_errors`. Duplicidade idêntica por produto/data é ignorada
+registrados em `import_errors`. Em cada aba mensal, o parser lê somente o bloco
+operacional anterior ao segundo cabeçalho de produtos e aceita apenas datas do
+mês indicado no nome da aba; blocos-resumo de entradas/saídas e dias sobrepostos
+do mês seguinte não criam registros duplicados. Quando existe uma aba mensal
+canônica (`MM.aaaa`), cópias sufixadas do mesmo mês são ignoradas. As colunas de
+código operacional, produto e saldo inicial, além da primeira linha de dados,
+são detectadas pelos cabeçalhos para suportar as disposições usadas antes e a
+partir de 2026. Quando a aba fornece `CÓD.TOTVS`, o vínculo e a deduplicação
+priorizam esse código ERP; abas antigas continuam usando o código operacional.
+Duplicidade idêntica por produto/data é ignorada
 com aviso, e duplicidade conflitante registra erro sem escolher um valor
 arbitrário. Os índices cobrem unicidade por import/produto/data e consultas
 históricas por produto/data.

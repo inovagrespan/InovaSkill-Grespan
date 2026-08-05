@@ -73,7 +73,7 @@ public sealed class GetCustomerConsumptionSummaryChatTool(
     public string Name => "get_customer_consumption_summary";
 
     public string Description =>
-        "Consulta consumo, última compra, movimentos recentes e evolução mensal de um cliente pelo identificador.";
+        "Consulta consumo, última compra, movimentos fiscais recentes com valores e referências, e evolução mensal de um cliente pelo identificador.";
 
     public object GetParameterSchema() => new
     {
@@ -140,7 +140,7 @@ public sealed class ListRecentFiscalDocumentsChatTool(
     public string Name => "list_recent_fiscal_documents";
 
     public string Description =>
-        "Lista notas fiscais recentes por cliente, número, cidade, período ou categoria de movimento, incluindo quantidade, valor unitário, valor total de origem e valor calculável dos itens para análises de preço.";
+        "Lista notas fiscais recentes por cliente, número, cidade, período ou categoria, incluindo cabeçalho fiscal, documento original, produtos, quantidade, valores, tributos e referências operacionais.";
 
     public object GetParameterSchema() => new
     {
@@ -562,7 +562,7 @@ public sealed class GetProductionSummaryChatTool(
     public string Name => "get_production_summary";
 
     public string Description =>
-        "Consulta o resumo de produção: última data publicada, produção, saída, saldo operacional e totais do mês atual.";
+        "Consulta o resumo de produção: última data, produção por turno, saída, ajustes, fechamento, saldo operacional e totais do mês atual.";
 
     public object GetParameterSchema() => new
     {
@@ -609,7 +609,7 @@ public sealed class ListProductionRecordsChatTool(
     public string Name => "list_production_records";
 
     public string Description =>
-        "Lista registros de produção e saída por produto, texto de busca e período, usando o controle diário publicado.";
+        "Lista registros de produção por produto e período, com identificação completa, produção por turno, saída, ajustes e fechamento do controle diário publicado.";
 
     public object GetParameterSchema() => new
     {
@@ -617,7 +617,7 @@ public sealed class ListProductionRecordsChatTool(
         additionalProperties = false,
         properties = new
         {
-            searchTerm = new { type = new[] { "string", "null" }, description = "Nome, código ERP ou código operacional do produto." },
+            searchTerm = new { type = new[] { "string", "null" }, description = "Nome, descrição, código externo, código ERP, código operacional ou GTIN do produto." },
             productId = new { type = new[] { "string", "null" }, format = "uuid" },
             dateFrom = new { type = new[] { "string", "null" }, format = "date" },
             dateTo = new { type = new[] { "string", "null" }, format = "date" },

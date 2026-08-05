@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClosedXML.Excel;
 using InovaSkill.Importer.Application.RouteImports;
 
@@ -7,6 +8,7 @@ public sealed record ParsedDailyInventoryRow(
     string SheetName,
     int RowNumber,
     string OperationalCode,
+    string? ErpCode,
     string ProductName,
     DateOnly Date,
     decimal ProductionQuantity,
@@ -29,24 +31,49 @@ public sealed class DailyInventorySpreadsheetParser
             var rows = new List<ParsedDailyInventoryRow>();
             var errors = new List<ParsedImportError>();
             var totalRows = 0;
+            var canonicalPeriods = workbook.Worksheets
+                .Where(sheet => sheet.Name.Trim().Length == 7)
+                .Select(sheet => TryReadSheetPeriod(sheet.Name))
+                .Where(period => period.HasValue)
+                .Select(period => period!.Value)
+                .ToHashSet();
             foreach (var sheet in workbook.Worksheets)
             {
+                var sheetPeriod = TryReadSheetPeriod(sheet.Name);
+                if (sheetPeriod.HasValue && canonicalPeriods.Contains(sheetPeriod.Value) &&
+                    sheet.Name.Trim().Length != 7)
+                    continue;
+                var layout = FindDataLayout(sheet);
+                if (layout is null) continue;
                 var dateColumns = FindDateColumns(sheet);
                 if (dateColumns.Count == 0) continue;
                 var lastRow = sheet.LastRowUsed()?.RowNumber() ?? 2;
-                for (var rowNumber = 3; rowNumber <= lastRow; rowNumber++)
+                for (var rowNumber = layout.FirstDataRow; rowNumber <= lastRow; rowNumber++)
                 {
-                    var rawOperationalCode = SpreadsheetParsingHelpers.Compact(sheet.Cell(rowNumber, 1).GetFormattedString());
-                    var name = SpreadsheetParsingHelpers.Compact(sheet.Cell(rowNumber, 3).GetFormattedString());
+                    var rawOperationalCode = SpreadsheetParsingHelpers.Compact(
+                        sheet.Cell(rowNumber, layout.OperationalCodeColumn).GetFormattedString());
+                    var erpCode = layout.ErpCodeColumn.HasValue
+                        ? SpreadsheetParsingHelpers.Compact(
+                            sheet.Cell(rowNumber, layout.ErpCodeColumn.Value).GetFormattedString())
+                        : null;
+                    var name = SpreadsheetParsingHelpers.Compact(
+                        sheet.Cell(rowNumber, layout.ProductNameColumn).GetFormattedString());
+                    if (SpreadsheetParsingHelpers.NormalizeHeader(rawOperationalCode) == "COD" ||
+                        SpreadsheetParsingHelpers.NormalizeHeader(sheet.Cell(rowNumber, 1).GetFormattedString()) == "COD")
+                        break;
                     if (string.IsNullOrWhiteSpace(rawOperationalCode) && string.IsNullOrWhiteSpace(name)) continue;
                     totalRows++;
-                    if (string.IsNullOrWhiteSpace(rawOperationalCode) ||
-                        SpreadsheetParsingHelpers.NormalizeHeader(rawOperationalCode) == "COD")
+                    if (string.IsNullOrWhiteSpace(rawOperationalCode))
                         continue;
                     var operationalCode = ProductCodeNormalizer.NormalizeOperationalCode(rawOperationalCode);
-                    var previousClosing = ReadOptionalInitialClosing(sheet.Cell(rowNumber, 5));
+                    var previousClosing = ReadOptionalInitialClosing(
+                        sheet.Cell(rowNumber, layout.InitialClosingColumn));
                     foreach (var dateColumn in dateColumns)
                     {
+                        if (sheetPeriod.HasValue &&
+                            (dateColumn.Date.Year != sheetPeriod.Value.Year ||
+                             dateColumn.Date.Month != sheetPeriod.Value.Month))
+                            continue;
                         decimal? production;
                         if (dateColumn.EntranceCount > 1)
                         {
@@ -78,7 +105,7 @@ public sealed class DailyInventorySpreadsheetParser
                             previousClosing = closing;
                             continue;
                         }
-                        rows.Add(new ParsedDailyInventoryRow(sheet.Name, rowNumber, operationalCode, name,
+                        rows.Add(new ParsedDailyInventoryRow(sheet.Name, rowNumber, operationalCode, erpCode, name,
                             dateColumn.Date, production.Value, outbound.Value, 0, closing.Value));
                         previousClosing = closing;
                     }
@@ -91,6 +118,50 @@ public sealed class DailyInventorySpreadsheetParser
         {
             throw new StructuralImportException("O arquivo de controle diário não é um XLSX válido ou está corrompido.", exception);
         }
+    }
+
+    private static DateOnly? TryReadSheetPeriod(string sheetName)
+    {
+        var candidate = sheetName.Trim();
+        if (candidate.Length < 7 ||
+            !DateTime.TryParseExact(candidate[..7], "MM.yyyy", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var period))
+            return null;
+        return DateOnly.FromDateTime(period);
+    }
+
+    private static DailyInventoryLayout? FindDataLayout(IXLWorksheet sheet)
+    {
+        var lastColumn = sheet.LastColumnUsed()?.ColumnNumber() ?? 0;
+        var operationalCodeColumn = 0;
+        int? erpCodeColumn = null;
+        var productNameColumn = 0;
+        var initialClosingColumn = 0;
+        for (var column = 1; column <= lastColumn; column++)
+        {
+            var header = SpreadsheetParsingHelpers.NormalizeHeader(sheet.Cell(1, column).GetFormattedString());
+            if (header == "COD") operationalCodeColumn = column;
+            else if (header == "CODTOTVS") erpCodeColumn = column;
+            else if (header == "PRODUTO") productNameColumn = column;
+            else if (header == "ATUAL" && initialClosingColumn == 0) initialClosingColumn = column;
+        }
+        if (operationalCodeColumn == 0 || productNameColumn == 0 || initialClosingColumn == 0)
+            return null;
+
+        var firstDataRow = 0;
+        var headerEndRow = Math.Min(Math.Max(sheet.LastRowUsed()?.RowNumber() ?? 2, 2), 5);
+        for (var row = 2; row <= headerEndRow; row++)
+        {
+            if (SpreadsheetParsingHelpers.NormalizeHeader(
+                    sheet.Cell(row, productNameColumn).GetFormattedString()) != "MOVIMENTACOES")
+                continue;
+            firstDataRow = row + 1;
+            break;
+        }
+        return firstDataRow == 0
+            ? null
+            : new DailyInventoryLayout(
+                operationalCodeColumn, erpCodeColumn, productNameColumn, initialClosingColumn, firstDataRow);
     }
 
     private static List<DailyDateColumns> FindDateColumns(IXLWorksheet sheet)
@@ -175,4 +246,10 @@ public sealed class DailyInventorySpreadsheetParser
     }
 
     private sealed record DailyDateColumns(DateOnly Date, int EntranceColumn, int OutboundColumn, int CurrentColumn, int EntranceCount = 1);
+    private sealed record DailyInventoryLayout(
+        int OperationalCodeColumn,
+        int? ErpCodeColumn,
+        int ProductNameColumn,
+        int InitialClosingColumn,
+        int FirstDataRow);
 }

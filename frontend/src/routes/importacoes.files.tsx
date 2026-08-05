@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
+import { IMPORT_STATUS_POLL_INTERVAL_MS, isImportActive, resolveImportProgressPercent } from "@/lib/import-runtime";
 import {
   MAX_UPLOAD_SIZE_BYTES,
   MAX_UPLOAD_SIZE_MEGABYTES,
@@ -68,6 +69,7 @@ function ImportacoesPage() {
   const [importsLoading, setImportsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const pageSize = 20;
   const pageRef = useRef(1);
 
@@ -82,9 +84,13 @@ function ImportacoesPage() {
     try {
       const data = await fetchImports(p, pageSize);
       setImports(data.items);
+      setSelectedImport((current) => current == null
+        ? null
+        : data.items.find((item) => item.id === current.id) ?? current);
       setTotal(data.total);
       setPage(data.page);
       pageRef.current = data.page;
+      setLastRefreshedAt(new Date());
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -107,6 +113,14 @@ function ImportacoesPage() {
   useEffect(() => {
     void loadImports(1);
   }, []);
+
+  const hasActiveImport = imports.some((item) => isImportActive(item.status));
+
+  useEffect(() => {
+    if (!hasActiveImport) return;
+    const pollingId = window.setInterval(() => void loadImports(pageRef.current), IMPORT_STATUS_POLL_INTERVAL_MS);
+    return () => window.clearInterval(pollingId);
+  }, [hasActiveImport]);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -248,7 +262,13 @@ function ImportacoesPage() {
 
       <Card className="animate-soft-enter border-border bg-surface">
         <CardHeader>
-          <CardTitle>Importações realizadas</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Importações realizadas</CardTitle>
+            <span className="text-xs text-muted-foreground">
+              {hasActiveImport ? "Atualização automática a cada 10 segundos" : "Atualizado"}
+              {lastRefreshedAt ? ` às ${lastRefreshedAt.toLocaleTimeString("pt-BR")}` : ""}
+            </span>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {importsLoading && imports.length === 0 && <SkeletonList rows={5} />}
@@ -278,11 +298,18 @@ function ImportacoesPage() {
                 {imp.totalRows != null && <span>Linhas: {imp.totalRows}</span>}
                 {imp.importedRows != null && <span>Importadas: {imp.importedRows}</span>}
                 {imp.errorCount > 0 && <span className="text-destructive">Erros: {imp.errorCount}</span>}
-                {imp.durationSeconds != null && <span>Duração: {formatDuration(imp.durationSeconds)}</span>}
+                {imp.durationSeconds != null && (
+                  <span>
+                    {isImportActive(imp.status) ? "Tempo decorrido" : "Duração"}: {formatDuration(imp.durationSeconds)}
+                  </span>
+                )}
               </div>
               {imp.status === "Processing" && (
                 <div className="mt-2">
-                  <Progress value={null} className="h-1.5 animate-pulse" />
+                  <Progress
+                    value={resolveImportProgressPercent(imp.totalRows, imp.importedRows)}
+                    className={`h-1.5 ${resolveImportProgressPercent(imp.totalRows, imp.importedRows) == null ? "animate-pulse" : ""}`}
+                  />
                 </div>
               )}
             </button>

@@ -3089,6 +3089,7 @@ export type ImportItem = {
   isCurrent: boolean;
   status: ImportStatusEnum;
   createdAt: string;
+  startedAt: string | null;
   totalRows: number | null;
   importedRows: number | null;
   errorCount: number;

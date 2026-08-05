@@ -100,6 +100,131 @@ public sealed class ProductInventoryImportTests
     }
 
     [Fact]
+    public void DailyInventorySpreadsheetParser_IgnoresSummaryBlocksAndDatesOutsideSheetMonth()
+    {
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.AddWorksheet("02.2024");
+        AddDailySheet(sheet, 31, new DateTime(2024, 2, 29));
+        sheet.Cell(1, 9).Value = new DateTime(2024, 3, 1);
+        sheet.Cell(2, 9).Value = "ENTRADA";
+        sheet.Cell(2, 10).Value = "SAIDA";
+        sheet.Cell(2, 11).Value = "ATUAL";
+        sheet.Cell(3, 9).Value = 10;
+        sheet.Cell(3, 10).Value = 2;
+        sheet.Cell(3, 11).Value = 34;
+        sheet.Cell(5, 1).Value = "CÓD";
+        sheet.Cell(7, 1).Value = "V6793";
+        sheet.Cell(7, 2).Value = "6793";
+        sheet.Cell(7, 3).Value = "RAPIDO 80 GR";
+        sheet.Cell(7, 5).Value = 999;
+        sheet.Cell(7, 6).Value = 999;
+        sheet.Cell(7, 7).Value = 999;
+        sheet.Cell(7, 8).Value = 999;
+        using var stream = new MemoryStream(Save(workbook));
+
+        var result = new DailyInventorySpreadsheetParser().Parse(stream);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(new DateOnly(2024, 2, 29), row.Date);
+        Assert.Equal(31, row.ProductionQuantity);
+        Assert.DoesNotContain(result.Rows, item => item.RowNumber == 7);
+        Assert.DoesNotContain(result.Rows, item => item.Date == new DateOnly(2024, 3, 1));
+    }
+
+    [Fact]
+    public void DailyInventorySpreadsheetParser_PrefersCanonicalMonthlySheetOverCopy()
+    {
+        using var workbook = new XLWorkbook();
+        AddDailySheet(workbook.AddWorksheet("06.2025 (2)"), 999, new DateTime(2025, 6, 30));
+        AddDailySheet(workbook.AddWorksheet("06.2025"), 31, new DateTime(2025, 6, 30));
+        using var stream = new MemoryStream(Save(workbook));
+
+        var row = Assert.Single(new DailyInventorySpreadsheetParser().Parse(stream).Rows);
+
+        Assert.Equal("06.2025", row.SheetName);
+        Assert.Equal(31, row.ProductionQuantity);
+    }
+
+    [Fact]
+    public void DailyInventorySpreadsheetParser_DetectsColumnsAndDataRowFromNewLayout()
+    {
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.AddWorksheet("05.2026");
+        sheet.Cell(1, 1).Value = "CÓD.";
+        sheet.Cell(1, 2).Value = "CÓD.TOTVS";
+        sheet.Cell(1, 3).Value = "CÓD";
+        sheet.Cell(1, 4).Value = "PRODUTO";
+        sheet.Cell(1, 5).Value = "PESO";
+        sheet.Cell(1, 6).Value = "ATUAL";
+        sheet.Cell(1, 7).Value = new DateTime(2026, 5, 1);
+        sheet.Cell(2, 7).Value = "1º TURNO";
+        sheet.Cell(3, 4).Value = "MOVIMENTAÇÕES";
+        sheet.Cell(3, 7).Value = "ENTRADA";
+        sheet.Cell(3, 8).Value = "ENTRADA";
+        sheet.Cell(3, 9).Value = "SAIDA";
+        sheet.Cell(3, 10).Value = "ATUAL";
+        sheet.Cell(4, 1).Value = 300;
+        sheet.Cell(4, 2).Value = 10000121;
+        sheet.Cell(4, 3).Value = 6792;
+        sheet.Cell(4, 4).Value = "RAPIDO 70 GR";
+        sheet.Cell(4, 6).Value = 20;
+        sheet.Cell(4, 7).Value = 2;
+        sheet.Cell(4, 8).Value = 3;
+        sheet.Cell(4, 9).Value = 4;
+        sheet.Cell(4, 10).FormulaA1 = "F4+G4+H4-I4";
+        using var stream = new MemoryStream(Save(workbook));
+
+        var row = Assert.Single(new DailyInventorySpreadsheetParser().Parse(stream).Rows);
+
+        Assert.Equal("6792", row.OperationalCode);
+        Assert.Equal("10000121", row.ErpCode);
+        Assert.Equal("RAPIDO 70 GR", row.ProductName);
+        Assert.Equal(5, row.ProductionQuantity);
+        Assert.Equal(4, row.OutboundQuantity);
+        Assert.Equal(21, row.ClosingQuantity);
+        Assert.Equal(4, row.RowNumber);
+    }
+
+    [Fact]
+    public async Task DailyInventoryProcessor_PrioritizesErpCodeWhenOperationalCodeIsIncorrect()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = CreateDb(connection);
+        var import = await AddImportAsync(db, DailyInventoryImportCodes.DataSource,
+            DailyInventoryImportCodes.ProcessorKey, DataSourceImportMode.Snapshot, "daily-new-layout");
+        var product = AddProduct(db, "10000121", "5996");
+        await db.SaveChangesAsync();
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.AddWorksheet("05.2026");
+        sheet.Cell(1, 1).Value = "CÓD.";
+        sheet.Cell(1, 2).Value = "CÓD.TOTVS";
+        sheet.Cell(1, 3).Value = "CÓD";
+        sheet.Cell(1, 4).Value = "PRODUTO";
+        sheet.Cell(1, 6).Value = "ATUAL";
+        sheet.Cell(1, 7).Value = new DateTime(2026, 5, 1);
+        sheet.Cell(3, 4).Value = "MOVIMENTAÇÕES";
+        sheet.Cell(3, 7).Value = "ENTRADA";
+        sheet.Cell(3, 8).Value = "SAIDA";
+        sheet.Cell(3, 9).Value = "ATUAL";
+        sheet.Cell(4, 2).Value = "10000121";
+        sheet.Cell(4, 3).Value = "6902";
+        sheet.Cell(4, 4).Value = "Produto";
+        sheet.Cell(4, 6).Value = 10;
+        sheet.Cell(4, 7).Value = 2;
+        sheet.Cell(4, 8).Value = 1;
+        sheet.Cell(4, 9).Value = 11;
+        var processor = new DailyInventoryProcessor(db, new MemoryStorage(Save(workbook)),
+            new DailyInventorySpreadsheetParser());
+
+        await processor.ProcessAsync(import.Id, default);
+
+        var record = await db.DailyInventoryRecords.SingleAsync();
+        Assert.Equal(product.Id, record.ProductId);
+        Assert.Empty(await db.RouteImportErrors.Where(error => error.ImportId == import.Id).ToListAsync());
+    }
+
+    [Fact]
     public async Task DailyInventoryProcessor_UsesOperationalCodeAndRejectsConflictingDuplicateDate()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -126,7 +251,7 @@ public sealed class ProductInventoryImportTests
         {
             "/home/leonardo/Downloads/Cadastro de produtos.xlsx",
             "/home/leonardo/Downloads/Estoque - Atual v2.xlsx",
-            "/home/leonardo/Downloads/1. CONTROLE DE ESTOQUE P\u00c3ES 2026 - CORRETO.xlsx"
+            "/home/leonardo/Downloads/v3 - 1. CONTROLE DE ESTOQUE P\u00c3ES 2026 - CORRIGIDO.xlsx"
         };
         if (files.Any(path => !File.Exists(path))) return;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -150,6 +275,16 @@ public sealed class ProductInventoryImportTests
         Assert.True(await db.DailyInventoryRecords.CountAsync() > 1_000);
         var rapido = await db.Products.SingleAsync(x => x.OperationalCode == "6793");
         Assert.True(await db.DailyInventoryRecords.AnyAsync(x => x.ProductId == rapido.Id));
+        var pendingDateErrors = await db.RouteImportErrors
+            .Where(x => x.ImportId == dailyImport.Id && x.Field == "date" && x.Status == ImportErrorStatus.Pending)
+            .ToListAsync();
+        Assert.True(pendingDateErrors.Count == 0, string.Join(Environment.NewLine,
+            pendingDateErrors.Take(20).Select(error =>
+                $"{error.SheetName}:{error.RowNumber} {error.RawValue} {error.Message}")));
+        var remainingErrors = await db.RouteImportErrors.Where(error => error.ImportId == dailyImport.Id).ToListAsync();
+        Assert.True(remainingErrors.Count == 0, string.Join(Environment.NewLine,
+            remainingErrors.Select(error =>
+                $"{error.SheetName}:{error.RowNumber} {error.Field} '{error.RawValue}' {error.Message}")));
         Assert.Equal(RouteImportStatus.Completed, (await db.RouteImports.FindAsync(dailyImport.Id))!.Status);
     }
 
@@ -247,18 +382,21 @@ public sealed class ProductInventoryImportTests
     private static byte[] CreateDailyInventoryWorkbook(bool duplicateConflict)
     {
         using var workbook = new XLWorkbook();
-        AddDailySheet(workbook.AddWorksheet("05.2026"), 31);
-        AddDailySheet(workbook.AddWorksheet("05.2026 copia"), duplicateConflict ? 30 : 31);
+        AddDailySheet(workbook.AddWorksheet("Controle A"), 31);
+        AddDailySheet(workbook.AddWorksheet("Controle B"), duplicateConflict ? 30 : 31);
         return Save(workbook);
     }
 
-    private static void AddDailySheet(IXLWorksheet sheet, int production)
+    private static void AddDailySheet(
+        IXLWorksheet sheet,
+        int production,
+        DateTime? date = null)
     {
         sheet.Cell(1, 1).Value = "CÓD.";
         sheet.Cell(1, 2).Value = "CÓD";
         sheet.Cell(1, 3).Value = "PRODUTO";
         sheet.Cell(1, 5).Value = "ATUAL";
-        sheet.Cell(1, 6).Value = new DateTime(2026, 5, 1);
+        sheet.Cell(1, 6).Value = date ?? new DateTime(2026, 5, 1);
         sheet.Cell(2, 3).Value = "MOVIMENTAÇÕES";
         sheet.Cell(2, 6).Value = "ENTRADA";
         sheet.Cell(2, 7).Value = "SAIDA";

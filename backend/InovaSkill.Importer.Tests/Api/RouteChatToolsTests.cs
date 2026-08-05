@@ -46,6 +46,10 @@ public sealed class RouteChatToolsTests
         Assert.Equal(route.Id, json.RootElement[0].GetProperty("id").GetGuid());
         Assert.Equal("Crítico", json.RootElement[0].GetProperty("status").GetString());
         Assert.Equal(97.4m, json.RootElement[0].GetProperty("occupancyPercentage").GetDecimal());
+        Assert.Equal("MONDAY", json.RootElement[0].GetProperty("weekday").GetString());
+        Assert.Equal(900m, json.RootElement[0].GetProperty("totalWeightKg").GetDecimal());
+        Assert.Equal(90m, json.RootElement[0].GetProperty("weightOccupancyPercentage").GetDecimal());
+        Assert.Equal(75m, json.RootElement[0].GetProperty("volumeOccupancyPercentage").GetDecimal());
     }
 
     [Fact]
@@ -99,6 +103,9 @@ public sealed class RouteChatToolsTests
         var routeJson = json.RootElement.GetProperty("route");
         Assert.Equal("Crítico", routeJson.GetProperty("status").GetString());
         Assert.Equal(112m, routeJson.GetProperty("occupancyPercentage").GetDecimal());
+        Assert.Equal(1000m, routeJson.GetProperty("vehicleCapacityKg").GetDecimal());
+        Assert.Equal(12m, routeJson.GetProperty("vehicleCapacityVolumeM3").GetDecimal());
+        Assert.Equal(10, routeJson.GetProperty("vehicleCapacityPallets").GetInt32());
         Assert.Equal(1, routeJson.GetProperty("cityCount").GetInt32());
         Assert.Equal(3, routeJson.GetProperty("deliveryCount").GetInt32());
         Assert.Equal(0, routeJson.GetProperty("potentialCustomerCount").GetInt32());
@@ -136,6 +143,7 @@ public sealed class RouteChatToolsTests
         Assert.Single(json.RootElement.EnumerateArray());
         Assert.Equal("Rota Crítica", json.RootElement[0].GetProperty("name").GetString());
         Assert.Equal("Ocupação acima do limite saudável.", json.RootElement[0].GetProperty("reason").GetString());
+        Assert.Equal(90m, json.RootElement[0].GetProperty("weightOccupancyPercentage").GetDecimal());
     }
 
     [Fact]
@@ -202,6 +210,10 @@ public sealed class RouteChatToolsTests
         Assert.Single(cities.EnumerateArray());
         Assert.Equal("Marília", cities[0].GetProperty("name").GetString());
         Assert.Equal("SP", cities[0].GetProperty("state").GetString());
+        Assert.Equal(1, cities[0].GetProperty("sequence").GetInt32());
+        Assert.Equal(3, cities[0].GetProperty("deliveries").GetInt32());
+        Assert.Equal(12m, cities[0].GetProperty("averagePerDay").GetDecimal());
+        Assert.Equal("Prioridade comercial", cities[0].GetProperty("note").GetString());
     }
 
     [Fact]
@@ -331,7 +343,14 @@ public sealed class RouteChatToolsTests
             db.AddRange(source, import);
         }
 
-        var vehicle = new VehicleType { Id = Guid.NewGuid(), Name = $"Truck {Guid.NewGuid()}", CapacityKg = 1000m };
+        var vehicle = new VehicleType
+        {
+            Id = Guid.NewGuid(),
+            Name = $"Truck {Guid.NewGuid()}",
+            CapacityKg = 1000m,
+            CapacityVolumeM3 = 12m,
+            CapacityPallets = 10
+        };
         var route = new Route
         {
             Id = Guid.NewGuid(),
@@ -340,6 +359,11 @@ public sealed class RouteChatToolsTests
             Weekday = "MONDAY",
             VehicleTypeId = vehicle.Id,
             TotalWeightKg = 900m,
+            TotalVolumeM3 = 9m,
+            TotalPallets = 8,
+            WeightOccupancy = 0.90m,
+            VolumeOccupancy = 0.75m,
+            PalletOccupancy = 0.80m,
             OverallOccupancy = occupancy,
             OccupancyStatus = occupancy.HasValue ? RouteOccupancyStatus.Calculated : RouteOccupancyStatus.MissingCapacity,
             CreatedAt = now
@@ -359,6 +383,7 @@ public sealed class RouteChatToolsTests
             Municipality = municipality,
             Deliveries = 3,
             AveragePerDay = 12m,
+            Note = "Prioridade comercial",
             CreatedAt = now
         });
         if (extraCity is not null)

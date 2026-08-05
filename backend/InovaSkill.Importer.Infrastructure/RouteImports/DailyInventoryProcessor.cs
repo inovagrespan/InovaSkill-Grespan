@@ -28,19 +28,32 @@ public sealed class DailyInventoryProcessor(
         var now = DateTime.UtcNow;
         AddParserErrors(importId, parsed.Errors, now);
         var operationalCodes = parsed.Rows.Select(x => x.OperationalCode).Distinct().ToArray();
+        var erpCodes = parsed.Rows.Where(x => !string.IsNullOrWhiteSpace(x.ErpCode))
+            .Select(x => x.ErpCode!).Distinct().ToArray();
         var matchedProducts = await dbContext.Products
-            .Where(x => operationalCodes.Contains(x.OperationalCode))
+            .Where(x => operationalCodes.Contains(x.OperationalCode) || erpCodes.Contains(x.ErpCode))
             .ToListAsync(cancellationToken);
-        var productGroups = matchedProducts
-            .GroupBy(x => x.OperationalCode)
+        var productGroups = matchedProducts.SelectMany(product => new[]
+            {
+                new { Key = $"OP:{product.OperationalCode}", Product = product },
+                new { Key = $"ERP:{product.ErpCode}", Product = product }
+            })
+            .Where(item => !item.Key.EndsWith(':'))
+            .GroupBy(item => item.Key, item => item.Product)
             .ToDictionary(x => x.Key, x => x.ToArray());
         var importedRows = 0;
         var relationshipErrors = 0;
         var duplicateWarnings = 0;
         var conflictErrors = 0;
-        foreach (var group in parsed.Rows.GroupBy(x => new { x.OperationalCode, x.Date }))
+        foreach (var group in parsed.Rows.GroupBy(x => new
+                 {
+                     ProductKey = string.IsNullOrWhiteSpace(x.ErpCode)
+                         ? $"OP:{x.OperationalCode}"
+                         : $"ERP:{x.ErpCode}",
+                     x.Date
+                 }))
         {
-            if (!productGroups.TryGetValue(group.Key.OperationalCode, out var matches))
+            if (!productGroups.TryGetValue(group.Key.ProductKey, out var matches))
             {
                 foreach (var row in group.Take(1))
                     AddRelationshipError(importId, row, now, "Produto não encontrado pelo código operacional.");

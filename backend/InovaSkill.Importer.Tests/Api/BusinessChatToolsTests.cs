@@ -61,6 +61,11 @@ public sealed class BusinessChatToolsTests
         Assert.Equal("COMPARABLE", metrics.GetProperty("variationStatus").GetString());
         Assert.Equal("2026-07-10", metrics.GetProperty("lastPurchaseDate").GetString());
         Assert.Equal(12, root.GetProperty("summary").GetProperty("monthlyTimeline").GetArrayLength());
+        var movements = root.GetProperty("summary").GetProperty("recentMovements").EnumerateArray()
+            .ToDictionary(item => item.GetProperty("documentNumber").GetString()!);
+        Assert.Equal("NF", movements["100"].GetProperty("documentType").GetString());
+        Assert.Equal("Sale", movements["100"].GetProperty("operationCode").GetString());
+        Assert.Equal(10m, movements["100"].GetProperty("calculatedAmount").GetDecimal());
     }
 
     [Fact]
@@ -84,6 +89,8 @@ public sealed class BusinessChatToolsTests
         Assert.Single(json.RootElement.EnumerateArray());
         Assert.Equal("201", json.RootElement[0].GetProperty("documentNumber").GetString());
         Assert.Equal("Return", json.RootElement[0].GetProperty("operationCategory").GetString());
+        Assert.Equal("NF", json.RootElement[0].GetProperty("documentType").GetString());
+        Assert.Equal("Return", json.RootElement[0].GetProperty("operationCode").GetString());
         Assert.Equal(0m, json.RootElement[0].GetProperty("pricingItems")[0].GetProperty("calculatedAmount").GetDecimal());
         Assert.Equal("5102", json.RootElement[0].GetProperty("pricingItems")[0].GetProperty("cfopCode").GetString());
         Assert.Equal("501", json.RootElement[0].GetProperty("pricingItems")[0].GetProperty("tesCode").GetString());
@@ -278,9 +285,16 @@ public sealed class BusinessChatToolsTests
             default)).Payload).RootElement;
 
         Assert.Equal(40m, summary.GetProperty("lastProduction").GetDecimal());
+        Assert.Equal(2m, summary.GetProperty("lastAdjustment").GetDecimal());
+        Assert.Equal(27m, summary.GetProperty("lastClosing").GetDecimal());
+        Assert.Equal(20m, summary.GetProperty("lastFirstShiftProduction").GetDecimal());
+        Assert.Equal(12m, summary.GetProperty("lastSecondShiftProduction").GetDecimal());
+        Assert.Equal(8m, summary.GetProperty("lastThirdShiftProduction").GetDecimal());
         Assert.Equal(65m, summary.GetProperty("totalProductionMonth").GetDecimal());
+        Assert.Equal(4m, summary.GetProperty("totalAdjustmentMonth").GetDecimal());
         Assert.Single(records.EnumerateArray());
         Assert.Equal(40m, records[0].GetProperty("productionQuantity").GetDecimal());
+        Assert.Equal("7891234567890", records[0].GetProperty("gtin").GetString());
     }
 
     private static ImportDbContext CreateDbContext() =>
@@ -393,8 +407,11 @@ public sealed class BusinessChatToolsTests
             Date = date,
             ProductionQuantity = production,
             OutboundQuantity = outbound,
-            ClosingQuantity = production - outbound,
-            AdjustmentQuantity = 0,
+            ClosingQuantity = production - outbound + 2,
+            AdjustmentQuantity = 2,
+            FirstShiftProductionQuantity = production / 2,
+            SecondShiftProductionQuantity = production * 0.3m,
+            ThirdShiftProductionQuantity = production * 0.2m,
             SourceSheetName = "Julho",
             SourceRowNumber = 1,
             CreatedAt = DateTime.UtcNow

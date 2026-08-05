@@ -92,11 +92,12 @@ public sealed class RouteImportsController(
                 isCurrent = item.DataSource!.CurrentImportId == item.Id,
                 status = item.Status.ToString(),
                 item.CreatedAt,
+                item.StartedAt,
                 item.TotalRows,
                 item.ImportedRows,
                 item.ErrorCount,
-                durationSeconds = item.StartedAt.HasValue && item.FinishedAt.HasValue
-                    ? (double?)(item.FinishedAt.Value - item.StartedAt.Value).TotalSeconds
+                durationSeconds = item.StartedAt.HasValue
+                    ? (double?)((item.FinishedAt ?? DateTime.UtcNow) - item.StartedAt.Value).TotalSeconds
                     : null
             })
             .ToListAsync(cancellationToken);
@@ -118,8 +119,8 @@ public sealed class RouteImportsController(
                 x.CreatedAt,
                 x.StartedAt,
                 x.FinishedAt,
-                durationSeconds = x.StartedAt.HasValue && x.FinishedAt.HasValue
-                    ? (double?)(x.FinishedAt.Value - x.StartedAt.Value).TotalSeconds : null,
+                durationSeconds = x.StartedAt.HasValue
+                    ? (double?)((x.FinishedAt ?? DateTime.UtcNow) - x.StartedAt.Value).TotalSeconds : null,
                 x.TotalRows,
                 x.ImportedRows,
                 x.ErrorCount,

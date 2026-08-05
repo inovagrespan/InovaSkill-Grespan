@@ -213,6 +213,10 @@ public sealed class BusinessAssistantServiceTests
         Assert.Contains("Faça uma pergunta curta de esclarecimento", instructions);
         Assert.Contains("ausência de um campo neles não prova que o dado não existe", instructions);
         Assert.Contains("Faça a consulta primeiro", instructions);
+        Assert.Contains("consultar várias ferramentas na mesma resposta", instructions);
+        Assert.Contains("uma quantidade considerável de consultas", instructions);
+        Assert.Contains("Pare assim que houver evidência suficiente", instructions);
+        Assert.Contains("não repita consultas equivalentes", instructions);
         Assert.Contains("consulte novamente list_recent_fiscal_documents", instructions);
         Assert.Contains("[TABELA]", instructions);
         Assert.Contains("[COLUNAS]", instructions);

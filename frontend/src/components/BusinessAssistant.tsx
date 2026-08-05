@@ -18,6 +18,7 @@ import {
   type AssistantSource,
 } from "@/lib/assistant-api";
 import { getCurrentUserRole } from "@/lib/auth";
+import { createClientMessageId } from "@/lib/client-message-id";
 import { cn } from "@/lib/utils";
 
 type AssistantMessage = {
@@ -106,7 +107,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
       setSuggestions(DEFAULT_SUGGESTIONS);
     } catch (error) {
       setMessages((current) => [...current, {
-        id: crypto.randomUUID(),
+        id: createClientMessageId(),
         author: "assistant",
         text: (error as Error).message,
         mode: "Não foi possível carregar o histórico",
@@ -121,7 +122,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
     setQuestion("");
     setMessages((current) => [
       ...current,
-      { id: crypto.randomUUID(), author: "user", text: trimmed },
+      { id: createClientMessageId(), author: "user", text: trimmed },
     ]);
     setLoading(true);
     try {
@@ -130,7 +131,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
       setMessages((current) => [
         ...current,
         {
-          id: crypto.randomUUID(),
+          id: createClientMessageId(),
           author: "assistant",
           text: response.answer,
           sources: response.sources,
@@ -143,7 +144,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
       setMessages((current) => [
         ...current,
         {
-          id: crypto.randomUUID(),
+          id: createClientMessageId(),
           author: "assistant",
           text: (error as Error).message,
           mode: "Não foi possível responder",
