@@ -96,6 +96,9 @@ public sealed class RouteImportsController(
                 item.TotalRows,
                 item.ImportedRows,
                 item.ErrorCount,
+                item.FailureMessage,
+                technicalFailureMessage = item.JobExecutions.OrderByDescending(job => job.CreatedAt)
+                    .Select(job => job.ErrorMessage).FirstOrDefault(),
                 durationSeconds = item.StartedAt.HasValue
                     ? (double?)((item.FinishedAt ?? DateTime.UtcNow) - item.StartedAt.Value).TotalSeconds
                     : null
@@ -124,7 +127,9 @@ public sealed class RouteImportsController(
                 x.TotalRows,
                 x.ImportedRows,
                 x.ErrorCount,
-                x.FailureMessage
+                x.FailureMessage,
+                technicalFailureMessage = x.JobExecutions.OrderByDescending(job => job.CreatedAt)
+                    .Select(job => job.ErrorMessage).FirstOrDefault()
             })
             .SingleOrDefaultAsync(cancellationToken);
         return item is null ? NotFound() : Ok(item);

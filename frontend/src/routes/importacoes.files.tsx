@@ -399,10 +399,12 @@ function ImportacoesPage() {
                 </div>
               )}
 
-              <Alert variant={selectedImport.errorCount > 0 ? "destructive" : "default"}>
+              <Alert variant={selectedImport.status === "Failed" || selectedImport.errorCount > 0 ? "destructive" : "default"}>
                 <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  {selectedImport.errorCount > 0
+                <AlertDescription className="whitespace-pre-wrap">
+                  {selectedImport.status === "Failed"
+                    ? selectedImport.technicalFailureMessage || selectedImport.failureMessage || "O processamento falhou sem registrar detalhes técnicos."
+                    : selectedImport.errorCount > 0
                     ? `Foram encontrados ${selectedImport.errorCount} erro(s) durante a validação.`
                     : "Nenhum erro encontrado."}
                 </AlertDescription>
@@ -414,7 +416,7 @@ function ImportacoesPage() {
                 <p className="text-sm text-muted-foreground">Nenhum erro registrado no momento.</p>
               )}
 
-              {!errorsLoading && errors.length === 0 && selectedImport.errorCount === 0 && (
+              {!errorsLoading && errors.length === 0 && selectedImport.errorCount === 0 && selectedImport.status !== "Failed" && (
                 <p className="text-sm text-muted-foreground">Esta importação não possui erros.</p>
               )}
 

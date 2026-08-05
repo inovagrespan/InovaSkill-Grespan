@@ -13,7 +13,7 @@ public sealed class FiscalMovementsProcessor(
     FiscalMovementsSpreadsheetParser parser,
     IServiceScopeFactory scopeFactory) : IDataSourceProcessor
 {
-    private const int RowBatchSize = 2_000;
+    private const int RowBatchSize = 500;
     private static readonly TimeSpan ProgressPersistenceInterval = TimeSpan.FromSeconds(10);
 
     public string SourceCode => FiscalImportCodes.ProcessorKey;
@@ -85,8 +85,12 @@ public sealed class FiscalMovementsProcessor(
         var matchingProducts = await dbContext.Products
             .Where(x => productCodes.Contains(x.ErpCode) || productCodes.Contains(x.ExternalCode))
             .ToListAsync(cancellationToken);
-        var products = matchingProducts.GroupBy(x => string.IsNullOrWhiteSpace(x.ErpCode) ? x.ExternalCode : x.ErpCode)
-            .ToDictionary(x => x.Key, x => x.First());
+        var products = new Dictionary<string, Product>(StringComparer.OrdinalIgnoreCase);
+        foreach (var product in matchingProducts)
+        {
+            if (!string.IsNullOrWhiteSpace(product.ErpCode)) products.TryAdd(product.ErpCode, product);
+            if (!string.IsNullOrWhiteSpace(product.ExternalCode)) products.TryAdd(product.ExternalCode, product);
+        }
         foreach (var row in rows.DistinctBy(x => x.ProductCode))
         {
             if (string.IsNullOrWhiteSpace(row.ProductCode)) continue;

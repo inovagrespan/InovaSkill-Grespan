@@ -3093,6 +3093,8 @@ export type ImportItem = {
   totalRows: number | null;
   importedRows: number | null;
   errorCount: number;
+  failureMessage: string | null;
+  technicalFailureMessage: string | null;
   durationSeconds: number | null;
   sourceCode: string;
   sourceName: string;
@@ -3112,6 +3114,7 @@ export type ImportDetail = {
   importedRows: number | null;
   errorCount: number;
   failureMessage: string | null;
+  technicalFailureMessage: string | null;
 };
 
 export type ImportErrorItem = {

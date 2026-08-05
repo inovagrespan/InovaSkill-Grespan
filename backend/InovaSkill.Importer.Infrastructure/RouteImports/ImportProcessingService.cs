@@ -14,6 +14,7 @@ public sealed class ImportProcessingService(
     IRouteOptimizationService routeOptimizationService) : IImportProcessingService
 {
     private const int MaximumAttempts = 4;
+    private const int MaximumPersistedErrorMessageLength = 1024;
 
     public async Task ProcessAsync(
         Guid importId,
@@ -120,13 +121,13 @@ public sealed class ImportProcessingService(
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             (job, import) = await ReloadStateAsync(importId, jobExecutionId, cancellationToken);
-            job.ErrorMessage = exception.Message;
+            job.ErrorMessage = LimitErrorMessage(exception.Message);
             if (job.Attempts >= MaximumAttempts)
             {
                 job.Status = JobExecutionStatus.Failed;
                 job.FinishedAt = DateTime.UtcNow;
                 import.Status = RouteImportStatus.Failed;
-                import.FailureMessage = "O processamento falhou após as tentativas automáticas.";
+                import.FailureMessage = job.ErrorMessage;
                 import.FinishedAt = DateTime.UtcNow;
                 await dbContext.SaveChangesAsync(cancellationToken);
                 return;
@@ -137,6 +138,11 @@ public sealed class ImportProcessingService(
             throw;
         }
     }
+
+    private static string LimitErrorMessage(string message) =>
+        message.Length <= MaximumPersistedErrorMessageLength
+            ? message
+            : message[..MaximumPersistedErrorMessageLength];
 
     private async Task<(InovaSkill.Importer.Domain.Entities.JobExecution Job,
         InovaSkill.Importer.Domain.Entities.RouteImport Import)> ReloadStateAsync(

@@ -15,6 +15,7 @@ describe("processing monitoring", () => {
     expect(source).toContain("window.setInterval");
     expect(source).toContain("window.clearInterval");
     expect(source).toContain("loadData(pageRef.current)");
+    expect(source).toContain('from "@/components/ui/alert"');
   });
   const localStorageMap = new Map<string, string>();
   const sessionStorageMap = new Map<string, string>();

@@ -724,11 +724,14 @@ frontend não mantém relógio nem estima progresso localmente: exibe somente o
 último estado recebido, que pode ficar defasado em até um ciclo de polling. Os
 contadores parciais persistidos alimentam a barra percentual; sem total conhecido,
 a barra permanece indeterminada.
+Falhas técnicas são persistidas em `job_executions.ErrorMessage` e expostas
+tanto na Central de Processamentos quanto no detalhe da importação; os registros
+de `import_errors` permanecem reservados a problemas de validação por linha.
 
 A importação fiscal não usa o modelo em memória do ClosedXML no caminho de
 produção. `FiscalMovementsSpreadsheetParser` percorre `sheet1.xml` com
 `OpenXmlReader`, mantendo somente a linha corrente e a pequena tabela de strings
-compartilhadas. `FiscalMovementsProcessor` acumula lotes de 2.000 linhas,
+compartilhadas. `FiscalMovementsProcessor` acumula lotes de 500 linhas,
 persiste produtos, documentos e itens e limpa o rastreamento do EF entre lotes.
 Os dados fiscais continuam dentro de uma única transação para impedir consultas
 de observarem uma importação parcial. A cada aproximadamente dez segundos, um
