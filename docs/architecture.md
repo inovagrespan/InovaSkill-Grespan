@@ -744,6 +744,11 @@ Importações fiscais são serializadas por um advisory lock transacional deriva
 do `DataSourceId`, não do ID de cada versão. Assim, uploads e reprocessamentos de
 versões diferentes da mesma fonte não atualizam simultaneamente os mesmos
 documentos e itens fiscais, evitando conflitos de concorrência otimista.
+Cada `SaveChanges` de lote também possui reconciliação local limitada a três
+tentativas para alterações externas: valores existentes são recarregados antes
+de reaplicar o upsert e uma linha removida entre leitura e gravação volta ao
+estado `Added`. Se o conflito persistir, a falha identifica os tipos de entidade
+envolvidos, em vez de retornar apenas a mensagem genérica do EF.
 
 ### Versionamento e publicação
 

@@ -39,6 +39,23 @@ public sealed class FiscalMovementsProcessorPostgresTests
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ImportDbContext>();
+        await db.Database.ExecuteSqlRawAsync("""
+            DROP TRIGGER IF EXISTS fiscal_import_concurrency_test_trigger ON products;
+            DROP FUNCTION IF EXISTS fiscal_import_concurrency_test();
+            DROP SEQUENCE IF EXISTS fiscal_import_concurrency_test_sequence;
+            CREATE SEQUENCE fiscal_import_concurrency_test_sequence;
+            CREATE FUNCTION fiscal_import_concurrency_test() RETURNS trigger AS $$
+            BEGIN
+                IF nextval('fiscal_import_concurrency_test_sequence') = 1 THEN
+                    RETURN NULL;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+            CREATE TRIGGER fiscal_import_concurrency_test_trigger
+            BEFORE UPDATE ON products
+            FOR EACH ROW EXECUTE FUNCTION fiscal_import_concurrency_test();
+            """);
         var source = await db.DataSources.SingleAsync(item => item.Code == FiscalImportCodes.DataSource);
         var import = new RouteImport {
             Id = Guid.NewGuid(), DataSourceId = source.Id,

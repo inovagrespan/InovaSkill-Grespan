@@ -14,6 +14,7 @@ public sealed class FiscalMovementsProcessor(
     IServiceScopeFactory scopeFactory) : IDataSourceProcessor
 {
     private const int RowBatchSize = 500;
+    private const int MaximumBatchConcurrencyAttempts = 3;
     private static readonly TimeSpan ProgressPersistenceInterval = TimeSpan.FromSeconds(10);
 
     public string SourceCode => FiscalImportCodes.ProcessorKey;
@@ -113,7 +114,7 @@ public sealed class FiscalMovementsProcessor(
                 product.UpdatedAt = now;
             }
         }
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveBatchChangesAsync(cancellationToken);
 
         var documentGroups = rows.GroupBy(DocumentKey).ToArray();
         var documentNumbers = documentGroups.Select(group => group.First().DocumentNumber).Distinct().ToArray();
@@ -181,7 +182,43 @@ public sealed class FiscalMovementsProcessor(
                 item.UpdatedAt = now;
             }
         }
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveBatchChangesAsync(cancellationToken);
+    }
+
+    private async Task SaveBatchChangesAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= MaximumBatchConcurrencyAttempts; attempt++)
+        {
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            catch (DbUpdateConcurrencyException exception) when (attempt < MaximumBatchConcurrencyAttempts)
+            {
+                foreach (var entry in exception.Entries)
+                {
+                    var databaseValues = await entry.GetDatabaseValuesAsync(cancellationToken);
+                    if (databaseValues is null)
+                    {
+                        entry.State = EntityState.Added;
+                        continue;
+                    }
+
+                    entry.OriginalValues.SetValues(databaseValues);
+                    entry.State = EntityState.Modified;
+                }
+            }
+            catch (DbUpdateConcurrencyException exception)
+            {
+                var entityNames = string.Join(", ", exception.Entries
+                    .Select(entry => entry.Metadata.ClrType.Name)
+                    .Distinct(StringComparer.Ordinal));
+                throw new DbUpdateConcurrencyException(
+                    $"A importação fiscal não conseguiu reconciliar alterações concorrentes após " +
+                    $"{MaximumBatchConcurrencyAttempts} tentativas. Entidades: {entityNames}.", exception);
+            }
+        }
     }
 
     private async Task PersistProgressAsync(
