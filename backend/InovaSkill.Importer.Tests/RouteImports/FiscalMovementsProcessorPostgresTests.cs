@@ -11,6 +11,20 @@ namespace InovaSkill.Importer.Tests.RouteImports;
 public sealed class FiscalMovementsProcessorPostgresTests
 {
     [Fact]
+    public void DataSourceLockKey_IsSharedByVersionsAndDifferentBetweenSources()
+    {
+        var fiscalSourceId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var anotherSourceId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+        Assert.Equal(
+            FiscalMovementsProcessor.ResolveDataSourceLockKey(fiscalSourceId),
+            FiscalMovementsProcessor.ResolveDataSourceLockKey(fiscalSourceId));
+        Assert.NotEqual(
+            FiscalMovementsProcessor.ResolveDataSourceLockKey(fiscalSourceId),
+            FiscalMovementsProcessor.ResolveDataSourceLockKey(anotherSourceId));
+    }
+
+    [Fact]
     public async Task RealSpreadsheet_ProcessesBeyondFirstBatch_WhenPostgresIsConfigured()
     {
         var connectionString = Environment.GetEnvironmentVariable("FISCAL_IMPORT_TEST_CONNECTION");

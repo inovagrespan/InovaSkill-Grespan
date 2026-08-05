@@ -740,6 +740,10 @@ operacionais podem sobreviver ao rollback dos dados e são substituídos pelo
 estado terminal quando a execução conclui ou falha. O lote sustenta o acesso por
 códigos de produto, número/chave de documento e itens já cobertos pelos índices
 de unicidade e consulta existentes; nenhum índice adicional é necessário.
+Importações fiscais são serializadas por um advisory lock transacional derivado
+do `DataSourceId`, não do ID de cada versão. Assim, uploads e reprocessamentos de
+versões diferentes da mesma fonte não atualizam simultaneamente os mesmos
+documentos e itens fiscais, evitando conflitos de concorrência otimista.
 
 ### Versionamento e publicação
 

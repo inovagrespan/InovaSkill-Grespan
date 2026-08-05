@@ -21,10 +21,10 @@ public sealed class FiscalMovementsProcessor(
     public async Task ProcessAsync(Guid importId, CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var import = await dbContext.RouteImports.SingleAsync(x => x.Id == importId, cancellationToken);
         if (dbContext.Database.IsNpgsql())
             await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock({BitConverter.ToInt64(importId.ToByteArray(), 0)})", cancellationToken);
-        var import = await dbContext.RouteImports.SingleAsync(x => x.Id == importId, cancellationToken);
+                $"SELECT pg_advisory_xact_lock({ResolveDataSourceLockKey(import.DataSourceId)})", cancellationToken);
         await using var content = await fileStorage.OpenReadAsync(import.FilePath, cancellationToken);
         var now = DateTime.UtcNow;
         var customerSourceId = await dbContext.DataSources.Where(x => x.Code == CustomerImportCodes.DataSource)
@@ -204,4 +204,7 @@ public sealed class FiscalMovementsProcessor(
 
     private static string DocumentKey(FiscalDocument document) =>
         $"{document.DocumentType}|{document.DocumentNumber}|{document.Series}|{document.IssueDate:yyyyMMdd}|{document.CustomerCodeAtIssue}|{document.BranchCodeAtIssue}";
+
+    public static long ResolveDataSourceLockKey(Guid dataSourceId) =>
+        BitConverter.ToInt64(dataSourceId.ToByteArray(), 0);
 }
