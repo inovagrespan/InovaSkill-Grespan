@@ -34,7 +34,15 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             {
                 route.Id,
                 route.Name,
-                route.OverallOccupancy
+                route.Weekday,
+                VehicleType = route.VehicleType!.Name,
+                route.TotalWeightKg,
+                route.TotalVolumeM3,
+                route.TotalPallets,
+                route.OverallOccupancy,
+                route.WeightOccupancy,
+                route.VolumeOccupancy,
+                route.PalletOccupancy
             })
             .ToListAsync(cancellationToken);
 
@@ -42,8 +50,16 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             .Select(route => new RouteChatSummaryDto(
                 route.Id,
                 route.Name,
+                route.Weekday,
+                route.VehicleType,
+                route.TotalWeightKg,
+                route.TotalVolumeM3,
+                route.TotalPallets,
                 RouteOccupancyLevelPolicy.Label(RouteOccupancyLevelPolicy.Classify(route.OverallOccupancy)),
-                ToOccupancyPercentage(route.OverallOccupancy)))
+                ToOccupancyPercentage(route.OverallOccupancy),
+                ToOccupancyPercentage(route.WeightOccupancy),
+                ToOccupancyPercentage(route.VolumeOccupancy),
+                ToOccupancyPercentage(route.PalletOccupancy)))
             .ToList();
     }
 
@@ -57,7 +73,18 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             {
                 item.Id,
                 item.Name,
+                item.Weekday,
+                VehicleType = item.VehicleType!.Name,
+                VehicleCapacityKg = item.VehicleType.CapacityKg,
+                VehicleCapacityVolumeM3 = item.VehicleType.CapacityVolumeM3,
+                VehicleCapacityPallets = item.VehicleType.CapacityPallets,
+                item.TotalWeightKg,
+                item.TotalVolumeM3,
+                item.TotalPallets,
                 item.OverallOccupancy,
+                item.WeightOccupancy,
+                item.VolumeOccupancy,
+                item.PalletOccupancy,
                 item.CreatedAt,
                 CityCount = item.Entries.Count,
                 DeliveryCount = item.Entries.Sum(entry => entry.Deliveries),
@@ -70,8 +97,19 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             : new RouteChatDetailsDto(
                 route.Id,
                 route.Name,
+                route.Weekday,
+                route.VehicleType,
+                route.VehicleCapacityKg,
+                route.VehicleCapacityVolumeM3,
+                route.VehicleCapacityPallets,
+                route.TotalWeightKg,
+                route.TotalVolumeM3,
+                route.TotalPallets,
                 RouteOccupancyLevelPolicy.Label(RouteOccupancyLevelPolicy.Classify(route.OverallOccupancy)),
                 ToOccupancyPercentage(route.OverallOccupancy),
+                ToOccupancyPercentage(route.WeightOccupancy),
+                ToOccupancyPercentage(route.VolumeOccupancy),
+                ToOccupancyPercentage(route.PalletOccupancy),
                 route.CityCount,
                 route.DeliveryCount,
                 route.PotentialCustomerCount,
@@ -97,7 +135,15 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             {
                 route.Id,
                 route.Name,
-                route.OverallOccupancy
+                route.Weekday,
+                VehicleType = route.VehicleType!.Name,
+                route.TotalWeightKg,
+                route.TotalVolumeM3,
+                route.TotalPallets,
+                route.OverallOccupancy,
+                route.WeightOccupancy,
+                route.VolumeOccupancy,
+                route.PalletOccupancy
             })
             .ToListAsync(cancellationToken);
 
@@ -105,8 +151,16 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             .Select(route => new RouteChatCriticalDto(
                 route.Id,
                 route.Name,
+                route.Weekday,
+                route.VehicleType,
+                route.TotalWeightKg,
+                route.TotalVolumeM3,
+                route.TotalPallets,
                 RouteOccupancyLevelPolicy.Label("critical"),
                 ToOccupancyPercentage(route.OverallOccupancy),
+                ToOccupancyPercentage(route.WeightOccupancy),
+                ToOccupancyPercentage(route.VolumeOccupancy),
+                ToOccupancyPercentage(route.PalletOccupancy),
                 "Ocupação acima do limite saudável."))
             .ToList();
     }
@@ -160,7 +214,15 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             {
                 route.Id,
                 route.Name,
-                route.OverallOccupancy
+                route.Weekday,
+                VehicleType = route.VehicleType!.Name,
+                route.TotalWeightKg,
+                route.TotalVolumeM3,
+                route.TotalPallets,
+                route.OverallOccupancy,
+                route.WeightOccupancy,
+                route.VolumeOccupancy,
+                route.PalletOccupancy
             })
             .ToListAsync(cancellationToken);
 
@@ -168,8 +230,16 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             .Select(route => new RouteChatSummaryDto(
                 route.Id,
                 route.Name,
+                route.Weekday,
+                route.VehicleType,
+                route.TotalWeightKg,
+                route.TotalVolumeM3,
+                route.TotalPallets,
                 RouteOccupancyLevelPolicy.Label(RouteOccupancyLevelPolicy.Classify(route.OverallOccupancy)),
-                ToOccupancyPercentage(route.OverallOccupancy)))
+                ToOccupancyPercentage(route.OverallOccupancy),
+                ToOccupancyPercentage(route.WeightOccupancy),
+                ToOccupancyPercentage(route.VolumeOccupancy),
+                ToOccupancyPercentage(route.PalletOccupancy)))
             .ToList();
     }
 
@@ -188,8 +258,12 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
                     .OrderBy(entry => entry.Sequence)
                     .Take(limit)
                     .Select(entry => new RouteChatCityDto(
+                        entry.Sequence,
                         entry.Municipality != null ? entry.Municipality.Name : entry.Name,
-                        entry.Municipality != null ? entry.Municipality.StateCode : null))
+                        entry.Municipality != null ? entry.Municipality.StateCode : null,
+                        entry.Deliveries,
+                        entry.AveragePerDay,
+                        entry.Note))
                     .ToList()
             })
             .SingleOrDefaultAsync(cancellationToken);

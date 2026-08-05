@@ -50,6 +50,16 @@ um serviço de infraestrutura:
 - volume `route_imports_data`: arquivos de importação compartilhados entre API e
   Worker.
 
+Na execução integral pelo `docker-compose.yml`, frontend, API, Worker e
+PostgreSQL sobem com valores demonstrativos e sem dependência de arquivo
+secreto. A API escuta HTTP internamente na porta 8080 e desabilita o
+redirecionamento HTTPS nesse cenário, pois o Nginx do frontend atua como gateway
+para `/api`. As portas e credenciais locais podem ser sobrescritas por `.env`,
+usando `.env.example` como referência; esse arquivo particular não é versionado.
+O provedor de distância padrão do Compose é `Geographic`, permitindo que o MVP
+funcione sem dados cartográficos externos. O OSRM permanece opt-in pelo perfil
+`osrm` e exige os artefatos pré-processados em `infra/osrm`.
+
 ## Limites e dependências
 
 As dependências do backend apontam para o centro do domínio:

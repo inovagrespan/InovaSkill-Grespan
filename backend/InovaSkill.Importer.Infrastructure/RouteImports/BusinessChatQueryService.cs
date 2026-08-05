@@ -208,10 +208,16 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 document.IssueDate,
                 document.DocumentNumber,
                 document.Series,
+                document.DocumentType,
+                document.MovementType,
                 document.MovementCategory.ToString(),
+                document.OperationCode,
                 document.OperationDescription,
+                document.OriginalDocumentNumber,
                 document.Items.Count,
-                document.Items.Sum(item => item.GrossWeightKg)))
+                document.Items.Sum(item => item.GrossWeightKg),
+                document.Items.Sum(item =>
+                    item.SourceTotalValue ?? (item.UnitValue.HasValue ? item.Quantity * item.UnitValue.Value : 0))))
             .ToListAsync(cancellationToken);
 
         return new BusinessChatCustomerConsumptionDto(customer, metrics, monthlyTimeline, movements);
@@ -261,6 +267,8 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 document.IssueDate,
                 document.DocumentNumber,
                 document.Series,
+                document.DocumentType,
+                document.MovementType,
                 document.CustomerId,
                 document.CustomerNameAtIssue,
                 document.CustomerCodeAtIssue,
@@ -268,7 +276,9 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 document.CityNameAtIssue,
                 document.StateCodeAtIssue,
                 document.MovementCategory.ToString(),
+                document.OperationCode,
                 document.OperationDescription,
+                document.OriginalDocumentNumber,
                 document.Items.Count,
                 document.Items.Sum(item => item.GrossWeightKg),
                 document.Items
@@ -725,7 +735,7 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
         var dailyImportId = await CurrentImportIdAsync(DailyInventoryImportCodes.DataSource, cancellationToken);
         if (!dailyImportId.HasValue)
         {
-            return new BusinessChatProductionSummaryDto(null, 0, 0, 0, 0, 0);
+            return new BusinessChatProductionSummaryDto(null, 0, 0, 0, 0, null, null, null, 0, 0, 0, 0);
         }
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -738,6 +748,11 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
 
         decimal lastProduction = 0;
         decimal lastOutbound = 0;
+        decimal lastAdjustment = 0;
+        decimal lastClosing = 0;
+        decimal? lastFirstShiftProduction = null;
+        decimal? lastSecondShiftProduction = null;
+        decimal? lastThirdShiftProduction = null;
         if (lastDate.HasValue)
         {
             var daily = await dbContext.DailyInventoryRecords.AsNoTracking()
@@ -748,11 +763,21 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
                 .Select(group => new
                 {
                     Production = group.Sum(record => record.ProductionQuantity),
-                    Outbound = group.Sum(record => record.OutboundQuantity)
+                    Outbound = group.Sum(record => record.OutboundQuantity),
+                    Adjustment = group.Sum(record => record.AdjustmentQuantity),
+                    Closing = group.Sum(record => record.ClosingQuantity),
+                    FirstShift = group.Sum(record => record.FirstShiftProductionQuantity),
+                    SecondShift = group.Sum(record => record.SecondShiftProductionQuantity),
+                    ThirdShift = group.Sum(record => record.ThirdShiftProductionQuantity)
                 })
                 .SingleOrDefaultAsync(cancellationToken);
             lastProduction = daily?.Production ?? 0;
             lastOutbound = daily?.Outbound ?? 0;
+            lastAdjustment = daily?.Adjustment ?? 0;
+            lastClosing = daily?.Closing ?? 0;
+            lastFirstShiftProduction = daily?.FirstShift;
+            lastSecondShiftProduction = daily?.SecondShift;
+            lastThirdShiftProduction = daily?.ThirdShift;
         }
 
         var monthTotals = await dbContext.DailyInventoryRecords.AsNoTracking()
@@ -763,7 +788,8 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
             .Select(group => new
             {
                 Production = group.Sum(record => record.ProductionQuantity),
-                Outbound = group.Sum(record => record.OutboundQuantity)
+                Outbound = group.Sum(record => record.OutboundQuantity),
+                Adjustment = group.Sum(record => record.AdjustmentQuantity)
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -771,9 +797,15 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
             lastDate,
             lastProduction,
             lastOutbound,
+            lastAdjustment,
+            lastClosing,
+            lastFirstShiftProduction,
+            lastSecondShiftProduction,
+            lastThirdShiftProduction,
             lastProduction - lastOutbound,
             monthTotals?.Production ?? 0,
-            monthTotals?.Outbound ?? 0);
+            monthTotals?.Outbound ?? 0,
+            monthTotals?.Adjustment ?? 0);
     }
 
     public async Task<IReadOnlyList<BusinessChatProductionRecordDto>> ListProductionRecordsAsync(
@@ -799,8 +831,11 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
             var term = productionQuery.SearchTerm.Trim().ToUpperInvariant();
             query = query.Where(record =>
                 record.Product!.Name.ToUpper().Contains(term) ||
+                record.Product.Description.ToUpper().Contains(term) ||
+                record.Product.ExternalCode.ToUpper().Contains(term) ||
                 record.Product.ErpCode.ToUpper().Contains(term) ||
-                record.Product.OperationalCode.ToUpper().Contains(term));
+                record.Product.OperationalCode.ToUpper().Contains(term) ||
+                record.Product.Gtin.ToUpper().Contains(term));
         }
 
         if (productionQuery.DateFrom.HasValue)
@@ -858,9 +893,12 @@ public sealed class BusinessChatQueryService(ImportDbContext dbContext) : IBusin
         query.Select(record => new BusinessChatProductionRecordDto(
             record.Id,
             record.ProductId,
-            record.Product!.ErpCode,
+            record.Product!.ExternalCode,
+            record.Product.Description,
+            record.Product.ErpCode,
             record.Product.OperationalCode,
             record.Product.Name,
+            record.Product.Gtin,
             record.Product.GroupCode,
             record.Product.Type,
             record.Date,

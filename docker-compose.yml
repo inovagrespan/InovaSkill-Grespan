@@ -3,15 +3,15 @@
     image: postgres:16-alpine
     container_name: inovaskill-postgres
     environment:
-      POSTGRES_DB: inovaskill_importer
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-inovaskill_importer}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d inovaskill_importer"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-inovaskill_importer}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -35,12 +35,17 @@
       context: ./backend
       dockerfile: InovaSkill.Importer.Api/Dockerfile
     ports:
-      - "5279:8080"
+      - "${API_PORT:-5279}:8080"
     environment:
-      ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      DisableHttpsRedirection: "true"
+      ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=${POSTGRES_DB:-inovaskill_importer};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+      Jwt__Secret: ${JWT_SECRET:-local-mvp-secret-change-before-production-2026}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       Storage__ImportsPath: /data/route-imports
-      RouteOptimization__DistanceProvider: Osrm
-      RouteOptimization__OsrmBaseUrl: http://osrm:5000
+      RouteOptimization__DistanceProvider: ${ROUTE_DISTANCE_PROVIDER:-Geographic}
+      RouteOptimization__OsrmBaseUrl: ${OSRM_BASE_URL:-http://osrm:5000}
     volumes:
       - route_imports_data:/data/route-imports
     depends_on:
@@ -56,10 +61,11 @@
       context: ./backend
       dockerfile: InovaSkill.Importer.Worker/Dockerfile
     environment:
-      ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=inovaskill_importer;Username=postgres;Password=postgres
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=${POSTGRES_DB:-inovaskill_importer};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
       Storage__ImportsPath: /data/route-imports
-      RouteOptimization__DistanceProvider: Osrm
-      RouteOptimization__OsrmBaseUrl: http://osrm:5000
+      RouteOptimization__DistanceProvider: ${ROUTE_DISTANCE_PROVIDER:-Geographic}
+      RouteOptimization__OsrmBaseUrl: ${OSRM_BASE_URL:-http://osrm:5000}
     volumes:
       - route_imports_data:/data/route-imports
     depends_on:
@@ -77,7 +83,7 @@
       args:
         VITE_API_URL: /api
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
       - api
     restart: unless-stopped

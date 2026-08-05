@@ -90,14 +90,33 @@ public sealed record RouteChatOccupancyQuery(
 public sealed record RouteChatSummaryDto(
     Guid Id,
     string Name,
+    string Weekday,
+    string VehicleType,
+    decimal TotalWeightKg,
+    decimal? TotalVolumeM3,
+    int? TotalPallets,
     string Status,
-    decimal? OccupancyPercentage);
+    decimal? OccupancyPercentage,
+    decimal? WeightOccupancyPercentage,
+    decimal? VolumeOccupancyPercentage,
+    decimal? PalletOccupancyPercentage);
 
 public sealed record RouteChatDetailsDto(
     Guid Id,
     string Name,
+    string Weekday,
+    string VehicleType,
+    decimal? VehicleCapacityKg,
+    decimal? VehicleCapacityVolumeM3,
+    int? VehicleCapacityPallets,
+    decimal TotalWeightKg,
+    decimal? TotalVolumeM3,
+    int? TotalPallets,
     string Status,
     decimal? OccupancyPercentage,
+    decimal? WeightOccupancyPercentage,
+    decimal? VolumeOccupancyPercentage,
+    decimal? PalletOccupancyPercentage,
     int CityCount,
     int DeliveryCount,
     int PotentialCustomerCount,
@@ -106,8 +125,16 @@ public sealed record RouteChatDetailsDto(
 public sealed record RouteChatCriticalDto(
     Guid Id,
     string Name,
+    string Weekday,
+    string VehicleType,
+    decimal TotalWeightKg,
+    decimal? TotalVolumeM3,
+    int? TotalPallets,
     string Status,
     decimal? OccupancyPercentage,
+    decimal? WeightOccupancyPercentage,
+    decimal? VolumeOccupancyPercentage,
+    decimal? PalletOccupancyPercentage,
     string Reason);
 
 public sealed record RouteChatCitiesDto(
@@ -115,7 +142,13 @@ public sealed record RouteChatCitiesDto(
     string RouteName,
     IReadOnlyList<RouteChatCityDto> Cities);
 
-public sealed record RouteChatCityDto(string Name, string? State);
+public sealed record RouteChatCityDto(
+    int Sequence,
+    string Name,
+    string? State,
+    int Deliveries,
+    decimal AveragePerDay,
+    string? Note);
 
 public sealed record RouteChatRouteCustomersDto(
     Guid RouteId,
@@ -178,10 +211,15 @@ public sealed record BusinessChatCustomerRecentMovementDto(
     DateOnly IssueDate,
     string DocumentNumber,
     string Series,
+    string DocumentType,
+    string MovementType,
     string OperationCategory,
+    string OperationCode,
     string OperationDescription,
+    string? OriginalDocumentNumber,
     int ItemCount,
-    decimal GrossWeightKg);
+    decimal GrossWeightKg,
+    decimal CalculatedAmount);
 
 public sealed record BusinessChatFiscalDocumentQuery(
     string? SearchTerm,
@@ -196,6 +234,8 @@ public sealed record BusinessChatFiscalDocumentDto(
     DateOnly IssueDate,
     string DocumentNumber,
     string Series,
+    string DocumentType,
+    string MovementType,
     Guid? CustomerId,
     string CustomerName,
     string CustomerCode,
@@ -203,7 +243,9 @@ public sealed record BusinessChatFiscalDocumentDto(
     string CityName,
     string State,
     string OperationCategory,
+    string OperationCode,
     string OperationDescription,
+    string? OriginalDocumentNumber,
     int ItemCount,
     decimal GrossWeightKg,
     IReadOnlyList<BusinessChatFiscalDocumentPricingItemDto> PricingItems);
@@ -375,9 +417,15 @@ public sealed record BusinessChatProductionSummaryDto(
     DateOnly? LastDailyDate,
     decimal LastProduction,
     decimal LastOutbound,
+    decimal LastAdjustment,
+    decimal LastClosing,
+    decimal? LastFirstShiftProduction,
+    decimal? LastSecondShiftProduction,
+    decimal? LastThirdShiftProduction,
     decimal OperationalBalance,
     decimal TotalProductionMonth,
-    decimal TotalOutboundMonth);
+    decimal TotalOutboundMonth,
+    decimal TotalAdjustmentMonth);
 
 public sealed record BusinessChatProductionRecordQuery(
     string? SearchTerm,
@@ -390,9 +438,12 @@ public sealed record BusinessChatProductionRecordQuery(
 public sealed record BusinessChatProductionRecordDto(
     Guid Id,
     Guid ProductId,
+    string ExternalCode,
+    string ProductDescription,
     string ErpCode,
     string OperationalCode,
     string ProductName,
+    string Gtin,
     string GroupCode,
     string Type,
     DateOnly Date,
