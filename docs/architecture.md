@@ -731,24 +731,23 @@ de `import_errors` permanecem reservados a problemas de validação por linha.
 A importação fiscal não usa o modelo em memória do ClosedXML no caminho de
 produção. `FiscalMovementsSpreadsheetParser` percorre `sheet1.xml` com
 `OpenXmlReader`, mantendo somente a linha corrente e a pequena tabela de strings
-compartilhadas. `FiscalMovementsProcessor` acumula lotes de 500 linhas,
-persiste produtos, documentos e itens e limpa o rastreamento do EF entre lotes.
-Os dados fiscais continuam dentro de uma única transação para impedir consultas
-de observarem uma importação parcial. A cada aproximadamente dez segundos, um
-contexto separado atualiza somente `TotalRows` e `ImportedRows`; esses contadores
-operacionais podem sobreviver ao rollback dos dados e são substituídos pelo
-estado terminal quando a execução conclui ou falha. O lote sustenta o acesso por
-códigos de produto, número/chave de documento e itens já cobertos pelos índices
-de unicidade e consulta existentes; nenhum índice adicional é necessário.
-Importações fiscais são serializadas por um advisory lock transacional derivado
-do `DataSourceId`, não do ID de cada versão. Assim, uploads e reprocessamentos de
-versões diferentes da mesma fonte não atualizam simultaneamente os mesmos
-documentos e itens fiscais, evitando conflitos de concorrência otimista.
-Cada `SaveChanges` de lote também possui reconciliação local limitada a três
-tentativas para alterações externas: valores existentes são recarregados antes
-de reaplicar o upsert e uma linha removida entre leitura e gravação volta ao
-estado `Added`. Se o conflito persistir, a falha identifica os tipos de entidade
-envolvidos, em vez de retornar apenas a mensagem genérica do EF.
+compartilhadas. `FiscalMovementsProcessor` grava lotes de 500 linhas em
+`fiscal_import_staging` por cópia binária do PostgreSQL. Cada lote é confirmado
+separadamente e atualiza os contadores do import; uma retentativa consulta a
+maior linha já armazenada e retoma a carga sem regravar os lotes concluídos.
+Após a carga, comandos set-based consolidam produtos, documentos e itens com
+`INSERT ... ON CONFLICT` dentro de uma única transação curta. A publicação do
+estado `Completed` e a remoção do staging ocorrem na mesma transação, impedindo
+que uma falha de merge publique resultado parcial. Se a carga ou o merge falhar,
+o staging permanece ligado ao `ImportId` para retomada e também é removido por
+cascade quando o import for excluído. A chave primária `ImportId + RowNumber`
+cobre retomada e deduplicação; o merge filtra sempre por `ImportId`, portanto não
+há necessidade de índice adicional.
+Importações fiscais são serializadas por um advisory lock de sessão derivado do
+`DataSourceId`. Versões diferentes da mesma fonte aguardam umas às outras durante
+carga e merge, enquanto fontes distintas continuam independentes. O caminho de
+produção não usa entidades EF rastreadas para atualizar fatos fiscais em massa,
+eliminando conflitos de concorrência otimista linha a linha.
 
 ### Versionamento e publicação
 

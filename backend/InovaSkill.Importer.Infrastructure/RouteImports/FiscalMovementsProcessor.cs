@@ -1,247 +1,311 @@
+using System.Data;
+using System.Text.Json;
 using InovaSkill.Importer.Application.RouteImports;
-using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
 public sealed class FiscalMovementsProcessor(
     ImportDbContext dbContext,
     IImportFileStorage fileStorage,
-    FiscalMovementsSpreadsheetParser parser,
-    IServiceScopeFactory scopeFactory) : IDataSourceProcessor
+    FiscalMovementsSpreadsheetParser parser) : IDataSourceProcessor
 {
-    private const int RowBatchSize = 500;
-    private const int MaximumBatchConcurrencyAttempts = 3;
-    private static readonly TimeSpan ProgressPersistenceInterval = TimeSpan.FromSeconds(10);
+    private const int StagingBatchSize = 500;
+    private const int MergeCommandTimeoutSeconds = 600;
+    private static readonly JsonSerializerOptions StagingJsonOptions = new(JsonSerializerDefaults.Web);
 
     public string SourceCode => FiscalImportCodes.ProcessorKey;
 
     public async Task ProcessAsync(Guid importId, CancellationToken cancellationToken)
     {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var import = await dbContext.RouteImports.SingleAsync(x => x.Id == importId, cancellationToken);
-        if (dbContext.Database.IsNpgsql())
-            await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock({ResolveDataSourceLockKey(import.DataSourceId)})", cancellationToken);
-        await using var content = await fileStorage.OpenReadAsync(import.FilePath, cancellationToken);
-        var now = DateTime.UtcNow;
-        var customerSourceId = await dbContext.DataSources.Where(x => x.Code == CustomerImportCodes.DataSource)
-            .Select(x => (Guid?)x.Id).SingleOrDefaultAsync(cancellationToken);
-        var customers = customerSourceId is null
-            ? new Dictionary<string, Guid>()
-            : await dbContext.Customers.AsNoTracking().Where(x => x.DataSourceId == customerSourceId)
-                .ToDictionaryAsync(x => $"{x.ExternalCode}|{x.BranchCode}", x => x.Id, cancellationToken);
-        var municipalities = (await dbContext.Municipalities.AsNoTracking().ToListAsync(cancellationToken))
-            .GroupBy(x => MunicipalityNameNormalizer.Normalize(x.Name))
-            .Where(x => x.Count() == 1).ToDictionary(x => x.Key, x => x.Single().Id);
-
-        var detectedTotalRows = 0;
-        var importedRows = 0;
-        var lastProgressPersistence = DateTime.MinValue;
-        var batch = new List<ParsedFiscalMovementRow>(RowBatchSize);
-        foreach (var row in parser.StreamRows(content, total => detectedTotalRows = total))
+        var import = await dbContext.RouteImports.AsNoTracking()
+            .SingleAsync(item => item.Id == importId, cancellationToken);
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        var connection = (NpgsqlConnection)dbContext.Database.GetDbConnection();
+        var lockKey = ResolveDataSourceLockKey(import.DataSourceId);
+        await SetAdvisoryLockAsync(connection, lockKey, acquire: true, cancellationToken);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            batch.Add(row);
-            if (batch.Count < RowBatchSize) continue;
-            await ProcessBatchAsync(import, batch, customers, municipalities, now, cancellationToken);
-            importedRows += batch.Count;
-            batch.Clear();
-            dbContext.ChangeTracker.Clear();
-            if (DateTime.UtcNow - lastProgressPersistence >= ProgressPersistenceInterval)
+            var stagedThroughRow = await GetLastStagedRowAsync(connection, importId, cancellationToken);
+            var customerSourceId = await dbContext.DataSources.AsNoTracking()
+                .Where(item => item.Code == CustomerImportCodes.DataSource)
+                .Select(item => (Guid?)item.Id).SingleOrDefaultAsync(cancellationToken);
+            var customers = customerSourceId is null
+                ? new Dictionary<string, Guid>()
+                : await dbContext.Customers.AsNoTracking().Where(item => item.DataSourceId == customerSourceId)
+                    .ToDictionaryAsync(item => $"{item.ExternalCode}|{item.BranchCode}", item => item.Id, cancellationToken);
+            var municipalities = (await dbContext.Municipalities.AsNoTracking().ToListAsync(cancellationToken))
+                .GroupBy(item => MunicipalityNameNormalizer.Normalize(item.Name))
+                .Where(group => group.Count() == 1)
+                .ToDictionary(group => group.Key, group => group.Single().Id);
+            await using var content = await fileStorage.OpenReadAsync(import.FilePath, cancellationToken);
+            var detectedTotalRows = 0;
+            var stagedRows = await CountStagedRowsAsync(connection, importId, cancellationToken);
+            var batch = new List<FiscalStagingRow>(StagingBatchSize);
+
+            foreach (var row in parser.StreamRows(content, total => detectedTotalRows = total))
             {
-                await PersistProgressAsync(importId, detectedTotalRows, importedRows, cancellationToken);
-                lastProgressPersistence = DateTime.UtcNow;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (row.RowNumber <= stagedThroughRow) continue;
+                customers.TryGetValue($"{row.CustomerCode}|{row.BranchCode}", out var customerId);
+                municipalities.TryGetValue(MunicipalityNameNormalizer.Normalize(row.CityName), out var municipalityId);
+                batch.Add(new FiscalStagingRow(
+                    row,
+                    customerId == Guid.Empty ? null : customerId,
+                    municipalityId == Guid.Empty ? null : municipalityId,
+                    FiscalOperationClassifier.Classify(row.OperationCode, row.OperationDescription).ToString()));
+                if (batch.Count < StagingBatchSize) continue;
+                await WriteStagingBatchAsync(connection, importId, batch, cancellationToken);
+                stagedRows += batch.Count;
+                batch.Clear();
+                await PersistProgressAsync(importId, detectedTotalRows, stagedRows, cancellationToken);
             }
-        }
-        if (batch.Count > 0)
-        {
-            await ProcessBatchAsync(import, batch, customers, municipalities, now, cancellationToken);
-            importedRows += batch.Count;
-            batch.Clear();
-            dbContext.ChangeTracker.Clear();
-        }
+            if (batch.Count > 0)
+            {
+                await WriteStagingBatchAsync(connection, importId, batch, cancellationToken);
+                stagedRows += batch.Count;
+                batch.Clear();
+                await PersistProgressAsync(importId, detectedTotalRows, stagedRows, cancellationToken);
+            }
 
-        await dbContext.RouteImports.Where(x => x.Id == importId).ExecuteUpdateAsync(setters => setters
-            .SetProperty(x => x.TotalRows, importedRows)
-            .SetProperty(x => x.ImportedRows, importedRows)
-            .SetProperty(x => x.Status, RouteImportStatus.Completed)
-            .SetProperty(x => x.FinishedAt, DateTime.UtcNow)
-            .SetProperty(x => x.FailureMessage, (string?)null), cancellationToken);
+            await MergeStagingAsync(import.Id, import.DataSourceId, stagedRows, cancellationToken);
+        }
+        finally
+        {
+            await SetAdvisoryLockAsync(connection, lockKey, acquire: false, CancellationToken.None);
+            await dbContext.Database.CloseConnectionAsync();
+        }
+    }
+
+    private static async Task WriteStagingBatchAsync(
+        NpgsqlConnection connection,
+        Guid importId,
+        IReadOnlyList<FiscalStagingRow> rows,
+        CancellationToken cancellationToken)
+    {
+        await using var importer = await connection.BeginBinaryImportAsync("""
+            COPY fiscal_import_staging
+                ("ImportId", "RowNumber", "CustomerId", "MunicipalityId", "MovementCategory", "Payload", "CreatedAt")
+            FROM STDIN (FORMAT BINARY)
+            """, cancellationToken);
+        foreach (var staged in rows)
+        {
+            await importer.StartRowAsync(cancellationToken);
+            await importer.WriteAsync(importId, NpgsqlDbType.Uuid, cancellationToken);
+            await importer.WriteAsync(staged.Row.RowNumber, NpgsqlDbType.Integer, cancellationToken);
+            if (staged.CustomerId.HasValue)
+                await importer.WriteAsync(staged.CustomerId.Value, NpgsqlDbType.Uuid, cancellationToken);
+            else await importer.WriteNullAsync(cancellationToken);
+            if (staged.MunicipalityId.HasValue)
+                await importer.WriteAsync(staged.MunicipalityId.Value, NpgsqlDbType.Uuid, cancellationToken);
+            else await importer.WriteNullAsync(cancellationToken);
+            await importer.WriteAsync(staged.MovementCategory, NpgsqlDbType.Varchar, cancellationToken);
+            await importer.WriteAsync(JsonSerializer.Serialize(staged.Row, StagingJsonOptions), NpgsqlDbType.Jsonb, cancellationToken);
+            await importer.WriteAsync(DateTime.UtcNow, NpgsqlDbType.TimestampTz, cancellationToken);
+        }
+        await importer.CompleteAsync(cancellationToken);
+    }
+
+    private async Task MergeStagingAsync(
+        Guid importId,
+        Guid dataSourceId,
+        int stagedRows,
+        CancellationToken cancellationToken)
+    {
+        dbContext.Database.SetCommandTimeout(MergeCommandTimeoutSeconds);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var now = DateTime.UtcNow;
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($$"""
+            WITH staged AS (
+                SELECT DISTINCT ON ("Payload"->>'productCode')
+                    "Payload"->>'productCode' AS code,
+                    "Payload"->>'productDescription' AS description,
+                    "Payload"->>'productGroupCode' AS group_code
+                FROM fiscal_import_staging
+                WHERE "ImportId" = {{importId}} AND COALESCE("Payload"->>'productCode', '') <> ''
+                ORDER BY "Payload"->>'productCode', "RowNumber" DESC
+            )
+            UPDATE products AS product
+            SET "Name" = staged.description,
+                "Description" = staged.description,
+                "GroupCode" = CASE WHEN staged.group_code = '' THEN product."GroupCode" ELSE staged.group_code END,
+                "UpdatedAt" = {{now}}
+            FROM staged
+            WHERE product."ErpCode" = staged.code OR product."ExternalCode" = staged.code;
+
+            WITH staged AS (
+                SELECT DISTINCT ON ("Payload"->>'productCode')
+                    "Payload"->>'productCode' AS code,
+                    "Payload"->>'productDescription' AS description,
+                    "Payload"->>'productGroupCode' AS group_code
+                FROM fiscal_import_staging
+                WHERE "ImportId" = {{importId}} AND COALESCE("Payload"->>'productCode', '') <> ''
+                ORDER BY "Payload"->>'productCode', "RowNumber" DESC
+            )
+            INSERT INTO products
+                ("Id", "DataSourceId", "ExternalCode", "Description", "ErpCode", "OperationalCode", "Name",
+                 "Type", "Unit", "GroupCode", "Gtin", "CreatedAt", "UpdatedAt")
+            SELECT gen_random_uuid(), {{dataSourceId}}, staged.code, staged.description, staged.code, '', staged.description,
+                   '', '', staged.group_code, '', {{now}}, {{now}}
+            FROM staged
+            WHERE NOT EXISTS (SELECT 1 FROM products product
+                              WHERE product."ErpCode" = staged.code OR product."ExternalCode" = staged.code);
+            """, cancellationToken);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($$"""
+            WITH staged AS (
+                SELECT DISTINCT ON (
+                    "Payload"->>'documentType', "Payload"->>'documentNumber', "Payload"->>'series',
+                    ("Payload"->>'issueDate')::date, "Payload"->>'customerCode', "Payload"->>'branchCode')
+                    "CustomerId" AS customer_id, "MunicipalityId" AS municipality_id,
+                    "MovementCategory" AS movement_category, "Payload" AS payload
+                FROM fiscal_import_staging
+                WHERE "ImportId" = {{importId}}
+                ORDER BY "Payload"->>'documentType', "Payload"->>'documentNumber', "Payload"->>'series',
+                    ("Payload"->>'issueDate')::date, "Payload"->>'customerCode', "Payload"->>'branchCode', "RowNumber" DESC
+            )
+            INSERT INTO fiscal_documents
+                ("Id", "DataSourceId", "DocumentNumber", "Series", "DocumentType", "MovementType", "IssueDate",
+                 "CustomerId", "MunicipalityId", "CustomerCodeAtIssue", "BranchCodeAtIssue", "CustomerNameAtIssue",
+                 "CityNameAtIssue", "StateCodeAtIssue", "OperationCode", "OperationDescription", "MovementCategory",
+                 "OriginalDocumentNumber", "FirstSeenImportId", "LastSeenImportId", "CreatedAt", "UpdatedAt")
+            SELECT gen_random_uuid(), {{dataSourceId}}, payload->>'documentNumber', payload->>'series',
+                   payload->>'documentType', payload->>'documentType', (payload->>'issueDate')::date,
+                   customer_id, municipality_id, payload->>'customerCode', payload->>'branchCode',
+                   payload->>'customerName', payload->>'cityName', payload->>'stateCode', payload->>'operationCode',
+                   payload->>'operationDescription', movement_category, NULLIF(payload->>'originalDocumentNumber', ''),
+                   {{importId}}, {{importId}}, {{now}}, {{now}}
+            FROM staged
+            ON CONFLICT ("DataSourceId", "DocumentType", "DocumentNumber", "Series", "IssueDate",
+                         "CustomerCodeAtIssue", "BranchCodeAtIssue")
+            DO UPDATE SET
+                "CustomerId" = COALESCE(fiscal_documents."CustomerId", EXCLUDED."CustomerId"),
+                "MunicipalityId" = COALESCE(fiscal_documents."MunicipalityId", EXCLUDED."MunicipalityId"),
+                "CustomerNameAtIssue" = EXCLUDED."CustomerNameAtIssue",
+                "CityNameAtIssue" = EXCLUDED."CityNameAtIssue",
+                "StateCodeAtIssue" = EXCLUDED."StateCodeAtIssue",
+                "OperationCode" = EXCLUDED."OperationCode",
+                "OperationDescription" = EXCLUDED."OperationDescription",
+                "MovementCategory" = EXCLUDED."MovementCategory",
+                "OriginalDocumentNumber" = EXCLUDED."OriginalDocumentNumber",
+                "LastSeenImportId" = EXCLUDED."LastSeenImportId",
+                "UpdatedAt" = EXCLUDED."UpdatedAt";
+            """, cancellationToken);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($$"""
+            WITH parsed AS MATERIALIZED (
+                SELECT "RowNumber", "Payload" AS payload,
+                    "Payload"->>'documentType' AS document_type,
+                    "Payload"->>'documentNumber' AS document_number,
+                    "Payload"->>'series' AS series,
+                    ("Payload"->>'issueDate')::date AS issue_date,
+                    "Payload"->>'customerCode' AS customer_code,
+                    "Payload"->>'branchCode' AS branch_code,
+                    "Payload"->>'itemNumber' AS item_number,
+                    "Payload"->>'productCode' AS product_code
+                FROM fiscal_import_staging
+                WHERE "ImportId" = {{importId}}
+            ), staged AS (
+                SELECT DISTINCT ON (document_type, document_number, series, issue_date,
+                                    customer_code, branch_code, item_number) *
+                FROM parsed
+                ORDER BY document_type, document_number, series, issue_date,
+                         customer_code, branch_code, item_number, "RowNumber" DESC
+            ), resolved AS (
+                SELECT document."Id" AS document_id,
+                       COALESCE(product."Id", external_product."Id") AS product_id,
+                       staged.payload
+                FROM staged
+                JOIN fiscal_documents document ON document."DataSourceId" = {{dataSourceId}}
+                 AND document."DocumentType" = staged.document_type
+                 AND document."DocumentNumber" = staged.document_number
+                 AND document."Series" = staged.series
+                 AND document."IssueDate" = staged.issue_date
+                 AND document."CustomerCodeAtIssue" = staged.customer_code
+                 AND document."BranchCodeAtIssue" = staged.branch_code
+                LEFT JOIN products product ON product."ErpCode" = staged.product_code
+                LEFT JOIN LATERAL (
+                    SELECT fallback."Id" FROM products fallback
+                    WHERE product."Id" IS NULL AND fallback."ExternalCode" = staged.product_code
+                    LIMIT 1
+                ) external_product ON true
+            )
+            INSERT INTO fiscal_document_items
+                ("Id", "FiscalDocumentId", "ItemNumber", "ProductId", "ProductCode", "ProductDescription",
+                 "ProductGroupCode", "ProductGroupDescription", "Quantity", "GrossWeightKg", "UnitValue",
+                 "SourceTotalValue", "Expenses", "Ipi", "Icms", "Iss", "CfopCode", "CfopDescription",
+                 "TesCode", "TesDescription", "OrderNumber", "WarehouseCode", "CreatedAt", "UpdatedAt")
+            SELECT gen_random_uuid(), document_id, payload->>'itemNumber', product_id, payload->>'productCode',
+                   payload->>'productDescription', payload->>'productGroupCode', payload->>'productGroupDescription',
+                   (payload->>'quantity')::numeric, (payload->>'grossWeightKg')::numeric,
+                   NULLIF(payload->>'unitValue', '')::numeric, NULLIF(payload->>'sourceTotalValue', '')::numeric,
+                   NULLIF(payload->>'expenses', '')::numeric, NULLIF(payload->>'ipi', '')::numeric,
+                   NULLIF(payload->>'icms', '')::numeric, NULLIF(payload->>'iss', '')::numeric,
+                   NULLIF(payload->>'cfopCode', ''), NULLIF(payload->>'cfopDescription', ''),
+                   NULLIF(payload->>'tesCode', ''), NULLIF(payload->>'tesDescription', ''),
+                   NULLIF(payload->>'orderNumber', ''), NULLIF(payload->>'warehouseCode', ''), {{now}}, {{now}}
+            FROM resolved
+            ON CONFLICT ("FiscalDocumentId", "ItemNumber") DO UPDATE SET
+                "ProductId" = EXCLUDED."ProductId", "ProductCode" = EXCLUDED."ProductCode",
+                "ProductDescription" = EXCLUDED."ProductDescription", "ProductGroupCode" = EXCLUDED."ProductGroupCode",
+                "ProductGroupDescription" = EXCLUDED."ProductGroupDescription", "Quantity" = EXCLUDED."Quantity",
+                "GrossWeightKg" = EXCLUDED."GrossWeightKg", "UnitValue" = EXCLUDED."UnitValue",
+                "SourceTotalValue" = EXCLUDED."SourceTotalValue", "Expenses" = EXCLUDED."Expenses",
+                "Ipi" = EXCLUDED."Ipi", "Icms" = EXCLUDED."Icms", "Iss" = EXCLUDED."Iss",
+                "CfopCode" = EXCLUDED."CfopCode", "CfopDescription" = EXCLUDED."CfopDescription",
+                "TesCode" = EXCLUDED."TesCode", "TesDescription" = EXCLUDED."TesDescription",
+                "OrderNumber" = EXCLUDED."OrderNumber", "WarehouseCode" = EXCLUDED."WarehouseCode",
+                "UpdatedAt" = EXCLUDED."UpdatedAt";
+
+            DELETE FROM fiscal_import_staging WHERE "ImportId" = {{importId}};
+            UPDATE imports SET "TotalRows" = {{stagedRows}}, "ImportedRows" = {{stagedRows}},
+                "Status" = 'Completed', "FinishedAt" = {{DateTime.UtcNow}}, "FailureMessage" = NULL
+            WHERE "Id" = {{importId}};
+            """, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
-    private async Task ProcessBatchAsync(
-        RouteImport import,
-        IReadOnlyList<ParsedFiscalMovementRow> rows,
-        IReadOnlyDictionary<string, Guid> customers,
-        IReadOnlyDictionary<string, Guid> municipalities,
-        DateTime now,
-        CancellationToken cancellationToken)
-    {
-        var productCodes = rows.Select(x => x.ProductCode).Where(x => x.Length > 0).Distinct().ToArray();
-        var matchingProducts = await dbContext.Products
-            .Where(x => productCodes.Contains(x.ErpCode) || productCodes.Contains(x.ExternalCode))
-            .ToListAsync(cancellationToken);
-        var products = new Dictionary<string, Product>(StringComparer.OrdinalIgnoreCase);
-        foreach (var product in matchingProducts)
-        {
-            if (!string.IsNullOrWhiteSpace(product.ErpCode)) products.TryAdd(product.ErpCode, product);
-            if (!string.IsNullOrWhiteSpace(product.ExternalCode)) products.TryAdd(product.ExternalCode, product);
-        }
-        foreach (var row in rows.DistinctBy(x => x.ProductCode))
-        {
-            if (string.IsNullOrWhiteSpace(row.ProductCode)) continue;
-            if (!products.TryGetValue(row.ProductCode, out var product))
-            {
-                product = new Product {
-                    Id = Guid.NewGuid(), DataSourceId = import.DataSourceId,
-                    ErpCode = row.ProductCode, ExternalCode = row.ProductCode,
-                    Name = row.ProductDescription, Description = row.ProductDescription,
-                    GroupCode = row.ProductGroupCode, CreatedAt = now, UpdatedAt = now
-                };
-                products.Add(row.ProductCode, product);
-                dbContext.Products.Add(product);
-            }
-            else if (row.ProductDescription.Length > 0)
-            {
-                product.Description = row.ProductDescription;
-                product.Name = row.ProductDescription;
-                if (row.ProductGroupCode.Length > 0) product.GroupCode = row.ProductGroupCode;
-                product.UpdatedAt = now;
-            }
-        }
-        await SaveBatchChangesAsync(cancellationToken);
-
-        var documentGroups = rows.GroupBy(DocumentKey).ToArray();
-        var documentNumbers = documentGroups.Select(group => group.First().DocumentNumber).Distinct().ToArray();
-        var existingDocuments = await dbContext.FiscalDocuments.Include(x => x.Items)
-            .Where(x => x.DataSourceId == import.DataSourceId && documentNumbers.Contains(x.DocumentNumber))
-            .ToListAsync(cancellationToken);
-        var documentsByKey = existingDocuments.ToDictionary(DocumentKey);
-        foreach (var group in documentGroups)
-        {
-            var row = group.First();
-            documentsByKey.TryGetValue(DocumentKey(row), out var document);
-            customers.TryGetValue($"{row.CustomerCode}|{row.BranchCode}", out var customerId);
-            municipalities.TryGetValue(MunicipalityNameNormalizer.Normalize(row.CityName), out var municipalityId);
-            if (document is null)
-            {
-                document = new FiscalDocument {
-                    Id = Guid.NewGuid(), DataSourceId = import.DataSourceId, DocumentNumber = row.DocumentNumber,
-                    Series = row.Series, DocumentType = row.DocumentType, MovementType = row.DocumentType,
-                    IssueDate = row.IssueDate, CustomerId = customerId == Guid.Empty ? null : customerId,
-                    MunicipalityId = municipalityId == Guid.Empty ? null : municipalityId,
-                    CustomerCodeAtIssue = row.CustomerCode, BranchCodeAtIssue = row.BranchCode,
-                    CustomerNameAtIssue = row.CustomerName, CityNameAtIssue = row.CityName,
-                    StateCodeAtIssue = row.StateCode, OperationCode = row.OperationCode,
-                    OperationDescription = row.OperationDescription,
-                    MovementCategory = FiscalOperationClassifier.Classify(row.OperationCode, row.OperationDescription),
-                    OriginalDocumentNumber = row.OriginalDocumentNumber, FirstSeenImportId = import.Id,
-                    LastSeenImportId = import.Id, CreatedAt = now, UpdatedAt = now
-                };
-                documentsByKey.Add(DocumentKey(row), document);
-                dbContext.FiscalDocuments.Add(document);
-            }
-            else
-            {
-                document.LastSeenImportId = import.Id;
-                document.CustomerId ??= customerId == Guid.Empty ? null : customerId;
-                document.MunicipalityId ??= municipalityId == Guid.Empty ? null : municipalityId;
-                document.UpdatedAt = now;
-            }
-            foreach (var itemRow in group.GroupBy(x => x.ItemNumber).Select(x => x.Last()))
-            {
-                var item = document.Items.SingleOrDefault(x => x.ItemNumber == itemRow.ItemNumber);
-                item ??= new FiscalDocumentItem {
-                    Id = Guid.NewGuid(), FiscalDocument = document, ItemNumber = itemRow.ItemNumber, CreatedAt = now
-                };
-                if (item.FiscalDocumentId == Guid.Empty && !document.Items.Contains(item)) document.Items.Add(item);
-                item.ProductId = products.GetValueOrDefault(itemRow.ProductCode)?.Id;
-                item.ProductCode = itemRow.ProductCode;
-                item.ProductDescription = itemRow.ProductDescription;
-                item.ProductGroupCode = itemRow.ProductGroupCode;
-                item.ProductGroupDescription = itemRow.ProductGroupDescription;
-                item.Quantity = itemRow.Quantity;
-                item.GrossWeightKg = itemRow.GrossWeightKg;
-                item.UnitValue = itemRow.UnitValue;
-                item.SourceTotalValue = itemRow.SourceTotalValue;
-                item.Expenses = itemRow.Expenses;
-                item.Ipi = itemRow.Ipi;
-                item.Icms = itemRow.Icms;
-                item.Iss = itemRow.Iss;
-                item.CfopCode = itemRow.CfopCode;
-                item.CfopDescription = itemRow.CfopDescription;
-                item.TesCode = itemRow.TesCode;
-                item.TesDescription = itemRow.TesDescription;
-                item.OrderNumber = itemRow.OrderNumber;
-                item.WarehouseCode = itemRow.WarehouseCode;
-                item.UpdatedAt = now;
-            }
-        }
-        await SaveBatchChangesAsync(cancellationToken);
-    }
-
-    private async Task SaveBatchChangesAsync(CancellationToken cancellationToken)
-    {
-        for (var attempt = 1; attempt <= MaximumBatchConcurrencyAttempts; attempt++)
-        {
-            try
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-                return;
-            }
-            catch (DbUpdateConcurrencyException exception) when (attempt < MaximumBatchConcurrencyAttempts)
-            {
-                foreach (var entry in exception.Entries)
-                {
-                    var databaseValues = await entry.GetDatabaseValuesAsync(cancellationToken);
-                    if (databaseValues is null)
-                    {
-                        entry.State = EntityState.Added;
-                        continue;
-                    }
-
-                    entry.OriginalValues.SetValues(databaseValues);
-                    entry.State = EntityState.Modified;
-                }
-            }
-            catch (DbUpdateConcurrencyException exception)
-            {
-                var entityNames = string.Join(", ", exception.Entries
-                    .Select(entry => entry.Metadata.ClrType.Name)
-                    .Distinct(StringComparer.Ordinal));
-                throw new DbUpdateConcurrencyException(
-                    $"A importação fiscal não conseguiu reconciliar alterações concorrentes após " +
-                    $"{MaximumBatchConcurrencyAttempts} tentativas. Entidades: {entityNames}.", exception);
-            }
-        }
-    }
-
-    private async Task PersistProgressAsync(
-        Guid importId,
-        int totalRows,
-        int importedRows,
-        CancellationToken cancellationToken)
-    {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var progressDbContext = scope.ServiceProvider.GetRequiredService<ImportDbContext>();
-        await progressDbContext.RouteImports
-            .Where(x => x.Id == importId && x.Status == RouteImportStatus.Processing)
+    private async Task PersistProgressAsync(Guid importId, int totalRows, int importedRows, CancellationToken cancellationToken) =>
+        await dbContext.RouteImports.Where(item => item.Id == importId && item.Status == RouteImportStatus.Processing)
             .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.TotalRows, totalRows)
-                .SetProperty(x => x.ImportedRows, importedRows), cancellationToken);
+                .SetProperty(item => item.TotalRows, totalRows)
+                .SetProperty(item => item.ImportedRows, importedRows), cancellationToken);
+
+    private static async Task<int> GetLastStagedRowAsync(NpgsqlConnection connection, Guid importId, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT COALESCE(MAX(\"RowNumber\"), 0) FROM fiscal_import_staging WHERE \"ImportId\" = @importId", connection);
+        command.Parameters.AddWithValue("importId", importId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
 
-    private static string DocumentKey(ParsedFiscalMovementRow row) =>
-        $"{row.DocumentType}|{row.DocumentNumber}|{row.Series}|{row.IssueDate:yyyyMMdd}|{row.CustomerCode}|{row.BranchCode}";
+    private static async Task<int> CountStagedRowsAsync(NpgsqlConnection connection, Guid importId, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT COUNT(*) FROM fiscal_import_staging WHERE \"ImportId\" = @importId", connection);
+        command.Parameters.AddWithValue("importId", importId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+    }
 
-    private static string DocumentKey(FiscalDocument document) =>
-        $"{document.DocumentType}|{document.DocumentNumber}|{document.Series}|{document.IssueDate:yyyyMMdd}|{document.CustomerCodeAtIssue}|{document.BranchCodeAtIssue}";
+    private static async Task SetAdvisoryLockAsync(
+        NpgsqlConnection connection, long key, bool acquire, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            acquire ? "SELECT pg_advisory_lock(@key)" : "SELECT pg_advisory_unlock(@key)", connection);
+        command.Parameters.AddWithValue("key", key);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 
     public static long ResolveDataSourceLockKey(Guid dataSourceId) =>
         BitConverter.ToInt64(dataSourceId.ToByteArray(), 0);
+
+    private sealed record FiscalStagingRow(
+        ParsedFiscalMovementRow Row,
+        Guid? CustomerId,
+        Guid? MunicipalityId,
+        string MovementCategory);
 }
