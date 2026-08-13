@@ -17,6 +17,8 @@ describe("sidebar navigation", () => {
     expect(diretorItems).toEqual([
       "Dashboard",
       "Chat IA",
+      "Meu WhatsApp",
+      "Simulador WhatsApp",
       "Rotas",
       "Tipos de Veículo",
       "Mapa",
@@ -29,6 +31,8 @@ describe("sidebar navigation", () => {
     expect(vendasItems).toEqual([
       "Dashboard",
       "Chat IA",
+      "Meu WhatsApp",
+      "Simulador WhatsApp",
       "Rotas",
       "Mapa",
       "Clientes",
@@ -39,6 +43,8 @@ describe("sidebar navigation", () => {
     expect(getVisibleSidebarItemsForRole("logistica").map((item) => item.label)).toEqual([
       "Dashboard",
       "Chat IA",
+      "Meu WhatsApp",
+      "Simulador WhatsApp",
       "Rotas",
       "Tipos de Veículo",
       "Mapa",
@@ -48,12 +54,12 @@ describe("sidebar navigation", () => {
       "Estoque",
       "Produção",
     ]);
-    expect(adminItems).toHaveLength(14);
+    expect(adminItems).toHaveLength(16);
     expect(adminItems).toContain("Importações");
     expect(adminItems).toContain("Processamento");
     expect(adminItems).toContain("Consumo de IA");
     expect(adminItems).toContain("Memórias da IA");
-    expect(adminSystemItems).toEqual(adminItems);
+    expect(adminSystemItems).toEqual([...adminItems, "WhatsApp corporativo"]);
     expect(getVisibleSidebarItemsForRole("gestor")).toEqual([]);
   });
 

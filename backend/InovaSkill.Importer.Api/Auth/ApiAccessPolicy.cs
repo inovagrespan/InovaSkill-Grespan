@@ -30,7 +30,8 @@ public static class ApiAccessPolicy
     public static bool CanAccess(string? role, string path, string method)
     {
         if (path.Equals("/api/login", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/api/register", StringComparison.OrdinalIgnoreCase))
+            path.Equals("/api/register", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/api/integrations/whatsapp/webhook", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -43,7 +44,12 @@ public static class ApiAccessPolicy
         var normalizedRole = role.Trim().ToLowerInvariant();
         var isMutation = !HttpMethods.IsGet(method) && !HttpMethods.IsHead(method);
 
-        if (StartsWithAny(path, "/api/admin/jobs", "/api/admin/ai-consumption", "/api/admin/knowledge-memories", "/api/route-imports", "/api/import-errors"))
+        if (path.StartsWith("/api/admin/whatsapp", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedRole == AppUserRoles.AdminSystem;
+        }
+
+        if (StartsWithAny(path, "/api/admin/jobs", "/api/admin/job-schedules", "/api/admin/ai-consumption", "/api/admin/knowledge-memories", "/api/route-imports", "/api/import-errors"))
         {
             return AdministratorRoles.Contains(normalizedRole);
         }

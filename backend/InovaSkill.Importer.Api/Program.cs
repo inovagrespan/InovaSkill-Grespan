@@ -14,38 +14,6 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-builder.Services.AddHttpClient();
-builder.Services.Configure<AssistantOptions>(options =>
-{
-    builder.Configuration.GetSection(AssistantOptions.SectionName).Bind(options);
-    options.OpenAiApiKey = builder.Configuration["OPENAI_API_KEY"] ?? options.OpenAiApiKey;
-});
-builder.Services.AddScoped<IChatModelClient, OpenAiChatModelClient>();
-builder.Services.AddScoped<AiConsumptionService>();
-builder.Services.AddScoped<IChatHistoryStore, ChatHistoryStore>();
-builder.Services.AddScoped<AssistantScopeClassifier>();
-builder.Services.AddScoped<KnowledgeMemoryService>();
-builder.Services.AddScoped<IChatTool, SearchRoutesChatTool>();
-builder.Services.AddScoped<IChatTool, GetRouteDetailsChatTool>();
-builder.Services.AddScoped<IChatTool, GetCriticalRoutesChatTool>();
-builder.Services.AddScoped<IChatTool, ListRoutesByOccupancyChatTool>();
-builder.Services.AddScoped<IChatTool, GetRouteCitiesChatTool>();
-builder.Services.AddScoped<IChatTool, GetRouteCustomersChatTool>();
-builder.Services.AddScoped<IChatTool, GetLatestGlobalRouteOptimizationChatTool>();
-builder.Services.AddScoped<IChatTool, GetLatestRouteOptimizationChatTool>();
-builder.Services.AddScoped<IChatTool, RequestGlobalRouteOptimizationChatTool>();
-builder.Services.AddScoped<IChatTool, SearchCustomersChatTool>();
-builder.Services.AddScoped<IChatTool, GetCustomerConsumptionSummaryChatTool>();
-builder.Services.AddScoped<IChatTool, ListRecentFiscalDocumentsChatTool>();
-builder.Services.AddScoped<IChatTool, GetFiscalReturnRateChatTool>();
-builder.Services.AddScoped<IChatTool, SearchProductsChatTool>();
-builder.Services.AddScoped<IChatTool, GetProductDetailsChatTool>();
-builder.Services.AddScoped<IChatTool, GetInventorySummaryChatTool>();
-builder.Services.AddScoped<IChatTool, ListInventoryPositionsChatTool>();
-builder.Services.AddScoped<IChatTool, ListStockoutProductsChatTool>();
-builder.Services.AddScoped<IChatTool, GetProductionSummaryChatTool>();
-builder.Services.AddScoped<IChatTool, ListProductionRecordsChatTool>();
-builder.Services.AddScoped<BusinessAssistantService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddImportInfrastructure(builder.Configuration);
 builder.Services.Configure<ImportHangfireOptions>(
@@ -54,6 +22,7 @@ builder.Services.AddImportHangfire(builder.Configuration);
 builder.Services.Configure<JwtAuthOptions>(builder.Configuration.GetSection(JwtAuthOptions.SectionName));
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<PasswordHasher<AppUser>>();
+builder.Services.AddScoped<InovaSkill.Importer.Api.WhatsApp.WhatsAppUserLinkService>();
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = RouteImportCodes.MaximumUploadSizeBytes;

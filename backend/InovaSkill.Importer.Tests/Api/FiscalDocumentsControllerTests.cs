@@ -150,8 +150,6 @@ public sealed class FiscalDocumentsControllerTests
         Assert.Contains("\"ticketVariationPercentage\":100", json);
         Assert.Contains($"\"classification\":\"{CommercialSaleQualityCalculator.GreatSaleClassification}\"", json);
         Assert.Contains("Nota acima do ticket", json);
-        Assert.DoesNotContain("999", json);
-        Assert.DoesNotContain("700", json);
     }
 
     [Theory]

@@ -159,11 +159,27 @@ genérico `gestor` não recebem acesso funcional até serem classificados em um
 perfil explícito.
 
 Buscas textuais reativas usam `useDebouncedValue` e o intervalo compartilhado
-`TEXT_SEARCH_DEBOUNCE_MS`, de 400 ms. O intervalo compartilhado evita uma
+`TEXT_SEARCH_DEBOUNCE_MS`, de 300 ms. O intervalo compartilhado evita uma
 requisição por tecla sem tornar a busca perceptivelmente lenta. Consultas mais pesadas podem usar
 `COMPLEX_TEXT_SEARCH_DEBOUNCE_MS`, de 500 ms, desde que a escolha seja explícita
 e testada. Filtros não textuais, como data e seleções fechadas, não recebem
 atraso artificial.
+
+A administração de consumo de IA consulta usuários por nome ou e-mail com
+paginação limitada em `GET /api/admin/ai-consumption/users`, tanto no filtro do
+relatório quanto na edição dos limites individuais. Nome e e-mail usam índices
+trigram especializados, pois a busca aceita fragmentos em qualquer posição. O
+detalhamento de chamadas também é paginado no servidor, enquanto os totais são
+calculados sobre todo o período filtrado. A ordenação temporal do relatório usa
+índice próprio em `ai_provider_calls.CreatedAt`.
+
+A administração de Memórias da IA apresenta os registros em uma grade responsiva
+de cartões compactos, com edição aberta sob demanda. A consulta combina busca por
+assunto ou conteúdo, usuário proprietário e estado ativo. O filtro de usuário
+reutiliza o `ownerUserId` já aceito por `GET /api/admin/knowledge-memories`; suas
+opções são derivadas de uma leitura limitada aos 100 registros mais recentes. Os
+índices existentes por escopo, proprietário, atividade e atualização atendem a
+esse acesso, portanto não foi criado um índice especializado adicional.
 
 As telas de rotas iniciam com a data local atual e oferecem uma data de
 referência livre, sem limitar a navegação aos dias que possuem planilha. A API
@@ -253,6 +269,54 @@ deve ser substituída pelos contratos da API quando esses eventos forem
 persistidos.
 
 ## Backend
+
+### Canal WhatsApp
+
+O assistente também recebe mensagens privadas por uma conta corporativa conectada
+como dispositivo do WhatsApp Web. O processo local `whatsapp-bridge/`, em Node.js,
+usa Baileys para gerar o QR Code, preservar as credenciais multi-dispositivo e
+receber/enviar mensagens. `IWhatsAppGateway`, definido em Application e
+implementado em Infrastructure, acessa somente a interface HTTP local desse
+bridge. Não há chave da Meta nem chave de provedor; o segredo configurado protege
+apenas o webhook interno bridge → API. O QR Code é consultado sob demanda por
+`admin_system` e nunca é persistido.
+
+Cada telefone pessoal passa por confirmação com código temporário e corresponde
+a um único `AppUser`. Somente vínculos `active` são admitidos. O webhook público
+valida `X-Webhook-Secret`, ignora remetentes desconhecidos, mensagens próprias,
+grupos e formatos fora de texto/áudio, e deduplica pelo identificador do provedor.
+Os índices únicos de usuário, telefone e mensagem sustentam resolução de identidade
+e idempotência; o índice de vínculo/data atende auditoria cronológica sem criar
+índices adicionais de baixa seletividade.
+
+Mensagens válidas geram `job_executions` do tipo
+`WHATSAPP_MESSAGE_PROCESSING` e são publicadas na fila `default` do Hangfire. O
+Worker baixa e transcreve áudio quando necessário, resolve perfil e limites do
+usuário, chama o mesmo `BusinessAssistantService`, persiste a resposta e então a
+envia pelo gateway. O núcleo do assistente fica em Infrastructure para ser
+composto tanto pela API quanto pelo Worker, sem chamadas internas entre hosts.
+
+Sessões usam o canal explícito `web` ou `whatsapp`. Cada vínculo confirmado mantém
+uma sessão contínua própria do WhatsApp, enquanto os endpoints de histórico web
+filtram apenas `web`. Ambos os canais compartilham identidade, permissões,
+ferramentas, consumo e `KnowledgeMemory`, mas nunca o histórico de mensagens.
+
+No frontend, `/meu-whatsapp` oferece cadastro, confirmação e revogação para todos
+os perfis funcionais. `/administracao/whatsapp` oferece estado, QR, reconexão e
+desconexão somente para `admin_system`, atualizando o estado em intervalo definido
+por constante.
+A indisponibilidade do bridge local é exposta como
+estado operacional `unavailable`, e não como erro genérico da tela. O polling
+automático ocorre somente durante `connecting`; nos demais estados a atualização
+é manual. Se o envio do código falhar, a alteração pendente do vínculo é desfeita,
+evitando solicitar ao usuário um código que nunca foi entregue.
+
+Enquanto o bridge local não estiver disponível, `/simulador-whatsapp` reproduz
+a interface de uma conversa privada e chama `POST
+/api/assistant/whatsapp-simulator`. O endpoint é autenticado e reutiliza o mesmo
+assistente, usuário, perfil, limites e memórias, persistindo uma sessão do canal
+`whatsapp`; ele não passa pelo webhook, não exige telefone confirmado e não envia
+mensagens ao provedor externo.
 
 ### Cache de aplicação
 
@@ -413,16 +477,14 @@ específico quando a pergunta contém referência pessoal explícita. O corte ge
 continua valendo para memórias corporativas, e o filtro por `OwnerUserId` é
 aplicado antes do ranqueamento.
 
-Em toda resposta, a seleção reserva até três das oito posições de contexto para
-memórias pessoais que definem como se referir ao usuário, na ordem: nome
-preferido (`preferred name`), nome informado (`name`) e cargo ou função (`role`).
-Essas memórias são incluídas mesmo quando a pergunta atual pertence a outro
-assunto; as posições restantes seguem o ranqueamento semântico normal. O modelo
-usa o nome preferido quando disponível e o cargo apenas para adequar o contexto,
-sem recitar o perfil em cada resposta. A extração usa esses três assuntos
+Em toda resposta, a seleção injeta no contexto até 30 memórias que atendam aos
+critérios de relevância, ordenadas por similaridade. O limite é apenas um teto:
+memórias irrelevantes não são incluídas para completar a quantidade. Nome
+preferido (`preferred name`), nome informado (`name`) e cargo ou função (`role`)
+seguem a recuperação híbrida aplicada às demais memórias pessoais e só entram
+quando forem pertinentes à pergunta. A extração usa esses três assuntos
 canônicos para substituir informações anteriores corretamente. A consulta ao
-banco, o limite de 500 candidatos e os índices permanecem inalterados porque a
-reserva ocorre após o filtro de autorização e o cálculo já existente.
+banco, o limite de 500 candidatos e os índices permanecem inalterados.
 
 Os embeddings ficam serializados em `jsonb`. A busca limita-se aos 500 registros
 ativos mais recentes autorizados antes do cálculo em memória; essa decisão evita
@@ -981,9 +1043,11 @@ RMSE normalizado, meses ativos e qualidade:
 - `INSUFFICIENT`: menos de 4 meses ativos ou média histórica zerada.
 
 A projeção é explicável e exploratória, não uma garantia de demanda ou receita.
-O frontend mostra realizado, projetado e limites de 95%, e destaca quando a
-qualidade é baixa ou insuficiente. Esta etapa não calcula risco de ruptura,
-ocupação futura de rota nem recomendação automática. O índice composto
+O contrato permanece disponível na API, mas não é consumido pelo detalhe do
+cliente no frontend. A tela apresenta somente indicadores calculados sobre o
+histórico realizado e permite abrir sua evolução mensal, sem valores futuros,
+faixas estimadas ou classificação de qualidade da projeção. Esta etapa não
+calcula risco de ruptura, ocupação futura de rota nem recomendação automática. O índice composto
 `CustomerId + IssueDate + MovementCategory` atende a consulta da janela.
 
 Os índices compostos em cliente, data e categoria atendem às agregações do
@@ -994,13 +1058,37 @@ ou cálculo financeiro neste fluxo.
 A Central de Processamentos consulta `/api/admin/jobs` e
 `/api/admin/jobs/summary` a cada cinco segundos, além da atualização manual. O
 polling impede que a tela preserve indefinidamente um estado antigo depois que
-o Worker conclui o job.
+o Worker conclui o job. A interface separa esse fluxo em duas abas: a aba
+`Monitoramento` concentra indicadores e o histórico das execuções, enquanto
+`Serviços disponíveis` apresenta o catálogo de serviços operacionais que podem
+ser iniciados manualmente. Ambas continuam usando os mesmos contratos e o ciclo
+de vida centralizado em `job_executions`.
 `GET /api/admin/jobs/definitions` expõe apenas jobs operacionais declarados no
 catálogo da Application, e `POST /api/admin/jobs/definitions/{jobType}/run`
 permite executar manualmente somente os que possuem `ManualRunAllowed`. Jobs de
 importação de planilha não entram nesse catálogo porque dependem de upload,
 arquivo e import específico; eles continuam sendo criados por upload,
 reprocessamento ou retry técnico.
+
+O catálogo de jobs é indexado por `JobType`, com busca sem diferença entre
+maiúsculas e minúsculas. Cada definição declara fila, versão do contrato,
+exemplo de parâmetros e permissões de execução manual e agendamento. Todas as
+execuções persistem um envelope imutável em `job_executions`, com
+`ParametersJson`, `ResultJson`, versão, fila, gatilho, progresso, origem do
+retry, usuário solicitante e eventual agendamento. Os JSONs são limitados a 1
+MB e não recebem índice de conteúdo porque os acessos operacionais usam tipo,
+status, datas e relacionamentos. Importações guardam somente `importId` no
+payload: a fonte persistida da importação seleciona o `IDataSourceProcessor`, e
+o arquivo nunca é incorporado ao JSON.
+
+`job_schedules` mantém agendamentos administrativos com cron, fuso horário,
+payload versionado, estado e auditoria. O fuso padrão é
+`America/Sao_Paulo`; cada disparo cria uma nova `job_execution`, e ocorrências
+perdidas durante indisponibilidade não são recuperadas. Pausa, reativação,
+edição e exclusão atualizam o registro recorrente do Hangfire. Importações e
+webhooks continuam não agendáveis nem executáveis manualmente. O cancelamento é
+cooperativo: a API registra a solicitação e o Worker encerra em ponto seguro com
+estado `Cancelled`.
 
 Antes do enfileiramento manual, a API resolve a publicação exigida pelo job:
 o enriquecimento municipal usa a importação atual de clientes e a detecção de
@@ -1133,12 +1221,24 @@ npm install
 npm run dev
 ```
 
+Para conectar um número real do WhatsApp, execute também o bridge local:
+
+```bash
+cd whatsapp-bridge
+npm install
+npm start
+```
+
+O bridge escuta apenas `127.0.0.1:8081`, envia eventos para a API local e salva
+as credenciais vinculadas em `whatsapp-bridge/.data/auth`, fora do Git.
+
 Endereços padrão:
 
 - frontend: `http://localhost:5173`;
 - API: `http://localhost:5279`;
 - Hangfire Dashboard: `http://localhost:5279/hangfire`;
 - PostgreSQL: `localhost:5432`.
+- Bridge WhatsApp: `http://127.0.0.1:8081`.
 
 Para encerrar a infraestrutura depois de parar os processos locais:
 
@@ -1158,6 +1258,9 @@ Configurações essenciais:
   desenvolvimento somente quando configurado explicitamente.
 - `Storage__ImportsPath`: caminho compartilhado dos arquivos importados.
 - `VITE_API_URL`: base da API incorporada ao build do frontend.
+- `WhatsApp__BaseUrl` e `WhatsApp__InstanceName`: endereço do bridge local e
+  identidade operacional usados pela API e pelo Worker.
+- `WhatsApp__WebhookSecret`: segredo obrigatório do webhook recebido pela API.
 
 Em desenvolvimento local, quando `VITE_API_URL` não é informado, o frontend usa
 `http://localhost:5279/api`. No build servido pelo Nginx, `VITE_API_URL=/api`

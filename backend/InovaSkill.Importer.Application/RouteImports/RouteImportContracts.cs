@@ -1,4 +1,5 @@
 using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Application.WhatsApp;
 
 namespace InovaSkill.Importer.Application.RouteImports;
 
@@ -65,8 +66,10 @@ public static class ProductCodeNormalizer
 
 public static class OperationalJobCodes
 {
+    public const string ProcessImport = RouteImportCodes.JobType;
     public const string MunicipalityCoordinateEnrichment = "MUNICIPALITY_COORDINATE_ENRICHMENT";
     public const string RouteOptimization = RouteOptimizationCodes.JobType;
+    public const string WhatsAppMessageProcessing = WhatsAppJobCodes.MessageProcessing;
     public const int WorkerExecutionTimeoutMinutes = 30;
 }
 
@@ -83,7 +86,10 @@ public sealed record OperationalJobDefinition(
     string Description,
     bool ManualRunAllowed,
     bool ScheduleAllowed,
-    bool AllowConcurrentRuns);
+    bool AllowConcurrentRuns,
+    string Queue,
+    int ContractVersion,
+    string ExampleParametersJson);
 
 public static class OperationalJobCatalog
 {
@@ -93,7 +99,10 @@ public static class OperationalJobCatalog
         "Busca municípios de clientes sem coordenadas e salva latitude/longitude por cidade.",
         ManualRunAllowed: true,
         ScheduleAllowed: true,
-        AllowConcurrentRuns: false);
+        AllowConcurrentRuns: true,
+        BackgroundJobQueues.Default,
+        ContractVersion: 1,
+        ExampleParametersJson: "{\"importId\":\"00000000-0000-0000-0000-000000000000\",\"reprocessFailed\":false}");
 
     public static readonly OperationalJobDefinition RouteOptimization = new(
         OperationalJobCodes.RouteOptimization,
@@ -101,10 +110,46 @@ public static class OperationalJobCatalog
         "Calcula em background a recomendação global de realocação de cidades para o snapshot atual de rotas.",
         ManualRunAllowed: true,
         ScheduleAllowed: true,
-        AllowConcurrentRuns: false);
+        AllowConcurrentRuns: true,
+        BackgroundJobQueues.RouteOptimization,
+        ContractVersion: 1,
+        ExampleParametersJson: "{\"scope\":\"AllRoutes\",\"referenceDate\":\"2026-01-01\",\"targetRouteId\":null,\"snapshotImportId\":null}");
 
-    public static IReadOnlyList<OperationalJobDefinition> All { get; } =
-        [MunicipalityCoordinateEnrichment, RouteOptimization];
+    public static readonly OperationalJobDefinition WhatsAppMessageProcessing = new(
+        OperationalJobCodes.WhatsAppMessageProcessing,
+        "Processar mensagem do WhatsApp",
+        "Transcreve quando necessário, consulta o assistente e envia a resposta ao remetente autorizado.",
+        ManualRunAllowed: false,
+        ScheduleAllowed: false,
+        AllowConcurrentRuns: true,
+        BackgroundJobQueues.Default,
+        ContractVersion: 1,
+        ExampleParametersJson: "{\"receiptId\":\"00000000-0000-0000-0000-000000000000\"}");
+
+    public static readonly OperationalJobDefinition ProcessImport = new(
+        OperationalJobCodes.ProcessImport,
+        "Processar arquivo importado",
+        "Processa um arquivo previamente recebido e associado a uma fonte de dados.",
+        ManualRunAllowed: false,
+        ScheduleAllowed: false,
+        AllowConcurrentRuns: false,
+        BackgroundJobQueues.Imports,
+        ContractVersion: 1,
+        ExampleParametersJson: "{\"importId\":\"00000000-0000-0000-0000-000000000000\"}");
+
+    private static readonly IReadOnlyDictionary<string, OperationalJobDefinition> Definitions =
+        new[] { ProcessImport, MunicipalityCoordinateEnrichment, RouteOptimization, WhatsAppMessageProcessing }
+            .ToDictionary(definition => definition.JobType, StringComparer.OrdinalIgnoreCase);
+
+    public static IReadOnlyCollection<OperationalJobDefinition> All { get; } = Definitions.Values.ToArray();
+
+    public static bool TryGet(string jobType, out OperationalJobDefinition definition) =>
+        Definitions.TryGetValue(jobType, out definition!);
+
+    public static OperationalJobDefinition GetRequired(string jobType) =>
+        TryGet(jobType, out var definition)
+            ? definition
+            : throw new InvalidOperationException($"Job desconhecido: {jobType}.");
 }
 
 public interface IDataSourceProcessor

@@ -39,30 +39,28 @@ public sealed class KnowledgeMemoryServiceTests
     }
 
     [Fact]
-    public void SelectMemoriesForRecall_AlwaysIncludesUpToThreeUserReferenceMemories()
+    public void SelectMemoriesForRecall_IncludesPersonalMemoryWhenQuestionExplicitlyMatchesItsSubject()
     {
         var memories = new[]
         {
-            Memory("user", "preferred name", "Prefere ser chamado de Leo.", 0.02),
             Memory("user", "name", "O nome é Leonardo.", 0.03),
             Memory("user", "role", "Atua como gestor de logística.", 0.01),
-            Memory("company", "route policy", "Rotas acima de 95% são críticas.", 0.92),
+            Memory("company", "route policy", "Rotas acima de 95% são críticas.", 0.12),
         };
 
-        var selected = KnowledgeMemoryService.SelectMemoriesForRecall("Quais notas fiscais são recentes?", memories);
+        var selected = KnowledgeMemoryService.SelectMemoriesForRecall("Qual é o meu nome?", memories);
 
-        Assert.Equal(4, selected.Count);
-        Assert.Equal(["preferred name", "name", "role"], selected.Take(3).Select(memory => memory.Subject));
-        Assert.Contains(selected, memory => memory.Subject == "route policy");
+        Assert.Single(selected);
+        Assert.Equal("name", selected[0].Subject);
     }
 
     [Fact]
-    public void SelectMemoriesForRecall_DoesNotReserveCompanyOrUnrelatedUserMemoriesAsIdentity()
+    public void SelectMemoriesForRecall_DoesNotIncludeIrrelevantMemoriesToFillTheLimit()
     {
         var memories = new[]
         {
-            Memory("company", "name", "Nome de uma política interna.", 0.01),
-            Memory("user", "favorite format", "Prefere tabelas.", 0.01),
+            Memory("user", "name", "O nome é Leonardo.", 0.01),
+            Memory("user", "role", "Atua como gestor de logística.", 0.01),
             Memory("company", "invoice policy", "Política fiscal vigente.", 0.90),
         };
 
@@ -73,20 +71,31 @@ public sealed class KnowledgeMemoryServiceTests
     }
 
     [Fact]
-    public void SelectMemoriesForRecall_KeepsTheGlobalRecallLimit()
+    public void SelectMemoriesForRecall_ReturnsOnlyRelevantMemoriesWhenFewerThanTheLimitQualify()
     {
-        var memories = new[]
-        {
-            Memory("user", "preferred name", "Leo", 0.01),
-            Memory("user", "name", "Leonardo", 0.01),
-            Memory("user", "role", "Gestor", 0.01),
-        }.Concat(Enumerable.Range(1, 10).Select(index =>
-            Memory("company", $"policy {index}", $"Política {index}", 0.90 - index / 100d))).ToArray();
+        var memories = Enumerable.Range(1, 10)
+            .Select(index => Memory("company", $"policy {index}", $"Política {index}", index <= 4 ? 0.80 : 0.10))
+            .ToArray();
 
         var selected = KnowledgeMemoryService.SelectMemoriesForRecall("políticas", memories);
 
-        Assert.Equal(8, selected.Count);
-        Assert.Equal(3, selected.Count(memory => memory.Scope == "user"));
+        Assert.Equal(4, selected.Count);
+        Assert.All(selected, memory => Assert.True(memory.Similarity >= 0.80));
+    }
+
+    [Fact]
+    public void SelectMemoriesForRecall_ReturnsTheThirtyMostRelevantMemoriesWhenLimitIsExceeded()
+    {
+        var memories = Enumerable.Range(1, 35)
+            .Select(index => Memory("company", $"policy {index}", $"Política {index}", index / 100d + 0.40))
+            .ToArray();
+
+        var selected = KnowledgeMemoryService.SelectMemoriesForRecall("políticas", memories);
+
+        Assert.Equal(30, selected.Count);
+        Assert.Equal(memories.OrderByDescending(memory => memory.Similarity).Take(30).Select(memory => memory.Id), selected.Select(memory => memory.Id));
+        Assert.Equal(0.75, selected.First().Similarity, 10);
+        Assert.Equal(0.46, selected.Last().Similarity, 10);
     }
 
     private static RecalledMemory Memory(string scope, string subject, string content, double similarity) =>

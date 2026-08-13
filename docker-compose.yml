@@ -42,10 +42,13 @@
       DisableHttpsRedirection: "true"
       ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=${POSTGRES_DB:-inovaskill_importer};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
       Jwt__Secret: ${JWT_SECRET:-local-mvp-secret-change-before-production-2026}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      WhatsApp__WebhookSecret: ${WHATSAPP_WEBHOOK_SECRET:-}
       Storage__ImportsPath: /data/route-imports
       RouteOptimization__DistanceProvider: ${ROUTE_DISTANCE_PROVIDER:-Geographic}
       RouteOptimization__OsrmBaseUrl: ${OSRM_BASE_URL:-http://osrm:5000}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      WhatsApp__BaseUrl: ${WHATSAPP_BASE_URL:-http://host.docker.internal:8081}
+      WhatsApp__InstanceName: ${WHATSAPP_INSTANCE_NAME:-grespan}
     volumes:
       - route_imports_data:/data/route-imports
     depends_on:
@@ -66,6 +69,9 @@
       Storage__ImportsPath: /data/route-imports
       RouteOptimization__DistanceProvider: ${ROUTE_DISTANCE_PROVIDER:-Geographic}
       RouteOptimization__OsrmBaseUrl: ${OSRM_BASE_URL:-http://osrm:5000}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      WhatsApp__BaseUrl: ${WHATSAPP_BASE_URL:-http://host.docker.internal:8081}
+      WhatsApp__InstanceName: ${WHATSAPP_INSTANCE_NAME:-grespan}
     volumes:
       - route_imports_data:/data/route-imports
     depends_on:

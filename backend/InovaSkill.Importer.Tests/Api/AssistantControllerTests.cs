@@ -35,6 +35,16 @@ public sealed class AssistantControllerTests
     }
 
     [Fact]
+    public async Task SimulateWhatsApp_RejectsEmptyMessageWithoutCallingProvider()
+    {
+        var controller = CreateController(maximumLength: 800);
+        var result = await controller.SimulateWhatsApp(
+            new AssistantQuestionRequest(null, "   ", null), CancellationToken.None);
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("Digite uma mensagem.", Assert.IsType<ProblemDetails>(badRequest.Value).Detail);
+    }
+
+    [Fact]
     public async Task ListSessions_ReturnsOnlyTheAuthenticatedUsersConversationSummaries()
     {
         var sessionId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");

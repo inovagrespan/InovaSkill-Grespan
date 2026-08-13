@@ -10,11 +10,20 @@ namespace InovaSkill.Importer.Api.Controllers;
 [Route("api/admin/ai-consumption")]
 public sealed class AiConsumptionAdminController(ImportDbContext db, AiConsumptionService consumptionService) : ControllerBase
 {
-    private const int MaximumDetailRows = 500;
+    private const int DefaultDetailPageSize = 25;
+    private const int MaximumDetailPageSize = 100;
+    private const int DefaultUserPageSize = 20;
+    private const int MaximumUserPageSize = 100;
+    private const int MaximumConfigurationHistoryRows = 100;
+    private const int MaximumAlertRows = 100;
 
     [HttpGet("report")]
-    public async Task<ActionResult> Report([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] long? userId, CancellationToken cancellationToken)
+    public async Task<ActionResult> Report([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] long? userId,
+        [FromQuery] int detailPage = 1, [FromQuery] int detailPageSize = DefaultDetailPageSize,
+        CancellationToken cancellationToken = default)
     {
+        detailPage = Math.Max(detailPage, 1);
+        detailPageSize = Math.Clamp(detailPageSize, 1, MaximumDetailPageSize);
         var start = from?.ToUniversalTime() ?? DateTime.UtcNow.AddDays(-30);
         var end = to?.ToUniversalTime() ?? DateTime.UtcNow;
         if (end <= start) return BadRequest(new ProblemDetails { Detail = "O período informado é inválido." });
@@ -27,24 +36,54 @@ public sealed class AiConsumptionAdminController(ImportDbContext db, AiConsumpti
             estimatedCostUsd = group.Sum(x => x.InputCostUsd + x.OutputCostUsd), calls = group.Count(),
             responses = group.Select(x => x.ResponseExecutionId).Distinct().Count()
         }).SingleOrDefaultAsync(cancellationToken);
-        var byUser = await calls.GroupBy(x => new { x.ResponseExecution.UserId, x.ResponseExecution.User.Name })
-            .Select(group => new { userId = group.Key.UserId, userName = group.Key.Name, totalTokens = group.Sum(x => (long)x.InputTokens + x.OutputTokens), estimatedCostUsd = group.Sum(x => x.InputCostUsd + x.OutputCostUsd), calls = group.Count() })
-            .OrderByDescending(x => x.totalTokens).ToListAsync(cancellationToken);
-        var details = await calls.OrderByDescending(x => x.CreatedAt).Take(MaximumDetailRows)
+        var detailTotal = await calls.CountAsync(cancellationToken);
+        var details = await calls.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+            .Skip((detailPage - 1) * detailPageSize).Take(detailPageSize)
             .Select(x => new { x.Id, x.ResponseExecutionId, userId = x.ResponseExecution.UserId, userName = x.ResponseExecution.User.Name, x.Model, x.Purpose, x.Status, x.InputTokens, x.OutputTokens, totalTokens = x.InputTokens + x.OutputTokens, estimatedCostUsd = x.InputCostUsd + x.OutputCostUsd, x.CreatedAt })
             .ToListAsync(cancellationToken);
-        return Ok(new { from = start, to = end, total = total ?? new { inputTokens = 0L, outputTokens = 0L, totalTokens = 0L, estimatedCostUsd = 0m, calls = 0, responses = 0 }, byUser, details });
+        return Ok(new { from = start, to = end, total = total ?? new { inputTokens = 0L, outputTokens = 0L, totalTokens = 0L, estimatedCostUsd = 0m, calls = 0, responses = 0 }, detailPage, detailPageSize, detailTotal, details });
     }
 
     [HttpGet("configuration")]
     public async Task<ActionResult> Configuration(CancellationToken cancellationToken)
     {
         var settings = await consumptionService.GetSettingsAsync(cancellationToken);
-        var prices = await db.AiModelPrices.AsNoTracking().OrderByDescending(x => x.EffectiveFrom).ToListAsync(cancellationToken);
-        var users = await db.AppUsers.AsNoTracking().OrderBy(x => x.Name)
-            .GroupJoin(db.AiUserLimits.AsNoTracking(), user => user.Id, limit => limit.UserId, (user, limits) => new { user.Id, user.Name, user.Email, user.Role, limit = limits.FirstOrDefault() })
-            .Select(x => new { userId = x.Id, x.Name, x.Email, x.Role, monthlyTokenLimit = x.limit == null ? null : x.limit.MonthlyTokenLimit, alertPercentage = x.limit == null ? null : x.limit.AlertPercentage }).ToListAsync(cancellationToken);
-        return Ok(new { settings.Model, settings.DefaultMonthlyTokenLimit, settings.DefaultAlertPercentage, prices, users });
+        var prices = await db.AiModelPrices.AsNoTracking().OrderByDescending(x => x.EffectiveFrom).Take(MaximumConfigurationHistoryRows).ToListAsync(cancellationToken);
+        return Ok(new { settings.Model, settings.DefaultMonthlyTokenLimit, settings.DefaultAlertPercentage, prices });
+    }
+
+    [HttpGet("users")]
+    public async Task<ActionResult> Users(
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = DefaultUserPageSize,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, MaximumUserPageSize);
+        var query = db.AppUsers.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(user =>
+                EF.Functions.ILike(user.Name, $"%{term}%") ||
+                EF.Functions.ILike(user.Email, $"%{term}%"));
+        }
+
+        var total = await query.CountAsync(cancellationToken);
+        var users = await query
+            .OrderBy(user => user.Name).ThenBy(user => user.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .GroupJoin(db.AiUserLimits.AsNoTracking(), user => user.Id, limit => limit.UserId,
+                (user, limits) => new { user.Id, user.Name, user.Email, user.Role, Limit = limits.FirstOrDefault() })
+            .Select(x => new
+            {
+                userId = x.Id, x.Name, x.Email, x.Role,
+                monthlyTokenLimit = x.Limit == null ? null : x.Limit.MonthlyTokenLimit,
+                alertPercentage = x.Limit == null ? null : x.Limit.AlertPercentage
+            })
+            .ToListAsync(cancellationToken);
+        return Ok(new { page, pageSize, total, items = users });
     }
 
     [HttpPut("configuration")]
@@ -88,7 +127,7 @@ public sealed class AiConsumptionAdminController(ImportDbContext db, AiConsumpti
 
     [HttpGet("alerts")]
     public async Task<ActionResult> Alerts(CancellationToken cancellationToken) => Ok(await db.AiConsumptionAlerts.AsNoTracking().OrderBy(x => x.ReadAt != null).ThenByDescending(x => x.CreatedAt)
-        .Select(x => new { x.Id, x.UserId, userName = x.User.Name, x.PeriodMonth, x.Level, x.ConsumedTokens, x.TokenLimit, x.CreatedAt, x.ReadAt }).ToListAsync(cancellationToken));
+        .Take(MaximumAlertRows).Select(x => new { x.Id, x.UserId, userName = x.User.Name, x.PeriodMonth, x.Level, x.ConsumedTokens, x.TokenLimit, x.CreatedAt, x.ReadAt }).ToListAsync(cancellationToken));
 
     [HttpPut("alerts/{id:guid}/read")]
     public async Task<ActionResult> ReadAlert(Guid id, CancellationToken cancellationToken)

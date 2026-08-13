@@ -2,6 +2,7 @@ using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
@@ -30,11 +31,20 @@ public sealed class ImportProcessingService(
         {
             return;
         }
+        if (job.CancellationRequestedAt.HasValue || job.Status == JobExecutionStatus.Cancelled)
+        {
+            job.Status = JobExecutionStatus.Cancelled;
+            job.FinishedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
 
         job.Attempts++;
         job.StartedAt ??= DateTime.UtcNow;
         job.Status = JobExecutionStatus.Processing;
         job.ErrorMessage = null;
+        job.ProgressPercent = 1;
+        job.ProgressMessage = "Processando arquivo";
         import.Status = RouteImportStatus.Processing;
         import.StartedAt ??= DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -50,7 +60,18 @@ public sealed class ImportProcessingService(
             dbContext.ChangeTracker.Clear();
             job = await dbContext.JobExecutions.SingleAsync(
                 x => x.Id == jobExecutionId, cancellationToken);
+            if (job.CancellationRequestedAt.HasValue)
+            {
+                job.Status = JobExecutionStatus.Cancelled;
+                job.ProgressMessage = "Cancelado";
+                job.FinishedAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return;
+            }
             job.Status = JobExecutionStatus.Completed;
+            job.ProgressPercent = 100;
+            job.ProgressMessage = "Arquivo processado";
+            job.ResultJson = JsonSerializer.Serialize(new { importId, completed = true });
             job.FinishedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
             var activated = await importLifecycle.TryActivateAsync(import.Id, cancellationToken);
@@ -114,6 +135,9 @@ public sealed class ImportProcessingService(
             import.FailureMessage = exception.Message;
             import.FinishedAt = DateTime.UtcNow;
             job.Status = JobExecutionStatus.Completed;
+            job.ProgressPercent = 100;
+            job.ProgressMessage = "Arquivo validado com inconsistências";
+            job.ResultJson = JsonSerializer.Serialize(new { importId, needsReview = true });
             job.FinishedAt = DateTime.UtcNow;
             job.ErrorMessage = null;
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -125,6 +149,7 @@ public sealed class ImportProcessingService(
             if (job.Attempts >= MaximumAttempts)
             {
                 job.Status = JobExecutionStatus.Failed;
+                job.ProgressMessage = "Falha";
                 job.FinishedAt = DateTime.UtcNow;
                 import.Status = RouteImportStatus.Failed;
                 import.FailureMessage = job.ErrorMessage;

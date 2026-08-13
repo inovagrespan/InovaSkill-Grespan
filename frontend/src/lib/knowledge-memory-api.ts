@@ -13,8 +13,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }
 
-export const listKnowledgeMemories = (search = "", includeInactive = false) =>
-  request<KnowledgeMemory[]>(`?search=${encodeURIComponent(search)}&includeInactive=${includeInactive}`);
+export type KnowledgeMemoryFilters = {
+  search?: string;
+  ownerUserId?: number | null;
+  includeInactive?: boolean;
+  take?: number;
+};
+
+export const listKnowledgeMemories = ({ search = "", ownerUserId = null, includeInactive = false, take = 50 }: KnowledgeMemoryFilters = {}) => {
+  const query = new URLSearchParams({ search, includeInactive: String(includeInactive), take: String(take) });
+  if (ownerUserId !== null) query.set("ownerUserId", String(ownerUserId));
+  return request<KnowledgeMemory[]>(`?${query.toString()}`);
+};
 export const updateKnowledgeMemory = (memory: Pick<KnowledgeMemory, "id" | "subject" | "content" | "isActive">) =>
   request<void>(`/${memory.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(memory) });
 export const deleteKnowledgeMemory = (id: string) => request<void>(`/${id}`, { method: "DELETE" });

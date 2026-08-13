@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   Building2,
   CalendarDays,
-  CircleAlert,
   ChevronRight,
   DollarSign,
   Hash,
@@ -25,10 +24,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   fetchCustomerConsumptionSummary,
-  fetchCustomerProjection,
   type CustomerConsumptionSummary,
-  type CustomerProjectionResponse,
-  type CustomerProjectionSeries,
 } from "@/lib/importer-api";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
@@ -36,8 +32,6 @@ const weightFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 
 const percentageFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const compactWeight = (value: number) => `${formatKpiCompactNumber(value)} kg`;
-const signedPercentage = (value: number) =>
-  `${value > 0 ? "+" : ""}${percentageFormatter.format(value)}%`;
 type ChartMetric = "salesWeightKg" | "salesDocumentCount" | "averageSalesWeightPerDocumentKg" |
   "calculatedSalesAmount" | "returnWeightKg" | "bonusWeightKg";
 
@@ -49,90 +43,6 @@ const chartLabels: Record<ChartMetric, string> = {
   returnWeightKg: "Peso de devoluções por mês",
   bonusWeightKg: "Peso de bonificações por mês",
 };
-
-const projectionQualityLabels: Record<CustomerProjectionSeries["quality"], string> = {
-  HIGH: "Alta",
-  MODERATE: "Moderada",
-  LOW: "Baixa",
-  INSUFFICIENT: "Insuficiente",
-};
-
-function projectionQualityClass(quality: CustomerProjectionSeries["quality"]): string {
-  if (quality === "HIGH") return "border-[color:var(--success)]/35 bg-[color-mix(in_srgb,var(--success)_10%,transparent)] text-[var(--success)]";
-  if (quality === "MODERATE") return "border-[color:var(--warning)]/35 bg-[color-mix(in_srgb,var(--warning)_10%,transparent)] text-[var(--warning)]";
-  return "border-[color:var(--error)]/35 bg-[color-mix(in_srgb,var(--error)_10%,transparent)] text-[var(--error)]";
-}
-
-function ProjectionChart({
-  title,
-  projection,
-  series,
-  kind,
-}: {
-  title: string;
-  projection: CustomerProjectionResponse;
-  series: CustomerProjectionSeries;
-  kind: "weight" | "revenue";
-}) {
-  const historical = projection.historical ?? [];
-  const actualKey = kind === "weight" ? "salesWeightKg" : "calculatedSalesAmount";
-  const lastHistorical = historical.at(-1);
-  const points = [
-    ...historical.map(point => ({ month: point.month, actual: point[actualKey], forecast: null, lower: null, upper: null })),
-    ...(lastHistorical ? [{
-      month: lastHistorical.month,
-      actual: null,
-      forecast: lastHistorical[actualKey],
-      lower: null,
-      upper: null,
-    }] : []),
-    ...series.forecast.map(point => ({
-      month: point.month,
-      actual: null,
-      forecast: point.forecast,
-      lower: point.lowerBound,
-      upper: point.upperBound,
-    })),
-  ];
-  const formatValue = (value: number) => kind === "revenue"
-    ? currencyFormatter.format(value)
-    : `${weightFormatter.format(value)} kg`;
-  return (
-    <div className="rounded-xl border border-border bg-surface p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h4 className="font-semibold">{title}</h4>
-        <Badge variant="outline" className={projectionQualityClass(series.quality)}>
-          R² {percentageFormatter.format(series.rSquared * 100)}%
-        </Badge>
-      </div>
-      <ChartContainer config={{
-        actual: { label: "Realizado", color: "var(--primary)" },
-        forecast: { label: "Projetado", color: "var(--info)" },
-      }} className="h-[280px] min-h-[280px]">
-        <LineChart data={points} margin={{ top: 10, right: 16, left: 6, bottom: 4 }}>
-          <CartesianGrid vertical={false} stroke="var(--border)" />
-          <XAxis dataKey="month" tickLine={false} axisLine={false}
-            tickFormatter={value => new Date(`${String(value).slice(0, 7)}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short" })} />
-          <YAxis tickLine={false} axisLine={false} width={76}
-            tickFormatter={value => kind === "revenue"
-              ? new Intl.NumberFormat("pt-BR", { notation: "compact", style: "currency", currency: "BRL" }).format(Number(value))
-              : new Intl.NumberFormat("pt-BR", { notation: "compact" }).format(Number(value))} />
-          <ChartTooltip content={<ChartTooltipContent
-            labelFormatter={value => new Date(`${String(value).slice(0, 7)}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
-            formatter={(value, name) => <span className="font-semibold">{name}: {formatValue(Number(value))}</span>} />} />
-          <Line type="monotone" dataKey="actual" name="Realizado" connectNulls={false}
-            stroke="var(--primary)" strokeWidth={3} dot={{ r: 2.5 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="forecast" name="Projetado" connectNulls
-            stroke="var(--info)" strokeWidth={3} strokeDasharray="7 5" dot={{ r: 3 }} isAnimationActive={false} />
-          <Line type="monotone" dataKey="lower" name="Limite inferior" connectNulls
-            stroke="var(--muted-foreground)" strokeWidth={1.5} strokeDasharray="3 5" dot={false} isAnimationActive={false} />
-          <Line type="monotone" dataKey="upper" name="Limite superior" connectNulls
-            stroke="var(--muted-foreground)" strokeWidth={1.5} strokeDasharray="3 5" dot={false} isAnimationActive={false} />
-        </LineChart>
-      </ChartContainer>
-    </div>
-  );
-}
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "Sem registro";
@@ -161,7 +71,6 @@ export function CustomerConsumptionDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [data, setData] = useState<CustomerConsumptionSummary | null>(null);
-  const [projection, setProjection] = useState<CustomerProjectionResponse | null>(null);
   const [error, setError] = useState("");
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<ChartMetric | null>(null);
@@ -169,13 +78,9 @@ export function CustomerConsumptionDialog({
   useEffect(() => {
     if (!open || !id) return;
     setData(null);
-    setProjection(null);
     setError("");
-    Promise.all([fetchCustomerConsumptionSummary(id), fetchCustomerProjection(id)])
-      .then(([summary, projectionResult]) => {
-        setData(summary);
-        setProjection(projectionResult);
-      })
+    fetchCustomerConsumptionSummary(id)
+      .then(setData)
       .catch(reason => setError((reason as Error).message));
   }, [id, open]);
 
@@ -225,75 +130,6 @@ export function CustomerConsumptionDialog({
                     <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><ShoppingBag className="size-4" /></span>
                     <div><p className="text-xs text-muted-foreground">Tipo de cliente</p><p className="text-sm font-semibold">{data.customer.customerType || "Não informado"}</p></div>
                   </div>
-                </section>
-
-                <section className="space-y-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                      <h3 className="font-display text-lg font-semibold">Projeção de impacto</h3>
-                      <p className="text-xs text-muted-foreground">
-                        Tendência linear sobre 12 meses completos, com previsão para os próximos 3 meses e faixa de 95%.
-                      </p>
-                    </div>
-                    {projection?.available && projection.weight ? (
-                      <Badge variant="outline" className={projectionQualityClass(projection.weight.quality)}>
-                        Qualidade do peso: {projectionQualityLabels[projection.weight.quality]}
-                      </Badge>
-                    ) : null}
-                  </div>
-                  {!projection?.available || !projection.weight || !projection.revenue ? (
-                    <Alert>
-                      <CircleAlert className="size-4" />
-                      <AlertDescription>Histórico fiscal insuficiente para calcular projeções.</AlertDescription>
-                    </Alert>
-                  ) : (
-                    <>
-                      {(projection.weight.quality === "LOW" || projection.weight.quality === "INSUFFICIENT" ||
-                        projection.revenue.quality === "LOW" || projection.revenue.quality === "INSUFFICIENT") ? (
-                        <Alert>
-                          <CircleAlert className="size-4" />
-                          <AlertDescription>
-                            Projeção exploratória: a série possui baixa regularidade ou poucos meses ativos.
-                            Use a faixa estimada e não apenas o valor central.
-                          </AlertDescription>
-                        </Alert>
-                      ) : null}
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <KpiCard className="w-full" title="Peso projetado — próximo mês"
-                          value={compactWeight(projection.weight.forecast[0]?.forecast ?? 0)}
-                          valueTooltip={`${weightFormatter.format(projection.weight.forecast[0]?.forecast ?? 0)} kg`}
-                          periodLabel={`Faixa: ${weightFormatter.format(projection.weight.forecast[0]?.lowerBound ?? 0)}–${weightFormatter.format(projection.weight.forecast[0]?.upperBound ?? 0)} kg`}
-                          icon={Scale} showPercentageChange={false} />
-                        <KpiCard className="w-full" title="Variação mensal do peso"
-                          value={`${formatKpiCompactNumber(projection.weight.monthlyChange)} kg/mês`}
-                          valueTooltip={`${projection.weight.monthlyChange > 0 ? "+" : ""}${weightFormatter.format(projection.weight.monthlyChange)} kg/mês`}
-                          periodLabel={`${projection.weight.monthlyChangePercentage == null ? "Sem base percentual" : `${signedPercentage(projection.weight.monthlyChangePercentage)} da média`}`}
-                          periodLabelClassName={projection.weight.monthlyChange > 0 ? "text-[var(--success)]" : projection.weight.monthlyChange < 0 ? "text-[var(--error)]" : undefined}
-                          showPercentageChange={false} />
-                        <KpiCard className="w-full" title="Faturamento projetado — próximo mês"
-                          value={formatKpiCompactCurrency(projection.revenue.forecast[0]?.forecast ?? 0)}
-                          valueTooltip={currencyFormatter.format(projection.revenue.forecast[0]?.forecast ?? 0)}
-                          periodLabel={`Faixa: ${currencyFormatter.format(projection.revenue.forecast[0]?.lowerBound ?? 0)}–${currencyFormatter.format(projection.revenue.forecast[0]?.upperBound ?? 0)}`}
-                          icon={DollarSign} showPercentageChange={false} />
-                        <KpiCard className="w-full" title="Variação mensal do faturamento"
-                          value={`${projection.revenue.monthlyChange > 0 ? "+" : ""}${formatKpiCompactCurrency(projection.revenue.monthlyChange)}/mês`}
-                          valueTooltip={`${projection.revenue.monthlyChange > 0 ? "+" : ""}${currencyFormatter.format(projection.revenue.monthlyChange)}/mês`}
-                          periodLabel={`${projection.revenue.monthlyChangePercentage == null ? "Sem base percentual" : `${signedPercentage(projection.revenue.monthlyChangePercentage)} da média`}`}
-                          periodLabelClassName={projection.revenue.monthlyChange > 0 ? "text-[var(--success)]" : projection.revenue.monthlyChange < 0 ? "text-[var(--error)]" : undefined}
-                          showPercentageChange={false} />
-                      </div>
-                      <div className="grid gap-4 xl:grid-cols-2">
-                        <ProjectionChart title="Peso mensal: realizado × projetado"
-                          projection={projection} series={projection.weight} kind="weight" />
-                        <ProjectionChart title="Faturamento mensal: realizado × projetado"
-                          projection={projection} series={projection.revenue} kind="revenue" />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">
-                        Base de {formatDate(projection.baseStartMonth)} a {formatDate(projection.baseEndMonth)}.
-                        O mês parcial da cobertura fiscal ({formatDate(projection.sourceCoverageDate)}) não entra no ajuste.
-                      </p>
-                    </>
-                  )}
                 </section>
 
                 <section>

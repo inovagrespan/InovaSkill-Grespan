@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using InovaSkill.Importer.Api.Assistant;
+using InovaSkill.Importer.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -64,6 +65,39 @@ public sealed class AssistantController(
         {
             if (consumptionService is not null)
                 await consumptionService.CompleteAsync(succeeded, CancellationToken.None);
+        }
+    }
+
+    [HttpPost("whatsapp-simulator")]
+    public async Task<ActionResult<AssistantAnswerResponse>> SimulateWhatsApp(
+        AssistantQuestionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var question = (request.Message ?? request.Question)?.Trim() ?? string.Empty;
+        if (question.Length == 0) return BadRequest(new ProblemDetails { Detail = "Digite uma mensagem." });
+        if (question.Length > options.Value.MaximumQuestionLength)
+            return BadRequest(new ProblemDetails { Detail = $"A mensagem deve ter no máximo {options.Value.MaximumQuestionLength} caracteres." });
+
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? User.FindFirstValue("role") ?? string.Empty;
+        if (!TryGetUserId(out var userId)) return Unauthorized(new ProblemDetails { Detail = "Usuário autenticado inválido." });
+        var admission = consumptionService is null
+            ? new AiUsageAdmission(true, 0, 0)
+            : await consumptionService.BeginAsync(userId, role, cancellationToken);
+        if (!admission.Allowed)
+            return StatusCode(StatusCodes.Status429TooManyRequests, new ProblemDetails { Detail = "Seu limite mensal de uso do assistente foi atingido." });
+
+        var succeeded = false;
+        try
+        {
+            var answer = await assistantService.AnswerAsync(
+                request.SessionId, question, new ChatExecutionContext(userId, role), cancellationToken,
+                ChatSessionChannels.WhatsApp);
+            succeeded = true;
+            return Ok(answer);
+        }
+        finally
+        {
+            if (consumptionService is not null) await consumptionService.CompleteAsync(succeeded, CancellationToken.None);
         }
     }
 

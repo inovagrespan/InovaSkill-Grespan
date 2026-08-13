@@ -401,7 +401,7 @@ public sealed class GlobalRouteOptimizationSolver(IDistanceMatrixProvider distan
                 var sourceAfterOccupancy = sourceAfterLoad / source.Route.CapacityKg!.Value;
                 var destinationAfterOccupancy = destinationAfterLoad / destination.Route.CapacityKg!.Value;
                 if (source.Occupancy - sourceAfterOccupancy < problem.Constraints.MinimumOccupancyImprovement ||
-                    sourceAfterOccupancy > RouteOccupancyLevelPolicy.CriticalMinimumExclusive ||
+                    sourceAfterOccupancy > problem.Constraints.MaximumDestinationOccupancy ||
                     destinationAfterOccupancy > problem.Constraints.MaximumDestinationOccupancy)
                 {
                     continue;

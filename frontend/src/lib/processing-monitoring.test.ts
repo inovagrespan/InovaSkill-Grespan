@@ -9,7 +9,10 @@ vi.mock("@/lib/importer-progress", () => ({
 
 describe("processing monitoring", () => {
   it("atualiza automaticamente a central para refletir a conclusão do worker", () => {
-    const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/processamentos.tsx"), "utf8");
+    const source = fs.readFileSync(
+      path.resolve(process.cwd(), "src/routes/processamentos.tsx"),
+      "utf8",
+    );
 
     expect(source).toContain("PROCESSING_REFRESH_INTERVAL_MS = 5_000");
     expect(source).toContain("window.setInterval");
@@ -51,53 +54,98 @@ describe("processing monitoring", () => {
   });
 
   it("normaliza snapshot operacional vindo da API", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
-      Summary: {
-        RunningJobs: 2,
-        QueuedJobs: 8,
-        CompletedToday: 156,
-        FailedJobs: 4,
-        AverageProcessingSeconds: 134,
-        ProcessedRowsToday: 2340000,
-        StaleJobs: 1,
-      },
-      Jobs: [
-        {
-          Id: 10,
-          Company: "-",
-          FileName: "vendas.xlsx",
-          Template: "SALES_INVOICE",
-          Status: "Processando",
-          StatusLabel: "Importacao",
-          CurrentStep: "Importando dados",
-          ProgressPercent: 66,
-          CreatedAt: "2026-06-01T10:00:00Z",
-          ElapsedSeconds: 90,
-          ProcessedRows: 120,
-          TotalRows: 200,
-          ErrorCount: 3,
-        },
-      ],
-      Daily: [{ Date: "2026-06-01T00:00:00Z", Jobs: 3, CompletedJobs: 2, FailedJobs: 1, ProcessedRows: 500, AverageProcessingSeconds: 20, SuccessRatePercent: 66.67 }],
-      StageDurations: [{ Stage: "IMPORT", StageName: "Importacao", AverageDurationSeconds: 45, SharePercent: 55 }],
-      Workers: [{ WorkerId: "worker-1", Status: "Online", LastSeenAt: "2026-06-01T10:01:00Z", SecondsSinceLastSeen: 12, ProcessedJobsToday: 7, IdleSeconds: 5, CurrentTask: "Aguardando job" }],
-    }), { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              Summary: {
+                RunningJobs: 2,
+                QueuedJobs: 8,
+                CompletedToday: 156,
+                FailedJobs: 4,
+                AverageProcessingSeconds: 134,
+                ProcessedRowsToday: 2340000,
+                StaleJobs: 1,
+              },
+              Jobs: [
+                {
+                  Id: 10,
+                  Company: "-",
+                  FileName: "vendas.xlsx",
+                  Template: "SALES_INVOICE",
+                  Status: "Processando",
+                  StatusLabel: "Importacao",
+                  CurrentStep: "Importando dados",
+                  ProgressPercent: 66,
+                  CreatedAt: "2026-06-01T10:00:00Z",
+                  ElapsedSeconds: 90,
+                  ProcessedRows: 120,
+                  TotalRows: 200,
+                  ErrorCount: 3,
+                },
+              ],
+              Daily: [
+                {
+                  Date: "2026-06-01T00:00:00Z",
+                  Jobs: 3,
+                  CompletedJobs: 2,
+                  FailedJobs: 1,
+                  ProcessedRows: 500,
+                  AverageProcessingSeconds: 20,
+                  SuccessRatePercent: 66.67,
+                },
+              ],
+              StageDurations: [
+                {
+                  Stage: "IMPORT",
+                  StageName: "Importacao",
+                  AverageDurationSeconds: 45,
+                  SharePercent: 55,
+                },
+              ],
+              Workers: [
+                {
+                  WorkerId: "worker-1",
+                  Status: "Online",
+                  LastSeenAt: "2026-06-01T10:01:00Z",
+                  SecondsSinceLastSeen: 12,
+                  ProcessedJobsToday: 7,
+                  IdleSeconds: 5,
+                  CurrentTask: "Aguardando job",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
     const { fetchProcessingMonitoringDashboard } = await import("./importer-api");
 
     const dashboard = await fetchProcessingMonitoringDashboard();
 
     expect(dashboard.summary.runningJobs).toBe(2);
     expect(dashboard.summary.processedRowsToday).toBe(2340000);
-    expect(dashboard.jobs[0]).toEqual(expect.objectContaining({ id: 10, progressPercent: 66, errorCount: 3 }));
+    expect(dashboard.jobs[0]).toEqual(
+      expect.objectContaining({ id: 10, progressPercent: 66, errorCount: 3 }),
+    );
     expect(dashboard.jobs[0].canRunManualActions).toBe(false);
-    expect(dashboard.stageDurations[0]).toEqual(expect.objectContaining({ stage: "IMPORT", sharePercent: 55 }));
-    expect(dashboard.workers[0]).toEqual(expect.objectContaining({ workerId: "worker-1", status: "Online" }));
+    expect(dashboard.stageDurations[0]).toEqual(
+      expect.objectContaining({ stage: "IMPORT", sharePercent: 55 }),
+    );
+    expect(dashboard.workers[0]).toEqual(
+      expect.objectContaining({ workerId: "worker-1", status: "Online" }),
+    );
   });
 
   it("usa dashboard demo quando a API de monitoramento esta indisponivel", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("fetch failed");
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("fetch failed");
+      }),
+    );
     const { fetchProcessingMonitoringDashboard } = await import("./importer-api");
 
     const dashboard = await fetchProcessingMonitoringDashboard();
@@ -109,54 +157,97 @@ describe("processing monitoring", () => {
   });
 
   it("normaliza detalhes do job preservando metricas e timeline criticas", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
-      Job: {
-        Id: 20,
-        FileName: "vendas.xlsx",
-        Status: "Processando",
-        StatusLabel: "Importacao",
-        CurrentStep: "Gerando resumo",
-        ProgressPercent: 100,
-        CreatedAt: "2026-06-01T10:00:00Z",
-        StartedAt: "2026-06-01T10:01:00Z",
-        FinishedAt: null,
-        ElapsedSeconds: 180,
-        ProcessedRows: 90,
-        TotalRows: 100,
-        ErrorCount: 10,
-      },
-      Timeline: [
-        { Step: "VALIDATION", StepName: "Validacao", StartedAt: "2026-06-01T10:01:00Z", FinishedAt: "2026-06-01T10:02:00Z", DurationSeconds: 60, Status: "completed", ProcessedRows: 100, ErrorCount: 10 },
-      ],
-      Metrics: {
-        TotalRows: 100,
-        ValidRows: 90,
-        InvalidRows: 10,
-        ImportedRows: 90,
-        ErrorCount: 10,
-        WarningCount: 0,
-      },
-      PerformanceByStage: [
-        { Stage: "VALIDATION", StageName: "Validacao", AverageDurationSeconds: 60, SharePercent: 100 },
-      ],
-      Logs: [
-        { Timestamp: "2026-06-01T10:02:00Z", FileJobId: 20, Stage: "VALIDATION", Level: "Warning", Message: "10 linhas invalidas" },
-      ],
-    }), { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              Job: {
+                Id: 20,
+                FileName: "vendas.xlsx",
+                Status: "Processando",
+                StatusLabel: "Importacao",
+                CurrentStep: "Gerando resumo",
+                ProgressPercent: 100,
+                CreatedAt: "2026-06-01T10:00:00Z",
+                StartedAt: "2026-06-01T10:01:00Z",
+                FinishedAt: null,
+                ElapsedSeconds: 180,
+                ProcessedRows: 90,
+                TotalRows: 100,
+                ErrorCount: 10,
+              },
+              Timeline: [
+                {
+                  Step: "VALIDATION",
+                  StepName: "Validacao",
+                  StartedAt: "2026-06-01T10:01:00Z",
+                  FinishedAt: "2026-06-01T10:02:00Z",
+                  DurationSeconds: 60,
+                  Status: "completed",
+                  ProcessedRows: 100,
+                  ErrorCount: 10,
+                },
+              ],
+              Metrics: {
+                TotalRows: 100,
+                ValidRows: 90,
+                InvalidRows: 10,
+                ImportedRows: 90,
+                ErrorCount: 10,
+                WarningCount: 0,
+              },
+              PerformanceByStage: [
+                {
+                  Stage: "VALIDATION",
+                  StageName: "Validacao",
+                  AverageDurationSeconds: 60,
+                  SharePercent: 100,
+                },
+              ],
+              Logs: [
+                {
+                  Timestamp: "2026-06-01T10:02:00Z",
+                  FileJobId: 20,
+                  Stage: "VALIDATION",
+                  Level: "Warning",
+                  Message: "10 linhas invalidas",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
     const { fetchProcessingJobDetails } = await import("./importer-api");
 
     const details = await fetchProcessingJobDetails(20);
 
-    expect(details.job).toEqual(expect.objectContaining({ id: 20, progressPercent: 100, totalRows: 100 }));
-    expect(details.metrics).toEqual(expect.objectContaining({ totalRows: 100, validRows: 90, invalidRows: 10 }));
-    expect(details.timeline[0]).toEqual(expect.objectContaining({ step: "VALIDATION", errorCount: 10 }));
+    expect(details.job).toEqual(
+      expect.objectContaining({ id: 20, progressPercent: 100, totalRows: 100 }),
+    );
+    expect(details.metrics).toEqual(
+      expect.objectContaining({ totalRows: 100, validRows: 90, invalidRows: 10 }),
+    );
+    expect(details.timeline[0]).toEqual(
+      expect.objectContaining({ step: "VALIDATION", errorCount: 10 }),
+    );
     expect(details.performanceByStage[0]).toEqual(expect.objectContaining({ sharePercent: 100 }));
-    expect(details.logs[0]).toEqual(expect.objectContaining({ stage: "VALIDATION", level: "Warning" }));
+    expect(details.logs[0]).toEqual(
+      expect.objectContaining({ stage: "VALIDATION", level: "Warning" }),
+    );
   });
 
   it("expoe a rota e o menu de Processamentos", () => {
-    const routeSource = fs.readFileSync(path.resolve(process.cwd(), "src/routes/processamentos.tsx"), "utf8");
-    const sidebarSource = fs.readFileSync(path.resolve(process.cwd(), "src/components/AppSidebar.tsx"), "utf8");
+    const routeSource = fs.readFileSync(
+      path.resolve(process.cwd(), "src/routes/processamentos.tsx"),
+      "utf8",
+    );
+    const sidebarSource = fs.readFileSync(
+      path.resolve(process.cwd(), "src/components/AppSidebar.tsx"),
+      "utf8",
+    );
 
     expect(routeSource).toContain('createFileRoute("/processamentos")');
     expect(routeSource).toContain("beforeLoad");
@@ -171,7 +262,15 @@ describe("processing monitoring", () => {
     expect(routeSource).toContain("FeedbackMessage");
     expect(routeSource).toContain('setMessageType("success")');
     expect(routeSource).toContain('setMessageType("error")');
-    expect(routeSource).toContain("Jobs operacionais");
+    expect(routeSource).toContain('defaultValue="monitoring"');
+    expect(routeSource).toContain("Monitoramento");
+    expect(routeSource).toContain("Serviços disponíveis");
+    expect(routeSource).toContain("Serviços que podem ser executados");
+    expect(routeSource).toContain("Parâmetros JSON");
+    expect(routeSource).toContain("Agendamentos");
+    expect(routeSource).toContain("Reenviar igual");
+    expect(routeSource).toContain("Editar e executar novamente");
+    expect(routeSource).toContain("parametersJson");
     expect(routeSource).toContain("Executar agora");
     expect(routeSource).toContain("DashboardKpiCard");
     expect(sidebarSource).toContain('to: "/processamentos"');
@@ -185,10 +284,19 @@ describe("processing monitoring", () => {
   });
 
   it("usa skeletons nos principais fluxos assincronos", () => {
-    const processamentos = fs.readFileSync(path.resolve(process.cwd(), "src/routes/processamentos.tsx"), "utf8");
+    const processamentos = fs.readFileSync(
+      path.resolve(process.cwd(), "src/routes/processamentos.tsx"),
+      "utf8",
+    );
     const vendas = fs.readFileSync(path.resolve(process.cwd(), "src/routes/vendas.tsx"), "utf8");
-    const clientes = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
-    const importacoes = fs.readFileSync(path.resolve(process.cwd(), "src/routes/importacoes.files.tsx"), "utf8");
+    const clientes = fs.readFileSync(
+      path.resolve(process.cwd(), "src/routes/clientes.tsx"),
+      "utf8",
+    );
+    const importacoes = fs.readFileSync(
+      path.resolve(process.cwd(), "src/routes/importacoes.files.tsx"),
+      "utf8",
+    );
 
     expect(processamentos).toContain("SkeletonTable");
     expect(processamentos).toContain("SkeletonMetricCard");
@@ -202,7 +310,10 @@ describe("processing monitoring", () => {
   });
 
   it("atualiza lista de jobs manualmente com botao Atualizar", () => {
-    const processamentos = fs.readFileSync(path.resolve(process.cwd(), "src/routes/processamentos.tsx"), "utf8");
+    const processamentos = fs.readFileSync(
+      path.resolve(process.cwd(), "src/routes/processamentos.tsx"),
+      "utf8",
+    );
 
     expect(processamentos).toContain("Atualizar");
     expect(processamentos).toContain("fetchAdminJobsSummary");

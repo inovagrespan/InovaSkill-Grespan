@@ -154,7 +154,7 @@ public sealed class SingleRouteOptimizationSolver(IDistanceMatrixProvider distan
                 var destinationAfterOccupancy = destinationAfterLoad / destination.CapacityKg!.Value;
                 var improvement = source.Occupancy!.Value - sourceAfterOccupancy;
                 if (improvement < problem.Constraints.MinimumOccupancyImprovement ||
-                    sourceAfterOccupancy > RouteOccupancyLevelPolicy.CriticalMinimumExclusive ||
+                    sourceAfterOccupancy > problem.Constraints.MaximumDestinationOccupancy ||
                     destinationAfterOccupancy > problem.Constraints.MaximumDestinationOccupancy)
                 {
                     continue;
@@ -264,7 +264,7 @@ public sealed class SingleRouteOptimizationSolver(IDistanceMatrixProvider distan
                 Model = model,
                 Occupancy = source.LoadKg / model.CapacityKg
             })
-            .Where(item => item.Occupancy <= RouteOccupancyLevelPolicy.CriticalMinimumExclusive)
+            .Where(item => item.Occupancy <= problem.Constraints.MaximumDestinationOccupancy)
             .OrderBy(item => item.Model.CapacityKg)
             .ThenBy(item => item.Model.Name)
             .FirstOrDefault();

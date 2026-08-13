@@ -14,12 +14,16 @@ const ROUTE_VIEW_ROLES: readonly ApplicationRole[] = ALL_ROLES;
 const LOGISTICS_ROLES: readonly ApplicationRole[] = ["diretor", "logistica", "admin", "admin_system"];
 const COMMERCIAL_CONTEXT_ROLES: readonly ApplicationRole[] = ALL_ROLES;
 const ADMIN_ROLES: readonly ApplicationRole[] = ["admin", "admin_system"];
+const SYSTEM_ADMIN_ROLES: readonly ApplicationRole[] = ["admin_system"];
 const ROUTE_SIMULATION_ROLES: readonly ApplicationRole[] = ["vendas", "logistica", "admin", "admin_system"];
 
 const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
+  { path: "/administracao/whatsapp", roles: SYSTEM_ADMIN_ROLES },
   { path: "/administracao/consumo-ia", roles: ADMIN_ROLES },
   { path: "/administracao/memorias", roles: ADMIN_ROLES },
   { path: "/assistente", roles: ALL_ROLES },
+  { path: "/meu-whatsapp", roles: ALL_ROLES },
+  { path: "/simulador-whatsapp", roles: ALL_ROLES },
   { path: "/processamentos", roles: ADMIN_ROLES },
   { path: "/importacoes", roles: ADMIN_ROLES },
   { path: "/veiculos/tipos", roles: LOGISTICS_ROLES },

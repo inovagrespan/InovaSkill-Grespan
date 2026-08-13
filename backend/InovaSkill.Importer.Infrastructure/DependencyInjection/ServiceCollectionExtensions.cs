@@ -4,6 +4,9 @@ using InovaSkill.Importer.Infrastructure.Caching;
 using InovaSkill.Importer.Infrastructure.BackgroundJobs;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.RouteImports;
+using InovaSkill.Importer.Infrastructure.WhatsApp;
+using InovaSkill.Importer.Application.WhatsApp;
+using InovaSkill.Importer.Api.Assistant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,11 +24,18 @@ public static class ServiceCollectionExtensions
             ?? throw new InvalidOperationException("ConnectionStrings:ImportDb não foi configurada.");
 
         services.AddDbContext<ImportDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddHttpClient();
         services.AddMemoryCache();
         services.AddSingleton<ICacheStore, MemoryCacheStore>();
         services.AddSingleton<IApplicationCache, ResilientApplicationCache>();
         services.Configure<RouteOptimizationOptions>(
             configuration.GetSection(RouteOptimizationOptions.SectionName));
+        services.Configure<AssistantOptions>(options =>
+        {
+            configuration.GetSection(AssistantOptions.SectionName).Bind(options);
+            options.OpenAiApiKey = configuration["OPENAI_API_KEY"] ?? options.OpenAiApiKey;
+        });
+        services.Configure<WhatsAppOptions>(configuration.GetSection(WhatsAppOptions.SectionName));
         services.AddHttpClient<OsrmDistanceMatrixProvider>((serviceProvider, client) =>
         {
             var options = serviceProvider.GetRequiredService<IOptions<RouteOptimizationOptions>>().Value;
@@ -43,6 +53,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IImportLifecycleService, ImportLifecycleService>();
         services.AddScoped<IMunicipalityCoordinateProvider, EmbeddedMunicipalityCoordinateProvider>();
         services.AddScoped<IOperationalJobQueue, OperationalJobQueue>();
+        services.AddScoped<IJobExecutionLauncher, JobExecutionLauncher>();
+        services.AddScoped<IJobScheduleDispatcher, JobScheduleDispatcher>();
+        services.AddScoped<IScheduledJobLauncher, ScheduledJobLauncher>();
         services.AddScoped<IBackgroundJobDispatcher, HangfireBackgroundJobDispatcher>();
         services.AddScoped<IRouteOptimizationJobDispatcher, HangfireBackgroundJobDispatcher>();
         services.AddScoped<IImportProcessingService, ImportProcessingService>();
@@ -68,6 +81,36 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDataSourceProcessor, InventoryCurrentProcessor>();
         services.AddScoped<IDataSourceProcessor, DailyInventoryProcessor>();
         services.AddScoped<IOperationalJobProcessor, MunicipalityCoordinateEnrichmentProcessor>();
+        services.AddScoped<IWhatsAppGateway, LocalBaileysWhatsAppGateway>();
+        services.AddScoped<IAudioTranscriptionService, OpenAiAudioTranscriptionService>();
+        services.AddScoped<IWhatsAppMessageQueue, WhatsAppMessageQueue>();
+        services.AddScoped<IOperationalJobProcessor, WhatsAppMessageProcessor>();
+        services.AddScoped<IChatModelClient, OpenAiChatModelClient>();
+        services.AddScoped<AiConsumptionService>();
+        services.AddScoped<IChatHistoryStore, ChatHistoryStore>();
+        services.AddScoped<AssistantScopeClassifier>();
+        services.AddScoped<KnowledgeMemoryService>();
+        services.AddScoped<IChatTool, SearchRoutesChatTool>();
+        services.AddScoped<IChatTool, GetRouteDetailsChatTool>();
+        services.AddScoped<IChatTool, GetCriticalRoutesChatTool>();
+        services.AddScoped<IChatTool, ListRoutesByOccupancyChatTool>();
+        services.AddScoped<IChatTool, GetRouteCitiesChatTool>();
+        services.AddScoped<IChatTool, GetRouteCustomersChatTool>();
+        services.AddScoped<IChatTool, GetLatestGlobalRouteOptimizationChatTool>();
+        services.AddScoped<IChatTool, GetLatestRouteOptimizationChatTool>();
+        services.AddScoped<IChatTool, RequestGlobalRouteOptimizationChatTool>();
+        services.AddScoped<IChatTool, SearchCustomersChatTool>();
+        services.AddScoped<IChatTool, GetCustomerConsumptionSummaryChatTool>();
+        services.AddScoped<IChatTool, ListRecentFiscalDocumentsChatTool>();
+        services.AddScoped<IChatTool, GetFiscalReturnRateChatTool>();
+        services.AddScoped<IChatTool, SearchProductsChatTool>();
+        services.AddScoped<IChatTool, GetProductDetailsChatTool>();
+        services.AddScoped<IChatTool, GetInventorySummaryChatTool>();
+        services.AddScoped<IChatTool, ListInventoryPositionsChatTool>();
+        services.AddScoped<IChatTool, ListStockoutProductsChatTool>();
+        services.AddScoped<IChatTool, GetProductionSummaryChatTool>();
+        services.AddScoped<IChatTool, ListProductionRecordsChatTool>();
+        services.AddScoped<BusinessAssistantService>();
         return services;
     }
 }

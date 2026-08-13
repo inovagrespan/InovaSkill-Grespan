@@ -286,7 +286,12 @@ export type CommercialInvoiceAnalyticsResponse = {
   trend: CommercialInvoiceAnalyticsTrendPoint[];
   ranking: CommercialInvoiceAnalyticsRankingItem[];
 };
-export type CommercialTransactionTimelineGranularity = "hour" | "day" | "week" | "month" | "quarter";
+export type CommercialTransactionTimelineGranularity =
+  | "hour"
+  | "day"
+  | "week"
+  | "month"
+  | "quarter";
 export type CommercialTransactionTimelinePoint = {
   periodStart: string;
   totalAmount: number;
@@ -366,8 +371,6 @@ export type WorkerHealth = {
   currentJobId: number | null;
   currentTask: string;
 };
-
-
 
 export type ProcessingJobDetails = {
   job: ProcessingJobQueueItem;
@@ -714,16 +717,29 @@ function shouldUseDemoData(_error: unknown): boolean {
   return true;
 }
 
-function hasItems<T extends { items?: unknown[]; total?: number; totalItems?: number }>(value: T): boolean {
+function hasItems<T extends { items?: unknown[]; total?: number; totalItems?: number }>(
+  value: T,
+): boolean {
   return (value.items?.length ?? 0) > 0 || (value.total ?? value.totalItems ?? 0) > 0;
 }
 
 function hasFinanceData(value: FinanceDashboardResponse): boolean {
-  return value.summary.totalRevenue !== 0 || value.items.length > 0 || value.revenueTrend.length > 0 || value.customerRanking.length > 0;
+  return (
+    value.summary.totalRevenue !== 0 ||
+    value.items.length > 0 ||
+    value.revenueTrend.length > 0 ||
+    value.customerRanking.length > 0
+  );
 }
 
 function hasProcessingData(value: ProcessingMonitoringDashboard): boolean {
-  return value.jobs.length > 0 || value.daily.length > 0 || value.workers.length > 0 || value.summary.completedToday > 0 || value.summary.runningJobs > 0;
+  return (
+    value.jobs.length > 0 ||
+    value.daily.length > 0 ||
+    value.workers.length > 0 ||
+    value.summary.completedToday > 0 ||
+    value.summary.runningJobs > 0
+  );
 }
 
 function demoUploadJobId(fileName: string): number {
@@ -823,9 +839,55 @@ function demoCommercialTransactions(): CommercialTransaction[] {
 
 function demoProducts(): Product[] {
   return [
-    { id: "2001", erpCode: "10000122", operationalCode: "6793", name: "Pão Francês Congelado 60g", type: "PA", unit: "UN", groupCode: "0022", netWeightKg: 0.8, grossWeightKg: 0.8, gtin: "", inventory: { onHandQuantity: 2539, committedQuantity: 483, availableQuantity: 2056, stockValue: 12800 } },
-    { id: "2002", erpCode: "10000123", operationalCode: "6792", name: "RAPIDO 70 GR PCT 8 K", type: "PA", unit: "UN", groupCode: "0022", netWeightKg: 0.7, grossWeightKg: 0.7, gtin: "", inventory: { onHandQuantity: 761, committedQuantity: 106, availableQuantity: 655, stockValue: 6400 } },
-    { id: "2003", erpCode: "10000124", operationalCode: "6901", name: "LENTO 80 GR PCT 8 K", type: "PA", unit: "UN", groupCode: "0023", netWeightKg: 0.8, grossWeightKg: 0.8, gtin: "", inventory: { onHandQuantity: 0, committedQuantity: 0, availableQuantity: 0, stockValue: 0 } },
+    {
+      id: "2001",
+      erpCode: "10000122",
+      operationalCode: "6793",
+      name: "Pão Francês Congelado 60g",
+      type: "PA",
+      unit: "UN",
+      groupCode: "0022",
+      netWeightKg: 0.8,
+      grossWeightKg: 0.8,
+      gtin: "",
+      inventory: {
+        onHandQuantity: 2539,
+        committedQuantity: 483,
+        availableQuantity: 2056,
+        stockValue: 12800,
+      },
+    },
+    {
+      id: "2002",
+      erpCode: "10000123",
+      operationalCode: "6792",
+      name: "RAPIDO 70 GR PCT 8 K",
+      type: "PA",
+      unit: "UN",
+      groupCode: "0022",
+      netWeightKg: 0.7,
+      grossWeightKg: 0.7,
+      gtin: "",
+      inventory: {
+        onHandQuantity: 761,
+        committedQuantity: 106,
+        availableQuantity: 655,
+        stockValue: 6400,
+      },
+    },
+    {
+      id: "2003",
+      erpCode: "10000124",
+      operationalCode: "6901",
+      name: "LENTO 80 GR PCT 8 K",
+      type: "PA",
+      unit: "UN",
+      groupCode: "0023",
+      netWeightKg: 0.8,
+      grossWeightKg: 0.8,
+      gtin: "",
+      inventory: { onHandQuantity: 0, committedQuantity: 0, availableQuantity: 0, stockValue: 0 },
+    },
   ];
 }
 
@@ -841,18 +903,21 @@ function filterDemoProducts(input: {
 }): Product[] {
   const normalizedSearch = input.search?.trim().toLowerCase() ?? "";
 
-  return demoProducts().filter((item) => (
-    (!normalizedSearch ||
-      item.erpCode.toLowerCase().includes(normalizedSearch) ||
-      item.operationalCode.toLowerCase().includes(normalizedSearch) ||
-      item.name.toLowerCase().includes(normalizedSearch)) &&
-    (!input.type || item.type === input.type) &&
-    (!input.group || item.groupCode === input.group) &&
-    (!input.stockStatus ||
-      (input.stockStatus === "AVAILABLE" && (item.inventory?.availableQuantity ?? 0) > 0) ||
-      (input.stockStatus === "STOCKOUT" && item.inventory != null && item.inventory.availableQuantity <= 0) ||
-      (input.stockStatus === "NO_INFORMATION" && item.inventory == null))
-  ));
+  return demoProducts().filter(
+    (item) =>
+      (!normalizedSearch ||
+        item.erpCode.toLowerCase().includes(normalizedSearch) ||
+        item.operationalCode.toLowerCase().includes(normalizedSearch) ||
+        item.name.toLowerCase().includes(normalizedSearch)) &&
+      (!input.type || item.type === input.type) &&
+      (!input.group || item.groupCode === input.group) &&
+      (!input.stockStatus ||
+        (input.stockStatus === "AVAILABLE" && (item.inventory?.availableQuantity ?? 0) > 0) ||
+        (input.stockStatus === "STOCKOUT" &&
+          item.inventory != null &&
+          item.inventory.availableQuantity <= 0) ||
+        (input.stockStatus === "NO_INFORMATION" && item.inventory == null)),
+  );
 }
 
 function normalizeProduct(raw: any): Product {
@@ -868,12 +933,18 @@ function normalizeProduct(raw: any): Product {
     netWeightKg: raw.netWeightKg ?? raw.NetWeightKg ?? null,
     grossWeightKg: raw.grossWeightKg ?? raw.GrossWeightKg ?? null,
     gtin: raw.gtin ?? raw.Gtin ?? "",
-    inventory: inventory ? {
-      onHandQuantity: Number(inventory.onHandQuantity ?? inventory.OnHandQuantity ?? 0),
-      committedQuantity: Number(inventory.committedQuantity ?? inventory.CommittedQuantity ?? 0),
-      availableQuantity: Number(inventory.availableQuantity ?? inventory.AvailableQuantity ?? 0),
-      stockValue: Number(inventory.stockValue ?? inventory.StockValue ?? 0),
-    } : null,
+    inventory: inventory
+      ? {
+          onHandQuantity: Number(inventory.onHandQuantity ?? inventory.OnHandQuantity ?? 0),
+          committedQuantity: Number(
+            inventory.committedQuantity ?? inventory.CommittedQuantity ?? 0,
+          ),
+          availableQuantity: Number(
+            inventory.availableQuantity ?? inventory.AvailableQuantity ?? 0,
+          ),
+          stockValue: Number(inventory.stockValue ?? inventory.StockValue ?? 0),
+        }
+      : null,
   };
 }
 
@@ -895,12 +966,15 @@ function includesNormalized(value: string, filter?: string): boolean {
   return value.toLowerCase().includes(normalizedFilter);
 }
 
-function filterDemoCommercialTransactions(input: DemoCommercialTransactionFilters): CommercialTransaction[] {
+function filterDemoCommercialTransactions(
+  input: DemoCommercialTransactionFilters,
+): CommercialTransaction[] {
   const filtered = demoCommercialTransactions().filter((item) => {
     if (!includesNormalized(item.documentNumber, input.documentNumber)) return false;
     if (!includesNormalized(item.customerCode, input.customerCode)) return false;
     if (!includesNormalized(item.customerName, input.customerName)) return false;
-    if (!includesNormalized(`${item.productCode} ${item.productDescription}`, input.productCode)) return false;
+    if (!includesNormalized(`${item.productCode} ${item.productDescription}`, input.productCode))
+      return false;
     if (!includesNormalized(item.city, input.city)) return false;
     if (!includesNormalized(item.productGroup, input.productGroup)) return false;
     if (!includesNormalized(item.transactionType, input.transactionType)) return false;
@@ -917,12 +991,14 @@ function paginateDemoItems<T>(items: T[], page = DEMO_PAGE, pageSize = DEMO_PAGE
   return items.slice(start, start + pageSize);
 }
 
-function demoCommercialSummary(input: {
-  page?: number;
-  pageSize?: number;
-  granularity?: SummaryGranularity;
-  sortBy?: SummarySortBy;
-} & DemoCommercialTransactionFilters): CommercialTransactionSummaryResponse {
+function demoCommercialSummary(
+  input: {
+    page?: number;
+    pageSize?: number;
+    granularity?: SummaryGranularity;
+    sortBy?: SummarySortBy;
+  } & DemoCommercialTransactionFilters,
+): CommercialTransactionSummaryResponse {
   const filteredItems = filterDemoCommercialTransactions(input);
   const groups = new Map<string, CommercialTransactionCompanySummary>();
 
@@ -956,7 +1032,11 @@ function demoCommercialSummary(input: {
   const sortedItems = Array.from(groups.values()).sort((left, right) => {
     if (sortBy === "quantity") return right.totalQuantity - left.totalQuantity;
     if (sortBy === "weight") return right.totalWeightKg - left.totalWeightKg;
-    if (sortBy === "growth") return (right.growthPercent ?? Number.NEGATIVE_INFINITY) - (left.growthPercent ?? Number.NEGATIVE_INFINITY);
+    if (sortBy === "growth")
+      return (
+        (right.growthPercent ?? Number.NEGATIVE_INFINITY) -
+        (left.growthPercent ?? Number.NEGATIVE_INFINITY)
+      );
     return right.totalAmount - left.totalAmount;
   });
   const page = input.page ?? DEMO_PAGE;
@@ -984,10 +1064,12 @@ function demoCommercialSummary(input: {
   };
 }
 
-function demoCommercialInvoices(input: {
-  page?: number;
-  pageSize?: number;
-} & DemoCommercialTransactionFilters): CommercialInvoiceSummaryResponse {
+function demoCommercialInvoices(
+  input: {
+    page?: number;
+    pageSize?: number;
+  } & DemoCommercialTransactionFilters,
+): CommercialInvoiceSummaryResponse {
   const filteredItems = filterDemoCommercialTransactions(input);
   const groups = new Map<string, CommercialInvoiceSummary>();
 
@@ -1012,9 +1094,10 @@ function demoCommercialInvoices(input: {
     groups.set(item.documentNumber, current);
   }
 
-  const items = Array.from(groups.values()).sort((left, right) =>
-    right.transactionDate.localeCompare(left.transactionDate, "pt-BR") ||
-    right.documentNumber.localeCompare(left.documentNumber, "pt-BR"),
+  const items = Array.from(groups.values()).sort(
+    (left, right) =>
+      right.transactionDate.localeCompare(left.transactionDate, "pt-BR") ||
+      right.documentNumber.localeCompare(left.documentNumber, "pt-BR"),
   );
   const page = input.page ?? DEMO_PAGE;
   const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
@@ -1031,7 +1114,9 @@ function demoCommercialInvoices(input: {
 }
 
 function demoCommercialInvoiceDetails(documentNumber: string): CommercialInvoiceDetails {
-  const items = filterDemoCommercialTransactions({ documentNumber }).filter((item) => item.documentNumber === documentNumber);
+  const items = filterDemoCommercialTransactions({ documentNumber }).filter(
+    (item) => item.documentNumber === documentNumber,
+  );
   const firstItem = items[0];
 
   return {
@@ -1049,9 +1134,11 @@ function demoCommercialInvoiceDetails(documentNumber: string): CommercialInvoice
   };
 }
 
-function demoCommercialInvoiceAnalytics(input: {
-  granularity?: CommercialInvoiceAnalyticsGranularity;
-} & DemoCommercialTransactionFilters): CommercialInvoiceAnalyticsResponse {
+function demoCommercialInvoiceAnalytics(
+  input: {
+    granularity?: CommercialInvoiceAnalyticsGranularity;
+  } & DemoCommercialTransactionFilters,
+): CommercialInvoiceAnalyticsResponse {
   const invoices = demoCommercialInvoices(input).items;
   const granularity = input.granularity ?? "month";
   const trendGroups = new Map<string, CommercialInvoiceAnalyticsTrendPoint>();
@@ -1095,14 +1182,22 @@ function demoCommercialInvoiceAnalytics(input: {
       totalItems: invoices.reduce((total, item) => total + item.totalItems, 0),
       totalQuantity: invoices.reduce((total, item) => total + item.totalQuantity, 0),
     },
-    trend: Array.from(trendGroups.values()).sort((left, right) => left.periodStart.localeCompare(right.periodStart, "pt-BR")),
-    ranking: Array.from(rankingGroups.values()).sort((left, right) => right.totalAmount - left.totalAmount || left.customerName.localeCompare(right.customerName, "pt-BR")),
+    trend: Array.from(trendGroups.values()).sort((left, right) =>
+      left.periodStart.localeCompare(right.periodStart, "pt-BR"),
+    ),
+    ranking: Array.from(rankingGroups.values()).sort(
+      (left, right) =>
+        right.totalAmount - left.totalAmount ||
+        left.customerName.localeCompare(right.customerName, "pt-BR"),
+    ),
   };
 }
 
-function demoCommercialTimeline(input: {
-  granularity?: CommercialTransactionTimelineGranularity;
-} & DemoCommercialTransactionFilters): CommercialTransactionTimelineResponse {
+function demoCommercialTimeline(
+  input: {
+    granularity?: CommercialTransactionTimelineGranularity;
+  } & DemoCommercialTransactionFilters,
+): CommercialTransactionTimelineResponse {
   const filteredItems = filterDemoCommercialTransactions(input);
 
   const granularity = input.granularity ?? "month";
@@ -1127,7 +1222,9 @@ function demoCommercialTimeline(input: {
 
   return {
     granularity,
-    items: Array.from(grouped.values()).sort((left, right) => left.periodStart.localeCompare(right.periodStart)),
+    items: Array.from(grouped.values()).sort((left, right) =>
+      left.periodStart.localeCompare(right.periodStart),
+    ),
   };
 }
 
@@ -1206,7 +1303,11 @@ function demoFileJobs(page = DEMO_PAGE, pageSize = 10): PagedResult<FileJob> {
       totalRows: 3_400,
       currentStageCode: "VALIDATE",
       currentStageName: "Validação",
-      stages: buildFallbackStages({ status: "ValidationFailed", progressPercent: 42, errorCount: 12 }),
+      stages: buildFallbackStages({
+        status: "ValidationFailed",
+        progressPercent: 42,
+        errorCount: 12,
+      }),
     },
   ];
 
@@ -1263,12 +1364,60 @@ function demoProcessingDashboard(): ProcessingMonitoringDashboard {
       },
     ],
     daily: [
-      { date: "2026-06-01", jobs: 8, completedJobs: 7, failedJobs: 1, processedRows: 18_900, averageProcessingSeconds: 102, successRatePercent: 87.5 },
-      { date: "2026-06-02", jobs: 11, completedJobs: 11, failedJobs: 0, processedRows: 24_200, averageProcessingSeconds: 94, successRatePercent: 100 },
-      { date: "2026-06-03", jobs: 9, completedJobs: 8, failedJobs: 1, processedRows: 21_650, averageProcessingSeconds: 110, successRatePercent: 88.9 },
-      { date: "2026-06-04", jobs: 13, completedJobs: 13, failedJobs: 0, processedRows: 31_400, averageProcessingSeconds: 89, successRatePercent: 100 },
-      { date: "2026-06-05", jobs: 10, completedJobs: 9, failedJobs: 1, processedRows: 27_900, averageProcessingSeconds: 97, successRatePercent: 90 },
-      { date: DEMO_DATE_TODAY, jobs: 24, completedJobs: 18, failedJobs: 1, processedRows: 42_860, averageProcessingSeconds: 96, successRatePercent: 94.7 },
+      {
+        date: "2026-06-01",
+        jobs: 8,
+        completedJobs: 7,
+        failedJobs: 1,
+        processedRows: 18_900,
+        averageProcessingSeconds: 102,
+        successRatePercent: 87.5,
+      },
+      {
+        date: "2026-06-02",
+        jobs: 11,
+        completedJobs: 11,
+        failedJobs: 0,
+        processedRows: 24_200,
+        averageProcessingSeconds: 94,
+        successRatePercent: 100,
+      },
+      {
+        date: "2026-06-03",
+        jobs: 9,
+        completedJobs: 8,
+        failedJobs: 1,
+        processedRows: 21_650,
+        averageProcessingSeconds: 110,
+        successRatePercent: 88.9,
+      },
+      {
+        date: "2026-06-04",
+        jobs: 13,
+        completedJobs: 13,
+        failedJobs: 0,
+        processedRows: 31_400,
+        averageProcessingSeconds: 89,
+        successRatePercent: 100,
+      },
+      {
+        date: "2026-06-05",
+        jobs: 10,
+        completedJobs: 9,
+        failedJobs: 1,
+        processedRows: 27_900,
+        averageProcessingSeconds: 97,
+        successRatePercent: 90,
+      },
+      {
+        date: DEMO_DATE_TODAY,
+        jobs: 24,
+        completedJobs: 18,
+        failedJobs: 1,
+        processedRows: 42_860,
+        averageProcessingSeconds: 96,
+        successRatePercent: 94.7,
+      },
     ],
     stageDurations: [
       { stage: "READ", stageName: "Leitura", averageDurationSeconds: 24, sharePercent: 25 },
@@ -1277,8 +1426,26 @@ function demoProcessingDashboard(): ProcessingMonitoringDashboard {
       { stage: "SUMMARY", stageName: "Resumo", averageDurationSeconds: 2, sharePercent: 2 },
     ],
     workers: [
-      { workerId: "worker-01", status: "Online", lastSeenAt: "2026-06-07T10:14:00-03:00", secondsSinceLastSeen: 8, processedJobsToday: 12, idleSeconds: 0, currentJobId: 502, currentTask: "Importando clientes" },
-      { workerId: "worker-02", status: "Online", lastSeenAt: "2026-06-07T10:14:05-03:00", secondsSinceLastSeen: 3, processedJobsToday: 6, idleSeconds: 78, currentJobId: null, currentTask: "Aguardando fila" },
+      {
+        workerId: "worker-01",
+        status: "Online",
+        lastSeenAt: "2026-06-07T10:14:00-03:00",
+        secondsSinceLastSeen: 8,
+        processedJobsToday: 12,
+        idleSeconds: 0,
+        currentJobId: 502,
+        currentTask: "Importando clientes",
+      },
+      {
+        workerId: "worker-02",
+        status: "Online",
+        lastSeenAt: "2026-06-07T10:14:05-03:00",
+        secondsSinceLastSeen: 3,
+        processedJobsToday: 6,
+        idleSeconds: 78,
+        currentJobId: null,
+        currentTask: "Aguardando fila",
+      },
     ],
   };
 }
@@ -1289,9 +1456,36 @@ function demoProcessingJobDetails(jobId: number): ProcessingJobDetails {
   return {
     job,
     timeline: [
-      { step: "READ", stepName: "Leitura do arquivo", startedAt: "2026-06-07T09:18:00-03:00", finishedAt: "2026-06-07T09:18:24-03:00", durationSeconds: 24, status: "completed", processedRows: DEMO_TOTAL_ROWS / 4, errorCount: 0 },
-      { step: "VALIDATE", stepName: "Validação de colunas", startedAt: "2026-06-07T09:18:24-03:00", finishedAt: "2026-06-07T09:19:10-03:00", durationSeconds: 46, status: "completed", processedRows: DEMO_TOTAL_ROWS / 4, errorCount: 3 },
-      { step: "IMPORT", stepName: "Persistência", startedAt: "2026-06-07T09:19:10-03:00", finishedAt: null, durationSeconds: 340, status: "running", processedRows: 8_160, errorCount: 3 },
+      {
+        step: "READ",
+        stepName: "Leitura do arquivo",
+        startedAt: "2026-06-07T09:18:00-03:00",
+        finishedAt: "2026-06-07T09:18:24-03:00",
+        durationSeconds: 24,
+        status: "completed",
+        processedRows: DEMO_TOTAL_ROWS / 4,
+        errorCount: 0,
+      },
+      {
+        step: "VALIDATE",
+        stepName: "Validação de colunas",
+        startedAt: "2026-06-07T09:18:24-03:00",
+        finishedAt: "2026-06-07T09:19:10-03:00",
+        durationSeconds: 46,
+        status: "completed",
+        processedRows: DEMO_TOTAL_ROWS / 4,
+        errorCount: 3,
+      },
+      {
+        step: "IMPORT",
+        stepName: "Persistência",
+        startedAt: "2026-06-07T09:19:10-03:00",
+        finishedAt: null,
+        durationSeconds: 340,
+        status: "running",
+        processedRows: 8_160,
+        errorCount: 3,
+      },
     ],
     metrics: {
       totalRows: 12_000,
@@ -1303,9 +1497,27 @@ function demoProcessingJobDetails(jobId: number): ProcessingJobDetails {
     },
     performanceByStage: dashboard.stageDurations,
     logs: [
-      { timestamp: "2026-06-07T09:18:24-03:00", fileJobId: job.id, stage: "READ", level: "Info", message: "Arquivo carregado com sucesso." },
-      { timestamp: "2026-06-07T09:19:10-03:00", fileJobId: job.id, stage: "VALIDATE", level: "Warning", message: "3 linhas possuem cidade vazia; aplicado o valor padrão." },
-      { timestamp: "2026-06-07T09:22:00-03:00", fileJobId: job.id, stage: "IMPORT", level: "Info", message: "Importação em andamento." },
+      {
+        timestamp: "2026-06-07T09:18:24-03:00",
+        fileJobId: job.id,
+        stage: "READ",
+        level: "Info",
+        message: "Arquivo carregado com sucesso.",
+      },
+      {
+        timestamp: "2026-06-07T09:19:10-03:00",
+        fileJobId: job.id,
+        stage: "VALIDATE",
+        level: "Warning",
+        message: "3 linhas possuem cidade vazia; aplicado o valor padrão.",
+      },
+      {
+        timestamp: "2026-06-07T09:22:00-03:00",
+        fileJobId: job.id,
+        stage: "IMPORT",
+        level: "Info",
+        message: "Importação em andamento.",
+      },
     ],
   };
 }
@@ -1328,12 +1540,53 @@ function demoCustomerSummary(): CustomerAnalyticsSummary {
 
 function demoCustomerRanking(input: { page?: number; pageSize?: number }): CustomerRankingResponse {
   const items: CustomerRankingItem[] = [
-    { customerCode: "CLI-001", customerName: "Padaria São Bento", revenue: 64_850, quantity: 2_420, weight: 12_800, orders: 28, averageTicket: 2_316.07, variationPercent: 12.6 },
-    { customerCode: "CLI-002", customerName: "Supermercado Primavera", revenue: 52_300, quantity: 3_180, weight: 9_750, orders: 21, averageTicket: 2_490.48, variationPercent: -6.4 },
-    { customerCode: "CLI-003", customerName: "Cafeteria Grão & Massa", revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33, variationPercent: 24.8 },
-    { customerCode: "CLI-004", customerName: "Rede Conveniência Rota 12", revenue: 31_500, quantity: 980, weight: 2_400, orders: 12, averageTicket: 2_625, variationPercent: 5.7 },
+    {
+      customerCode: "CLI-001",
+      customerName: "Padaria São Bento",
+      revenue: 64_850,
+      quantity: 2_420,
+      weight: 12_800,
+      orders: 28,
+      averageTicket: 2_316.07,
+      variationPercent: 12.6,
+    },
+    {
+      customerCode: "CLI-002",
+      customerName: "Supermercado Primavera",
+      revenue: 52_300,
+      quantity: 3_180,
+      weight: 9_750,
+      orders: 21,
+      averageTicket: 2_490.48,
+      variationPercent: -6.4,
+    },
+    {
+      customerCode: "CLI-003",
+      customerName: "Cafeteria Grão & Massa",
+      revenue: 38_940,
+      quantity: 1_760,
+      weight: 4_980,
+      orders: 18,
+      averageTicket: 2_163.33,
+      variationPercent: 24.8,
+    },
+    {
+      customerCode: "CLI-004",
+      customerName: "Rede Conveniência Rota 12",
+      revenue: 31_500,
+      quantity: 980,
+      weight: 2_400,
+      orders: 12,
+      averageTicket: 2_625,
+      variationPercent: 5.7,
+    },
   ];
-  return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_PAGE_SIZE, totalItems: items.length, items };
+  return {
+    page: input.page ?? DEMO_PAGE,
+    pageSize: input.pageSize ?? DEMO_PAGE_SIZE,
+    totalItems: items.length,
+    items,
+  };
 }
 
 function demoCustomerDetails(customerId: string): CustomerDetailSummary {
@@ -1345,7 +1598,8 @@ function demoCustomerDetails(customerId: string): CustomerDetailSummary {
     city: customer.customerCode === "CLI-002" ? "Ribeirão Preto" : "Campinas",
     linkedCompany: "Grespan Distribuição",
     lastPurchaseDate: DEMO_DATE_TODAY,
-    status: customer.variationPercent != null && customer.variationPercent < 0 ? "Em queda" : "Ativo",
+    status:
+      customer.variationPercent != null && customer.variationPercent < 0 ? "Em queda" : "Ativo",
     totalRevenue: customer.revenue,
     averageTicket: customer.averageTicket,
     averageRevenueMonthly: customer.revenue / 6,
@@ -1362,18 +1616,114 @@ function demoCustomerTimeline(input: {
   metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
 }): CustomerTimelineResponse {
   const points: CustomerTimelinePoint[] = [
-    { periodStart: "2025-07-01", value: 18_500, revenue: 18_500, quantity: 760, weight: 2_940, orders: 8, averageTicket: 2_312.5 },
-    { periodStart: "2025-08-01", value: 0, revenue: 0, quantity: 0, weight: 0, orders: 0, averageTicket: 0 },
-    { periodStart: "2025-09-01", value: 20_200, revenue: 20_200, quantity: 810, weight: 3_040, orders: 9, averageTicket: 2_244.44 },
-    { periodStart: "2025-10-01", value: 21_400, revenue: 21_400, quantity: 880, weight: 3_200, orders: 9, averageTicket: 2_377.78 },
-    { periodStart: "2025-11-01", value: 24_900, revenue: 24_900, quantity: 940, weight: 3_520, orders: 10, averageTicket: 2_490 },
-    { periodStart: "2025-12-01", value: 19_700, revenue: 19_700, quantity: 790, weight: 2_980, orders: 8, averageTicket: 2_462.5 },
-    { periodStart: "2026-01-01", value: 28_600, revenue: 28_600, quantity: 1_120, weight: 4_100, orders: 12, averageTicket: 2_383.33 },
-    { periodStart: "2026-02-01", value: 0, revenue: 0, quantity: 0, weight: 0, orders: 0, averageTicket: 0 },
-    { periodStart: "2026-03-01", value: 31_200, revenue: 31_200, quantity: 1_280, weight: 4_450, orders: 13, averageTicket: 2_400 },
-    { periodStart: "2026-04-01", value: 29_400, revenue: 29_400, quantity: 1_140, weight: 4_280, orders: 12, averageTicket: 2_450 },
-    { periodStart: "2026-05-01", value: 33_800, revenue: 33_800, quantity: 1_430, weight: 4_780, orders: 15, averageTicket: 2_253.33 },
-    { periodStart: "2026-06-01", value: 38_940, revenue: 38_940, quantity: 1_760, weight: 4_980, orders: 18, averageTicket: 2_163.33 },
+    {
+      periodStart: "2025-07-01",
+      value: 18_500,
+      revenue: 18_500,
+      quantity: 760,
+      weight: 2_940,
+      orders: 8,
+      averageTicket: 2_312.5,
+    },
+    {
+      periodStart: "2025-08-01",
+      value: 0,
+      revenue: 0,
+      quantity: 0,
+      weight: 0,
+      orders: 0,
+      averageTicket: 0,
+    },
+    {
+      periodStart: "2025-09-01",
+      value: 20_200,
+      revenue: 20_200,
+      quantity: 810,
+      weight: 3_040,
+      orders: 9,
+      averageTicket: 2_244.44,
+    },
+    {
+      periodStart: "2025-10-01",
+      value: 21_400,
+      revenue: 21_400,
+      quantity: 880,
+      weight: 3_200,
+      orders: 9,
+      averageTicket: 2_377.78,
+    },
+    {
+      periodStart: "2025-11-01",
+      value: 24_900,
+      revenue: 24_900,
+      quantity: 940,
+      weight: 3_520,
+      orders: 10,
+      averageTicket: 2_490,
+    },
+    {
+      periodStart: "2025-12-01",
+      value: 19_700,
+      revenue: 19_700,
+      quantity: 790,
+      weight: 2_980,
+      orders: 8,
+      averageTicket: 2_462.5,
+    },
+    {
+      periodStart: "2026-01-01",
+      value: 28_600,
+      revenue: 28_600,
+      quantity: 1_120,
+      weight: 4_100,
+      orders: 12,
+      averageTicket: 2_383.33,
+    },
+    {
+      periodStart: "2026-02-01",
+      value: 0,
+      revenue: 0,
+      quantity: 0,
+      weight: 0,
+      orders: 0,
+      averageTicket: 0,
+    },
+    {
+      periodStart: "2026-03-01",
+      value: 31_200,
+      revenue: 31_200,
+      quantity: 1_280,
+      weight: 4_450,
+      orders: 13,
+      averageTicket: 2_400,
+    },
+    {
+      periodStart: "2026-04-01",
+      value: 29_400,
+      revenue: 29_400,
+      quantity: 1_140,
+      weight: 4_280,
+      orders: 12,
+      averageTicket: 2_450,
+    },
+    {
+      periodStart: "2026-05-01",
+      value: 33_800,
+      revenue: 33_800,
+      quantity: 1_430,
+      weight: 4_780,
+      orders: 15,
+      averageTicket: 2_253.33,
+    },
+    {
+      periodStart: "2026-06-01",
+      value: 38_940,
+      revenue: 38_940,
+      quantity: 1_760,
+      weight: 4_980,
+      orders: 18,
+      averageTicket: 2_163.33,
+    },
   ];
   const metric = input.metric ?? "revenue";
   return {
@@ -1389,7 +1739,10 @@ function demoCustomerIndividualAnalysis(input: {
   metric?: "revenue" | "quantity" | "weight" | "orders" | "averageTicket";
 }): CustomerIndividualAnalysisResponse {
   const summary = demoCustomerDetails(input.customerId);
-  const timeline = demoCustomerTimeline({ granularity: "monthly", metric: input.metric ?? "revenue" });
+  const timeline = demoCustomerTimeline({
+    granularity: "monthly",
+    metric: input.metric ?? "revenue",
+  });
   return {
     scope: input.scope ?? "historical",
     periodStart: "2025-07-01",
@@ -1403,9 +1756,27 @@ function demoCustomerIndividualAnalysis(input: {
 
 function demoCustomerTopProducts(): CustomerTopProductItem[] {
   return [
-    { productCode: "PAN-104", productDescription: "Pão Francês Congelado 60g", quantity: 820, revenue: 22_878, sharePercent: 35.2 },
-    { productCode: "PAN-221", productDescription: "Pão de Queijo Congelado 1kg", quantity: 1_100, revenue: 9_570, sharePercent: 14.7 },
-    { productCode: "PAN-318", productDescription: "Croissant Congelado 80g", quantity: 480, revenue: 8_880, sharePercent: 13.7 },
+    {
+      productCode: "PAN-104",
+      productDescription: "Pão Francês Congelado 60g",
+      quantity: 820,
+      revenue: 22_878,
+      sharePercent: 35.2,
+    },
+    {
+      productCode: "PAN-221",
+      productDescription: "Pão de Queijo Congelado 1kg",
+      quantity: 1_100,
+      revenue: 9_570,
+      sharePercent: 14.7,
+    },
+    {
+      productCode: "PAN-318",
+      productDescription: "Croissant Congelado 80g",
+      quantity: 480,
+      revenue: 8_880,
+      sharePercent: 13.7,
+    },
   ];
 }
 
@@ -1422,23 +1793,85 @@ function demoCustomerCommercialHealth(customerId: string): CustomerCommercialHea
       averageDaysBetweenPurchases: details.averageDaysBetweenPurchases,
       commercialStatus: details.status,
     },
-    score: { value: 82, label: "Saudável", explanation: "Cliente com compra recente, frequência estável e bom ticket médio." },
-    health: { status: "Bom", tone: "success", summary: "Cliente ativo e recorrente.", detail: "O histórico indica regularidade no relacionamento comercial." },
-    trend: { status: "Crescimento", tone: "success", summary: "Faturamento subiu no último mês.", detail: "A variação mensal indica evolução positiva." },
-    potential: { expectedRevenue: 42_000, expectedQuantity: 1_920, label: "Potencial alto", explanation: "Projeção baseada no histórico mensal." },
-    dependency: { status: "Mix concentrado", explanation: "Top 3 produtos representam parte relevante da receita.", productsToReachEightyPercent: 5, topProductSharePercent: 35.2 },
+    score: {
+      value: 82,
+      label: "Saudável",
+      explanation: "Cliente com compra recente, frequência estável e bom ticket médio.",
+    },
+    health: {
+      status: "Bom",
+      tone: "success",
+      summary: "Cliente ativo e recorrente.",
+      detail: "O histórico indica regularidade no relacionamento comercial.",
+    },
+    trend: {
+      status: "Crescimento",
+      tone: "success",
+      summary: "Faturamento subiu no último mês.",
+      detail: "A variação mensal indica evolução positiva.",
+    },
+    potential: {
+      expectedRevenue: 42_000,
+      expectedQuantity: 1_920,
+      label: "Potencial alto",
+      explanation: "Projeção baseada no histórico mensal.",
+    },
+    dependency: {
+      status: "Mix concentrado",
+      explanation: "Top 3 produtos representam parte relevante da receita.",
+      productsToReachEightyPercent: 5,
+      topProductSharePercent: 35.2,
+    },
     products: demoCustomerTopProducts(),
-    timeline: demoCustomerTimeline({}).points.map((point) => ({ date: point.periodStart, orders: point.orders, revenue: point.revenue, quantity: point.quantity })),
-    evolution: demoCustomerTimeline({}).points.map((point) => ({ periodStart: point.periodStart, revenue: point.revenue, quantity: point.quantity, orders: point.orders, averageTicket: point.revenue / Math.max(point.orders, 1) })),
+    timeline: demoCustomerTimeline({}).points.map((point) => ({
+      date: point.periodStart,
+      orders: point.orders,
+      revenue: point.revenue,
+      quantity: point.quantity,
+    })),
+    evolution: demoCustomerTimeline({}).points.map((point) => ({
+      periodStart: point.periodStart,
+      revenue: point.revenue,
+      quantity: point.quantity,
+      orders: point.orders,
+      averageTicket: point.revenue / Math.max(point.orders, 1),
+    })),
     comparisons: [
-      { label: "Mês atual", revenue: 38_940, previousRevenue: 31_200, quantity: 1_760, previousQuantity: 1_280, orders: 18, previousOrders: 13, averageTicket: 2_163.33, previousAverageTicket: 2_400, revenueVariationPercent: 24.8, quantityVariationPercent: 37.5, ordersVariationPercent: 38.5, averageTicketVariationPercent: -9.9 },
+      {
+        label: "Mês atual",
+        revenue: 38_940,
+        previousRevenue: 31_200,
+        quantity: 1_760,
+        previousQuantity: 1_280,
+        orders: 18,
+        previousOrders: 13,
+        averageTicket: 2_163.33,
+        previousAverageTicket: 2_400,
+        revenueVariationPercent: 24.8,
+        quantityVariationPercent: 37.5,
+        ordersVariationPercent: 38.5,
+        averageTicketVariationPercent: -9.9,
+      },
     ],
     recommendations: [
-      { priority: "Alta", title: "Reforçar mix principal", detail: "Oferecer reposição dos produtos de maior participação antes da próxima janela de compra." },
-      { priority: "Média", title: "Oferecer produto complementar", detail: "Avaliar sugestões comerciais compatíveis com o histórico de compras." },
+      {
+        priority: "Alta",
+        title: "Reforçar mix principal",
+        detail:
+          "Oferecer reposição dos produtos de maior participação antes da próxima janela de compra.",
+      },
+      {
+        priority: "Média",
+        title: "Oferecer produto complementar",
+        detail: "Avaliar sugestões comerciais compatíveis com o histórico de compras.",
+      },
     ],
     alerts: [
-      { severity: "info", title: "Perfil atualizado", detail: "Os indicadores comerciais estão atualizados para análise." },
+      {
+        severity: "info",
+        title: "Perfil atualizado",
+        detail: "Os indicadores comerciais estão atualizados para análise.",
+      },
     ],
   };
 }
@@ -1470,7 +1903,9 @@ async function parseApiError(response: Response, fallbackMessage: string): Promi
           (payload.Title as string) ??
           fallbackMessage
         );
-      } catch { return fallbackMessage; }
+      } catch {
+        return fallbackMessage;
+      }
     }
     return text || fallbackMessage;
   } catch {
@@ -1669,7 +2104,9 @@ export async function fetchJobErrors(
 ): Promise<PagedResult<ImportError>> {
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/files/jobs/${jobId}/errors?page=${page}&pageSize=${pageSize}`);
+    response = await authFetch(
+      `${API_URL}/api/files/jobs/${jobId}/errors?page=${page}&pageSize=${pageSize}`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) {
       return {
@@ -1677,14 +2114,31 @@ export async function fetchJobErrors(
         pageSize,
         total: 2,
         items: [
-          { id: 1, fileJobId: jobId, rowNumber: 18, stage: "VALIDATE", column: "Cidade", message: "Cidade vazia na linha processada.", recordIdentifier: "CLI-002" },
-          { id: 2, fileJobId: jobId, rowNumber: 42, stage: "VALIDATE", column: "Valor Total", message: "Valor total divergente da quantidade x unitário.", recordIdentifier: "NF-2026-042" },
+          {
+            id: 1,
+            fileJobId: jobId,
+            rowNumber: 18,
+            stage: "VALIDATE",
+            column: "Cidade",
+            message: "Cidade vazia na linha processada.",
+            recordIdentifier: "CLI-002",
+          },
+          {
+            id: 2,
+            fileJobId: jobId,
+            rowNumber: 42,
+            stage: "VALIDATE",
+            column: "Valor Total",
+            message: "Valor total divergente da quantidade x unitário.",
+            recordIdentifier: "NF-2026-042",
+          },
         ],
       };
     }
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar erros do arquivo."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar erros do arquivo."));
 
   const rawJson = await response.json();
   if (Array.isArray(rawJson)) {
@@ -1706,17 +2160,19 @@ export async function fetchJobErrors(
   const raw = rawJson as
     | PagedResult<ImportError>
     | { Page?: number; PageSize?: number; Total?: number; Items?: ImportError[] };
-  const items = ((raw as PagedResult<ImportError>).items ?? (raw as { Items?: ImportError[] }).Items ?? []).map(
-    (e: any) => ({
-      id: e.id ?? e.Id ?? 0,
-      fileJobId: e.fileJobId ?? e.FileJobId ?? jobId,
-      rowNumber: e.rowNumber ?? e.RowNumber ?? 0,
-      stage: e.stage ?? e.Stage ?? "",
-      column: e.column ?? e.Column ?? "",
-      message: e.message ?? e.Message ?? "",
-      recordIdentifier: e.recordIdentifier ?? e.RecordIdentifier ?? "",
-    }),
-  );
+  const items = (
+    (raw as PagedResult<ImportError>).items ??
+    (raw as { Items?: ImportError[] }).Items ??
+    []
+  ).map((e: any) => ({
+    id: e.id ?? e.Id ?? 0,
+    fileJobId: e.fileJobId ?? e.FileJobId ?? jobId,
+    rowNumber: e.rowNumber ?? e.RowNumber ?? 0,
+    stage: e.stage ?? e.Stage ?? "",
+    column: e.column ?? e.Column ?? "",
+    message: e.message ?? e.Message ?? "",
+    recordIdentifier: e.recordIdentifier ?? e.RecordIdentifier ?? "",
+  }));
 
   return {
     page: (raw as PagedResult<ImportError>).page ?? (raw as { Page?: number }).Page ?? 1,
@@ -1737,7 +2193,8 @@ export async function fetchProcessingMonitoringDashboard(): Promise<ProcessingMo
     if (shouldUseDemoData(error)) return demoProcessingDashboard();
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar monitoramento de jobs."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar monitoramento de jobs."));
   const dashboard = normalizeProcessingDashboard(await response.json());
   return hasProcessingData(dashboard) ? dashboard : demoProcessingDashboard();
 }
@@ -1750,14 +2207,17 @@ export async function fetchProcessingJobDetails(jobId: number): Promise<Processi
     if (shouldUseDemoData(error)) return demoProcessingJobDetails(jobId);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes do job."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar detalhes do job."));
   return normalizeProcessingJobDetails(await response.json());
 }
 
 export async function retryProcessingJob(jobId: number): Promise<void> {
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/retry`, { method: "POST" });
+    response = await authFetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/retry`, {
+      method: "POST",
+    });
   } catch (error) {
     if (shouldUseDemoData(error)) return;
     throw error;
@@ -1768,7 +2228,9 @@ export async function retryProcessingJob(jobId: number): Promise<void> {
 export async function cancelProcessingJob(jobId: number): Promise<void> {
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/cancel`, { method: "POST" });
+    response = await authFetch(`${API_URL}/api/processing-monitoring/jobs/${jobId}/cancel`, {
+      method: "POST",
+    });
   } catch (error) {
     if (shouldUseDemoData(error)) return;
     throw error;
@@ -1791,7 +2253,8 @@ export async function runProcessingManualAction(input: {
     if (shouldUseDemoData(error)) return;
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao executar ação manual."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao executar ação manual."));
 }
 
 function normalizeProcessingDashboard(raw: any): ProcessingMonitoringDashboard {
@@ -1799,7 +2262,9 @@ function normalizeProcessingDashboard(raw: any): ProcessingMonitoringDashboard {
     summary: normalizeProcessingSummary(raw.summary ?? raw.Summary ?? {}),
     jobs: (raw.jobs ?? raw.Jobs ?? []).map(normalizeProcessingJobItem),
     daily: (raw.daily ?? raw.Daily ?? []).map(normalizeProcessingDailyPoint),
-    stageDurations: (raw.stageDurations ?? raw.StageDurations ?? []).map(normalizeProcessingStageDuration),
+    stageDurations: (raw.stageDurations ?? raw.StageDurations ?? []).map(
+      normalizeProcessingStageDuration,
+    ),
     workers: (raw.workers ?? raw.Workers ?? []).map(normalizeWorkerHealth),
   };
 }
@@ -1809,7 +2274,9 @@ function normalizeProcessingJobDetails(raw: any): ProcessingJobDetails {
     job: normalizeProcessingJobItem(raw.job ?? raw.Job ?? {}),
     timeline: (raw.timeline ?? raw.Timeline ?? []).map(normalizeProcessingStep),
     metrics: normalizeProcessingMetrics(raw.metrics ?? raw.Metrics ?? {}),
-    performanceByStage: (raw.performanceByStage ?? raw.PerformanceByStage ?? []).map(normalizeProcessingStageDuration),
+    performanceByStage: (raw.performanceByStage ?? raw.PerformanceByStage ?? []).map(
+      normalizeProcessingStageDuration,
+    ),
     logs: (raw.logs ?? raw.Logs ?? []).map(normalizeProcessingLog),
   };
 }
@@ -1942,9 +2409,13 @@ function demoFinanceDashboard(input: {
     },
     financeDemoTransactions,
   );
-  const metrics = filteredMetrics.items.length > 0
-    ? filteredMetrics
-    : calculateFinanceMetrics({ customer: "", dateFrom: "", dateTo: "", allTime: true }, financeDemoTransactions);
+  const metrics =
+    filteredMetrics.items.length > 0
+      ? filteredMetrics
+      : calculateFinanceMetrics(
+          { customer: "", dateFrom: "", dateTo: "", allTime: true },
+          financeDemoTransactions,
+        );
 
   return {
     customers: listFinanceCustomers(financeDemoTransactions),
@@ -1956,7 +2427,10 @@ function demoFinanceDashboard(input: {
     },
     revenueTrend: buildFinanceRevenueTrend(metrics.items, input.revenueGranularity ?? "monthly"),
     customerRanking: buildFinanceCustomerRevenueRanking(metrics.items),
-    items: metrics.items.slice(((input.page ?? 1) - 1) * (input.pageSize ?? 20), ((input.page ?? 1) - 1) * (input.pageSize ?? 20) + (input.pageSize ?? 20)),
+    items: metrics.items.slice(
+      ((input.page ?? 1) - 1) * (input.pageSize ?? 20),
+      ((input.page ?? 1) - 1) * (input.pageSize ?? 20) + (input.pageSize ?? 20),
+    ),
     page: input.page ?? 1,
     pageSize: input.pageSize ?? 20,
     totalItems: metrics.items.length,
@@ -2032,16 +2506,19 @@ export async function fetchFinanceDashboard(input: {
     throw error;
   }
 
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar painel de finanças."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar painel de finanças."));
   const dashboard = normalizeFinanceDashboard(await response.json());
   return hasFinanceData(dashboard) ? dashboard : demoFinanceDashboard(input);
 }
 
-export async function fetchFinanceCustomers(input: {
-  search?: string;
-  limit?: number;
-  signal?: AbortSignal;
-} = {}): Promise<FinanceCustomerOption[]> {
+export async function fetchFinanceCustomers(
+  input: {
+    search?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<FinanceCustomerOption[]> {
   const query = new URLSearchParams();
   if (input.search?.trim()) query.set("search", input.search.trim());
   query.set("limit", String(input.limit ?? 20));
@@ -2070,8 +2547,6 @@ export async function fetchFinanceCustomers(input: {
   }));
   return customers.length > 0 ? customers : demoFinanceCustomers(input);
 }
-
-
 
 function demoCustomerNewCustomersMonthly(): CustomerNewCustomersMonthlyResponse {
   return {
@@ -2106,15 +2581,30 @@ function demoCustomerPurchaseHistory(input: {
   }));
   const page = input.page ?? DEMO_PAGE;
   const pageSize = input.pageSize ?? DEMO_HISTORY_PAGE_SIZE;
-  return { page, pageSize, totalItems: items.length, items: paginateDemoItems(items, page, pageSize) };
+  return {
+    page,
+    pageSize,
+    totalItems: items.length,
+    items: paginateDemoItems(items, page, pageSize),
+  };
 }
 
 function demoCustomerComparison(): CustomerComparisonResponse {
   return {
     items: [
       { label: "Mês atual", currentValue: 38_940, previousValue: 31_200, variationPercent: 24.8 },
-      { label: "Últimos 3 meses", currentValue: 98_500, previousValue: 91_000, variationPercent: 8.2 },
-      { label: "Últimos 6 meses", currentValue: 165_800, previousValue: 172_400, variationPercent: -3.8 },
+      {
+        label: "Últimos 3 meses",
+        currentValue: 98_500,
+        previousValue: 91_000,
+        variationPercent: 8.2,
+      },
+      {
+        label: "Últimos 6 meses",
+        currentValue: 165_800,
+        previousValue: 172_400,
+        variationPercent: -3.8,
+      },
     ],
   };
 }
@@ -2180,7 +2670,12 @@ export async function fetchCommercialTransactions(input: {
       const page = input.page ?? DEMO_PAGE;
       const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
       const items = filterDemoCommercialTransactions(input);
-      return { page, pageSize, total: items.length, items: paginateDemoItems(items, page, pageSize) };
+      return {
+        page,
+        pageSize,
+        total: items.length,
+        items: paginateDemoItems(items, page, pageSize),
+      };
     }
     throw error;
   }
@@ -2190,19 +2685,31 @@ export async function fetchCommercialTransactions(input: {
     | PagedResult<CommercialTransaction>
     | { Page?: number; PageSize?: number; Total?: number; Items?: CommercialTransaction[] };
 
-  const items = (raw as PagedResult<CommercialTransaction>).items ?? (raw as { Items?: CommercialTransaction[] }).Items ?? [];
+  const items =
+    (raw as PagedResult<CommercialTransaction>).items ??
+    (raw as { Items?: CommercialTransaction[] }).Items ??
+    [];
 
   const result = {
     page: (raw as PagedResult<CommercialTransaction>).page ?? (raw as { Page?: number }).Page ?? 1,
-    pageSize: (raw as PagedResult<CommercialTransaction>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? 20,
-    total: (raw as PagedResult<CommercialTransaction>).total ?? (raw as { Total?: number }).Total ?? 0,
+    pageSize:
+      (raw as PagedResult<CommercialTransaction>).pageSize ??
+      (raw as { PageSize?: number }).PageSize ??
+      20,
+    total:
+      (raw as PagedResult<CommercialTransaction>).total ?? (raw as { Total?: number }).Total ?? 0,
     items,
   };
   if (!hasItems(result)) {
     const page = input.page ?? DEMO_PAGE;
     const pageSize = input.pageSize ?? DEMO_PAGE_SIZE;
     const demoItems = filterDemoCommercialTransactions(input);
-    return { page, pageSize, total: demoItems.length, items: paginateDemoItems(demoItems, page, pageSize) };
+    return {
+      page,
+      pageSize,
+      total: demoItems.length,
+      items: paginateDemoItems(demoItems, page, pageSize),
+    };
   }
   return result;
 }
@@ -2217,7 +2724,8 @@ function normalizeCommercialInvoiceSummary(raw: any): CommercialInvoiceSummaryRe
     totalWeightKg: raw.totalWeightKg ?? raw.TotalWeightKg ?? 0,
     items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
       documentNumber: item.documentNumber ?? item.DocumentNumber ?? "",
-      transactionDate: String(item.transactionDate ?? item.TransactionDate ?? "").split("T")[0] ?? "",
+      transactionDate:
+        String(item.transactionDate ?? item.TransactionDate ?? "").split("T")[0] ?? "",
       customerCode: item.customerCode ?? item.CustomerCode ?? "",
       customerName: item.customerName ?? item.CustomerName ?? "",
       city: item.city ?? item.City ?? "",
@@ -2245,7 +2753,8 @@ function normalizeCommercialInvoiceDetails(raw: any): CommercialInvoiceDetails {
     items: (raw.items ?? raw.Items ?? []).map((item: any) => ({
       id: item.id ?? item.Id ?? 0,
       documentNumber: item.documentNumber ?? item.DocumentNumber ?? "",
-      transactionDate: String(item.transactionDate ?? item.TransactionDate ?? "").split("T")[0] ?? "",
+      transactionDate:
+        String(item.transactionDate ?? item.TransactionDate ?? "").split("T")[0] ?? "",
       customerCode: item.customerCode ?? item.CustomerCode ?? "",
       customerName: item.customerName ?? item.CustomerName ?? "",
       productCode: item.productCode ?? item.ProductCode ?? "",
@@ -2318,9 +2827,12 @@ export async function fetchCommercialInvoiceAnalytics(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions/invoice-analytics?${query.toString()}`, {
-      signal: input.signal,
-    });
+    response = await authFetch(
+      `${API_URL}/api/commercial-transactions/invoice-analytics?${query.toString()}`,
+      {
+        signal: input.signal,
+      },
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
@@ -2329,7 +2841,8 @@ export async function fetchCommercialInvoiceAnalytics(input: {
     if (shouldUseDemoData(error)) return demoCommercialInvoiceAnalytics(input);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise de notas fiscais."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar análise de notas fiscais."));
 
   return normalizeCommercialInvoiceAnalytics(await response.json());
 }
@@ -2364,9 +2877,12 @@ export async function fetchCommercialInvoices(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions/invoices?${query.toString()}`, {
-      signal: input.signal,
-    });
+    response = await authFetch(
+      `${API_URL}/api/commercial-transactions/invoices?${query.toString()}`,
+      {
+        signal: input.signal,
+      },
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
@@ -2375,17 +2891,24 @@ export async function fetchCommercialInvoices(input: {
     if (shouldUseDemoData(error)) return demoCommercialInvoices(input);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar notas fiscais."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar notas fiscais."));
 
   return normalizeCommercialInvoiceSummary(await response.json());
 }
 
-export async function fetchCommercialInvoiceDetails(documentNumber: string, signal?: AbortSignal): Promise<CommercialInvoiceDetails> {
+export async function fetchCommercialInvoiceDetails(
+  documentNumber: string,
+  signal?: AbortSignal,
+): Promise<CommercialInvoiceDetails> {
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions/invoices/${encodeURIComponent(documentNumber)}`, {
-      signal,
-    });
+    response = await authFetch(
+      `${API_URL}/api/commercial-transactions/invoices/${encodeURIComponent(documentNumber)}`,
+      {
+        signal,
+      },
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
@@ -2394,7 +2917,8 @@ export async function fetchCommercialInvoiceDetails(documentNumber: string, sign
     if (shouldUseDemoData(error)) return demoCommercialInvoiceDetails(documentNumber);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes da nota fiscal."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar detalhes da nota fiscal."));
 
   return normalizeCommercialInvoiceDetails(await response.json());
 }
@@ -2422,7 +2946,12 @@ export async function fetchProducts(input: {
   } catch (error) {
     if (shouldUseDemoData(error)) {
       const items = filterDemoProducts(input);
-      return { page: input.page ?? DEMO_PAGE, pageSize: input.pageSize ?? DEMO_PAGE_SIZE, total: items.length, items };
+      return {
+        page: input.page ?? DEMO_PAGE,
+        pageSize: input.pageSize ?? DEMO_PAGE_SIZE,
+        total: items.length,
+        items,
+      };
     }
     throw error;
   }
@@ -2431,10 +2960,15 @@ export async function fetchProducts(input: {
   const raw = (await response.json()) as
     | PagedResult<Product>
     | { Page?: number; PageSize?: number; Total?: number; Items?: Product[] };
-  const items = ((raw as PagedResult<Product>).items ?? (raw as { Items?: Product[] }).Items ?? []).map(normalizeProduct);
+  const items = (
+    (raw as PagedResult<Product>).items ??
+    (raw as { Items?: Product[] }).Items ??
+    []
+  ).map(normalizeProduct);
 
   const page = (raw as PagedResult<Product>).page ?? (raw as { Page?: number }).Page ?? 1;
-  const pageSize = (raw as PagedResult<Product>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? 20;
+  const pageSize =
+    (raw as PagedResult<Product>).pageSize ?? (raw as { PageSize?: number }).PageSize ?? 20;
   const total = (raw as PagedResult<Product>).total ?? (raw as { Total?: number }).Total ?? 0;
 
   if (total === 0 && items.length === 0) {
@@ -2457,7 +2991,8 @@ export async function fetchProducts(input: {
 
 export async function fetchProductFilters(): Promise<ProductFilterOptions> {
   const response = await authFetch(`${API_URL}/api/products/filters`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar filtros de produtos."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar filtros de produtos."));
   const raw = await response.json();
   return {
     types: raw.types ?? raw.Types ?? [],
@@ -2467,12 +3002,17 @@ export async function fetchProductFilters(): Promise<ProductFilterOptions> {
 
 export async function fetchProductDetails(id: string): Promise<ProductDetails> {
   const response = await authFetch(`${API_URL}/api/products/${id}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhe do produto."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar detalhe do produto."));
   const raw = await response.json();
   return {
     product: normalizeProduct(raw.product ?? raw.Product ?? {}),
-    latestInventory: (raw.latestInventory ?? raw.LatestInventory ?? []).map(normalizeProductInventoryRow),
-    inventoryHistory: (raw.inventoryHistory ?? raw.InventoryHistory ?? []).map(normalizeProductInventoryRow),
+    latestInventory: (raw.latestInventory ?? raw.LatestInventory ?? []).map(
+      normalizeProductInventoryRow,
+    ),
+    inventoryHistory: (raw.inventoryHistory ?? raw.InventoryHistory ?? []).map(
+      normalizeProductInventoryRow,
+    ),
     dailyHistory: (raw.dailyHistory ?? raw.DailyHistory ?? []).map(normalizeProductDailyRow),
     fiscalItems: (raw.fiscalItems ?? raw.FiscalItems ?? []).map(normalizeProductFiscalItem),
   };
@@ -2498,9 +3038,12 @@ function normalizeProductDailyRow(raw: any): ProductDailyInventoryRow {
     outboundQuantity: Number(raw.outboundQuantity ?? raw.OutboundQuantity ?? 0),
     adjustmentQuantity: Number(raw.adjustmentQuantity ?? raw.AdjustmentQuantity ?? 0),
     closingQuantity: Number(raw.closingQuantity ?? raw.ClosingQuantity ?? 0),
-    firstShiftProductionQuantity: raw.firstShiftProductionQuantity ?? raw.FirstShiftProductionQuantity ?? null,
-    secondShiftProductionQuantity: raw.secondShiftProductionQuantity ?? raw.SecondShiftProductionQuantity ?? null,
-    thirdShiftProductionQuantity: raw.thirdShiftProductionQuantity ?? raw.ThirdShiftProductionQuantity ?? null,
+    firstShiftProductionQuantity:
+      raw.firstShiftProductionQuantity ?? raw.FirstShiftProductionQuantity ?? null,
+    secondShiftProductionQuantity:
+      raw.secondShiftProductionQuantity ?? raw.SecondShiftProductionQuantity ?? null,
+    thirdShiftProductionQuantity:
+      raw.thirdShiftProductionQuantity ?? raw.ThirdShiftProductionQuantity ?? null,
   };
 }
 
@@ -2572,12 +3115,17 @@ function normalizeInventoryItem(raw: any): InventoryItem {
 
 export async function fetchInventorySummary(): Promise<InventorySummary> {
   const response = await authFetch(`${API_URL}/api/inventory/summary`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de estoque."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar resumo de estoque."));
   const raw = await response.json();
   return {
     stockouts: Number(raw.stockouts ?? raw.Stockouts ?? 0),
-    stockoutProducts: Number(raw.stockoutProducts ?? raw.StockoutProducts ?? raw.stockouts ?? raw.Stockouts ?? 0),
-    stockoutWarehousePositions: Number(raw.stockoutWarehousePositions ?? raw.StockoutWarehousePositions ?? 0),
+    stockoutProducts: Number(
+      raw.stockoutProducts ?? raw.StockoutProducts ?? raw.stockouts ?? raw.Stockouts ?? 0,
+    ),
+    stockoutWarehousePositions: Number(
+      raw.stockoutWarehousePositions ?? raw.StockoutWarehousePositions ?? 0,
+    ),
     committedPercent: Number(raw.committedPercent ?? raw.CommittedPercent ?? 0),
     lastDailyDate: raw.lastDailyDate ?? raw.LastDailyDate ?? null,
     lastProduction: Number(raw.lastProduction ?? raw.LastProduction ?? 0),
@@ -2586,15 +3134,18 @@ export async function fetchInventorySummary(): Promise<InventorySummary> {
   };
 }
 
-export async function fetchInventoryStockouts(input: {
-  page?: number;
-  pageSize?: number;
-} = {}): Promise<PagedResult<InventoryStockoutProduct>> {
+export async function fetchInventoryStockouts(
+  input: {
+    page?: number;
+    pageSize?: number;
+  } = {},
+): Promise<PagedResult<InventoryStockoutProduct>> {
   const query = new URLSearchParams();
   query.set("page", String(input.page ?? 1));
   query.set("pageSize", String(input.pageSize ?? 20));
   const response = await authFetch(`${API_URL}/api/inventory/stockouts?${query.toString()}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar rupturas de estoque."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar rupturas de estoque."));
   const raw = await response.json();
   return {
     page: raw.page ?? raw.Page ?? 1,
@@ -2612,7 +3163,9 @@ export async function fetchInventoryStockouts(input: {
       committedQuantity: Number(item.committedQuantity ?? item.CommittedQuantity ?? 0),
       availableQuantity: Number(item.availableQuantity ?? item.AvailableQuantity ?? 0),
       stockValue: Number(item.stockValue ?? item.StockValue ?? 0),
-      affectedWarehousePositions: Number(item.affectedWarehousePositions ?? item.AffectedWarehousePositions ?? 0),
+      affectedWarehousePositions: Number(
+        item.affectedWarehousePositions ?? item.AffectedWarehousePositions ?? 0,
+      ),
       warehousePositions: Number(item.warehousePositions ?? item.WarehousePositions ?? 0),
     })),
   };
@@ -2620,13 +3173,26 @@ export async function fetchInventoryStockouts(input: {
 
 export async function fetchInventoryFilters(): Promise<InventoryFilterOptions> {
   const response = await authFetch(`${API_URL}/api/inventory/filters`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar filtros de estoque."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar filtros de estoque."));
   const raw = await response.json();
   return { warehouses: raw.warehouses ?? raw.Warehouses ?? [] };
 }
 
-export type ApiImportFileType = { id: string; name: string; code?: string; description?: string; allowedExtensions?: string };
-export type ApiTargetField = { name: string; displayName: string; required: boolean; dataType?: "text" | "number" | "date" | "currency"; description?: string };
+export type ApiImportFileType = {
+  id: string;
+  name: string;
+  code?: string;
+  description?: string;
+  allowedExtensions?: string;
+};
+export type ApiTargetField = {
+  name: string;
+  displayName: string;
+  required: boolean;
+  dataType?: "text" | "number" | "date" | "currency";
+  description?: string;
+};
 export type ApiTransformRule = {
   id: string;
   name: string;
@@ -2719,9 +3285,12 @@ export async function fetchCommercialTransactionsSummary(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions/summary?${query.toString()}`, {
-      signal: input.signal,
-    });
+    response = await authFetch(
+      `${API_URL}/api/commercial-transactions/summary?${query.toString()}`,
+      {
+        signal: input.signal,
+      },
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
@@ -2730,10 +3299,13 @@ export async function fetchCommercialTransactionsSummary(input: {
     if (shouldUseDemoData(error)) return demoCommercialSummary(input);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de vendas."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar resumo de vendas."));
 
   const summary = (await response.json()) as CommercialTransactionSummaryResponse;
-  return summary.totalRecords > 0 || summary.items.length > 0 ? summary : demoCommercialSummary(input);
+  return summary.totalRecords > 0 || summary.items.length > 0
+    ? summary
+    : demoCommercialSummary(input);
 }
 
 export async function fetchCommercialTransactionsTimeline(input: {
@@ -2764,9 +3336,12 @@ export async function fetchCommercialTransactionsTimeline(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/commercial-transactions/timeline?${query.toString()}`, {
-      signal: input.signal,
-    });
+    response = await authFetch(
+      `${API_URL}/api/commercial-transactions/timeline?${query.toString()}`,
+      {
+        signal: input.signal,
+      },
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
@@ -2775,7 +3350,8 @@ export async function fetchCommercialTransactionsTimeline(input: {
     if (shouldUseDemoData(error)) return demoCommercialTimeline(input);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a evolução de vendas."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar a evolução de vendas."));
 
   const timeline = (await response.json()) as CommercialTransactionTimelineResponse;
   return timeline.items.length > 0 ? timeline : demoCommercialTimeline(input);
@@ -2806,7 +3382,8 @@ export async function fetchCustomerAnalyticsSummary(input: {
     if (shouldUseDemoData(error)) return demoCustomerSummary();
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de clientes."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar resumo de clientes."));
   return (await response.json()) as CustomerAnalyticsSummary;
 }
 
@@ -2842,7 +3419,8 @@ export async function fetchCustomerRanking(input: {
     if (shouldUseDemoData(error)) return demoCustomerRanking(input);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar ranking de clientes."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar ranking de clientes."));
   return (await response.json()) as CustomerRankingResponse;
 }
 
@@ -2866,14 +3444,21 @@ export async function fetchCustomerNewCustomersMonthly(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/customer-analytics-v2/new-customers-monthly?${query.toString()}`);
+    response = await authFetch(
+      `${API_URL}/api/customer-analytics-v2/new-customers-monthly?${query.toString()}`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) return demoCustomerNewCustomersMonthly();
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução mensal de novos clientes."));
+  if (!response.ok)
+    throw new Error(
+      await parseApiError(response, "Falha ao carregar evolução mensal de novos clientes."),
+    );
   const monthly = (await response.json()) as CustomerNewCustomersMonthlyResponse;
-  return monthly.points.length > 0 || monthly.totalNewCustomers > 0 ? monthly : demoCustomerNewCustomersMonthly();
+  return monthly.points.length > 0 || monthly.totalNewCustomers > 0
+    ? monthly
+    : demoCustomerNewCustomersMonthly();
 }
 
 export async function fetchCustomerDetailsSummary(input: {
@@ -2887,14 +3472,19 @@ export async function fetchCustomerDetailsSummary(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/summary?${query.toString()}`);
+    response = await authFetch(
+      `${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/summary?${query.toString()}`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) return demoCustomerDetails(input.customerId);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo do cliente."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar resumo do cliente."));
   const details = (await response.json()) as CustomerDetailSummary;
-  return details.totalOrders > 0 || details.totalRevenue > 0 ? details : demoCustomerDetails(input.customerId);
+  return details.totalOrders > 0 || details.totalRevenue > 0
+    ? details
+    : demoCustomerDetails(input.customerId);
 }
 
 export async function fetchCustomerIndividualAnalysis(input: {
@@ -2912,14 +3502,19 @@ export async function fetchCustomerIndividualAnalysis(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/individual-analysis?${query.toString()}`);
+    response = await authFetch(
+      `${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/individual-analysis?${query.toString()}`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) return demoCustomerIndividualAnalysis(input);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise individual do cliente."));
+  if (!response.ok)
+    throw new Error(
+      await parseApiError(response, "Falha ao carregar análise individual do cliente."),
+    );
 
-  const raw = await response.json() as any;
+  const raw = (await response.json()) as any;
   return {
     scope: (raw.scope ?? raw.Scope ?? "historical") as CustomerIndividualAnalysisScope,
     periodStart: String(raw.periodStart ?? raw.PeriodStart ?? ""),
@@ -2932,15 +3527,34 @@ export async function fetchCustomerIndividualAnalysis(input: {
       city: String(raw.summary?.city ?? raw.Summary?.City ?? ""),
       linkedCompany: String(raw.summary?.linkedCompany ?? raw.Summary?.LinkedCompany ?? ""),
       lastPurchaseDate: raw.summary?.lastPurchaseDate ?? raw.Summary?.LastPurchaseDate ?? null,
-      status: String(raw.summary?.status ?? raw.Summary?.Status ?? "Ativo") as CustomerDetailSummary["status"],
+      status: String(
+        raw.summary?.status ?? raw.Summary?.Status ?? "Ativo",
+      ) as CustomerDetailSummary["status"],
       totalRevenue: Number(raw.summary?.totalRevenue ?? raw.Summary?.TotalRevenue ?? 0),
-      averageTicket: raw.summary?.averageTicket == null && raw.Summary?.AverageTicket == null ? null : Number(raw.summary?.averageTicket ?? raw.Summary?.AverageTicket ?? 0),
-      averageRevenueMonthly: raw.summary?.averageRevenueMonthly == null && raw.Summary?.AverageRevenueMonthly == null ? null : Number(raw.summary?.averageRevenueMonthly ?? raw.Summary?.AverageRevenueMonthly ?? 0),
-      averageRevenueWeekly: raw.summary?.averageRevenueWeekly == null && raw.Summary?.AverageRevenueWeekly == null ? null : Number(raw.summary?.averageRevenueWeekly ?? raw.Summary?.AverageRevenueWeekly ?? 0),
+      averageTicket:
+        raw.summary?.averageTicket == null && raw.Summary?.AverageTicket == null
+          ? null
+          : Number(raw.summary?.averageTicket ?? raw.Summary?.AverageTicket ?? 0),
+      averageRevenueMonthly:
+        raw.summary?.averageRevenueMonthly == null && raw.Summary?.AverageRevenueMonthly == null
+          ? null
+          : Number(raw.summary?.averageRevenueMonthly ?? raw.Summary?.AverageRevenueMonthly ?? 0),
+      averageRevenueWeekly:
+        raw.summary?.averageRevenueWeekly == null && raw.Summary?.AverageRevenueWeekly == null
+          ? null
+          : Number(raw.summary?.averageRevenueWeekly ?? raw.Summary?.AverageRevenueWeekly ?? 0),
       totalQuantity: Number(raw.summary?.totalQuantity ?? raw.Summary?.TotalQuantity ?? 0),
       totalWeight: Number(raw.summary?.totalWeight ?? raw.Summary?.TotalWeight ?? 0),
       totalOrders: Number(raw.summary?.totalOrders ?? raw.Summary?.TotalOrders ?? 0),
-      averageDaysBetweenPurchases: raw.summary?.averageDaysBetweenPurchases == null && raw.Summary?.AverageDaysBetweenPurchases == null ? null : Number(raw.summary?.averageDaysBetweenPurchases ?? raw.Summary?.AverageDaysBetweenPurchases ?? 0),
+      averageDaysBetweenPurchases:
+        raw.summary?.averageDaysBetweenPurchases == null &&
+        raw.Summary?.AverageDaysBetweenPurchases == null
+          ? null
+          : Number(
+              raw.summary?.averageDaysBetweenPurchases ??
+                raw.Summary?.AverageDaysBetweenPurchases ??
+                0,
+            ),
     },
     points: (raw.points ?? raw.Points ?? []).map((point: any) => ({
       periodStart: String(point.periodStart ?? point.PeriodStart ?? ""),
@@ -2969,12 +3583,17 @@ export async function fetchCustomerTimeline(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/timeline?${query.toString()}`);
+    response = await authFetch(
+      `${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/timeline?${query.toString()}`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) return demoCustomerTimeline(input);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar evolução temporal do cliente."));
+  if (!response.ok)
+    throw new Error(
+      await parseApiError(response, "Falha ao carregar evolução temporal do cliente."),
+    );
   const timeline = (await response.json()) as CustomerTimelineResponse;
   return timeline.points.length > 0 ? timeline : demoCustomerTimeline(input);
 }
@@ -2990,12 +3609,15 @@ export async function fetchCustomerTopProducts(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/top-products?${query.toString()}`);
+    response = await authFetch(
+      `${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/top-products?${query.toString()}`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) return demoCustomerTopProducts();
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar produtos mais comprados."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar produtos mais comprados."));
   const products = (await response.json()) as CustomerTopProductItem[];
   return products.length > 0 ? products : demoCustomerTopProducts();
 }
@@ -3015,14 +3637,19 @@ export async function fetchCustomerPurchaseHistory(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/purchase-history?${query.toString()}`);
+    response = await authFetch(
+      `${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/purchase-history?${query.toString()}`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) return demoCustomerPurchaseHistory(input);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar histórico de compras."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar histórico de compras."));
   const history = (await response.json()) as CustomerPurchaseHistoryResponse;
-  return history.items.length > 0 || history.totalItems > 0 ? history : demoCustomerPurchaseHistory(input);
+  return history.items.length > 0 || history.totalItems > 0
+    ? history
+    : demoCustomerPurchaseHistory(input);
 }
 
 export async function fetchCustomerComparison(input: {
@@ -3034,12 +3661,15 @@ export async function fetchCustomerComparison(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/comparison?${query.toString()}`);
+    response = await authFetch(
+      `${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/comparison?${query.toString()}`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) return demoCustomerComparison();
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar comparativo do cliente."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar comparativo do cliente."));
   const comparison = (await response.json()) as CustomerComparisonResponse;
   return comparison.items.length > 0 ? comparison : demoCustomerComparison();
 }
@@ -3053,14 +3683,19 @@ export async function fetchCustomerInsights(input: {
 
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`);
+    response = await authFetch(
+      `${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/insights?${query.toString()}`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) return demoCustomerInsights();
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar insights do cliente."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar insights do cliente."));
   const insights = (await response.json()) as CustomerInsightsResponse;
-  return insights.monthlyHistoryPeriods > 0 || insights.predictedRevenue != null ? insights : demoCustomerInsights();
+  return insights.monthlyHistoryPeriods > 0 || insights.predictedRevenue != null
+    ? insights
+    : demoCustomerInsights();
 }
 
 export async function fetchCustomerCommercialHealth(input: {
@@ -3068,14 +3703,21 @@ export async function fetchCustomerCommercialHealth(input: {
 }): Promise<CustomerCommercialHealthReport> {
   let response: Response;
   try {
-    response = await authFetch(`${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/commercial-health`);
+    response = await authFetch(
+      `${API_URL}/api/customers/${encodeURIComponent(input.customerId)}/commercial-health`,
+    );
   } catch (error) {
     if (shouldUseDemoData(error)) return demoCustomerCommercialHealth(input.customerId);
     throw error;
   }
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar análise comercial do cliente."));
+  if (!response.ok)
+    throw new Error(
+      await parseApiError(response, "Falha ao carregar análise comercial do cliente."),
+    );
   const report = (await response.json()) as CustomerCommercialHealthReport;
-  return report.evolution.length > 0 || report.products.length > 0 || report.timeline.length > 0 ? report : demoCustomerCommercialHealth(input.customerId);
+  return report.evolution.length > 0 || report.products.length > 0 || report.timeline.length > 0
+    ? report
+    : demoCustomerCommercialHealth(input.customerId);
 }
 
 // ─── Tipos da API real de RouteImports ─────────────────────────────────
@@ -3154,6 +3796,15 @@ export type AdminJobItem = {
   finishedAt: string | null;
   durationSeconds: number | null;
   errorMessage: string | null;
+  contractVersion?: number;
+  queue?: string;
+  trigger?: string;
+  parametersJson?: string;
+  resultJson?: string | null;
+  progressPercent?: number;
+  progressMessage?: string | null;
+  scheduleId?: string | null;
+  retriedFromJobExecutionId?: string | null;
 };
 
 export type OperationalJobDefinition = {
@@ -3163,7 +3814,22 @@ export type OperationalJobDefinition = {
   manualRunAllowed: boolean;
   scheduleAllowed: boolean;
   allowConcurrentRuns: boolean;
+  queue: string;
+  contractVersion: number;
+  exampleParametersJson: string;
   currentlyRunning: boolean;
+};
+
+export type JobSchedule = {
+  id: string;
+  name: string;
+  jobType: string;
+  contractVersion: number;
+  parametersJson: string;
+  cronExpression: string;
+  timeZoneId: string;
+  isActive: boolean;
+  nextExecutionAt: string | null;
 };
 
 export type LogisticsMapCustomerItem = {
@@ -3243,14 +3909,28 @@ export async function fetchCurrentCustomers(
 }
 
 export type FiscalDocumentListItem = {
-  id: string; issueDate: string; documentNumber: string; series: string; customerId: string | null;
-  customerNameAtIssue: string; customerCodeAtIssue: string; branchCodeAtIssue: string;
-  cityNameAtIssue: string; stateCodeAtIssue: string; operationCategory: string;
-  operationDescription: string; itemCount: number; grossWeightKg: number;
+  id: string;
+  issueDate: string;
+  documentNumber: string;
+  series: string;
+  customerId: string | null;
+  customerNameAtIssue: string;
+  customerCodeAtIssue: string;
+  branchCodeAtIssue: string;
+  cityNameAtIssue: string;
+  stateCodeAtIssue: string;
+  operationCategory: string;
+  operationDescription: string;
+  itemCount: number;
+  grossWeightKg: number;
 };
 export type FiscalDocumentDetails = FiscalDocumentListItem & {
-  documentType: string; movementType: string; operationCode: string;
-  originalDocumentNumber: string | null; totalQuantity: number; calculatedTotalAmount: number;
+  documentType: string;
+  movementType: string;
+  operationCode: string;
+  originalDocumentNumber: string | null;
+  totalQuantity: number;
+  calculatedTotalAmount: number;
   commercialQuality: {
     customerAverageTicket: number | null;
     historicalSaleDocumentCount: number;
@@ -3258,21 +3938,44 @@ export type FiscalDocumentDetails = FiscalDocumentListItem & {
     classification: string;
     reason: string;
   };
-  items: Array<{ id: string; itemNumber: string; productCode: string; productDescription: string;
-    productGroupCode: string; productGroupDescription: string; quantity: number; grossWeightKg: number;
-    unitValue: number | null; calculatedAmount: number }>;
+  items: Array<{
+    id: string;
+    itemNumber: string;
+    productCode: string;
+    productDescription: string;
+    productGroupCode: string;
+    productGroupDescription: string;
+    quantity: number;
+    grossWeightKg: number;
+    unitValue: number | null;
+    calculatedAmount: number;
+  }>;
 };
 export type CustomerConsumptionSummary = {
   customer: CurrentCustomerItem;
-  metrics: { salesWeightLast30Days: number; salesWeightPrevious30Days: number;
-    variationPercentage: number | null; variationStatus: string;
-    averageMonthlySalesWeight90Days: number; averageMonthlySalesWeight12Months: number;
-    saleDocumentsLast30Days: number; averageSalesWeightPerDocument12Months: number;
-    averageMonthlyCalculatedSalesAmount12Months: number; returnWeight12Months: number;
-    bonusWeight12Months: number; lastPurchaseDate: string | null };
-  monthlyTimeline: Array<{ month: string; salesWeightKg: number; salesDocumentCount: number;
-    averageSalesWeightPerDocumentKg: number; calculatedSalesAmount: number;
-    returnWeightKg: number; bonusWeightKg: number }>;
+  metrics: {
+    salesWeightLast30Days: number;
+    salesWeightPrevious30Days: number;
+    variationPercentage: number | null;
+    variationStatus: string;
+    averageMonthlySalesWeight90Days: number;
+    averageMonthlySalesWeight12Months: number;
+    saleDocumentsLast30Days: number;
+    averageSalesWeightPerDocument12Months: number;
+    averageMonthlyCalculatedSalesAmount12Months: number;
+    returnWeight12Months: number;
+    bonusWeight12Months: number;
+    lastPurchaseDate: string | null;
+  };
+  monthlyTimeline: Array<{
+    month: string;
+    salesWeightKg: number;
+    salesDocumentCount: number;
+    averageSalesWeightPerDocumentKg: number;
+    calculatedSalesAmount: number;
+    returnWeightKg: number;
+    bonusWeightKg: number;
+  }>;
   recentMovements: FiscalDocumentListItem[];
 };
 export type CustomerProjectionPoint = {
@@ -3309,35 +4012,52 @@ export type CustomerProjectionResponse = {
   };
 };
 
-export async function fetchFiscalDocuments(page = 1, pageSize = 25, search = "", operationCategory = "") {
+export async function fetchFiscalDocuments(
+  page = 1,
+  pageSize = 25,
+  search = "",
+  operationCategory = "",
+) {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search.trim()) params.set("search", search.trim());
   if (operationCategory) params.set("operationCategory", operationCategory);
   const response = await authFetch(`${API_URL}/api/fiscal-documents?${params}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar notas fiscais."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar notas fiscais."));
   return (await response.json()) as PagedResult<FiscalDocumentListItem>;
 }
 export async function fetchFiscalDocument(id: string): Promise<FiscalDocumentDetails> {
   const response = await authFetch(`${API_URL}/api/fiscal-documents/${id}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a nota fiscal."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar a nota fiscal."));
   return (await response.json()) as FiscalDocumentDetails;
 }
-export async function fetchCustomerConsumptionSummary(id: string): Promise<CustomerConsumptionSummary> {
+export async function fetchCustomerConsumptionSummary(
+  id: string,
+): Promise<CustomerConsumptionSummary> {
   const response = await authFetch(`${API_URL}/api/customers/${id}/consumption-summary`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar o consumo do cliente."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar o consumo do cliente."));
   return (await response.json()) as CustomerConsumptionSummary;
 }
 export async function fetchCustomerProjection(id: string): Promise<CustomerProjectionResponse> {
   const response = await authFetch(`${API_URL}/api/customers/${id}/projection`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao calcular a projeção do cliente."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao calcular a projeção do cliente."));
   return (await response.json()) as CustomerProjectionResponse;
 }
 
 export async function fetchImports(page = 1, pageSize = 20): Promise<PagedResult<ImportItem>> {
-  const response = await authFetch(`${API_URL}/api/route-imports?page=${page}&pageSize=${pageSize}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar importações."));
+  const response = await authFetch(
+    `${API_URL}/api/route-imports?page=${page}&pageSize=${pageSize}`,
+  );
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar importações."));
   const raw = (await response.json()) as {
-    page: number; pageSize: number; total: number; items: ImportItem[];
+    page: number;
+    pageSize: number;
+    total: number;
+    items: ImportItem[];
   };
   return { page: raw.page, pageSize: raw.pageSize, total: raw.total, items: raw.items };
 }
@@ -3378,33 +4098,44 @@ export type VehicleTypeItem = {
 
 export async function fetchVehicleTypes(): Promise<VehicleTypeItem[]> {
   const response = await authFetch(`${API_URL}/api/vehicle-types`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar tipos de veículo."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar tipos de veículo."));
   return (await response.json()) as VehicleTypeItem[];
 }
 
-export async function createVehicleType(name: string, capacityKg: number): Promise<VehicleTypeItem> {
+export async function createVehicleType(
+  name: string,
+  capacityKg: number,
+): Promise<VehicleTypeItem> {
   const response = await authFetch(`${API_URL}/api/vehicle-types`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, capacityKg }),
   });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao criar tipo de veículo."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao criar tipo de veículo."));
   return (await response.json()) as VehicleTypeItem;
 }
 
-export async function updateVehicleType(id: string, name: string, capacityKg: number): Promise<VehicleTypeItem> {
+export async function updateVehicleType(
+  id: string,
+  name: string,
+  capacityKg: number,
+): Promise<VehicleTypeItem> {
   const response = await authFetch(`${API_URL}/api/vehicle-types/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, capacityKg }),
   });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao atualizar tipo de veículo."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao atualizar tipo de veículo."));
   return (await response.json()) as VehicleTypeItem;
 }
 
 export async function deleteVehicleType(id: string): Promise<void> {
   const response = await authFetch(`${API_URL}/api/vehicle-types/${id}`, { method: "DELETE" });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao excluir tipo de veículo."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao excluir tipo de veículo."));
 }
 
 // ─── Imported Routes ─────────────────────────────────────────────────────
@@ -3598,14 +4329,18 @@ export type RouteOccupancySummary = {
 
 export async function fetchRouteOccupancySummary(): Promise<RouteOccupancySummary> {
   const response = await authFetch(`${API_URL}/api/routes/occupancy-summary`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a taxa de ocupação."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar a taxa de ocupação."));
   return (await response.json()) as RouteOccupancySummary;
 }
 
 export async function fetchFiscalReturnRate(periodDays: number): Promise<FiscalReturnRateSummary> {
   const query = new URLSearchParams({ periodDays: String(periodDays) });
-  const response = await authFetch(`${API_URL}/api/fiscal-documents/return-rate?${query.toString()}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a taxa de devolução."));
+  const response = await authFetch(
+    `${API_URL}/api/fiscal-documents/return-rate?${query.toString()}`,
+  );
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar a taxa de devolução."));
   const raw = await response.json();
   return {
     periodDays: Number(raw.periodDays ?? raw.PeriodDays ?? periodDays),
@@ -3633,7 +4368,10 @@ export async function fetchImportedRoutes(
   const response = await authFetch(`${API_URL}/api/routes?${params.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar rotas."));
   const raw = (await response.json()) as {
-    page: number; pageSize: number; total: number; items: ImportedRouteItem[];
+    page: number;
+    pageSize: number;
+    total: number;
+    items: ImportedRouteItem[];
   };
   return { page: raw.page, pageSize: raw.pageSize, total: raw.total, items: raw.items };
 }
@@ -3657,72 +4395,154 @@ export async function fetchImportedRoutesByImport(
     throw new Error(await parseApiError(response, "Falha ao carregar o histórico de rotas."));
   }
   const raw = (await response.json()) as {
-    page: number; pageSize: number; total: number; items: ImportedRouteItem[];
+    page: number;
+    pageSize: number;
+    total: number;
+    items: ImportedRouteItem[];
   };
   return { page: raw.page, pageSize: raw.pageSize, total: raw.total, items: raw.items };
 }
 
 export async function fetchImportedRouteDetail(id: string): Promise<ImportedRouteDetail> {
   const response = await authFetch(`${API_URL}/api/routes/${id}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes da rota."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar detalhes da rota."));
   return (await response.json()) as ImportedRouteDetail;
 }
 
-export async function requestGlobalRouteOptimizationRun(referenceDate: string): Promise<RouteOptimizationRun> {
+export async function requestGlobalRouteOptimizationRun(
+  referenceDate: string,
+): Promise<RouteOptimizationRun> {
   const response = await authFetch(`${API_URL}/api/route-optimization-runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scope: "AllRoutes", referenceDate, routeId: null }),
   });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao solicitar otimização global."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao solicitar otimização global."));
   return (await response.json()) as RouteOptimizationRun;
 }
 
 export async function fetchRouteOptimizationRun(id: string): Promise<RouteOptimizationRun> {
   const response = await authFetch(`${API_URL}/api/route-optimization-runs/${id}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar otimização da rota."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar otimização da rota."));
   return (await response.json()) as RouteOptimizationRun;
 }
 
-export async function fetchLatestGlobalRouteOptimization(referenceDate?: string): Promise<RouteOptimizationRun> {
+export async function fetchLatestGlobalRouteOptimization(
+  referenceDate?: string,
+): Promise<RouteOptimizationRun> {
   const params = new URLSearchParams();
   if (referenceDate) params.set("referenceDate", referenceDate);
   const query = params.toString();
-  const response = await authFetch(`${API_URL}/api/route-optimization-runs/latest${query ? `?${query}` : ""}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Nenhuma sugestão global de rotas foi encontrada."));
+  const response = await authFetch(
+    `${API_URL}/api/route-optimization-runs/latest${query ? `?${query}` : ""}`,
+  );
+  if (!response.ok)
+    throw new Error(
+      await parseApiError(response, "Nenhuma sugestão global de rotas foi encontrada."),
+    );
   return (await response.json()) as RouteOptimizationRun;
 }
 
-export async function fetchLatestRouteOptimization(routeId: string, referenceDate?: string): Promise<RouteLatestOptimization> {
+export async function fetchLatestRouteOptimization(
+  routeId: string,
+  referenceDate?: string,
+): Promise<RouteLatestOptimization> {
   const params = new URLSearchParams();
   if (referenceDate) params.set("referenceDate", referenceDate);
   const query = params.toString();
   const response = await authFetch(
     `${API_URL}/api/routes/${routeId}/latest-optimization${query ? `?${query}` : ""}`,
   );
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar recomendação da rota."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar recomendação da rota."));
   return (await response.json()) as RouteLatestOptimization;
 }
 
 export async function fetchAdminJobsSummary(): Promise<AdminJobSummary> {
   const response = await authFetch(`${API_URL}/api/admin/jobs/summary`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de jobs."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar resumo de jobs."));
   return (await response.json()) as AdminJobSummary;
 }
 
 export async function fetchOperationalJobDefinitions(): Promise<OperationalJobDefinition[]> {
   const response = await authFetch(`${API_URL}/api/admin/jobs/definitions`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar jobs operacionais."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar jobs operacionais."));
   return (await response.json()) as OperationalJobDefinition[];
 }
 
-export async function runOperationalJob(jobType: string): Promise<string> {
-  const response = await authFetch(`${API_URL}/api/admin/jobs/definitions/${encodeURIComponent(jobType)}/run`, {
-    method: "POST",
-  });
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao executar job operacional."));
+export async function runOperationalJob(
+  jobType: string,
+  contractVersion: number,
+  parameters: unknown,
+): Promise<string> {
+  const response = await authFetch(
+    `${API_URL}/api/admin/jobs/definitions/${encodeURIComponent(jobType)}/run`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contractVersion, parameters }),
+    },
+  );
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao executar job operacional."));
   const payload = (await response.json()) as { jobExecutionId: string };
   return payload.jobExecutionId;
+}
+
+export async function retryAdminJobWithParameters(
+  jobId: string,
+  contractVersion: number,
+  parameters: unknown,
+): Promise<string> {
+  const response = await authFetch(`${API_URL}/api/admin/jobs/${jobId}/retry-with-parameters`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contractVersion, parameters }),
+  });
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao reenviar job com novos parâmetros."));
+  const payload = (await response.json()) as { jobExecutionId: string };
+  return payload.jobExecutionId;
+}
+
+export async function fetchJobSchedules(): Promise<JobSchedule[]> {
+  const response = await authFetch(`${API_URL}/api/admin/job-schedules`);
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar agendamentos."));
+  return (await response.json()) as JobSchedule[];
+}
+
+export async function saveJobSchedule(
+  schedule: Omit<JobSchedule, "id" | "nextExecutionAt">,
+  id?: string,
+): Promise<JobSchedule> {
+  const response = await authFetch(`${API_URL}/api/admin/job-schedules${id ? `/${id}` : ""}`, {
+    method: id ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...schedule, parameters: JSON.parse(schedule.parametersJson) }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao salvar agendamento."));
+  return (await response.json()) as JobSchedule;
+}
+
+export async function setJobScheduleActive(id: string, active: boolean): Promise<void> {
+  const response = await authFetch(
+    `${API_URL}/api/admin/job-schedules/${id}/${active ? "activate" : "pause"}`,
+    { method: "POST" },
+  );
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao alterar agendamento."));
+}
+
+export async function deleteJobSchedule(id: string): Promise<void> {
+  const response = await authFetch(`${API_URL}/api/admin/job-schedules/${id}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao excluir agendamento."));
 }
 
 export async function fetchAdminJobs(
@@ -3739,14 +4559,18 @@ export async function fetchAdminJobs(
   const response = await authFetch(`${API_URL}/api/admin/jobs?${params.toString()}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar jobs."));
   const raw = (await response.json()) as {
-    page: number; pageSize: number; total: number; items: AdminJobItem[];
+    page: number;
+    pageSize: number;
+    total: number;
+    items: AdminJobItem[];
   };
   return { page: raw.page, pageSize: raw.pageSize, total: raw.total, items: raw.items };
 }
 
 export async function fetchAdminJobDetail(jobId: string): Promise<AdminJobItem> {
   const response = await authFetch(`${API_URL}/api/admin/jobs/${jobId}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar detalhes do job."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar detalhes do job."));
   return (await response.json()) as AdminJobItem;
 }
 
@@ -3760,10 +4584,13 @@ export async function cancelAdminJob(jobId: string): Promise<void> {
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao cancelar job."));
 }
 
-export async function fetchLogisticsMapCustomers(active?: string): Promise<LogisticsMapCustomersResponse> {
+export async function fetchLogisticsMapCustomers(
+  active?: string,
+): Promise<LogisticsMapCustomersResponse> {
   const query = active ? `?active=${encodeURIComponent(active)}` : "";
   const response = await authFetch(`${API_URL}/api/logistics/map/customers${query}`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar clientes do mapa."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar clientes do mapa."));
   return (await response.json()) as LogisticsMapCustomersResponse;
 }
 
@@ -3808,7 +4635,8 @@ export type ProductionFilterOptions = {
 
 export async function fetchProductionSummary(): Promise<ProductionSummary> {
   const response = await authFetch(`${API_URL}/api/production/summary`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar resumo de produção."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar resumo de produção."));
   const raw = await response.json();
   return {
     lastDailyDate: raw.lastDailyDate ?? null,
@@ -3842,7 +4670,8 @@ export async function fetchProduction(input: {
 
 export async function fetchProductionFilters(): Promise<ProductionFilterOptions> {
   const response = await authFetch(`${API_URL}/api/production/filters`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar filtros de produção."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar filtros de produção."));
   const raw = await response.json();
   return {
     types: raw.types ?? [],
@@ -3852,7 +4681,8 @@ export async function fetchProductionFilters(): Promise<ProductionFilterOptions>
 
 export async function fetchProductionDates(): Promise<string[]> {
   const response = await authFetch(`${API_URL}/api/production/dates`);
-  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar datas de produção."));
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar datas de produção."));
   const raw = await response.json();
   return raw.dates ?? [];
 }
