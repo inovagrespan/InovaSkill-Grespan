@@ -4,6 +4,8 @@ using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using System.Text.Json;
 
 namespace InovaSkill.Importer.Api.Controllers;
 
@@ -51,6 +53,9 @@ public sealed class AdminJobsController(
             definition.ManualRunAllowed,
             definition.ScheduleAllowed,
             definition.AllowConcurrentRuns,
+            definition.Queue,
+            definition.ContractVersion,
+            definition.ExampleParametersJson,
             currentlyRunning = runningJobs.GetValueOrDefault(definition.JobType) > 0
         }));
     }
@@ -58,49 +63,28 @@ public sealed class AdminJobsController(
     [HttpPost("definitions/{jobType}/run")]
     public async Task<ActionResult> RunDefinition(
         string jobType,
-        [FromServices] IOperationalJobQueue operationalJobQueue,
-        [FromServices] IRouteOptimizationService routeOptimizationService,
+        [FromBody] RunJobDefinitionRequest request,
+        [FromServices] IJobExecutionLauncher launcher,
         CancellationToken cancellationToken)
     {
-        var definition = OperationalJobCatalog.All.SingleOrDefault(item =>
-            string.Equals(item.JobType, jobType, StringComparison.OrdinalIgnoreCase));
-        if (definition is null) return NotFound();
+        if (!OperationalJobCatalog.TryGet(jobType, out var definition)) return NotFound();
         if (!definition.ManualRunAllowed)
             return Conflict(new { message = "Este job não permite execução manual." });
 
-        if (definition.JobType == OperationalJobCodes.RouteOptimization)
+        try
         {
-            var run = await routeOptimizationService.StartOptimizationAsync(
-                new RouteOptimizationStartRequest(
-                    RouteOptimizationScope.AllRoutes,
-                    DateOnly.FromDateTime(DateTime.UtcNow),
-                    null,
-                    RouteOptimizationRequestedFrom.RouteScreen,
-                    0),
-                cancellationToken);
-
-            return Accepted(new { jobExecutionId = run.Id, status = run.Status.ToString() });
+            var launched = await launcher.LaunchAsync(new JobLaunchRequest(
+                definition.JobType,
+                request.ContractVersion,
+                request.Parameters.GetRawText(),
+                JobExecutionTrigger.Manual,
+                ReadUserId()), cancellationToken);
+            return Accepted(new { jobExecutionId = launched.JobExecutionId, status = launched.Status });
         }
-
-        var relatedEntityId = await ResolveOperationalJobRelatedEntityIdAsync(
-            definition.JobType,
-            cancellationToken);
-        if (!relatedEntityId.HasValue)
+        catch (ArgumentException exception)
         {
-            return Conflict(new
-            {
-                message = "Não existe importação publicada para executar este job."
-            });
+            return BadRequest(new { message = exception.Message });
         }
-        var queuedJobId = await operationalJobQueue.TryQueueAsync(
-            definition.JobType,
-            relatedEntityId.Value,
-            cancellationToken);
-
-        if (!queuedJobId.HasValue)
-            return Conflict(new { message = "Já existe uma execução deste job em andamento." });
-
-        return Accepted(new { jobExecutionId = queuedJobId.Value, status = "QUEUED" });
     }
 
     [HttpGet]
@@ -127,6 +111,9 @@ public sealed class AdminJobsController(
             {
                 x.Id,
                 x.JobType,
+                x.ContractVersion,
+                x.Queue,
+                trigger = x.Trigger.ToString(),
                 status = x.Status.ToString(),
                 importId = x.RelatedEntityId,
                 importFileName = x.Import == null ? "Otimização de rotas" : x.Import.FileName,
@@ -150,6 +137,17 @@ public sealed class AdminJobsController(
             {
                 x.Id,
                 x.JobType,
+                x.ContractVersion,
+                x.Queue,
+                trigger = x.Trigger.ToString(),
+                x.ParametersJson,
+                x.ResultJson,
+                x.ProgressPercent,
+                x.ProgressMessage,
+                x.CancellationRequestedAt,
+                x.RequestedByUserId,
+                x.ScheduleId,
+                x.RetriedFromJobExecutionId,
                 status = x.Status.ToString(),
                 importId = x.RelatedEntityId,
                 fileName = x.Import == null ? "Otimização de rotas" : x.Import.FileName,
@@ -179,6 +177,12 @@ public sealed class AdminJobsController(
         {
             Id = Guid.NewGuid(),
             JobType = failedJob.JobType,
+            ContractVersion = failedJob.ContractVersion,
+            Queue = failedJob.Queue,
+            Trigger = JobExecutionTrigger.Retry,
+            ParametersJson = failedJob.ParametersJson,
+            RequestedByUserId = ReadUserId(),
+            RetriedFromJobExecutionId = failedJob.Id,
             Status = JobExecutionStatus.Queued,
             RelatedEntityId = failedJob.RelatedEntityId,
             CreatedAt = DateTime.UtcNow
@@ -223,6 +227,42 @@ public sealed class AdminJobsController(
         return Accepted(new { jobExecutionId = newJob.Id, status = "QUEUED" });
     }
 
+    [HttpPost("{id:guid}/retry-with-parameters")]
+    public async Task<ActionResult> RetryWithParameters(
+        Guid id,
+        [FromBody] RetryJobWithParametersRequest request,
+        [FromServices] IJobExecutionLauncher launcher,
+        CancellationToken cancellationToken)
+    {
+        var failedJob = await dbContext.JobExecutions.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (failedJob is null) return NotFound();
+        if (failedJob.Status != JobExecutionStatus.Failed)
+            return Conflict(new { message = "Apenas jobs com falha podem ser reenviados." });
+
+        try
+        {
+            var launched = await launcher.LaunchAsync(new JobLaunchRequest(
+                failedJob.JobType,
+                request.ContractVersion,
+                request.Parameters.GetRawText(),
+                JobExecutionTrigger.Retry,
+                ReadUserId(),
+                RetriedFromJobExecutionId: failedJob.Id), cancellationToken);
+            return Accepted(new { jobExecutionId = launched.JobExecutionId, status = launched.Status });
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    private long? ReadUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        return long.TryParse(value, out var userId) ? userId : null;
+    }
+
     [HttpPost("{id:guid}/cancel")]
     public async Task<ActionResult> Cancel(Guid id, CancellationToken cancellationToken)
     {
@@ -234,9 +274,13 @@ public sealed class AdminJobsController(
             return Conflict(new { message = "Apenas jobs em execução, na fila ou em retentativa podem ser cancelados." });
         }
 
-        job.Status = JobExecutionStatus.Failed;
-        job.ErrorMessage = "Cancelado pelo usuário.";
-        job.FinishedAt = DateTime.UtcNow;
+        job.CancellationRequestedAt = DateTime.UtcNow;
+        job.ProgressMessage = "Cancelamento solicitado";
+        if (job.Status == JobExecutionStatus.Queued)
+        {
+            job.Status = JobExecutionStatus.Cancelled;
+            job.FinishedAt = DateTime.UtcNow;
+        }
 
         if (job.Import is not null && job.Import.Status == RouteImportStatus.Processing)
         {
@@ -246,7 +290,7 @@ public sealed class AdminJobsController(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { status = "CANCELLED" });
+        return Ok(new { status = job.Status.ToString().ToUpperInvariant() });
     }
 
     private async Task<Guid?> ResolveOperationalJobRelatedEntityIdAsync(
@@ -267,3 +311,7 @@ public sealed class AdminJobsController(
         return currentImportId;
     }
 }
+
+public sealed record RunJobDefinitionRequest(int ContractVersion, JsonElement Parameters);
+
+public sealed record RetryJobWithParametersRequest(int ContractVersion, JsonElement Parameters);

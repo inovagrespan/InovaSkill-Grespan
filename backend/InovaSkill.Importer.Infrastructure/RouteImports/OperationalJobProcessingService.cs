@@ -2,6 +2,7 @@ using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
@@ -18,8 +19,15 @@ public sealed class OperationalJobProcessingService(
         var job = await dbContext.JobExecutions
             .SingleAsync(x => x.Id == jobExecutionId, cancellationToken);
 
-        if (job.Status is JobExecutionStatus.Completed or JobExecutionStatus.Failed)
+        if (job.Status is JobExecutionStatus.Completed or JobExecutionStatus.Failed or JobExecutionStatus.Cancelled)
         {
+            return;
+        }
+        if (job.CancellationRequestedAt.HasValue || job.Status == JobExecutionStatus.Cancelled)
+        {
+            job.Status = JobExecutionStatus.Cancelled;
+            job.FinishedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
             return;
         }
 
@@ -27,6 +35,8 @@ public sealed class OperationalJobProcessingService(
         job.StartedAt ??= DateTime.UtcNow;
         job.Status = JobExecutionStatus.Processing;
         job.ErrorMessage = null;
+        job.ProgressPercent = 1;
+        job.ProgressMessage = "Processando";
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var processor = processors.SingleOrDefault(item =>
@@ -40,7 +50,18 @@ public sealed class OperationalJobProcessingService(
             dbContext.ChangeTracker.Clear();
             job = await dbContext.JobExecutions
                 .SingleAsync(x => x.Id == jobExecutionId, cancellationToken);
+            if (job.CancellationRequestedAt.HasValue)
+            {
+                job.Status = JobExecutionStatus.Cancelled;
+                job.ProgressMessage = "Cancelado";
+                job.FinishedAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return;
+            }
             job.Status = JobExecutionStatus.Completed;
+            job.ProgressPercent = 100;
+            job.ProgressMessage = "Concluído";
+            job.ResultJson = JsonSerializer.Serialize(new { relatedEntityId = job.RelatedEntityId, completed = true });
             job.FinishedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
         }
@@ -53,6 +74,7 @@ public sealed class OperationalJobProcessingService(
             if (job.Attempts >= MaximumAttempts)
             {
                 job.Status = JobExecutionStatus.Failed;
+                job.ProgressMessage = "Falha";
                 job.FinishedAt = DateTime.UtcNow;
                 await dbContext.SaveChangesAsync(cancellationToken);
                 return;

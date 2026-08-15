@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export const TEXT_SEARCH_DEBOUNCE_MS = 400;
+export const TEXT_SEARCH_DEBOUNCE_MS = 300;
 export const COMPLEX_TEXT_SEARCH_DEBOUNCE_MS = 500;
 
 export function useDebouncedValue<T>(value: T, delayMs: number): T {

@@ -2,14 +2,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowRight,
   BarChart3,
-  CheckCircle2,
-  ChevronDown,
-  ClipboardCheck,
-  LineChart,
-  ShieldCheck,
+  Bot,
+  Boxes,
+  Check,
+  CircleGauge,
+  PackageCheck,
+  Route as RouteIcon,
+  Sparkles,
   TrendingUp,
   Truck,
-  Package,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
@@ -18,304 +19,309 @@ export const Route = createFileRoute("/")({
   component: LandingPage,
 });
 
-const steps = [
+const capabilities = [
   {
-    step: "01",
-    title: "Indicadores em tempo real",
-    text: "Cada área acompanha seus KPIs com filtros, comparativos e visões detalhadas de vendas e logística.",
+    title: "Visão comercial",
+    description: "Faturamento, clientes e produtos no mesmo contexto.",
     icon: TrendingUp,
   },
   {
-    step: "02",
-    title: "Acompanhamento diário",
-    text: "A diretoria enxerga o faturamento, a ocupação das rotas, as margens comerciais e as tendências de mercado.",
-    icon: ClipboardCheck,
-  },
-] as const;
-
-const pillars = [
-  {
-    title: "Indicadores por área",
-    text: "Vendas, logística e produtos enxergam os mesmos sinais com fórmulas, filtros e contexto operacional.",
-    icon: BarChart3,
-  },
-  {
-    title: "Foco operacional",
-    text: "Entenda o que aconteceu, por que aconteceu e quais os principais fatores com análises regionais e mapas.",
+    title: "Operação logística",
+    description: "Rotas, ocupação e frota acompanhadas em tempo real.",
     icon: Truck,
   },
+  {
+    title: "Inteligência conectada",
+    description: "Respostas objetivas a partir dos dados da operação.",
+    icon: Bot,
+  },
 ] as const;
 
-const modules = [
-  { label: "Vendas", icon: BarChart3, desc: "Pipeline, faturamento, ticket médio e metas por equipe." },
-  { label: "Logística", icon: Truck, desc: "Entregas, congestionamento, rotas e indicadores de frota." },
-  { label: "Produtos", icon: Package, desc: "Consulte o catálogo de produtos e preços importados." },
-] as const;
-
-const outcomes = [
-  "Unificar KPI, causa e evidência operacional",
-  "Dar visibilidade por perfil e responsabilidade",
-  "Reduzir decisões reativas sem visibilidade",
+const signals = [
+  { label: "Comercial", value: "R$ 2,4 mi", change: "+12,8%", width: "78%" },
+  { label: "Logística", value: "87,4%", change: "+4,2%", width: "87%" },
 ] as const;
 
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#f5f7fb] text-slate-950 dark:bg-[#0d1117] dark:text-white">
-      <header className="fixed inset-x-0 top-0 z-30 border-b border-white/10 bg-slate-950/80 px-4 py-3 text-white backdrop-blur-lg">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <BrandLogo
-            markClassName="size-10"
-            textClassName="text-xl text-white"
-            taglineClassName="hidden"
-          />
-          <nav className="hidden items-center gap-6 text-sm text-white/70 md:flex">
-            <a className="transition-colors hover:text-white" href="#">
-              Início
-            </a>
-            <a className="transition-colors hover:text-white" href="#plataforma">
+    <div className="min-h-dvh bg-background font-body text-foreground">
+      <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8">
+          <Link to="/" aria-label="Página inicial do Conecta360">
+            <BrandLogo markClassName="size-9" textClassName="text-lg" taglineClassName="hidden" />
+          </Link>
+
+          <nav
+            className="hidden items-center gap-7 text-sm text-muted-foreground md:flex"
+            aria-label="Navegação principal"
+          >
+            <a className="transition-colors hover:text-foreground" href="#plataforma">
               Plataforma
             </a>
-            <a className="transition-colors hover:text-white" href="#modulos">
-              Módulos
+            <a className="transition-colors hover:text-foreground" href="#recursos">
+              Recursos
             </a>
-            <a className="transition-colors hover:text-white" href="#resultado">
-              Resultado
+            <a className="transition-colors hover:text-foreground" href="#visao-360">
+              Visão 360
             </a>
           </nav>
-          <Button asChild size="sm" className="bg-[#d01825] text-white shadow-lg shadow-red-800/25 transition-all duration-200 hover:bg-[#b91420] hover:shadow-xl hover:shadow-red-800/35 active:scale-[0.96]">
-            <Link to="/login">Entrar</Link>
+
+          <Button asChild size="sm" className="rounded-lg px-4 shadow-sm">
+            <Link to="/login">
+              Entrar
+              <ArrowRight className="size-3.5" />
+            </Link>
           </Button>
         </div>
       </header>
 
-      <section className="relative min-h-screen overflow-hidden text-white">
-        <img
-          src="/assets/conecta360-hero.png"
-          alt="Sala executiva com dashboards e acompanhamento de indicadores"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(3,8,24,0.94)_0%,rgba(3,8,24,0.80)_40%,rgba(3,8,24,0.30)_75%,rgba(3,8,24,0.08)_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(208,24,37,0.20),transparent_50%),radial-gradient(ellipse_at_bottom_left,rgba(208,24,37,0.08),transparent_50%)]" />
-        <div className="relative z-10 mx-auto flex min-h-screen max-w-7xl items-center px-4 pt-20">
-          <div className="max-w-3xl">
-            <span className="inline-block rounded-full border border-red-300/30 bg-red-500/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-red-200 backdrop-blur-sm">
-              Cultura de acompanhamento
-            </span>
-            <h1 className="mt-6 max-w-3xl font-display text-5xl font-black leading-[0.95] tracking-tight text-white md:text-7xl">
-              Conecta<span className="text-[#d01825]">360</span>
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/75 md:text-xl md:leading-9">
-              Da operação desarticulada para uma operação que acompanha indicadores e execuções todos os dias.
-            </p>
-            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="h-12 bg-[#d01825] px-7 font-semibold shadow-lg shadow-red-800/30 transition-all duration-200 hover:bg-[#b91420] hover:shadow-xl hover:shadow-red-800/40 active:scale-[0.97]">
-                <Link to="/login">
-                  Acessar o sistema
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
+      <main>
+        <section id="plataforma" className="relative overflow-hidden border-b border-border/70">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(180,35,47,0.08),transparent_28%),radial-gradient(circle_at_85%_50%,rgba(17,24,39,0.05),transparent_30%)]" />
+          <div className="relative mx-auto grid max-w-7xl items-center gap-14 px-5 py-20 lg:grid-cols-[0.88fr_1.12fr] lg:px-8 lg:py-28">
+            <div className="max-w-xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
+                <Sparkles className="size-3.5" />
+                Gestão conectada, de ponta a ponta
+              </div>
+              <h1 className="mt-7 font-display text-4xl font-bold leading-[1.05] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
+                Uma visão clara para decisões que movem a operação.
+              </h1>
+              <p className="mt-6 max-w-lg text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+                O Conecta360 reúne vendas, logística e inteligência em uma experiência única,
+                simples e orientada à ação.
+              </p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Button asChild size="lg" className="h-11 rounded-lg px-6 shadow-sm">
+                  <Link to="/login">
+                    Acessar o sistema
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="h-11 rounded-lg border-border bg-surface px-6 shadow-xs"
+                >
+                  <a href="#recursos">Conhecer a plataforma</a>
+                </Button>
+              </div>
+              <div className="mt-9 flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <Check className="size-3.5 text-primary" />
+                  Dados centralizados
+                </span>
+                <span className="flex items-center gap-2">
+                  <Check className="size-3.5 text-primary" />
+                  Acesso por perfil
+                </span>
+                <span className="flex items-center gap-2">
+                  <Check className="size-3.5 text-primary" />
+                  Indicadores confiáveis
+                </span>
+              </div>
+            </div>
+
+            <DashboardPreview />
+          </div>
+        </section>
+
+        <section id="recursos" className="bg-surface">
+          <div className="mx-auto max-w-7xl px-5 py-20 lg:px-8 lg:py-24">
+            <div className="grid gap-8 lg:grid-cols-[0.72fr_1.28fr] lg:gap-16">
+              <div className="max-w-md">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                  Uma só plataforma
+                </p>
+                <h2 className="mt-4 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+                  Menos ruído. Mais contexto para decidir.
+                </h2>
+                <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                  As áreas acompanham o que importa sem perder a visão do conjunto. Cada perfil
+                  encontra a informação certa, no momento certo.
+                </p>
+              </div>
+
+              <div className="grid divide-y divide-border rounded-xl border border-border bg-background sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                {capabilities.map((capability) => {
+                  const Icon = capability.icon;
+                  return (
+                    <article key={capability.title} className="p-6 sm:p-7">
+                      <span className="flex size-10 items-center justify-center rounded-lg border border-primary/15 bg-primary/5 text-primary">
+                        <Icon className="size-4.5" />
+                      </span>
+                      <h3 className="mt-5 text-sm font-semibold">{capability.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        {capability.description}
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="visao-360" className="border-y border-border bg-background">
+          <div className="mx-auto grid max-w-7xl gap-8 px-5 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-24">
+            <div className="overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-sm">
+              <div className="grid min-h-72 gap-2 sm:grid-cols-[0.9fr_1.1fr]">
+                <div className="rounded-lg bg-[#111827] p-6 text-white">
+                  <CircleGauge className="size-5 text-red-400" />
+                  <p className="mt-14 text-xs text-white/50">Ocupação consolidada</p>
+                  <p className="mt-2 font-display text-4xl font-semibold">87,4%</p>
+                  <p className="mt-3 text-xs text-emerald-300">Faixa operacional saudável</p>
+                </div>
+                <div className="grid gap-2 sm:grid-rows-2">
+                  <div className="rounded-lg border border-border bg-background p-5">
+                    <div className="flex items-center justify-between">
+                      <Boxes className="size-4 text-primary" />
+                      <span className="text-xs text-muted-foreground">Produtos</span>
+                    </div>
+                    <p className="mt-7 text-xl font-semibold">Catálogo conectado</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Preço, estoque e histórico em um só lugar.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-5">
+                    <div className="flex items-center justify-between">
+                      <RouteIcon className="size-4 text-primary" />
+                      <span className="text-xs text-muted-foreground">Rotas</span>
+                    </div>
+                    <p className="mt-7 text-xl font-semibold">Operação visível</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Da visão geral ao detalhe de cada rota.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col justify-center lg:pl-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                Visão 360
+              </p>
+              <h2 className="mt-4 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+                O detalhe de cada área. A clareza do todo.
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                Acompanhe indicadores, encontre desvios e avance da análise para a ação sem alternar
+                entre ferramentas desconectadas.
+              </p>
               <Button
                 asChild
-                size="lg"
-                variant="outline"
-                className="h-12 border-white/25 bg-white/10 px-7 text-white backdrop-blur-sm transition-all duration-200 hover:bg-white/20 hover:text-white active:scale-[0.97]"
+                variant="link"
+                className="mt-5 h-auto w-fit p-0 font-semibold text-primary"
               >
-                <a href="#plataforma">Ver proposta</a>
-              </Button>
-            </div>
-          </div>
-        </div>
-        <a
-          href="#plataforma"
-          className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 text-white/40 transition-colors hover:text-white/70"
-          aria-label="Rolar para plataforma"
-        >
-          <ChevronDown className="size-6 animate-bounce" />
-        </a>
-      </section>
-
-      <section
-        id="plataforma"
-        className="relative flex min-h-screen items-center overflow-hidden bg-white dark:bg-[#101722]"
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(208,24,37,0.06),transparent_50%),radial-gradient(ellipse_at_bottom_right,rgba(208,24,37,0.03),transparent_50%)]" />
-        <div className="relative mx-auto w-full max-w-7xl px-4 py-16 md:py-20">
-          <div className="mx-auto max-w-2xl text-center">
-            <span className="inline-block rounded-full border border-red-200/40 bg-red-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#d01825] dark:border-red-800/40 dark:bg-red-950/40">
-              Como funciona
-            </span>
-            <h2 className="mt-5 font-display text-3xl font-bold tracking-tight md:text-5xl">
-              Um ciclo único entre <span className="text-[#d01825]">número</span>,{" "}
-              <span className="text-[#d01825]">causa</span> e{" "}
-              <span className="text-[#d01825]">evidência</span>.
-            </h2>
-            <p className="mt-4 text-sm leading-7 text-slate-500 dark:text-slate-400">
-              O Conecta360 substitui planilhas soltas por um fluxo integrado: os dados importados alimentam painéis interativos de vendas, logística e catálogos de produtos com total consistência.
-            </p>
-          </div>
-          <div className="mt-12 grid gap-6 md:grid-cols-2">
-            {steps.map((s, i) => {
-              const Icon = s.icon;
-              return (
-                <div
-                  key={s.title}
-                  className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white/80 p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#d01825]/25 hover:shadow-lg hover:shadow-red-900/5 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-red-500/20"
-                >
-                  <div className="absolute right-0 top-0 size-32 translate-x-8 -translate-y-8 rounded-full bg-[#d01825]/[0.04] transition-all duration-500 group-hover:scale-150 dark:bg-red-500/[0.04]" />
-                  <span className="relative flex size-11 items-center justify-center rounded-lg bg-[#d01825]/10 text-lg font-bold text-[#d01825]">
-                    {s.step}
-                  </span>
-                  <h3 className="relative mt-5 text-lg font-semibold">{s.title}</h3>
-                  <p className="relative mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                    {s.text}
-                  </p>
-                  {i < steps.length - 1 && (
-                    <ArrowRight className="mx-auto mt-4 size-5 text-[#d01825]/20 md:absolute md:-right-3 md:top-1/2 md:mt-0 md:-translate-y-1/2" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="modulos"
-        className="relative flex min-h-screen items-center overflow-hidden bg-[#eef1f6] dark:bg-[#090c12]"
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(208,24,37,0.05),transparent_50%)]" />
-        <div className="relative mx-auto w-full max-w-7xl px-4 py-16 md:py-20">
-          <div className="mx-auto max-w-2xl text-center">
-            <span className="inline-block rounded-full border border-red-200/30 bg-red-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#d01825] dark:border-red-800/30 dark:bg-red-950/30">
-              Módulos conectados
-            </span>
-            <h2 className="mt-5 font-display text-3xl font-bold tracking-tight md:text-5xl">
-              Cada área vê sua rotina, a diretoria vê o <span className="text-[#d01825]">conjunto</span>.
-            </h2>
-            <p className="mt-4 text-sm leading-7 text-slate-500 dark:text-slate-400">
-              Módulos estruturados que compartilham a mesma inteligência analítica com total precisão.
-            </p>
-          </div>
-          <div className="mt-12 grid gap-4 sm:grid-cols-3">
-            {modules.map((module) => {
-              const Icon = module.icon;
-              return (
-                <div
-                  key={module.label}
-                  className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-[#d01825]/30 hover:shadow-lg hover:shadow-red-900/8 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-red-500/20"
-                >
-                  <span className="inline-flex size-11 items-center justify-center rounded-lg bg-slate-950 text-white ring-1 ring-white/10 transition-all duration-200 group-hover:bg-[#d01825] group-hover:shadow-lg group-hover:shadow-red-800/20 dark:bg-white dark:text-slate-950 dark:group-hover:bg-[#d01825] dark:group-hover:text-white">
-                    <Icon className="size-5" />
-                  </span>
-                  <p className="mt-4 text-base font-semibold">{module.label}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                    {module.desc}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="resultado"
-        className="relative flex min-h-screen items-center overflow-hidden bg-white dark:bg-[#101722]"
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(208,24,37,0.07),transparent_50%),radial-gradient(ellipse_at_top_right,rgba(208,24,37,0.04),transparent_50%)]" />
-        <div className="relative mx-auto w-full max-w-7xl px-4 py-16 md:py-20">
-          <div className="grid gap-12 lg:grid-cols-[1fr_1fr] lg:items-center">
-            <div>
-              <span className="inline-block rounded-full border border-red-200/30 bg-red-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#d01825] dark:border-red-800/30 dark:bg-red-950/30">
-                Resultado esperado
-              </span>
-              <h2 className="mt-5 font-display text-3xl font-bold tracking-tight md:text-5xl">
-                Acompanhamento vira rotina, não <span className="text-[#d01825]">cobrança operacional</span>.
-              </h2>
-              <div className="mt-8 grid gap-3">
-                {outcomes.map((item) => (
-                  <div key={item} className="flex items-start gap-3 rounded-lg bg-emerald-50/50 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-emerald-50 dark:bg-emerald-950/10 dark:text-slate-200 dark:hover:bg-emerald-950/20">
-                    <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 p-6 shadow-xl dark:border-white/10">
-              <div className="absolute right-0 top-0 size-64 translate-x-16 -translate-y-32 rounded-full bg-[#d01825]/10 blur-2xl" />
-              <div className="relative flex items-center gap-3 border-b border-white/10 pb-5">
-                <span className="inline-flex size-11 items-center justify-center rounded-md bg-gradient-to-br from-[#d01825] to-red-700 shadow-lg shadow-red-800/30">
-                  <LineChart className="size-5" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-white">Gestão 360</p>
-                  <p className="text-xs text-white/50">Indicadores, chat e execução</p>
-                </div>
-              </div>
-              <div className="relative mt-6 grid gap-4 sm:grid-cols-2">
-                <Metric label="Indicadores monitorados" value="30+" />
-                <Metric label="Áreas integradas" value="3" />
-                <Metric label="Fluxo de acompanhamento" value="Filtros" />
-                <Metric label="Acesso por perfil" value="Seguro" />
-              </div>
-              <div className="relative mt-6 flex items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
-                <ShieldCheck className="size-4" />
-                <span>Foco em decisão com evidências claras.</span>
-              </div>
-            </div>
-          </div>
-          <div className="relative mt-16 text-center">
-            <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-8 shadow-sm dark:border-white/10 dark:from-white/[0.04] dark:to-white/[0.02]">
-              <p className="text-lg font-semibold">Pronto para transformar sua gestão?</p>
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                Comece hoje mesmo. Sua operação mais conectada em poucos minutos.
-              </p>
-              <Button asChild size="lg" className="mt-6 h-12 bg-[#d01825] px-8 font-semibold shadow-lg shadow-red-800/25 transition-all duration-200 hover:bg-[#b91420] hover:shadow-xl hover:shadow-red-800/35 active:scale-[0.97]">
                 <Link to="/login">
-                  Acessar o sistema
-                  <ArrowRight className="size-4" />
+                  Explorar o Conecta360 <ArrowRight className="size-4" />
                 </Link>
               </Button>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <footer className="border-t border-slate-200 bg-slate-50 px-4 py-10 dark:border-white/8 dark:bg-[#090c12]">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
-          <BrandLogo
-            markClassName="size-9"
-            textClassName="text-base"
-            taglineClassName="hidden"
-          />
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            &copy; {new Date().getFullYear()} Conecta360. Todos os direitos reservados.
-          </p>
-          <nav className="flex gap-4 text-xs text-slate-500 dark:text-slate-400">
-            <Link to="/login" className="transition-colors hover:text-slate-800 dark:hover:text-white">
-              Entrar
-            </Link>
-            <a href="#" className="transition-colors hover:text-slate-800 dark:hover:text-white">
-              Início
-            </a>
-            <a href="#plataforma" className="transition-colors hover:text-slate-800 dark:hover:text-white">
-              Plataforma
-            </a>
-            <a href="#resultado" className="transition-colors hover:text-slate-800 dark:hover:text-white">
-              Resultado
-            </a>
-          </nav>
+        <section className="bg-surface">
+          <div className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
+            <div className="flex flex-col items-start justify-between gap-7 rounded-2xl bg-[#111827] px-7 py-9 text-white sm:flex-row sm:items-center sm:px-10">
+              <div>
+                <p className="text-xs font-medium text-white/55">Sua operação, conectada.</p>
+                <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+                  Entre e transforme dados em direção.
+                </h2>
+              </div>
+              <Button asChild size="lg" className="h-11 shrink-0 rounded-lg px-6">
+                <Link to="/login">
+                  Acessar o sistema <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t border-border bg-surface">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-7 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-8">
+          <BrandLogo markClassName="size-7" textClassName="text-sm" taglineClassName="hidden" />
+          <p>Gestão integrada para decisões mais claras.</p>
         </div>
       </footer>
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function DashboardPreview() {
   return (
-    <div className="rounded-md border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm">
-      <p className="text-2xl font-display font-bold text-white">{value}</p>
-      <p className="mt-1 text-xs leading-5 text-white/50">{label}</p>
+    <div className="relative mx-auto w-full max-w-2xl" aria-label="Prévia da plataforma Conecta360">
+      <div className="absolute -inset-5 -z-10 rounded-[2rem] bg-primary/5 blur-2xl" />
+      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+        <div className="flex h-12 items-center justify-between border-b border-border px-4">
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-primary" />
+            <span className="text-xs font-semibold">Visão executiva</span>
+          </div>
+          <span className="rounded-md bg-muted px-2 py-1 text-[10px] text-muted-foreground">
+            Hoje
+          </span>
+        </div>
+        <div className="grid gap-3 bg-background/70 p-4 sm:grid-cols-[0.9fr_1.1fr]">
+          <div className="space-y-3">
+            {signals.map((signal) => (
+              <div
+                key={signal.label}
+                className="rounded-lg border border-border bg-surface p-4 shadow-xs"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">{signal.label}</p>
+                    <p className="mt-1 text-lg font-semibold">{signal.value}</p>
+                  </div>
+                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
+                    {signal.change}
+                  </span>
+                </div>
+                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary" style={{ width: signal.width }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg border border-border bg-surface p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-muted-foreground">Evolução mensal</p>
+                <p className="mt-1 text-sm font-semibold">Desempenho da operação</p>
+              </div>
+              <BarChart3 className="size-4 text-primary" />
+            </div>
+            <div className="mt-8 flex h-32 items-end gap-2 border-b border-border px-1">
+              {[44, 62, 51, 74, 68, 91, 82, 96].map((height, index) => (
+                <span
+                  key={height}
+                  className="flex-1 rounded-t-sm bg-primary/15"
+                  style={{ height: `${height}%` }}
+                >
+                  <span
+                    className={`block h-full rounded-t-sm ${index === 7 ? "bg-primary" : "bg-primary/45"}`}
+                  />
+                </span>
+              ))}
+            </div>
+            <div className="mt-5 flex items-center gap-3 rounded-lg bg-muted/70 p-3">
+              <span className="flex size-8 items-center justify-center rounded-md bg-surface text-primary shadow-xs">
+                <PackageCheck className="size-4" />
+              </span>
+              <div>
+                <p className="text-[11px] font-medium">Operação atualizada</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Indicadores prontos para análise
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

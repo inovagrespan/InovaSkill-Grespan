@@ -1,50 +1,52 @@
 using InovaSkill.Importer.Api.Controllers;
 using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace InovaSkill.Importer.Tests.Api;
 
 public sealed class AdminJobsControllerTests
 {
-    [Theory]
-    [InlineData(OperationalJobCodes.MunicipalityCoordinateEnrichment, CustomerImportCodes.DataSource)]
-    public async Task RunDefinition_QueuesJobWithCurrentImportFromRequiredSource(
-        string jobType,
-        string sourceCode)
-    {
-        await using var dbContext = CreateDbContext();
-        var currentImportId = Guid.NewGuid();
-        dbContext.DataSources.Add(CreateDataSource(sourceCode, currentImportId));
-        await dbContext.SaveChangesAsync();
-        var queue = new CapturingOperationalJobQueue();
-        var controller = new AdminJobsController(dbContext, new NoOpBackgroundJobDispatcher());
-
-        var result = await controller.RunDefinition(jobType, queue, null!, default);
-
-        Assert.IsType<AcceptedResult>(result);
-        Assert.Equal(jobType, queue.JobType);
-        Assert.Equal(currentImportId, queue.RelatedEntityId);
-    }
-
     [Fact]
-    public async Task RunDefinition_WhenRequiredImportIsNotPublished_ReturnsConflictWithoutQueuing()
+    public async Task RunDefinition_DelegatesValidatedEnvelopeToGenericLauncher()
     {
         await using var dbContext = CreateDbContext();
-        var queue = new CapturingOperationalJobQueue();
+        var launcher = new CapturingJobExecutionLauncher();
         var controller = new AdminJobsController(dbContext, new NoOpBackgroundJobDispatcher());
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        using var parameters = JsonDocument.Parse("""{"importId":"00000000-0000-0000-0000-000000000001","reprocessFailed":false}""");
 
         var result = await controller.RunDefinition(
             OperationalJobCodes.MunicipalityCoordinateEnrichment,
-            queue,
-            null!,
+            new RunJobDefinitionRequest(1, parameters.RootElement), launcher, default);
+
+        Assert.IsType<AcceptedResult>(result);
+        Assert.Equal(OperationalJobCodes.MunicipalityCoordinateEnrichment, launcher.Request?.JobType);
+        Assert.Equal(1, launcher.Request?.ContractVersion);
+        Assert.Equal(JobExecutionTrigger.Manual, launcher.Request?.Trigger);
+    }
+
+    [Fact]
+    public async Task RunDefinition_WhenLauncherRejectsParameters_ReturnsBadRequest()
+    {
+        await using var dbContext = CreateDbContext();
+        var launcher = new CapturingJobExecutionLauncher { Failure = new ArgumentException("$.importId é obrigatório.") };
+        var controller = new AdminJobsController(dbContext, new NoOpBackgroundJobDispatcher());
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        using var parameters = JsonDocument.Parse("{}");
+
+        var result = await controller.RunDefinition(
+            OperationalJobCodes.MunicipalityCoordinateEnrichment,
+            new RunJobDefinitionRequest(1, parameters.RootElement),
+            launcher,
             default);
 
-        Assert.IsType<ConflictObjectResult>(result);
-        Assert.Null(queue.JobType);
-        Assert.Null(queue.RelatedEntityId);
+        Assert.IsType<BadRequestObjectResult>(result);
     }
 
     private static ImportDbContext CreateDbContext() => new(
@@ -52,23 +54,16 @@ public sealed class AdminJobsControllerTests
             .UseInMemoryDatabase($"admin-jobs-{Guid.NewGuid()}")
             .Options);
 
-    private static DataSource CreateDataSource(string code, Guid currentImportId) => new()
+    private sealed class CapturingJobExecutionLauncher : IJobExecutionLauncher
     {
-        Id = Guid.NewGuid(), Code = code, Name = code, ProcessorKey = code,
-        Type = "EXCEL", CurrentImportId = currentImportId, Active = true,
-        CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
-    };
+        public JobLaunchRequest? Request { get; private set; }
+        public Exception? Failure { get; init; }
 
-    private sealed class CapturingOperationalJobQueue : IOperationalJobQueue
-    {
-        public string? JobType { get; private set; }
-        public Guid? RelatedEntityId { get; private set; }
-
-        public Task<Guid?> TryQueueAsync(string jobType, Guid relatedEntityId, CancellationToken cancellationToken)
+        public Task<JobLaunchResult> LaunchAsync(JobLaunchRequest request, CancellationToken cancellationToken)
         {
-            JobType = jobType;
-            RelatedEntityId = relatedEntityId;
-            return Task.FromResult<Guid?>(Guid.NewGuid());
+            if (Failure is not null) throw Failure;
+            Request = request;
+            return Task.FromResult(new JobLaunchResult(Guid.NewGuid(), "QUEUED"));
         }
     }
 

@@ -82,6 +82,20 @@ public sealed class RouteOptimizationService(
         {
             Id = Guid.NewGuid(),
             JobType = RouteOptimizationCodes.JobType,
+            ContractVersion = OperationalJobCatalog.RouteOptimization.ContractVersion,
+            Queue = BackgroundJobQueues.RouteOptimization,
+            Trigger = request.RequestedFrom == RouteOptimizationRequestedFrom.InternalProcess
+                ? JobExecutionTrigger.System
+                : JobExecutionTrigger.Manual,
+            RequestedByUserId = request.RequestedByUserId == 0 ? null : request.RequestedByUserId,
+            ParametersJson = JsonSerializer.Serialize(new
+            {
+                optimizationRunId = run.Id,
+                scope = request.Scope.ToString(),
+                referenceDate = request.ReferenceDate,
+                targetRouteId = request.TargetRouteId,
+                snapshotImportId = snapshot.ImportId
+            }, JsonOptions),
             Status = JobExecutionStatus.Queued,
             RelatedEntityId = run.Id,
             CreatedAt = now

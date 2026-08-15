@@ -1,4 +1,5 @@
 using System.Text.Json;
+using InovaSkill.Importer.Domain.Entities;
 using Microsoft.Extensions.Options;
 
 namespace InovaSkill.Importer.Api.Assistant;
@@ -33,11 +34,15 @@ public sealed class BusinessAssistantService(
         Guid? sessionId,
         string question,
         ChatExecutionContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string channel = ChatSessionChannels.Web,
+        Guid? whatsAppUserLinkId = null)
     {
-        var session = await historyStore.LoadOrCreateAsync(
+        var session = await historyStore.LoadOrCreateForChannelAsync(
             sessionId,
             context.UserId,
+            channel,
+            whatsAppUserLinkId,
             assistantOptions.MaximumHistoryMessages,
             cancellationToken);
         if (consumptionService is not null) await consumptionService.SetSessionAsync(session.SessionId, cancellationToken);

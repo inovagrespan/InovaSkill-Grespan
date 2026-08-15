@@ -21,7 +21,18 @@ public enum JobExecutionStatus
     Processing,
     Retrying,
     Completed,
-    Failed
+    Failed,
+    Cancelled
+}
+
+public enum JobExecutionTrigger
+{
+    Manual,
+    Schedule,
+    Import,
+    Webhook,
+    Retry,
+    System
 }
 
 public enum DataSourceImportMode

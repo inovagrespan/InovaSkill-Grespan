@@ -12,7 +12,7 @@ function readSource(file: string): string {
 
 describe("política de debounce para buscas textuais", () => {
   it("define intervalos compartilhados para buscas comuns e complexas", () => {
-    expect(TEXT_SEARCH_DEBOUNCE_MS).toBe(400);
+    expect(TEXT_SEARCH_DEBOUNCE_MS).toBe(300);
     expect(COMPLEX_TEXT_SEARCH_DEBOUNCE_MS).toBeGreaterThan(TEXT_SEARCH_DEBOUNCE_MS);
   });
 

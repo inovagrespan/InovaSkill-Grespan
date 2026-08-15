@@ -37,15 +37,14 @@ describe("exploração de fatos fiscais", () => {
 
   it("mantém o diálogo de consumo integrado ao detalhe da nota", () => {
     expect(customerDialog).toContain("<KpiCard");
-    expect(customerDialog.match(/<KpiCard/g)?.length).toBe(13);
+    expect(customerDialog.match(/<KpiCard/g)?.length).toBe(9);
     expect(customerDialog).toContain("<LineChart");
     expect(customerDialog).toContain("data.monthlyTimeline");
-    expect(customerDialog).toContain("fetchCustomerProjection");
-    expect(customerDialog).toContain("projectionQualityClass");
-    expect(customerDialog).toContain("formatKpiCompactNumber(projection.weight.monthlyChange)");
-    expect(customerDialog).toContain("formatKpiCompactCurrency(projection.revenue.forecast[0]?.forecast");
-    expect(customerDialog).toContain("signedPercentage(projection.weight.monthlyChangePercentage)");
-    expect(customerDialog).toContain("signedPercentage(projection.revenue.monthlyChangePercentage)");
+    expect(customerDialog).not.toContain("fetchCustomerProjection");
+    expect(customerDialog).not.toContain("Projeção de impacto");
+    expect(customerDialog).not.toContain("projetado");
+    expect(customerDialog).toContain("Consumo em vendas — 30d");
+    expect(customerDialog).toContain("Faturamento médio mensal");
     expect(customerDialog).toContain("formatDate(item.issueDate)");
     expect(customerDialog).toContain("Number.isNaN(date.getTime())");
     expect(customerDialog).toContain("<FiscalDocumentDialog");

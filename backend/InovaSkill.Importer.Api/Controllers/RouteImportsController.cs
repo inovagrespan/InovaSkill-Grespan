@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
@@ -267,6 +268,10 @@ public sealed class RouteImportsController(
     {
         Id = Guid.NewGuid(),
         JobType = RouteImportCodes.JobType,
+        ContractVersion = 1,
+        Queue = BackgroundJobQueues.Imports,
+        Trigger = JobExecutionTrigger.Import,
+        ParametersJson = JsonSerializer.Serialize(new { importId }),
         Status = JobExecutionStatus.Queued,
         RelatedEntityId = importId,
         CreatedAt = now

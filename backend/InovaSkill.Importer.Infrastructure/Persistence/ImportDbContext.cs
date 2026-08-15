@@ -10,6 +10,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<RouteImport> RouteImports => Set<RouteImport>();
     public DbSet<RouteImportError> RouteImportErrors => Set<RouteImportError>();
     public DbSet<JobExecution> JobExecutions => Set<JobExecution>();
+    public DbSet<JobSchedule> JobSchedules => Set<JobSchedule>();
     public DbSet<VehicleType> VehicleTypes => Set<VehicleType>();
     public DbSet<Route> Routes => Set<Route>();
     public DbSet<RouteEntry> RouteEntries => Set<RouteEntry>();
@@ -34,6 +35,9 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<AiUserLimit> AiUserLimits => Set<AiUserLimit>();
     public DbSet<AiConsumptionAlert> AiConsumptionAlerts => Set<AiConsumptionAlert>();
     public DbSet<KnowledgeMemory> KnowledgeMemories => Set<KnowledgeMemory>();
+    public DbSet<WhatsAppConnection> WhatsAppConnections => Set<WhatsAppConnection>();
+    public DbSet<WhatsAppUserLink> WhatsAppUserLinks => Set<WhatsAppUserLink>();
+    public DbSet<WhatsAppMessageReceipt> WhatsAppMessageReceipts => Set<WhatsAppMessageReceipt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -100,12 +104,35 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.ToTable("job_executions");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.JobType).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Queue).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Trigger).HasConversion<string>().HasMaxLength(16);
+            entity.Property(x => x.ParametersJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.ResultJson).HasColumnType("jsonb");
+            entity.Property(x => x.ProgressMessage).HasMaxLength(512);
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
             entity.Property(x => x.ErrorMessage).HasMaxLength(1024);
             entity.HasIndex(x => new { x.Status, x.CreatedAt });
+            entity.HasIndex(x => x.ScheduleId);
+            entity.HasIndex(x => x.RetriedFromJobExecutionId);
             entity.HasOne(x => x.Import).WithMany(x => x.JobExecutions)
                 .HasForeignKey(x => x.RelatedEntityId).OnDelete(DeleteBehavior.NoAction)
                 .IsRequired(false);
+            entity.HasOne(x => x.Schedule).WithMany(x => x.Executions)
+                .HasForeignKey(x => x.ScheduleId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.RetriedFromJobExecution).WithMany()
+                .HasForeignKey(x => x.RetriedFromJobExecutionId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<JobSchedule>(entity =>
+        {
+            entity.ToTable("job_schedules");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.JobType).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.ParametersJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.CronExpression).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.TimeZoneId).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => new { x.IsActive, x.NextExecutionAt });
         });
 
         modelBuilder.Entity<RouteOptimizationRun>(entity =>
@@ -157,8 +184,52 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.ToTable("chat_sessions");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.UserId, x.UpdatedAt });
+            entity.Property(x => x.Channel).HasMaxLength(16).IsRequired();
+            entity.HasIndex(x => new { x.WhatsAppUserLinkId, x.Channel }).IsUnique()
+                .HasFilter("\"WhatsAppUserLinkId\" IS NOT NULL");
             entity.HasOne(x => x.User).WithMany()
                 .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WhatsAppUserLink).WithMany(x => x.ChatSessions)
+                .HasForeignKey(x => x.WhatsAppUserLinkId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<WhatsAppConnection>(entity =>
+        {
+            entity.ToTable("whatsapp_connections");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.InstanceName).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.ConnectedPhone).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<WhatsAppUserLink>(entity =>
+        {
+            entity.ToTable("whatsapp_user_links");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.NormalizedPhone).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.VerificationCodeHash).HasMaxLength(128);
+            entity.HasIndex(x => x.UserId).IsUnique();
+            entity.HasIndex(x => x.NormalizedPhone).IsUnique();
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<WhatsAppMessageReceipt>(entity =>
+        {
+            entity.ToTable("whatsapp_message_receipts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ProviderMessageId).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.ProviderOutboundMessageId).HasMaxLength(256);
+            entity.Property(x => x.Direction).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.MessageType).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.TextContent).HasMaxLength(4000);
+            entity.Property(x => x.MediaReference).HasMaxLength(16000);
+            entity.HasIndex(x => x.ProviderMessageId).IsUnique();
+            entity.HasIndex(x => new { x.WhatsAppUserLinkId, x.CreatedAt });
+            entity.HasOne(x => x.WhatsAppUserLink).WithMany().HasForeignKey(x => x.WhatsAppUserLinkId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ChatSession).WithMany().HasForeignKey(x => x.ChatSessionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.ChatMessage).WithMany().HasForeignKey(x => x.ChatMessageId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ChatMessage>(entity =>
@@ -192,6 +263,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.OutputCostUsd).HasPrecision(18, 8);
             entity.HasIndex(x => new { x.ResponseExecutionId, x.CreatedAt });
             entity.HasIndex(x => new { x.Model, x.CreatedAt });
+            entity.HasIndex(x => x.CreatedAt);
             entity.HasOne(x => x.ResponseExecution).WithMany(x => x.Calls).HasForeignKey(x => x.ResponseExecutionId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<AiModelPrice>(entity =>

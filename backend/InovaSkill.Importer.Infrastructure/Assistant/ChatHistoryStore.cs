@@ -12,6 +12,15 @@ public interface IChatHistoryStore
         int maximumMessages,
         CancellationToken cancellationToken);
 
+    Task<ChatSessionSnapshot> LoadOrCreateForChannelAsync(
+        Guid? sessionId,
+        long userId,
+        string channel,
+        Guid? whatsAppUserLinkId,
+        int maximumMessages,
+        CancellationToken cancellationToken) =>
+        LoadOrCreateAsync(sessionId, userId, maximumMessages, cancellationToken);
+
     Task AppendAsync(
         Guid sessionId,
         string role,
@@ -46,13 +55,22 @@ public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistorySt
         long userId,
         int maximumMessages,
         CancellationToken cancellationToken)
+        => await LoadOrCreateForChannelAsync(sessionId, userId, ChatSessionChannels.Web, null, maximumMessages, cancellationToken);
+
+    public async Task<ChatSessionSnapshot> LoadOrCreateForChannelAsync(
+        Guid? sessionId,
+        long userId,
+        string channel,
+        Guid? whatsAppUserLinkId,
+        int maximumMessages,
+        CancellationToken cancellationToken)
     {
         ChatSession? session = null;
         if (sessionId.HasValue)
         {
             session = await dbContext.ChatSessions
                 .FirstOrDefaultAsync(
-                    item => item.Id == sessionId.Value && item.UserId == userId,
+                    item => item.Id == sessionId.Value && item.UserId == userId && item.Channel == channel,
                     cancellationToken);
         }
 
@@ -63,6 +81,8 @@ public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistorySt
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
+                Channel = channel,
+                WhatsAppUserLinkId = whatsAppUserLinkId,
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -116,7 +136,7 @@ public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistorySt
         int maximumSessions,
         CancellationToken cancellationToken) =>
         await dbContext.ChatSessions.AsNoTracking()
-            .Where(session => session.UserId == userId)
+            .Where(session => session.UserId == userId && session.Channel == ChatSessionChannels.Web)
             .OrderByDescending(session => session.UpdatedAt)
             .ThenByDescending(session => session.Id)
             .Skip(offset)
@@ -138,7 +158,7 @@ public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistorySt
         CancellationToken cancellationToken)
     {
         var exists = await dbContext.ChatSessions.AsNoTracking()
-            .AnyAsync(session => session.Id == sessionId && session.UserId == userId, cancellationToken);
+            .AnyAsync(session => session.Id == sessionId && session.UserId == userId && session.Channel == ChatSessionChannels.Web, cancellationToken);
         if (!exists) return null;
 
         var messages = await dbContext.ChatMessages.AsNoTracking()

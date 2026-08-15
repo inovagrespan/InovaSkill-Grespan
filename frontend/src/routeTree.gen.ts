@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VendasRouteImport } from './routes/vendas'
+import { Route as SimuladorWhatsappRouteImport } from './routes/simulador-whatsapp'
 import { Route as SimulacaoRouteImport } from './routes/simulacao'
 import { Route as RotasRouteImport } from './routes/rotas'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
@@ -17,6 +18,7 @@ import { Route as ProdutosRouteImport } from './routes/produtos'
 import { Route as ProducaoRouteImport } from './routes/producao'
 import { Route as ProcessamentosRouteImport } from './routes/processamentos'
 import { Route as NotasFiscaisRouteImport } from './routes/notas-fiscais'
+import { Route as MeuWhatsappRouteImport } from './routes/meu-whatsapp'
 import { Route as MapaRouteImport } from './routes/mapa'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as LoginRouteImport } from './routes/login'
@@ -33,12 +35,18 @@ import { Route as VeiculosTiposRouteImport } from './routes/veiculos.tipos'
 import { Route as LogisticaRotasRouteImport } from './routes/logistica.rotas'
 import { Route as LogisticaMapaRouteImport } from './routes/logistica.mapa'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
+import { Route as AdministracaoWhatsappRouteImport } from './routes/administracao.whatsapp'
 import { Route as AdministracaoMemoriasRouteImport } from './routes/administracao.memorias'
 import { Route as AdministracaoConsumoIaRouteImport } from './routes/administracao.consumo-ia'
 
 const VendasRoute = VendasRouteImport.update({
   id: '/vendas',
   path: '/vendas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SimuladorWhatsappRoute = SimuladorWhatsappRouteImport.update({
+  id: '/simulador-whatsapp',
+  path: '/simulador-whatsapp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SimulacaoRoute = SimulacaoRouteImport.update({
@@ -74,6 +82,11 @@ const ProcessamentosRoute = ProcessamentosRouteImport.update({
 const NotasFiscaisRoute = NotasFiscaisRouteImport.update({
   id: '/notas-fiscais',
   path: '/notas-fiscais',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MeuWhatsappRoute = MeuWhatsappRouteImport.update({
+  id: '/meu-whatsapp',
+  path: '/meu-whatsapp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MapaRoute = MapaRouteImport.update({
@@ -156,6 +169,11 @@ const ImportacoesFilesRoute = ImportacoesFilesRouteImport.update({
   path: '/files',
   getParentRoute: () => ImportacoesRoute,
 } as any)
+const AdministracaoWhatsappRoute = AdministracaoWhatsappRouteImport.update({
+  id: '/administracao/whatsapp',
+  path: '/administracao/whatsapp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdministracaoMemoriasRoute = AdministracaoMemoriasRouteImport.update({
   id: '/administracao/memorias',
   path: '/administracao/memorias',
@@ -178,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
   '/mapa': typeof MapaRoute
+  '/meu-whatsapp': typeof MeuWhatsappRoute
   '/notas-fiscais': typeof NotasFiscaisRoute
   '/processamentos': typeof ProcessamentosRoute
   '/producao': typeof ProducaoRoute
@@ -185,9 +204,11 @@ export interface FileRoutesByFullPath {
   '/relatorios': typeof RelatoriosRoute
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
+  '/simulador-whatsapp': typeof SimuladorWhatsappRoute
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
+  '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
@@ -204,6 +225,7 @@ export interface FileRoutesByTo {
   '/financas': typeof FinancasRoute
   '/login': typeof LoginRoute
   '/mapa': typeof MapaRoute
+  '/meu-whatsapp': typeof MeuWhatsappRoute
   '/notas-fiscais': typeof NotasFiscaisRoute
   '/processamentos': typeof ProcessamentosRoute
   '/producao': typeof ProducaoRoute
@@ -211,9 +233,11 @@ export interface FileRoutesByTo {
   '/relatorios': typeof RelatoriosRoute
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
+  '/simulador-whatsapp': typeof SimuladorWhatsappRoute
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
+  '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
@@ -233,6 +257,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRouteWithChildren
   '/mapa': typeof MapaRoute
+  '/meu-whatsapp': typeof MeuWhatsappRoute
   '/notas-fiscais': typeof NotasFiscaisRoute
   '/processamentos': typeof ProcessamentosRoute
   '/producao': typeof ProducaoRoute
@@ -240,9 +265,11 @@ export interface FileRoutesById {
   '/relatorios': typeof RelatoriosRoute
   '/rotas': typeof RotasRoute
   '/simulacao': typeof SimulacaoRoute
+  '/simulador-whatsapp': typeof SimuladorWhatsappRoute
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
+  '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
@@ -263,6 +290,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logistica'
     | '/mapa'
+    | '/meu-whatsapp'
     | '/notas-fiscais'
     | '/processamentos'
     | '/producao'
@@ -270,9 +298,11 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/rotas'
     | '/simulacao'
+    | '/simulador-whatsapp'
     | '/vendas'
     | '/administracao/consumo-ia'
     | '/administracao/memorias'
+    | '/administracao/whatsapp'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
@@ -289,6 +319,7 @@ export interface FileRouteTypes {
     | '/financas'
     | '/login'
     | '/mapa'
+    | '/meu-whatsapp'
     | '/notas-fiscais'
     | '/processamentos'
     | '/producao'
@@ -296,9 +327,11 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/rotas'
     | '/simulacao'
+    | '/simulador-whatsapp'
     | '/vendas'
     | '/administracao/consumo-ia'
     | '/administracao/memorias'
+    | '/administracao/whatsapp'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
@@ -317,6 +350,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logistica'
     | '/mapa'
+    | '/meu-whatsapp'
     | '/notas-fiscais'
     | '/processamentos'
     | '/producao'
@@ -324,9 +358,11 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/rotas'
     | '/simulacao'
+    | '/simulador-whatsapp'
     | '/vendas'
     | '/administracao/consumo-ia'
     | '/administracao/memorias'
+    | '/administracao/whatsapp'
     | '/importacoes/files'
     | '/logistica/mapa'
     | '/logistica/rotas'
@@ -346,6 +382,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   LogisticaRoute: typeof LogisticaRouteWithChildren
   MapaRoute: typeof MapaRoute
+  MeuWhatsappRoute: typeof MeuWhatsappRoute
   NotasFiscaisRoute: typeof NotasFiscaisRoute
   ProcessamentosRoute: typeof ProcessamentosRoute
   ProducaoRoute: typeof ProducaoRoute
@@ -353,9 +390,11 @@ export interface RootRouteChildren {
   RelatoriosRoute: typeof RelatoriosRoute
   RotasRoute: typeof RotasRoute
   SimulacaoRoute: typeof SimulacaoRoute
+  SimuladorWhatsappRoute: typeof SimuladorWhatsappRoute
   VendasRoute: typeof VendasRoute
   AdministracaoConsumoIaRoute: typeof AdministracaoConsumoIaRoute
   AdministracaoMemoriasRoute: typeof AdministracaoMemoriasRoute
+  AdministracaoWhatsappRoute: typeof AdministracaoWhatsappRoute
   VeiculosTiposRoute: typeof VeiculosTiposRoute
 }
 
@@ -366,6 +405,13 @@ declare module '@tanstack/react-router' {
       path: '/vendas'
       fullPath: '/vendas'
       preLoaderRoute: typeof VendasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/simulador-whatsapp': {
+      id: '/simulador-whatsapp'
+      path: '/simulador-whatsapp'
+      fullPath: '/simulador-whatsapp'
+      preLoaderRoute: typeof SimuladorWhatsappRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/simulacao': {
@@ -415,6 +461,13 @@ declare module '@tanstack/react-router' {
       path: '/notas-fiscais'
       fullPath: '/notas-fiscais'
       preLoaderRoute: typeof NotasFiscaisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/meu-whatsapp': {
+      id: '/meu-whatsapp'
+      path: '/meu-whatsapp'
+      fullPath: '/meu-whatsapp'
+      preLoaderRoute: typeof MeuWhatsappRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mapa': {
@@ -529,6 +582,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportacoesFilesRouteImport
       parentRoute: typeof ImportacoesRoute
     }
+    '/administracao/whatsapp': {
+      id: '/administracao/whatsapp'
+      path: '/administracao/whatsapp'
+      fullPath: '/administracao/whatsapp'
+      preLoaderRoute: typeof AdministracaoWhatsappRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/administracao/memorias': {
       id: '/administracao/memorias'
       path: '/administracao/memorias'
@@ -587,6 +647,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   LogisticaRoute: LogisticaRouteWithChildren,
   MapaRoute: MapaRoute,
+  MeuWhatsappRoute: MeuWhatsappRoute,
   NotasFiscaisRoute: NotasFiscaisRoute,
   ProcessamentosRoute: ProcessamentosRoute,
   ProducaoRoute: ProducaoRoute,
@@ -594,9 +655,11 @@ const rootRouteChildren: RootRouteChildren = {
   RelatoriosRoute: RelatoriosRoute,
   RotasRoute: RotasRoute,
   SimulacaoRoute: SimulacaoRoute,
+  SimuladorWhatsappRoute: SimuladorWhatsappRoute,
   VendasRoute: VendasRoute,
   AdministracaoConsumoIaRoute: AdministracaoConsumoIaRoute,
   AdministracaoMemoriasRoute: AdministracaoMemoriasRoute,
+  AdministracaoWhatsappRoute: AdministracaoWhatsappRoute,
   VeiculosTiposRoute: VeiculosTiposRoute,
 }
 export const routeTree = rootRouteImport

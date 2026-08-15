@@ -7,18 +7,21 @@ function readSource(relativePath: string): string {
 }
 
 describe("landing route", () => {
-  it("cria landing publica do Conecta360 com hero visual e CTA para login", () => {
+  it("cria landing pública alinhada ao sistema visual e com CTA para login", () => {
     const source = readSource("src/routes/index.tsx");
     const dashboard = readSource("src/routes/dashboard.tsx");
     const root = readSource("src/routes/__root.tsx");
     const login = readSource("src/routes/login.tsx");
 
     expect(source).toContain('createFileRoute("/")');
-    expect(source).toContain("/assets/conecta360-hero.png");
     expect(source).toContain("Conecta360");
     expect(source).toContain("Acessar o sistema");
     expect(source).toContain('to="/login"');
-    expect(source).toContain("Da operação desarticulada para uma operação");
+    expect(source).toContain("Uma visão clara para decisões que movem a operação.");
+    expect(source).toContain("DashboardPreview");
+    expect(source).toContain("bg-background");
+    expect(source).toContain("border-border");
+    expect(source).not.toContain("conecta360-hero.png");
     expect(root).toContain('const PUBLIC_ROUTES = new Set(["/", "/login"])');
     expect(login).toContain('to="/"');
     expect(login).toContain('search.redirect || "/dashboard"');

@@ -3,6 +3,7 @@ using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
@@ -15,8 +16,7 @@ public sealed class OperationalJobQueue(
         Guid relatedEntityId,
         CancellationToken cancellationToken)
     {
-        var definition = OperationalJobCatalog.All.SingleOrDefault(item => item.JobType == jobType)
-            ?? throw new InvalidOperationException($"Job operacional desconhecido: {jobType}.");
+        var definition = OperationalJobCatalog.GetRequired(jobType);
 
         if (!definition.AllowConcurrentRuns)
         {
@@ -34,6 +34,19 @@ public sealed class OperationalJobQueue(
         {
             Id = Guid.NewGuid(),
             JobType = jobType,
+            ContractVersion = definition.ContractVersion,
+            Queue = definition.Queue,
+            Trigger = jobType == OperationalJobCodes.WhatsAppMessageProcessing
+                ? JobExecutionTrigger.Webhook
+                : JobExecutionTrigger.System,
+            ParametersJson = jobType switch
+            {
+                OperationalJobCodes.MunicipalityCoordinateEnrichment =>
+                    JsonSerializer.Serialize(new { importId = relatedEntityId, reprocessFailed = false }),
+                OperationalJobCodes.WhatsAppMessageProcessing =>
+                    JsonSerializer.Serialize(new { receiptId = relatedEntityId }),
+                _ => JsonSerializer.Serialize(new { relatedEntityId })
+            },
             Status = JobExecutionStatus.Queued,
             RelatedEntityId = relatedEntityId,
             CreatedAt = DateTime.UtcNow

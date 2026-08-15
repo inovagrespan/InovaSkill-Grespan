@@ -21,8 +21,7 @@ public sealed class KnowledgeMemoryService(
     IOptions<AssistantOptions> options,
     ILogger<KnowledgeMemoryService> logger)
 {
-    private const int MaximumRecalledMemories = 8;
-    private const int MaximumUserReferenceMemories = 3;
+    private const int MaximumRecalledMemories = 30;
     private const double MinimumSimilarity = 0.35;
     private const double MinimumPersonalQuerySimilarity = 0.20;
     private static readonly IReadOnlyDictionary<string, string[]> PersonalSubjectTerms =
@@ -36,12 +35,6 @@ public sealed class KnowledgeMemoryService(
         };
     private static readonly HashSet<string> PersonalReferenceTerms =
         new(["eu", "meu", "minha", "meus", "minhas", "me", "mim"], StringComparer.Ordinal);
-    private static readonly IReadOnlyList<string[]> UserReferenceSubjectTerms =
-    [
-        ["preferred", "preferido", "apelido", "chamar"],
-        ["name", "nome"],
-        ["role", "cargo", "funcao", "trabalho", "profissao"]
-    ];
     private static readonly Regex SecretPattern = new(
         @"(?ix)(password|senha|token|api[_ -]?key|secret|chave\s+privada)\s*[:=]\s*\S+|-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -74,21 +67,9 @@ public sealed class KnowledgeMemoryService(
     public static IReadOnlyList<RecalledMemory> SelectMemoriesForRecall(
         string query, IReadOnlyList<RecalledMemory> scoredMemories)
     {
-        var userReferenceMemories = scoredMemories
-            .Where(memory => memory.Scope == KnowledgeMemoryScopes.User && GetUserReferencePriority(memory.Subject) >= 0)
-            .OrderBy(memory => GetUserReferencePriority(memory.Subject))
-            .ThenByDescending(memory => memory.Similarity)
-            .Take(MaximumUserReferenceMemories)
-            .ToList();
-        var selectedIds = userReferenceMemories.Select(memory => memory.Id).ToHashSet();
-        var relevantMemories = scoredMemories
-            .Where(memory => !selectedIds.Contains(memory.Id))
+        return scoredMemories
             .Where(memory => IsRelevantForRecall(query, memory.Scope, memory.Subject, memory.Similarity))
             .OrderByDescending(memory => memory.Similarity)
-            .ToList();
-
-        return userReferenceMemories
-            .Concat(relevantMemories)
             .Take(MaximumRecalledMemories)
             .ToList();
     }
@@ -185,16 +166,6 @@ public sealed class KnowledgeMemoryService(
         }
 
         return similarity >= MinimumPersonalQuerySimilarity && queryTerms.Overlaps(PersonalReferenceTerms);
-    }
-
-    private static int GetUserReferencePriority(string subject)
-    {
-        var subjectTerms = Tokenize(subject);
-        for (var index = 0; index < UserReferenceSubjectTerms.Count; index++)
-        {
-            if (UserReferenceSubjectTerms[index].Any(subjectTerms.Contains)) return index;
-        }
-        return -1;
     }
 
     private static HashSet<string> Tokenize(string value) =>

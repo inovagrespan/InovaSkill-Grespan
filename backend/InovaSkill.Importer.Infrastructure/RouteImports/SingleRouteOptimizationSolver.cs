@@ -264,7 +264,7 @@ public sealed class SingleRouteOptimizationSolver(IDistanceMatrixProvider distan
                 Model = model,
                 Occupancy = source.LoadKg / model.CapacityKg
             })
-            .Where(item => item.Occupancy <= RouteOccupancyLevelPolicy.CriticalMinimumExclusive)
+            .Where(item => item.Occupancy <= problem.Constraints.MaximumDestinationOccupancy)
             .OrderBy(item => item.Model.CapacityKg)
             .ThenBy(item => item.Model.Name)
             .FirstOrDefault();

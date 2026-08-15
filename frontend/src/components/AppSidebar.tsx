@@ -9,9 +9,11 @@ import {
   LogOut,
   Map,
   MessageCircle,
+  Smartphone,
   Moon,
   Package,
   PackageCheck,
+  QrCode,
   Route,
   Settings,
   Gauge,
@@ -46,6 +48,8 @@ const roleLabels: Record<string, string> = {
 const items = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/assistente", label: "Chat IA", icon: MessageCircle },
+  { to: "/meu-whatsapp", label: "Meu WhatsApp", icon: Smartphone },
+  { to: "/simulador-whatsapp", label: "Simulador WhatsApp", icon: MessageCircle },
   { to: "/logistica/rotas", label: "Rotas", icon: Route },
   { to: "/veiculos/tipos", label: "Tipos de Veículo", icon: Truck },
   { to: "/mapa", label: "Mapa", icon: Map },
@@ -58,6 +62,7 @@ const items = [
   { to: "/processamentos", label: "Processamento", icon: Settings },
   { to: "/administracao/consumo-ia", label: "Consumo de IA", icon: Gauge },
   { to: "/administracao/memorias", label: "Memórias da IA", icon: Brain },
+  { to: "/administracao/whatsapp", label: "WhatsApp corporativo", icon: QrCode },
 ] as const;
 
 export function getVisibleSidebarItemsForRole(role: string | null) {
