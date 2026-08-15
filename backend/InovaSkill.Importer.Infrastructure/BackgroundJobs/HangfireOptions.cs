@@ -33,7 +33,5 @@ public sealed class HangfireWorkerOptions
 {
     public int Imports { get; set; } = 2;
 
-    public int RouteOptimization { get; set; } = 2;
-
     public int Default { get; set; } = 2;
 }

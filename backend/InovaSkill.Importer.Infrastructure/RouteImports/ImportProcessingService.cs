@@ -11,8 +11,7 @@ public sealed class ImportProcessingService(
     IEnumerable<IDataSourceProcessor> processors,
     IImportLifecycleService importLifecycle,
     IRouteCustomerAssignmentSynchronizer routeCustomerAssignments,
-    IOperationalJobQueue operationalJobQueue,
-    IRouteOptimizationService routeOptimizationService) : IImportProcessingService
+    IOperationalJobQueue operationalJobQueue) : IImportProcessingService
 {
     private const int MaximumAttempts = 4;
     private const int MaximumPersistedErrorMessageLength = 1024;
@@ -77,34 +76,10 @@ public sealed class ImportProcessingService(
             var activated = await importLifecycle.TryActivateAsync(import.Id, cancellationToken);
             if (activated && (
                 string.Equals(import.DataSource!.Code, RouteImportCodes.DataSource, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(import.DataSource.Code, CustomerImportCodes.DataSource, StringComparison.OrdinalIgnoreCase)))
+                string.Equals(import.DataSource.Code, CustomerImportCodes.DataSource, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(import.DataSource.Code, CustomerRouteAssignmentImportCodes.DataSource, StringComparison.OrdinalIgnoreCase)))
             {
                 await routeCustomerAssignments.SyncInferredAssignmentsAsync(cancellationToken);
-            }
-
-            if (activated && string.Equals(import.DataSource!.Code, RouteImportCodes.DataSource,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    await routeOptimizationService.StartOptimizationAsync(
-                        new RouteOptimizationStartRequest(
-                            RouteOptimizationScope.AllRoutes,
-                            DateOnly.FromDateTime(DateTime.UtcNow),
-                            null,
-                            RouteOptimizationRequestedFrom.InternalProcess,
-                            0,
-                            import.Id),
-                        cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception)
-                {
-                    // A otimização pode ser solicitada manualmente sem invalidar a importação concluída.
-                }
             }
 
             if (activated && string.Equals(import.DataSource!.Code, CustomerImportCodes.DataSource,

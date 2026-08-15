@@ -16,9 +16,11 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<RouteEntry> RouteEntries => Set<RouteEntry>();
     public DbSet<Municipality> Municipalities => Set<Municipality>();
     public DbSet<MunicipalityCoordinate> MunicipalityCoordinates => Set<MunicipalityCoordinate>();
+    public DbSet<CustomerRegistrationAddress> CustomerRegistrationAddresses => Set<CustomerRegistrationAddress>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerSnapshot> CustomerSnapshots => Set<CustomerSnapshot>();
     public DbSet<RouteCustomerAssignment> RouteCustomerAssignments => Set<RouteCustomerAssignment>();
+    public DbSet<CustomerRouteMapping> CustomerRouteMappings => Set<CustomerRouteMapping>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<InventorySnapshot> InventorySnapshots => Set<InventorySnapshot>();
     public DbSet<DailyInventoryRecord> DailyInventoryRecords => Set<DailyInventoryRecord>();
@@ -26,8 +28,6 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<FiscalDocumentItem> FiscalDocumentItems => Set<FiscalDocumentItem>();
     public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
-    public DbSet<RouteOptimizationRun> RouteOptimizationRuns => Set<RouteOptimizationRun>();
-    public DbSet<RouteOptimizationScenario> RouteOptimizationScenarios => Set<RouteOptimizationScenario>();
     public DbSet<AiResponseExecution> AiResponseExecutions => Set<AiResponseExecution>();
     public DbSet<AiProviderCall> AiProviderCalls => Set<AiProviderCall>();
     public DbSet<AiModelPrice> AiModelPrices => Set<AiModelPrice>();
@@ -133,50 +133,6 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.CronExpression).HasMaxLength(128).IsRequired();
             entity.Property(x => x.TimeZoneId).HasMaxLength(64).IsRequired();
             entity.HasIndex(x => new { x.IsActive, x.NextExecutionAt });
-        });
-
-        modelBuilder.Entity<RouteOptimizationRun>(entity =>
-        {
-            entity.ToTable("route_optimization_runs");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Scope).HasConversion<string>().HasMaxLength(32);
-            entity.Property(x => x.RequestedFrom).HasConversion<string>().HasMaxLength(32);
-            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
-            entity.Property(x => x.ProgressStage).HasConversion<string>().HasMaxLength(32);
-            entity.Property(x => x.Confidence).HasConversion<string>().HasMaxLength(32);
-            entity.Property(x => x.AlgorithmVersion).HasMaxLength(64).IsRequired();
-            entity.Property(x => x.RulesVersion).HasMaxLength(64).IsRequired();
-            entity.Property(x => x.InputHash).HasMaxLength(64);
-            entity.Property(x => x.ErrorCode).HasMaxLength(64);
-            entity.Property(x => x.ErrorMessage).HasMaxLength(1024);
-            entity.Property(x => x.ProgressPercentage).HasPrecision(5, 2);
-            entity.HasIndex(x => new { x.Scope, x.ReferenceDate, x.Status });
-            entity.HasIndex(x => new { x.TargetRouteId, x.ReferenceDate, x.CreatedAt });
-            entity.HasIndex(x => x.InputHash);
-            entity.HasOne(x => x.TargetRoute).WithMany()
-                .HasForeignKey(x => x.TargetRouteId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.SnapshotImport).WithMany()
-                .HasForeignKey(x => x.SnapshotImportId).OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<RouteOptimizationScenario>(entity =>
-        {
-            entity.ToTable("route_optimization_scenarios");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.ActionType).HasConversion<string>().HasMaxLength(32);
-            entity.Property(x => x.Confidence).HasConversion<string>().HasMaxLength(32);
-            entity.Property(x => x.Score).HasPrecision(12, 4);
-            entity.Property(x => x.EstimatedDistanceChangeKm).HasPrecision(12, 2);
-            entity.Property(x => x.CurrentMetricsJson).HasColumnType("jsonb").IsRequired();
-            entity.Property(x => x.ProposedMetricsJson).HasColumnType("jsonb").IsRequired();
-            entity.Property(x => x.WarningsJson).HasColumnType("jsonb").IsRequired();
-            entity.Property(x => x.ReasonsJson).HasColumnType("jsonb").IsRequired();
-            entity.Property(x => x.CityReallocationsJson).HasColumnType("jsonb").IsRequired();
-            entity.Property(x => x.TruckChangeJson).HasColumnType("jsonb");
-            entity.Property(x => x.RouteSequencesJson).HasColumnType("jsonb").IsRequired();
-            entity.HasIndex(x => new { x.RunId, x.Rank }).IsUnique();
-            entity.HasOne(x => x.Run).WithMany(x => x.Scenarios)
-                .HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChatSession>(entity =>
@@ -411,6 +367,27 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<CustomerRegistrationAddress>(entity =>
+        {
+            entity.ToTable("customer_registration_addresses");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DocumentNumber).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Source).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.PostalCode).HasMaxLength(16);
+            entity.Property(x => x.StateCode).HasMaxLength(2);
+            entity.Property(x => x.City).HasMaxLength(256);
+            entity.Property(x => x.Street).HasMaxLength(512);
+            entity.Property(x => x.Number).HasMaxLength(64);
+            entity.Property(x => x.Complement).HasMaxLength(256);
+            entity.Property(x => x.Neighborhood).HasMaxLength(256);
+            entity.Property(x => x.FailureReason).HasMaxLength(1024);
+            entity.HasIndex(x => x.CustomerId).IsUnique();
+            entity.HasOne(x => x.Customer).WithOne(x => x.RegistrationAddress)
+                .HasForeignKey<CustomerRegistrationAddress>(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<RouteCustomerAssignment>(entity =>
         {
             entity.ToTable("route_customer_assignments");
@@ -426,6 +403,25 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
                 .HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Municipality).WithMany()
                 .HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomerRouteMapping>(entity =>
+        {
+            entity.ToTable("customer_route_mappings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SheetName).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Weekday).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.RouteName).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.NormalizedRouteName).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.MarketName).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.MunicipalityName).HasMaxLength(256).IsRequired();
+            entity.HasIndex(x => new { x.ImportId, x.SourceRowNumber, x.SheetName }).IsUnique();
+            entity.HasIndex(x => new { x.ImportId, x.Weekday, x.NormalizedRouteName });
+            entity.HasIndex(x => new { x.ImportId, x.CustomerId });
+            entity.HasOne(x => x.Import).WithMany(x => x.CustomerRouteMappings)
+                .HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Customer).WithMany()
+                .HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Product>(entity =>

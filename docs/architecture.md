@@ -56,9 +56,6 @@ secreto. A API escuta HTTP internamente na porta 8080 e desabilita o
 redirecionamento HTTPS nesse cenário, pois o Nginx do frontend atua como gateway
 para `/api`. As portas e credenciais locais podem ser sobrescritas por `.env`,
 usando `.env.example` como referência; esse arquivo particular não é versionado.
-O provedor de distância padrão do Compose é `Geographic`, permitindo que o MVP
-funcione sem dados cartográficos externos. O OSRM permanece opt-in pelo perfil
-`osrm` e exige os artefatos pré-processados em `infra/osrm`.
 
 ## Limites e dependências
 
@@ -102,6 +99,12 @@ O frontend começa em `frontend/src/main.tsx`; o roteador é configurado em
 - `src/lib`: clientes HTTP, autenticação, transformações, métricas e utilitários.
 - `src/hooks`: hooks compartilhados.
 - `src/styles.css`: estilos globais e tokens visuais.
+
+O frontend mantém somente componentes e adaptadores alcançáveis pela aplicação
+ou por testes de comportamento ativos. Componentes gerados sem consumidor não
+fazem parte do catálogo de UI; quando uma nova tela precisar deles, devem ser
+adicionados com a dependência mínima correspondente. O progresso das
+importações usa consultas HTTP periódicas, sem cliente SignalR paralelo.
 
 O layout raiz fornece o `QueryClient`, controla autenticação das rotas privadas,
 tema e barra lateral. Requisições autenticadas passam pelos clientes de
@@ -221,26 +224,40 @@ permissão da simulação de veículo: `vendas`, `logistica`, `admin` e
 `admin_system`. Para os demais perfis, esses componentes não são renderizados e
 o catálogo de veículos não é consultado ao abrir o detalhe.
 
-Na tela de rotas, a ação `Sugestão de IA` consulta
-`GET /api/route-optimization-runs/latest` para abrir o último cenário global já
-pré-processado. O cenário recomendado principal é um plano global de
-distribuição: dadas as cidades existentes, os caminhões atuais e as distâncias
-pré-calculadas, o solver propõe como as cidades deveriam ficar distribuídas
-entre as rotas do mesmo dia. Quando houver alternativa útil de curto prazo, o
-mesmo run também pode persistir um cenário secundário de realocação emergencial,
-tratado na UI em aba separada como medida paliativa para aliviar sobrecarga sem
-redesenhar toda a malha. Na aba do plano global, a UI não usa nomes das rotas
-antigas como identidade da rota sugerida; cada grupo é nomeado por uma cidade de
-referência do próprio agrupamento sugerido, preservando os nomes antigos apenas
-na lógica de origem/destino persistida. Cada grupo do plano ideal exibe uma
-análise operacional única gerada pelo endpoint `assistant/ask`, usando um prompt
-curto com o resumo do cenário persistido. Se o assistente estiver indisponível,
-a UI usa um texto local de fallback baseado nos mesmos números do job. Os cards
-e detalhes não exibem uma ação individual de recomendação. Abrir uma rota nunca
-cria run nem recalcula matriz, realocação ou troca de veículo. A execução
-manual de otimização global fica na Central de Processamentos como job
-operacional, reutilizando `POST /api/route-optimization-runs` ou o catálogo de
-jobs administrativos para enfileirar o processamento.
+O subsistema anterior de roteirização foi removido para permitir uma nova
+implementação sem dependências legadas. Não existem atualmente solver, matriz
+de distâncias, execução de otimização, sugestão global, endpoint ou ferramenta
+de chat de roteirização. A importação, consulta, histórico e indicadores básicos
+de rotas permanecem disponíveis e não iniciam processamento de otimização.
+
+O enriquecimento cadastral de clientes consulta a BrasilAPI pelo CNPJ em um job
+operacional assíncrono. O Worker limita as chamadas pela configuração
+`BrasilApi:RequestsPerSecond` (uma por segundo por padrão), de forma sequencial,
+e persiste o endereço em `customer_registration_addresses`, separado dos
+snapshots importados. Respostas HTTP 429 são repetidas somente para o CNPJ atual:
+o cliente respeita `Retry-After` quando presente ou usa espera exponencial de
+um, dois, quatro e até oito minutos, com jitter. Depois do limite configurado de
+tentativas, o CNPJ permanece pendente e o job continua nos demais clientes, sem
+registrar a indisponibilidade temporária como falha cadastral. A
+relação única por `CustomerId` reaproveita o resultado entre versões da fonte;
+resultados resolvidos, inválidos ou não encontrados não são consultados outra
+vez. O endereço representa o cadastro do CNPJ, não uma confirmação do local de
+entrega. O job `CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT` reutiliza Hangfire,
+`job_executions` e a Central de Processamentos e pode ser iniciado manualmente ou
+agendado. Sem `importId` explícito, cada execução resolve o snapshot de clientes
+publicado naquele momento. Resultados e progresso são persistidos a cada 25
+clientes por padrão no próprio `job_executions`, com contagens de resolvidos,
+inválidos, não encontrados e pendentes; não existe monitoramento paralelo.
+O índice único por `CustomerId` sustenta a consulta e impede duplicidade; não há
+índice por status porque o processamento parte dos clientes do snapshot e faz a
+comparação pelo identificador, sem filtrar globalmente por esse campo.
+Na tela de Clientes, administradores podem iniciar o enriquecimento diretamente;
+a listagem apresenta somente município e UF do snapshot importado. O endereço
+cadastral persistido fica restrito ao detalhe de consumo: nele, município e UF
+importados continuam identificados como localização operacional, enquanto
+logradouro, número, bairro, complemento, cidade, UF e CEP da BrasilAPI aparecem
+em um bloco cadastral separado. Os demais perfis consultam os resultados, mas não
+recebem a ação administrativa.
 
 O card executivo `Taxa de Ocupação` do dashboard logístico usa somente o
 snapshot atual publicado de rotas, sem filtro de data ou comparação com período
@@ -273,7 +290,7 @@ persistidos.
 ### Canal WhatsApp
 
 O assistente também recebe mensagens privadas por uma conta corporativa conectada
-como dispositivo do WhatsApp Web. O processo local `whatsapp-bridge/`, em Node.js,
+como dispositivo do WhatsApp Web. O processo `whatsapp-bridge/`, em Node.js,
 usa Baileys para gerar o QR Code, preservar as credenciais multi-dispositivo e
 receber/enviar mensagens. `IWhatsAppGateway`, definido em Application e
 implementado em Infrastructure, acessa somente a interface HTTP local desse
@@ -369,8 +386,6 @@ Os controllers atuais atendem:
 - consulta, retry e cancelamento de jobs administrativos;
 - catálogo e execução manual de jobs operacionais declarados como executáveis;
 - consulta paginada dos clientes da importação atualmente publicada.
-- solicitação manual de otimização global de rotas e consulta dos resultados
-  persistidos por execução ou por rota.
 - consulta paginada e detalhe de documentos fiscais, além do resumo histórico de
   consumo em vendas por cliente e da taxa fiscal de devolução por peso.
 - consulta de clientes reais para mapa logístico, posicionados pela coordenada
@@ -527,8 +542,7 @@ assíncrono ou administrativo.
 As ferramentas do chat implementam `IChatTool` e são registradas como coleção no
 container. Nesta versão existem ferramentas de rotas (`search_routes`,
 `get_route_details`, `get_critical_routes`, `list_routes_by_occupancy`,
-`get_route_cities`, `get_route_customers`), otimização
-(`get_latest_route_optimization`, `request_global_route_optimization`) e
+`get_route_cities`, `get_route_customers`) e
 consultas corporativas somente leitura (`search_customers`,
 `get_customer_consumption_summary`, `list_recent_fiscal_documents`,
 `get_fiscal_return_rate`, `search_products`, `get_product_details`,
@@ -654,24 +668,12 @@ Recomendações e ações operacionais usam bullets simples e são renderizadas 
 lista textual normal. Parágrafos explicativos continuam como texto. O modelo não
 deve misturar rotas, clientes e ações na mesma lista nem usar marcadores
 técnicos ou markdown de destaque para representar dados estruturados.
-Pedidos de recomendação feitos ao chat usam `get_latest_route_optimization`,
-quando a pergunta for sobre uma rota específica, ou
-`get_latest_global_route_optimization`, quando a pergunta for sobre a sugestão
-geral de rotas; ambas consultam apenas resultados já persistidos da última
-otimização global. Usuários autorizados podem solicitar novo processamento com
-`request_global_route_optimization`; essa ferramenta apenas cria ou reutiliza um
-run e enfileira `ProcessRouteOptimizationJob`. O modelo não decide realocação,
-caminhão, distância, ocupação ou motivos e não aguarda conclusão do job.
-
 ### Application e Domain
 
 `Application/RouteImports` contém os contratos do pipeline de importação, filas
 assíncronas, dispatcher de jobs em background, interfaces de
 storage/processadores, ciclo de vida, catálogo de jobs operacionais, cálculo de
-ocupação, política de capacidade dos veículos logísticos, resumo de execuções e
-contratos de otimização de rotas. `RouteOptimizationProblem` é o snapshot
-imutável usado pelo solver e não depende de HTTP, chat, frontend, EF ou
-serviços externos.
+ocupação, política de capacidade dos veículos logísticos e resumo de execuções.
 
 Não existe mais módulo de detecção, findings, central de notificações ou
 alertas. Sinais operacionais que antes seriam exibidos como alertas devem ser
@@ -681,13 +683,8 @@ fila paralela de alertas.
 `Domain/Entities` contém usuários, fontes de dados, importações,
 erros, execuções, tipos de veículo, rotas, entradas de rota, clientes, vínculos
 cliente-rota, snapshots de clientes, municípios compartilhados, coordenadas
-municipais, produtos, snapshots de estoque e registros diários de estoque.
-Simulações de otimização ficam em
-`RouteOptimizationRun` e `RouteOptimizationScenario`; cenários persistem JSON
-estruturado com métricas, motivos, avisos, realocações, plano global balanceado
-e troca simulada de caminhão, sem alterar `routes` ou `route_entries`. Os
-estados da importação, da otimização e a origem do vínculo cliente-rota ficam em
-`Domain/Enums`.
+municipais, produtos, snapshots de estoque e registros diários de estoque. Os
+estados da importação e a origem do vínculo cliente-rota ficam em `Domain/Enums`.
 
 `RouteCustomerAssignment` é a entidade de vínculo entre `Route` e `Customer`.
 Hoje ela é populada por `RouteCustomerAssignmentSynchronizer` com origem
@@ -700,49 +697,16 @@ rota para encontrar o município do cliente e materializar o mesmo vínculo. O
 mais de uma vez. Índices por `RouteId + Source`, `CustomerId + Source` e
 `RouteId + MunicipalityId` cobrem os padrões esperados de listagem por rota,
 auditoria da origem do vínculo e futuras consultas por cliente ou município.
-O pipeline de otimização usa `RouteEntry.MunicipalityId` quando disponível e,
-quando a planilha de rotas ainda não trouxe esse vínculo, resolve as coordenadas
-da cidade pelo município inferido em `route_customer_assignments`. Cidades que
-continuarem sem coordenadas são mantidas na rota atual no plano global e geram
-aviso no cenário; elas só tornam o run insuficiente quando nenhuma cidade útil
-possui coordenada. O solver global persiste primeiro o cenário
-`BuildBalancedRoutePlan`, que redistribui cidades entre rotas do mesmo dia
-priorizando redução de rotas críticas, menor pico de ocupação, respeito à
-capacidade dos caminhões e proximidade. O cenário `ReallocateCities` permanece
-como alternativa emergencial para execução manual pontual.
-O cálculo de distância é configurável por `RouteOptimization:DistanceProvider`.
-`Geographic` mantém a estimativa por latitude/longitude. `Osrm` consulta um
-serviço OSRM local com dados OpenStreetMap e grava no cenário o aviso de
-distância rodoviária estimada; se o serviço OSRM estiver indisponível, o job
-falha de forma explícita em vez de misturar metodologias silenciosamente.
 
-O plano global também calcula a sequência viária das cidades de cada rota. O
-`IRouteTravelMatrixProvider` materializa matrizes quadradas de distância e
-duração: com `Osrm`, `OsrmDistanceMatrixProvider` usa uma única chamada ao
-serviço `/table` por rota; com `Geographic`, a matriz estimada é mantida apenas
-como alternativa de desenvolvimento e testes. `MaximumMatrixPoints` limita o
-tamanho de cada matriz antes da chamada externa. Pares sem caminho retornado
-pelo OSRM invalidam o cálculo explicitamente.
-
-`DeterministicRouteStopSequenceOptimizer` recebe a matriz e resolve um percurso
-aberto por rota. Para até 14 cidades, usa programação dinâmica exata; acima
-desse limite, usa vizinho mais próximo seguido de melhoria local 2-opt. A
-primeira cidade da ordem importada permanece como
-ponto inicial operacional e um nó terminal artificial, sem custo, permite que o
-solver escolha o melhor ponto final. Essa decisão é provisória: enquanto o
-domínio não tiver um depósito com coordenadas, o sistema não afirma calcular o
-trecho de saída nem o retorno ao depósito. Cidades sem coordenadas impedem apenas
-a otimização de sequência da rota afetada e continuam preservadas no plano.
-
-O resultado de sequenciamento é persistido em
-`route_optimization_scenarios.RouteSequencesJson`, contendo ordem atual e
-proposta, distância, duração e reduções absolutas e percentuais por rota. A
-coluna JSON não recebe índice porque o padrão de acesso carrega cenários por
-`RunId + Rank` e desserializa o documento completo; não existem filtros ou
-agregações persistidas sobre campos internos. A tela apresenta esses valores
-como resultado de cálculo viário determinístico. IA pode explicar o resultado, mas não
-participa da matriz, da sequência nem das métricas.
-
+A fonte snapshot `CUSTOMER_ROUTE_ASSIGNMENTS` importa planilhas com `Dia`, `Mercado`,
+`Rota` e `Cidade`. As linhas resolvidas ficam em `customer_route_mappings`, preservando
+import, aba e linha de origem. Cliente exige correspondência única por nome e município;
+rota exige nome e dia únicos. Ausências e ambiguidades usam o fluxo de correção da
+Central de Importações. Enquanto não existe snapshot publicado, permanece a inferência
+por município. Depois da publicação, o sincronizador substitui todas as inferências por
+associações `Imported`; clientes não presentes ficam sem rota. Os índices por import e
+cliente atendem a reconstrução, e o índice por import, dia e nome normalizado atende a
+resolução contra novos snapshots de rotas.
 ### Infrastructure
 
 `ImportDbContext` mapeia as entidades para PostgreSQL. A configuração de
@@ -776,12 +740,6 @@ dependências registra:
   `ProcessOperationalJob` como camada fina de execução assíncrona. As regras
   permanecem em `ImportProcessingService`, `OperationalJobProcessingService` e
   processadores de aplicação/infraestrutura.
-- `OsrmDistanceMatrixProvider`, ativado por `RouteOptimization:DistanceProvider
-  = Osrm`, consulta `RouteOptimization:OsrmBaseUrl` para obter distância
-  rodoviária estimada. O compose inclui o serviço opcional `osrm` no profile
-  `osrm`; o grafo local é preparado por `scripts/prepare-osrm-sudeste.sh` em
-  `infra/osrm`, diretório ignorado pelo git por conter arquivos grandes.
-
 Parsing, acesso a arquivos e persistência ficam nesta camada porque dependem de
 formatos ou tecnologias externas. As decisões de domínio extraídas desses dados
 devem continuar testáveis sem depender do host HTTP.
@@ -790,14 +748,12 @@ devem continuar testáveis sem depender do host HTTP.
 
 `InovaSkill.Importer.Worker/Program.cs` configura o mesmo acesso a banco e
 storage da API, registra o storage Hangfire em PostgreSQL e sobe servidores
-separados para as filas `imports`, `route-optimization` e `default`. A
-quantidade de workers de cada fila vem de
-`Hangfire:Workers:{Imports,RouteOptimization,Default}`.
+separados para as filas `imports` e `default`. A quantidade de workers de cada
+fila vem de `Hangfire:Workers:{Imports,Default}`.
 
 O Worker é o local para parsing, consolidações e cálculos pesados. A API apenas
 registra/consulta o trabalho e enfileira o job no Hangfire após persistir o
-estado de negócio. Jobs de importação rodam na fila `imports`; jobs
-de otimização rodam na fila dedicada `route-optimization`; jobs operacionais
+estado de negócio. Jobs de importação rodam na fila `imports`; jobs operacionais
 genéricos rodam na fila `default`. Retries técnicos são explícitos:
 5 segundos, 30 segundos e 2 minutos, preservando o total de quatro execuções
 incluindo a tentativa inicial.
@@ -1248,7 +1204,8 @@ npm install
 npm run dev
 ```
 
-Para conectar um número real do WhatsApp, execute também o bridge local:
+Para conectar um número real do WhatsApp durante o desenvolvimento local, execute
+também o bridge:
 
 ```bash
 cd whatsapp-bridge
@@ -1258,6 +1215,12 @@ npm start
 
 O bridge escuta apenas `127.0.0.1:8081`, envia eventos para a API local e salva
 as credenciais vinculadas em `whatsapp-bridge/.data/auth`, fora do Git.
+
+Na execução completa por Docker Compose, o serviço `whatsapp-bridge` inicia
+automaticamente, escuta `0.0.0.0:8081` dentro do contêiner e se comunica com a
+API por `http://api:8080`. API e Worker acessam o bridge pelo DNS interno
+`http://whatsapp-bridge:8081`. A autenticação multi-dispositivo é preservada no
+volume nomeado `whatsapp_auth_data`, inclusive após recriação do contêiner.
 
 Endereços padrão:
 
@@ -1278,15 +1241,16 @@ Configurações essenciais:
 - `ConnectionStrings__ImportDb`: conexão PostgreSQL usada pela API e pelo Worker.
 - `Hangfire__Storage__ConnectionString`: conexão opcional específica do
   Hangfire; quando ausente, usa `ConnectionStrings__ImportDb`.
-- `Hangfire__Workers__Imports`, `Hangfire__Workers__RouteOptimization` e
-  `Hangfire__Workers__Default`:
+- `Hangfire__Workers__Imports` e `Hangfire__Workers__Default`:
   concorrência por fila do Worker.
 - `Hangfire__Dashboard__AllowAnonymous`: libera acesso ao dashboard fora de
   desenvolvimento somente quando configurado explicitamente.
 - `Storage__ImportsPath`: caminho compartilhado dos arquivos importados.
 - `VITE_API_URL`: base da API incorporada ao build do frontend.
-- `WhatsApp__BaseUrl` e `WhatsApp__InstanceName`: endereço do bridge local e
-  identidade operacional usados pela API e pelo Worker.
+- `WhatsApp__BaseUrl` e `WhatsApp__InstanceName`: endereço do bridge e identidade
+  operacional usados pela API e pelo Worker. No Compose, o endereço usa o DNS
+  interno `http://whatsapp-bridge:8081`; em execução local, usa
+  `http://localhost:8081`.
 - `WhatsApp__WebhookSecret`: segredo obrigatório do webhook recebido pela API.
 
 Em desenvolvimento local, quando `VITE_API_URL` não é informado, o frontend usa

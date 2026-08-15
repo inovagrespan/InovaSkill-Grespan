@@ -15,31 +15,9 @@ public sealed class ImportProcessingServiceTests
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
-        await using var db = new ImportDbContext(new DbContextOptionsBuilder<ImportDbContext>()
-            .UseSqlite(connection).Options);
-        await db.Database.EnsureCreatedAsync();
-        var source = new DataSource {
-            Id = Guid.NewGuid(), Code = "TEST", ProcessorKey = "test", Name = "Test", Type = "XLSX",
-            ImportMode = DataSourceImportMode.Upsert, NextImportVersion = 2, Active = true,
-            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
-        };
-        var import = new RouteImport {
-            Id = Guid.NewGuid(), DataSourceId = source.Id, FileName = "test.xlsx", FilePath = "test.xlsx",
-            Version = 1, Status = RouteImportStatus.Queued, CreatedAt = DateTime.UtcNow
-        };
-        var job = new JobExecution {
-            Id = Guid.NewGuid(), JobType = RouteImportCodes.JobType, RelatedEntityId = import.Id,
-            Status = JobExecutionStatus.Queued, CreatedAt = DateTime.UtcNow
-        };
-        db.AddRange(source, import, job);
-        await db.SaveChangesAsync();
-        var service = new ImportProcessingService(
-            db,
-            [new ClearingProcessor(db)],
-            new NoOpLifecycle(),
-            new NoOpRouteCustomerAssignmentSynchronizer(),
-            new NoOpOperationalJobQueue(),
-            new CapturingRouteOptimizationService());
+        await using var db = CreateDbContext(connection);
+        var (import, job) = await SeedAsync(db, RouteImportStatus.Queued);
+        var service = CreateService(db, new ClearingProcessor(db));
 
         await service.ProcessAsync(import.Id, job.Id, default);
 
@@ -53,33 +31,10 @@ public sealed class ImportProcessingServiceTests
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
-        await using var db = new ImportDbContext(new DbContextOptionsBuilder<ImportDbContext>()
-            .UseSqlite(connection).Options);
-        await db.Database.EnsureCreatedAsync();
-        var source = new DataSource {
-            Id = Guid.NewGuid(), Code = "TEST", ProcessorKey = "test", Name = "Test", Type = "XLSX",
-            ImportMode = DataSourceImportMode.Upsert, NextImportVersion = 2, Active = true,
-            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
-        };
-        var import = new RouteImport {
-            Id = Guid.NewGuid(), DataSourceId = source.Id, FileName = "test.xlsx", FilePath = "test.xlsx",
-            Version = 1, Status = RouteImportStatus.Completed, CreatedAt = DateTime.UtcNow,
-            FinishedAt = DateTime.UtcNow
-        };
-        var job = new JobExecution {
-            Id = Guid.NewGuid(), JobType = RouteImportCodes.JobType, RelatedEntityId = import.Id,
-            Status = JobExecutionStatus.Queued, CreatedAt = DateTime.UtcNow
-        };
-        db.AddRange(source, import, job);
-        await db.SaveChangesAsync();
+        await using var db = CreateDbContext(connection);
+        var (import, job) = await SeedAsync(db, RouteImportStatus.Completed);
         var processor = new CountingProcessor();
-        var service = new ImportProcessingService(
-            db,
-            [processor],
-            new NoOpLifecycle(),
-            new NoOpRouteCustomerAssignmentSynchronizer(),
-            new NoOpOperationalJobQueue(),
-            new CapturingRouteOptimizationService());
+        var service = CreateService(db, processor);
 
         await service.ProcessAsync(import.Id, job.Id, default);
 
@@ -89,45 +44,39 @@ public sealed class ImportProcessingServiceTests
         Assert.Equal(JobExecutionStatus.Queued, persistedJob.Status);
     }
 
-    [Fact]
-    public async Task ProcessAsync_ActivatedRouteImport_RequestsGlobalOptimizationRun()
+    private static ImportDbContext CreateDbContext(SqliteConnection connection) =>
+        new(new DbContextOptionsBuilder<ImportDbContext>().UseSqlite(connection).Options);
+
+    private static ImportProcessingService CreateService(ImportDbContext db, IDataSourceProcessor processor) =>
+        new(db, [processor], new NoOpLifecycle(), new NoOpRouteCustomerAssignmentSynchronizer(),
+            new NoOpOperationalJobQueue());
+
+    private static async Task<(RouteImport Import, JobExecution Job)> SeedAsync(
+        ImportDbContext db,
+        RouteImportStatus status)
     {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-        await using var db = new ImportDbContext(new DbContextOptionsBuilder<ImportDbContext>()
-            .UseSqlite(connection).Options);
         await db.Database.EnsureCreatedAsync();
-        var source = new DataSource {
-            Id = Guid.NewGuid(), Code = RouteImportCodes.DataSource, ProcessorKey = "test", Name = "Routes", Type = "XLSX",
-            ImportMode = DataSourceImportMode.Snapshot, NextImportVersion = 2, Active = true,
-            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        var now = DateTime.UtcNow;
+        var source = new DataSource
+        {
+            Id = Guid.NewGuid(), Code = "TEST", ProcessorKey = "test", Name = "Test", Type = "XLSX",
+            ImportMode = DataSourceImportMode.Upsert, NextImportVersion = 2, Active = true,
+            CreatedAt = now, UpdatedAt = now
         };
-        var import = new RouteImport {
-            Id = Guid.NewGuid(), DataSourceId = source.Id, FileName = "routes.xlsx", FilePath = "routes.xlsx",
-            Version = 1, Status = RouteImportStatus.Queued, CreatedAt = DateTime.UtcNow
+        var import = new RouteImport
+        {
+            Id = Guid.NewGuid(), DataSourceId = source.Id, FileName = "test.xlsx", FilePath = "test.xlsx",
+            Version = 1, Status = status, CreatedAt = now,
+            FinishedAt = status == RouteImportStatus.Completed ? now : null
         };
-        var job = new JobExecution {
+        var job = new JobExecution
+        {
             Id = Guid.NewGuid(), JobType = RouteImportCodes.JobType, RelatedEntityId = import.Id,
-            Status = JobExecutionStatus.Queued, CreatedAt = DateTime.UtcNow
+            Status = JobExecutionStatus.Queued, CreatedAt = now
         };
         db.AddRange(source, import, job);
         await db.SaveChangesAsync();
-        var optimizationService = new CapturingRouteOptimizationService();
-        var service = new ImportProcessingService(
-            db,
-            [new ClearingProcessor(db)],
-            new ActivatedLifecycle(),
-            new NoOpRouteCustomerAssignmentSynchronizer(),
-            new NoOpOperationalJobQueue(),
-            optimizationService);
-
-        await service.ProcessAsync(import.Id, job.Id, default);
-
-        Assert.NotNull(optimizationService.Request);
-        Assert.Equal(RouteOptimizationScope.AllRoutes, optimizationService.Request!.Scope);
-        Assert.Null(optimizationService.Request.TargetRouteId);
-        Assert.Equal(import.Id, optimizationService.Request.SnapshotImportId);
-        Assert.Equal(RouteOptimizationRequestedFrom.InternalProcess, optimizationService.Request.RequestedFrom);
+        return (import, job);
     }
 
     private sealed class ClearingProcessor(ImportDbContext db) : IDataSourceProcessor
@@ -146,7 +95,6 @@ public sealed class ImportProcessingServiceTests
     private sealed class CountingProcessor : IDataSourceProcessor
     {
         public string SourceCode => "test";
-
         public int Calls { get; private set; }
 
         public Task ProcessAsync(Guid importId, CancellationToken cancellationToken)
@@ -165,15 +113,6 @@ public sealed class ImportProcessingServiceTests
             Task.FromResult(false);
     }
 
-    private sealed class ActivatedLifecycle : IImportLifecycleService
-    {
-        public Task<RouteImport> CreateAsync(Guid dataSourceId, string fileName, string filePath,
-            CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<bool> TryActivateAsync(Guid importId, CancellationToken cancellationToken) =>
-            Task.FromResult(true);
-    }
-
     private sealed class NoOpOperationalJobQueue : IOperationalJobQueue
     {
         public Task<Guid?> TryQueueAsync(string jobType, Guid relatedEntityId, CancellationToken cancellationToken) =>
@@ -183,47 +122,5 @@ public sealed class ImportProcessingServiceTests
     private sealed class NoOpRouteCustomerAssignmentSynchronizer : IRouteCustomerAssignmentSynchronizer
     {
         public Task SyncInferredAssignmentsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-    private sealed class CapturingRouteOptimizationService : IRouteOptimizationService
-    {
-        public RouteOptimizationStartRequest? Request { get; private set; }
-
-        public Task<RouteOptimizationRunDto> StartOptimizationAsync(
-            RouteOptimizationStartRequest request,
-            CancellationToken cancellationToken)
-        {
-            Request = request;
-            return Task.FromResult(new RouteOptimizationRunDto(
-                Guid.NewGuid(),
-                request.Scope,
-                request.TargetRouteId,
-                request.ReferenceDate,
-                request.RequestedFrom,
-                RouteOptimizationStatus.Pending,
-                RouteOptimizationStatus.Pending,
-                null,
-                RouteOptimizationCodes.AlgorithmVersion,
-                RouteOptimizationCodes.RulesVersion,
-                null,
-                RouteOptimizationConfidence.Insufficient,
-                request.SnapshotImportId,
-                null,
-                DateTime.UtcNow,
-                null,
-                null,
-                null,
-                null,
-                []));
-        }
-
-        public Task<RouteOptimizationRunDto?> GetOptimizationResultAsync(Guid optimizationRunId, CancellationToken cancellationToken) =>
-            Task.FromResult<RouteOptimizationRunDto?>(null);
-
-        public Task<RouteOptimizationRunDto?> GetLatestGlobalOptimizationAsync(DateOnly? referenceDate, CancellationToken cancellationToken) =>
-            Task.FromResult<RouteOptimizationRunDto?>(null);
-
-        public Task<RouteLatestOptimizationDto> GetLatestRouteOptimizationAsync(Guid routeId, DateOnly? referenceDate, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
     }
 }

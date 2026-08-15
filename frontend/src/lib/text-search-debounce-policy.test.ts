@@ -20,7 +20,6 @@ describe("política de debounce para buscas textuais", () => {
     for (const file of [
       "src/routes/clientes.tsx",
       "src/routes/rotas.tsx",
-      "src/routes/logistica.rotas.tsx",
       "src/routes/financas.tsx",
       "src/routes/vendas.tsx",
       "src/components/ui/customer-map.tsx",
@@ -33,6 +32,5 @@ describe("política de debounce para buscas textuais", () => {
 
   it("não mantém timeouts textuais isolados nas telas de rotas", () => {
     expect(readSource("src/routes/rotas.tsx")).not.toContain("setTimeout(");
-    expect(readSource("src/routes/logistica.rotas.tsx")).not.toContain("setTimeout(");
   });
 });

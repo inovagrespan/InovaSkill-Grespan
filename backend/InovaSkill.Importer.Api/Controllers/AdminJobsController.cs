@@ -116,7 +116,7 @@ public sealed class AdminJobsController(
                 trigger = x.Trigger.ToString(),
                 status = x.Status.ToString(),
                 importId = x.RelatedEntityId,
-                importFileName = x.Import == null ? "Otimização de rotas" : x.Import.FileName,
+                importFileName = x.Import == null ? "Job operacional" : x.Import.FileName,
                 x.Attempts,
                 x.CreatedAt,
                 x.StartedAt,
@@ -150,7 +150,7 @@ public sealed class AdminJobsController(
                 x.RetriedFromJobExecutionId,
                 status = x.Status.ToString(),
                 importId = x.RelatedEntityId,
-                fileName = x.Import == null ? "Otimização de rotas" : x.Import.FileName,
+                fileName = x.Import == null ? "Job operacional" : x.Import.FileName,
                 x.Attempts,
                 x.CreatedAt,
                 x.StartedAt,
@@ -300,6 +300,7 @@ public sealed class AdminJobsController(
         var dataSourceCode = jobType switch
         {
             OperationalJobCodes.MunicipalityCoordinateEnrichment => CustomerImportCodes.DataSource,
+            OperationalJobCodes.CustomerRegistrationAddressEnrichment => CustomerImportCodes.DataSource,
             _ => throw new InvalidOperationException($"Job operacional sem resolvedor: {jobType}.")
         };
 

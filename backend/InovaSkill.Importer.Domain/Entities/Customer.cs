@@ -12,4 +12,5 @@ public sealed class Customer
     public DateTime CreatedAt { get; set; }
     public ICollection<CustomerSnapshot> Snapshots { get; set; } = [];
     public ICollection<RouteCustomerAssignment> RouteAssignments { get; set; } = [];
+    public CustomerRegistrationAddress? RegistrationAddress { get; set; }
 }

@@ -12,7 +12,8 @@ docker compose up -d --build
 ```
 
 Depois que os containers iniciarem, acesse <http://localhost>. A API também fica
-disponível em <http://localhost:5279>.
+disponível em <http://localhost:5279>. O conector local do WhatsApp é iniciado
+automaticamente e fica disponível em <http://localhost:8081>.
 
 Não é necessário criar um `.env`: o Compose já possui valores demonstrativos
 seguros para uso local. Para mudar portas, credenciais locais ou integrar a IA,
@@ -43,7 +44,7 @@ Comandos úteis:
 
 ```bash
 docker compose ps
-docker compose logs -f api worker frontend
+docker compose logs -f api worker frontend whatsapp-bridge
 docker compose down
 ```
 

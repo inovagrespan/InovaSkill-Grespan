@@ -14,6 +14,7 @@ import QRCode from "qrcode";
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const authDirectory = process.env.WHATSAPP_AUTH_PATH ?? path.resolve(dirname, "../.data/auth");
 const port = Number(process.env.WHATSAPP_BRIDGE_PORT ?? 8081);
+const host = process.env.WHATSAPP_BRIDGE_HOST ?? "127.0.0.1";
 const webhookUrl = process.env.WHATSAPP_WEBHOOK_URL ?? "http://localhost:5279/api/integrations/whatsapp/webhook";
 const webhookSecret = process.env.WHATSAPP_WEBHOOK_SECRET ?? "local-whatsapp-bridge-secret";
 const logger = pino({ level: process.env.WHATSAPP_LOG_LEVEL ?? "warn" });
@@ -135,6 +136,6 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(port, "127.0.0.1", () => {
-  logger.info(`Bridge do WhatsApp disponível em http://127.0.0.1:${port}`);
+server.listen(port, host, () => {
+  logger.info(`Bridge do WhatsApp disponível em http://${host}:${port}`);
 });

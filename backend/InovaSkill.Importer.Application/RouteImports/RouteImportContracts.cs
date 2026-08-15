@@ -23,6 +23,16 @@ public static class CustomerImportCodes
     public const string ProcessorKey = "customers";
 }
 
+public static class CustomerRouteAssignmentImportCodes
+{
+    public const string DataSource = "CUSTOMER_ROUTE_ASSIGNMENTS";
+    public const string DataSourceName = "Vínculos de Clientes e Rotas";
+    public const string DataSourceType = "EXCEL";
+    public const string ProcessorKey = "customer-route-assignments";
+    public const string CustomerCorrectionField = "customer_id";
+    public const string RouteCorrectionField = "route_id";
+}
+
 public static class FiscalImportCodes
 {
     public const string DataSource = "FISCAL_MOVEMENTS";
@@ -68,7 +78,7 @@ public static class OperationalJobCodes
 {
     public const string ProcessImport = RouteImportCodes.JobType;
     public const string MunicipalityCoordinateEnrichment = "MUNICIPALITY_COORDINATE_ENRICHMENT";
-    public const string RouteOptimization = RouteOptimizationCodes.JobType;
+    public const string CustomerRegistrationAddressEnrichment = "CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT";
     public const string WhatsAppMessageProcessing = WhatsAppJobCodes.MessageProcessing;
     public const int WorkerExecutionTimeoutMinutes = 30;
 }
@@ -76,7 +86,6 @@ public static class OperationalJobCodes
 public static class BackgroundJobQueues
 {
     public const string Imports = "imports";
-    public const string RouteOptimization = "route-optimization";
     public const string Default = "default";
 }
 
@@ -104,16 +113,16 @@ public static class OperationalJobCatalog
         ContractVersion: 1,
         ExampleParametersJson: "{\"importId\":\"00000000-0000-0000-0000-000000000000\",\"reprocessFailed\":false}");
 
-    public static readonly OperationalJobDefinition RouteOptimization = new(
-        OperationalJobCodes.RouteOptimization,
-        "Otimizar todas as rotas",
-        "Calcula em background a recomendação global de realocação de cidades para o snapshot atual de rotas.",
+    public static readonly OperationalJobDefinition CustomerRegistrationAddressEnrichment = new(
+        OperationalJobCodes.CustomerRegistrationAddressEnrichment,
+        "Enriquecer endereços cadastrais de clientes",
+        "Consulta CNPJs de um snapshot de clientes na BrasilAPI e salva os endereços cadastrais ainda ausentes.",
         ManualRunAllowed: true,
         ScheduleAllowed: true,
-        AllowConcurrentRuns: true,
-        BackgroundJobQueues.RouteOptimization,
+        AllowConcurrentRuns: false,
+        BackgroundJobQueues.Default,
         ContractVersion: 1,
-        ExampleParametersJson: "{\"scope\":\"AllRoutes\",\"referenceDate\":\"2026-01-01\",\"targetRouteId\":null,\"snapshotImportId\":null}");
+        ExampleParametersJson: "{}");
 
     public static readonly OperationalJobDefinition WhatsAppMessageProcessing = new(
         OperationalJobCodes.WhatsAppMessageProcessing,
@@ -138,7 +147,7 @@ public static class OperationalJobCatalog
         ExampleParametersJson: "{\"importId\":\"00000000-0000-0000-0000-000000000000\"}");
 
     private static readonly IReadOnlyDictionary<string, OperationalJobDefinition> Definitions =
-        new[] { ProcessImport, MunicipalityCoordinateEnrichment, RouteOptimization, WhatsAppMessageProcessing }
+        new[] { ProcessImport, MunicipalityCoordinateEnrichment, CustomerRegistrationAddressEnrichment, WhatsAppMessageProcessing }
             .ToDictionary(definition => definition.JobType, StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlyCollection<OperationalJobDefinition> All { get; } = Definitions.Values.ToArray();
@@ -162,6 +171,11 @@ public interface IOperationalJobProcessor
 {
     string JobType { get; }
     Task ProcessAsync(Guid relatedEntityId, CancellationToken cancellationToken);
+}
+
+public interface IProgressReportingOperationalJobProcessor : IOperationalJobProcessor
+{
+    Task ProcessAsync(Guid relatedEntityId, Guid jobExecutionId, CancellationToken cancellationToken);
 }
 
 public interface IOperationalJobQueue

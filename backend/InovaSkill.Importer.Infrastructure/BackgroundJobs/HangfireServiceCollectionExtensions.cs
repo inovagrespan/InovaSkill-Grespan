@@ -52,12 +52,6 @@ public static class HangfireServiceCollectionExtensions
         });
         services.AddHangfireServer(server =>
         {
-            server.ServerName = $"{Environment.MachineName}:route-optimization";
-            server.Queues = [BackgroundJobQueues.RouteOptimization];
-            server.WorkerCount = NormalizeWorkerCount(options.Workers.RouteOptimization);
-        });
-        services.AddHangfireServer(server =>
-        {
             server.ServerName = $"{Environment.MachineName}:default";
             server.Queues = [BackgroundJobQueues.Default];
             server.WorkerCount = NormalizeWorkerCount(options.Workers.Default);

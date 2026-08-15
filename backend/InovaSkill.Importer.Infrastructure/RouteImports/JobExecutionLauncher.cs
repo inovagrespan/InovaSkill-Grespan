@@ -10,8 +10,7 @@ namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
 public sealed class JobExecutionLauncher(
     ImportDbContext db,
-    IBackgroundJobDispatcher dispatcher,
-    IRouteOptimizationService routeOptimizationService) : IJobExecutionLauncher
+    IBackgroundJobDispatcher dispatcher) : IJobExecutionLauncher
 {
     public async Task<JobLaunchResult> LaunchAsync(JobLaunchRequest request, CancellationToken cancellationToken)
     {
@@ -22,12 +21,12 @@ public sealed class JobExecutionLauncher(
             throw new ArgumentException("O JSON de parâmetros excede o limite de 1 MB.");
 
         using var document = ParseObject(request.ParametersJson);
-        if (definition.JobType == OperationalJobCodes.RouteOptimization)
-            return await LaunchRouteOptimizationAsync(document.RootElement, request, cancellationToken);
-
         var relatedEntityId = definition.JobType switch
         {
             OperationalJobCodes.MunicipalityCoordinateEnrichment => ReadRequiredGuid(document.RootElement, "importId"),
+            OperationalJobCodes.CustomerRegistrationAddressEnrichment =>
+                ReadOptionalGuid(document.RootElement, "importId") ??
+                await ResolveCurrentCustomerImportIdAsync(cancellationToken),
             OperationalJobCodes.ProcessImport => ReadRequiredGuid(document.RootElement, "importId"),
             OperationalJobCodes.WhatsAppMessageProcessing => ReadRequiredGuid(document.RootElement, "receiptId"),
             _ => throw new InvalidOperationException($"Job sem lançador: {definition.JobType}.")
@@ -72,48 +71,28 @@ public sealed class JobExecutionLauncher(
         return new JobLaunchResult(job.Id, "QUEUED");
     }
 
-    private async Task<JobLaunchResult> LaunchRouteOptimizationAsync(
-        JsonElement parameters,
-        JobLaunchRequest request,
-        CancellationToken cancellationToken)
-    {
-        var scopeText = ReadRequiredString(parameters, "scope");
-        if (!Enum.TryParse<RouteOptimizationScope>(scopeText, true, out var scope))
-            throw new ArgumentException("$.scope deve ser 'AllRoutes' ou 'SingleRoute'.");
-        if (!DateOnly.TryParse(ReadRequiredString(parameters, "referenceDate"), out var referenceDate))
-            throw new ArgumentException("$.referenceDate deve ser uma data válida no formato AAAA-MM-DD.");
-        var targetRouteId = ReadOptionalGuid(parameters, "targetRouteId");
-        var snapshotImportId = ReadOptionalGuid(parameters, "snapshotImportId");
-        var run = await routeOptimizationService.StartOptimizationAsync(new RouteOptimizationStartRequest(
-            scope, referenceDate, targetRouteId,
-            request.Trigger == JobExecutionTrigger.Schedule
-                ? RouteOptimizationRequestedFrom.InternalProcess
-                : RouteOptimizationRequestedFrom.RouteScreen,
-            request.RequestedByUserId ?? 0,
-            snapshotImportId), cancellationToken);
-        var job = await db.JobExecutions.SingleAsync(item =>
-            item.JobType == OperationalJobCodes.RouteOptimization && item.RelatedEntityId == run.Id,
-            cancellationToken);
-        job.Trigger = request.Trigger;
-        job.ScheduleId = request.ScheduleId;
-        job.RetriedFromJobExecutionId = request.RetriedFromJobExecutionId;
-        job.ParametersJson = parameters.GetRawText();
-        job.ProgressMessage = "Na fila";
-        await db.SaveChangesAsync(cancellationToken);
-        return new JobLaunchResult(job.Id, job.Status.ToString().ToUpperInvariant());
-    }
-
     private async Task ValidateReferenceAsync(string jobType, Guid id, CancellationToken cancellationToken)
     {
         var exists = jobType switch
         {
-            OperationalJobCodes.ProcessImport or OperationalJobCodes.MunicipalityCoordinateEnrichment =>
+            OperationalJobCodes.ProcessImport or OperationalJobCodes.MunicipalityCoordinateEnrichment or
+                OperationalJobCodes.CustomerRegistrationAddressEnrichment =>
                 await db.RouteImports.AnyAsync(item => item.Id == id, cancellationToken),
             OperationalJobCodes.WhatsAppMessageProcessing =>
                 await db.WhatsAppMessageReceipts.AnyAsync(item => item.Id == id, cancellationToken),
             _ => false
         };
         if (!exists) throw new ArgumentException("A referência informada no payload não existe.");
+    }
+
+    private async Task<Guid> ResolveCurrentCustomerImportIdAsync(CancellationToken cancellationToken)
+    {
+        var importId = await db.DataSources.AsNoTracking()
+            .Where(source => source.Code == CustomerImportCodes.DataSource)
+            .Select(source => source.CurrentImportId)
+            .SingleOrDefaultAsync(cancellationToken);
+        return importId ?? throw new ArgumentException(
+            "Não existe um snapshot atual de clientes para enriquecer.");
     }
 
     private static JsonDocument ParseObject(string json)
