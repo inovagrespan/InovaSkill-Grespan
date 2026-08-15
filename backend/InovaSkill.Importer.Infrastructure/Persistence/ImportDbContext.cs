@@ -146,6 +146,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.ReasonsJson).HasColumnType("jsonb").IsRequired();
             entity.Property(x => x.CityReallocationsJson).HasColumnType("jsonb").IsRequired();
             entity.Property(x => x.TruckChangeJson).HasColumnType("jsonb");
+            entity.Property(x => x.RouteSequencesJson).HasColumnType("jsonb").IsRequired();
             entity.HasIndex(x => new { x.RunId, x.Rank }).IsUnique();
             entity.HasOne(x => x.Run).WithMany(x => x.Scenarios)
                 .HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);

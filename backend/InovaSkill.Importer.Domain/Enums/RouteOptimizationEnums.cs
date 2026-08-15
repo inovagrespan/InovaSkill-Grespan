@@ -41,6 +41,7 @@ public enum RouteOptimizationStatus
 public enum RouteOptimizationActionType
 {
     BuildBalancedRoutePlan,
+    OptimizeStopSequence,
     ReallocateCities,
     ChangeTruck,
     NoChange,

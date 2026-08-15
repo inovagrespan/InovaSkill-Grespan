@@ -7,6 +7,7 @@ public sealed class RouteOptimizationOptions
     public string DistanceProvider { get; set; } = RouteDistanceProviderNames.Geographic;
     public string OsrmBaseUrl { get; set; } = "http://localhost:5000";
     public int OsrmTimeoutSeconds { get; set; } = 10;
+    public int MaximumMatrixPoints { get; set; } = 100;
 }
 
 public static class RouteDistanceProviderNames

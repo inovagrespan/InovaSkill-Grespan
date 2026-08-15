@@ -19,5 +19,6 @@ public sealed class RouteOptimizationScenario
     public string ReasonsJson { get; set; } = "[]";
     public string CityReallocationsJson { get; set; } = "[]";
     public string? TruckChangeJson { get; set; }
+    public string RouteSequencesJson { get; set; } = "[]";
     public DateTime CreatedAt { get; set; }
 }

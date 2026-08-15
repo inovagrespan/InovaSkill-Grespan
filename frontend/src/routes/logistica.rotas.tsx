@@ -79,9 +79,58 @@ function recommendedScenario(run: RouteOptimizationRun | null): RouteOptimizatio
 
 function scenarioTitle(scenario: RouteOptimizationScenario): string {
   if (scenario.actionType === "BuildBalancedRoutePlan") return "Plano principal recomendado";
+  if (scenario.actionType === "OptimizeStopSequence") return "Sequência de cidades otimizada";
   if (scenario.actionType === "ReallocateCities") return "Realocação emergencial";
   if (scenario.actionType === "ChangeTruck") return "Troca de caminhão";
   return "Cenário analisado";
+}
+
+function RouteSequenceComparison({ scenario }: { scenario: RouteOptimizationScenario }) {
+  const sequences = scenario.routeSequences ?? [];
+  if (sequences.length === 0) {
+    return (
+      <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+        Não há sequência calculável: são necessárias ao menos duas cidades com coordenadas na mesma rota.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">Sequência calculada das cidades</h3>
+        <p className="text-xs text-muted-foreground">Cálculo combinatório determinístico com matriz viária; a primeira cidade permanece como ponto inicial.</p>
+      </div>
+      {sequences.map((sequence) => (
+        <div key={sequence.routeId} className="rounded-lg border border-border bg-surface-soft/40 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-medium text-foreground">{sequence.routeName}</p>
+              <p className="text-xs text-muted-foreground">{sequence.matrixMethod}</p>
+            </div>
+            <div className="text-right text-xs">
+              <p className="font-medium text-emerald-600">-{sequence.distanceReductionKm.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km</p>
+              <p className="text-muted-foreground">-{sequence.durationReductionMinutes} min</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <div className="rounded-md border border-border/70 bg-surface p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">Ordem atual · {sequence.currentDistanceKm.toLocaleString("pt-BR")} km</p>
+              <ol className="space-y-1 text-sm">
+                {sequence.currentStops.map((stop) => <li key={stop.cityId}>{stop.sequence}. {stop.cityName}</li>)}
+              </ol>
+            </div>
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <p className="mb-2 text-xs font-medium text-emerald-700">Ordem proposta · {sequence.proposedDistanceKm.toLocaleString("pt-BR")} km</p>
+              <ol className="space-y-1 text-sm">
+                {sequence.proposedStops.map((stop) => <li key={stop.cityId}>{stop.sequence}. {stop.cityName}</li>)}
+              </ol>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function occupancyBarWidth(value: number | null): string {
@@ -577,7 +626,7 @@ function LogisticaRotasPage() {
                 onClick={() => void openAiSuggestion()}
               >
                 <Sparkles className="mr-2 size-4" />
-                Sugestão de IA
+                Roteirização calculada
               </Button>
             </div>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
@@ -767,7 +816,7 @@ function LogisticaRotasPage() {
                 <Sparkles className="size-5" />
               </div>
               <div className="min-w-0 space-y-1">
-                <DialogTitle className="text-xl">Sugestão de IA</DialogTitle>
+                <DialogTitle className="text-xl">Roteirização calculada</DialogTitle>
                 <DialogDescription className="max-w-3xl">
                   Leitura do último job de otimização global já processado, com o cenário recomendado pronto para análise.
                 </DialogDescription>
@@ -804,13 +853,14 @@ function LogisticaRotasPage() {
                         scenario={aiScenario}
                         run={aiSuggestionRun}
                         tone="ideal"
-                        description="A IA redesenha a distribuição sugerida usando as cidades existentes, os caminhões disponíveis e as distâncias pré-processadas, sem aplicar nenhuma mudança automaticamente."
+                        description="O cálculo redesenha a distribuição sugerida usando as cidades existentes, os caminhões disponíveis e as distâncias viárias, sem aplicar nenhuma mudança automaticamente."
                       />
                       <AiPlanExplanation
                         text={aiPlanExplanation || buildLocalPlanExplanation(aiScenario)}
                         loading={aiPlanExplanationLoading}
                       />
                       <AiRoutePlanGroups scenario={aiScenario} />
+                      <RouteSequenceComparison scenario={aiScenario} />
                       {aiScenario.warnings.length > 0 && (
                         <div className="space-y-1">
                           {aiScenario.warnings.map((warning) => (

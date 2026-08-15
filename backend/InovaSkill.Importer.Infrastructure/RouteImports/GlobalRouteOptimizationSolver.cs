@@ -3,7 +3,9 @@ using InovaSkill.Importer.Domain.Enums;
 
 namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
-public sealed class GlobalRouteOptimizationSolver(IDistanceMatrixProvider distanceMatrixProvider) : IRouteOptimizationSolver
+public sealed class GlobalRouteOptimizationSolver(
+    IDistanceMatrixProvider distanceMatrixProvider,
+    IRouteStopSequenceOptimizer stopSequenceOptimizer) : IRouteOptimizationSolver
 {
     private const decimal DistanceScoreWeight = 0.05m;
     private const decimal PlanDistanceScoreWeight = 0.02m;
@@ -15,6 +17,11 @@ public sealed class GlobalRouteOptimizationSolver(IDistanceMatrixProvider distan
     private const decimal RoutePlanOverflowPenalty = 10_000m;
     private const int MaximumBalancedPlanIterations = 300;
     private const int OccupancyPercentScale = 100;
+
+    public GlobalRouteOptimizationSolver(IDistanceMatrixProvider distanceMatrixProvider)
+        : this(distanceMatrixProvider, new PreserveCurrentStopSequenceOptimizer())
+    {
+    }
 
     public bool CanHandle(RouteOptimizationScope scope) => scope == RouteOptimizationScope.AllRoutes;
 
@@ -64,6 +71,11 @@ public sealed class GlobalRouteOptimizationSolver(IDistanceMatrixProvider distan
         var emergencyScenario = await BuildEmergencyReallocationScenarioAsync(problem, warnings, cancellationToken);
         if (plannedScenario is not null)
         {
+            plannedScenario = await WithOptimizedSequencesAsync(problem, plannedScenario, cancellationToken);
+            if (emergencyScenario is not null)
+            {
+                emergencyScenario = await WithOptimizedSequencesAsync(problem, emergencyScenario, cancellationToken);
+            }
             var scenarios = emergencyScenario is null
                 ? [plannedScenario]
                 : new[] { plannedScenario, emergencyScenario };
@@ -77,6 +89,7 @@ public sealed class GlobalRouteOptimizationSolver(IDistanceMatrixProvider distan
 
         if (emergencyScenario is not null)
         {
+            emergencyScenario = await WithOptimizedSequencesAsync(problem, emergencyScenario, cancellationToken);
             return new RouteOptimizationSolution(
                 RouteOptimizationStatus.Completed,
                 RouteOptimizationConfidence.Medium,
@@ -96,12 +109,113 @@ public sealed class GlobalRouteOptimizationSolver(IDistanceMatrixProvider distan
             ? "Nenhum plano global confiável foi encontrado com os caminhões e cidades atuais."
             : "A otimização mais recente não recomenda alterações para as rotas.";
 
+        var unchangedScenario = await WithOptimizedSequencesAsync(
+            problem,
+            Scenario(problem, problem.Routes.Select(route => new MutableRouteState(route)), [], [new RouteOptimizationReasonDto(code, message)], warnings, 0, RouteOptimizationActionType.NoChange),
+            cancellationToken);
+        var hasSequenceImprovement = unchangedScenario.RouteSequences?.Any(sequence => sequence.DistanceReductionKm > 0) == true;
+        if (hasSequenceImprovement)
+        {
+            status = RouteOptimizationStatus.Completed;
+            unchangedScenario = unchangedScenario with
+            {
+                ActionType = RouteOptimizationActionType.OptimizeStopSequence,
+                Reasons = unchangedScenario.Reasons
+                    .Append(new RouteOptimizationReasonDto(
+                        "OptimizesStopSequence",
+                        "A distribuição de carga foi mantida, mas a ordem das cidades foi reduzida por cálculo viário."))
+                    .ToArray()
+            };
+        }
+
         return new RouteOptimizationSolution(
             status,
             RouteOptimizationConfidence.Medium,
-            [Scenario(problem, problem.Routes.Select(route => new MutableRouteState(route)), [], [new RouteOptimizationReasonDto(code, message)], warnings, 0, RouteOptimizationActionType.NoChange)],
-            [new RouteOptimizationReasonDto(code, message)],
+            [unchangedScenario],
+            unchangedScenario.Reasons,
             warnings);
+    }
+
+    private async Task<RouteOptimizationScenarioCandidate> WithOptimizedSequencesAsync(
+        RouteOptimizationProblem problem,
+        RouteOptimizationScenarioCandidate scenario,
+        CancellationToken cancellationToken)
+    {
+        var routeCities = problem.Routes.ToDictionary(
+            route => route.RouteId,
+            route => route.Cities.ToList());
+        foreach (var move in scenario.CityReallocations)
+        {
+            var source = routeCities[move.SourceRouteId];
+            var city = source.Single(item => item.CityId == move.CityId);
+            source.Remove(city);
+            routeCities[move.DestinationRouteId].Add(city);
+        }
+
+        var sequences = new List<RouteSequenceOptimizationDto>();
+        foreach (var route in problem.Routes.OrderBy(route => route.Weekday).ThenBy(route => route.Name))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var cities = routeCities[route.RouteId]
+                .OrderBy(city => city.Sequence)
+                .ThenBy(city => city.Name)
+                .ToArray();
+            if (cities.Length < 2 || cities.Any(city => city.Location is null))
+            {
+                continue;
+            }
+
+            var result = await stopSequenceOptimizer.OptimizeAsync(cities, cancellationToken);
+            var currentDistance = Math.Round(result.CurrentDistanceKm, 2, MidpointRounding.AwayFromZero);
+            var proposedDistance = Math.Round(result.ProposedDistanceKm, 2, MidpointRounding.AwayFromZero);
+            var distanceReduction = Math.Max(0m, currentDistance - proposedDistance);
+            var distanceReductionPercentage = currentDistance > 0
+                ? Math.Round(distanceReduction / currentDistance * OccupancyPercentScale, 2, MidpointRounding.AwayFromZero)
+                : 0m;
+            sequences.Add(new RouteSequenceOptimizationDto(
+                route.RouteId,
+                route.Name,
+                ToSequenceStops(cities),
+                ToSequenceStops(result.Stops),
+                currentDistance,
+                proposedDistance,
+                distanceReduction,
+                distanceReductionPercentage,
+                result.CurrentDurationMinutes,
+                result.ProposedDurationMinutes,
+                Math.Max(0, result.CurrentDurationMinutes - result.ProposedDurationMinutes),
+                result.MatrixMethod));
+        }
+
+        var totalDistanceReduction = sequences.Sum(sequence => sequence.DistanceReductionKm);
+        return scenario with
+        {
+            Score = Math.Round(scenario.Score + totalDistanceReduction, 4, MidpointRounding.AwayFromZero),
+            EstimatedDistanceChangeKm = Math.Round(
+                (scenario.EstimatedDistanceChangeKm ?? 0m) - totalDistanceReduction,
+                2,
+                MidpointRounding.AwayFromZero),
+            RouteSequences = sequences
+        };
+    }
+
+    private static IReadOnlyList<RouteSequenceStopDto> ToSequenceStops(
+        IReadOnlyList<OptimizationCity> cities) =>
+        cities.Select((city, index) => new RouteSequenceStopDto(
+            city.CityId,
+            city.Name,
+            index + 1,
+            city.LoadKg)).ToArray();
+
+    private sealed class PreserveCurrentStopSequenceOptimizer : IRouteStopSequenceOptimizer
+    {
+        public Task<RouteStopSequenceResult> OptimizeAsync(
+            IReadOnlyList<OptimizationCity> stops,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new RouteStopSequenceResult(stops, 0m, 0m, 0, 0, "TestCurrentSequence"));
+        }
     }
 
     private async Task<RouteOptimizationScenarioCandidate?> BuildBalancedRoutePlanScenarioAsync(
@@ -401,7 +515,7 @@ public sealed class GlobalRouteOptimizationSolver(IDistanceMatrixProvider distan
                 var sourceAfterOccupancy = sourceAfterLoad / source.Route.CapacityKg!.Value;
                 var destinationAfterOccupancy = destinationAfterLoad / destination.Route.CapacityKg!.Value;
                 if (source.Occupancy - sourceAfterOccupancy < problem.Constraints.MinimumOccupancyImprovement ||
-                    sourceAfterOccupancy > RouteOccupancyLevelPolicy.CriticalMinimumExclusive ||
+                    sourceAfterOccupancy > problem.Constraints.MaximumDestinationOccupancy ||
                     destinationAfterOccupancy > problem.Constraints.MaximumDestinationOccupancy)
                 {
                     continue;

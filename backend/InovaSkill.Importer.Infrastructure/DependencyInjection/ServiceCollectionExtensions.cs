@@ -56,6 +56,14 @@ public static class ServiceCollectionExtensions
                 ? serviceProvider.GetRequiredService<OsrmDistanceMatrixProvider>()
                 : new GeographicDistanceMatrixProvider();
         });
+        services.AddScoped<IRouteTravelMatrixProvider>(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<RouteOptimizationOptions>>().Value;
+            return string.Equals(options.DistanceProvider, RouteDistanceProviderNames.Osrm, StringComparison.OrdinalIgnoreCase)
+                ? serviceProvider.GetRequiredService<OsrmDistanceMatrixProvider>()
+                : new GeographicDistanceMatrixProvider();
+        });
+        services.AddScoped<IRouteStopSequenceOptimizer, DeterministicRouteStopSequenceOptimizer>();
         services.AddScoped<IRouteOptimizationSolver, SingleRouteOptimizationSolver>();
         services.AddScoped<IRouteOptimizationSolver, GlobalRouteOptimizationSolver>();
         services.AddScoped<IRouteOptimizationService, RouteOptimizationService>();

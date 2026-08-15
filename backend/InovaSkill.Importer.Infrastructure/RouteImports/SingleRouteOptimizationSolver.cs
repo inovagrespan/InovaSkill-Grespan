@@ -154,7 +154,7 @@ public sealed class SingleRouteOptimizationSolver(IDistanceMatrixProvider distan
                 var destinationAfterOccupancy = destinationAfterLoad / destination.CapacityKg!.Value;
                 var improvement = source.Occupancy!.Value - sourceAfterOccupancy;
                 if (improvement < problem.Constraints.MinimumOccupancyImprovement ||
-                    sourceAfterOccupancy > RouteOccupancyLevelPolicy.CriticalMinimumExclusive ||
+                    sourceAfterOccupancy > problem.Constraints.MaximumDestinationOccupancy ||
                     destinationAfterOccupancy > problem.Constraints.MaximumDestinationOccupancy)
                 {
                     continue;

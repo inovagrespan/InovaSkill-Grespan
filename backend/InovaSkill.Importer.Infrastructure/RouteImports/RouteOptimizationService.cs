@@ -288,7 +288,8 @@ public sealed class RouteOptimizationService(
             Deserialize<IReadOnlyList<RouteCityReallocationDto>>(scenario.CityReallocationsJson),
             string.IsNullOrWhiteSpace(scenario.TruckChangeJson)
                 ? null
-                : Deserialize<RouteTruckChangeDto>(scenario.TruckChangeJson));
+                : Deserialize<RouteTruckChangeDto>(scenario.TruckChangeJson),
+            Deserialize<IReadOnlyList<RouteSequenceOptimizationDto>>(scenario.RouteSequencesJson));
 
     internal static string Serialize<T>(T value) => JsonSerializer.Serialize(value, JsonOptions);
 
@@ -476,6 +477,7 @@ public sealed class RouteOptimizationProcessingService(
                     TruckChangeJson = scenario.TruckChange is null
                         ? null
                         : RouteOptimizationService.Serialize(scenario.TruckChange),
+                    RouteSequencesJson = RouteOptimizationService.Serialize(scenario.RouteSequences ?? []),
                     CreatedAt = DateTime.UtcNow
                 });
                 scenarioRank++;

@@ -654,6 +654,33 @@ serviço OSRM local com dados OpenStreetMap e grava no cenário o aviso de
 distância rodoviária estimada; se o serviço OSRM estiver indisponível, o job
 falha de forma explícita em vez de misturar metodologias silenciosamente.
 
+O plano global também calcula a sequência viária das cidades de cada rota. O
+`IRouteTravelMatrixProvider` materializa matrizes quadradas de distância e
+duração: com `Osrm`, `OsrmDistanceMatrixProvider` usa uma única chamada ao
+serviço `/table` por rota; com `Geographic`, a matriz estimada é mantida apenas
+como alternativa de desenvolvimento e testes. `MaximumMatrixPoints` limita o
+tamanho de cada matriz antes da chamada externa. Pares sem caminho retornado
+pelo OSRM invalidam o cálculo explicitamente.
+
+`DeterministicRouteStopSequenceOptimizer` recebe a matriz e resolve um percurso
+aberto por rota. Para até 14 cidades, usa programação dinâmica exata; acima
+desse limite, usa vizinho mais próximo seguido de melhoria local 2-opt. A
+primeira cidade da ordem importada permanece como
+ponto inicial operacional e um nó terminal artificial, sem custo, permite que o
+solver escolha o melhor ponto final. Essa decisão é provisória: enquanto o
+domínio não tiver um depósito com coordenadas, o sistema não afirma calcular o
+trecho de saída nem o retorno ao depósito. Cidades sem coordenadas impedem apenas
+a otimização de sequência da rota afetada e continuam preservadas no plano.
+
+O resultado de sequenciamento é persistido em
+`route_optimization_scenarios.RouteSequencesJson`, contendo ordem atual e
+proposta, distância, duração e reduções absolutas e percentuais por rota. A
+coluna JSON não recebe índice porque o padrão de acesso carrega cenários por
+`RunId + Rank` e desserializa o documento completo; não existem filtros ou
+agregações persistidas sobre campos internos. A tela apresenta esses valores
+como resultado de cálculo viário determinístico. IA pode explicar o resultado, mas não
+participa da matriz, da sequência nem das métricas.
+
 ### Infrastructure
 
 `ImportDbContext` mapeia as entidades para PostgreSQL. A configuração de

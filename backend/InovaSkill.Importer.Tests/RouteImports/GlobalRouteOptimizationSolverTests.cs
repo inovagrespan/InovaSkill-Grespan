@@ -111,6 +111,76 @@ public sealed class GlobalRouteOptimizationSolverTests
         Assert.Contains(scenario.Warnings, warning => warning.Contains("OSRM/OpenStreetMap"));
     }
 
+    [Fact]
+    public async Task SolveAsync_HealthyRoute_ReportsSequenceSavingsAndCompletedStatus()
+    {
+        var cities = new[]
+        {
+            City("Origem", 2_000m, -22.1m, -49.1m) with { Sequence = 1 },
+            City("Distante", 3_000m, -22.2m, -49.2m) with { Sequence = 2 },
+            City("Próxima", 3_000m, -22.3m, -49.3m) with { Sequence = 3 }
+        };
+        var problem = new RouteOptimizationProblem(
+            RouteOptimizationScope.AllRoutes,
+            new DateOnly(2026, 8, 11),
+            null,
+            Guid.NewGuid(),
+            13,
+            [Route("saudavel", "ROTA TESTE", 10_000m, 8_000m, cities)],
+            [Truck("Truck", 10_000m)],
+            new OptimizationConstraints(2, 8, 0.05m, 1.00m, 80m),
+            "hash");
+        var solver = new GlobalRouteOptimizationSolver(
+            new GeographicDistanceMatrixProvider(),
+            new FixedSequenceOptimizer());
+
+        var solution = await solver.SolveAsync(problem, CancellationToken.None);
+
+        Assert.Equal(RouteOptimizationStatus.Completed, solution.Status);
+        var scenario = Assert.Single(solution.Scenarios);
+        Assert.Equal(RouteOptimizationActionType.OptimizeStopSequence, scenario.ActionType);
+        var sequence = Assert.Single(scenario.RouteSequences!);
+        Assert.Equal(30m, sequence.CurrentDistanceKm);
+        Assert.Equal(20m, sequence.ProposedDistanceKm);
+        Assert.Equal(10m, sequence.DistanceReductionKm);
+        Assert.Equal(33.33m, sequence.DistanceReductionPercentage);
+        Assert.Equal(15, sequence.DurationReductionMinutes);
+        Assert.Equal(new[] { "Origem", "Próxima", "Distante" }, sequence.ProposedStops.Select(stop => stop.CityName));
+    }
+
+    [Fact]
+    public async Task SolveAsync_SequenceMetrics_ClampWorseAndZeroBaselineSavingsToZero()
+    {
+        var cities = new[]
+        {
+            City("Origem", 4_000m, -22.1m, -49.1m) with { Sequence = 1 },
+            City("Destino", 4_000m, -22.1m, -49.1m) with { Sequence = 2 }
+        };
+        var problem = new RouteOptimizationProblem(
+            RouteOptimizationScope.AllRoutes,
+            new DateOnly(2026, 8, 11),
+            null,
+            Guid.NewGuid(),
+            13,
+            [Route("saudavel", "ROTA ZERO", 10_000m, 8_000m, cities)],
+            [Truck("Truck", 10_000m)],
+            new OptimizationConstraints(2, 8, 0.05m, 1.00m, 80m),
+            "hash");
+        var solver = new GlobalRouteOptimizationSolver(
+            new GeographicDistanceMatrixProvider(),
+            new WorseSequenceOptimizer());
+
+        var solution = await solver.SolveAsync(problem, CancellationToken.None);
+
+        Assert.Equal(RouteOptimizationStatus.NoChangeRecommended, solution.Status);
+        var sequence = Assert.Single(Assert.Single(solution.Scenarios).RouteSequences!);
+        Assert.Equal(0m, sequence.CurrentDistanceKm);
+        Assert.Equal(5m, sequence.ProposedDistanceKm);
+        Assert.Equal(0m, sequence.DistanceReductionKm);
+        Assert.Equal(0m, sequence.DistanceReductionPercentage);
+        Assert.Equal(0, sequence.DurationReductionMinutes);
+    }
+
     private static OptimizationRoute Route(
         string routeIdSeed,
         string name,
@@ -156,5 +226,33 @@ public sealed class GlobalRouteOptimizationSolverTests
             GeoPoint destination,
             CancellationToken cancellationToken) =>
             Task.FromResult(12m);
+    }
+
+    private sealed class FixedSequenceOptimizer : IRouteStopSequenceOptimizer
+    {
+        public Task<RouteStopSequenceResult> OptimizeAsync(
+            IReadOnlyList<OptimizationCity> stops,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new RouteStopSequenceResult(
+                [stops[0], stops[2], stops[1]],
+                30m,
+                20m,
+                45,
+                30,
+                "FixedRoadMatrix"));
+    }
+
+    private sealed class WorseSequenceOptimizer : IRouteStopSequenceOptimizer
+    {
+        public Task<RouteStopSequenceResult> OptimizeAsync(
+            IReadOnlyList<OptimizationCity> stops,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new RouteStopSequenceResult(
+                stops,
+                0m,
+                5m,
+                0,
+                10,
+                "FixedRoadMatrix"));
     }
 }

@@ -5,8 +5,8 @@ namespace InovaSkill.Importer.Application.RouteImports;
 public static class RouteOptimizationCodes
 {
     public const string JobType = "PROCESS_ROUTE_OPTIMIZATION";
-    public const string AlgorithmVersion = "global-route-v4-balanced-plan";
-    public const string RulesVersion = "occupancy-v1";
+    public const string AlgorithmVersion = "global-route-v5-stop-sequence";
+    public const string RulesVersion = "occupancy-and-road-sequence-v1";
 }
 
 public sealed record RouteOptimizationStartRequest(
@@ -52,7 +52,8 @@ public sealed record RouteOptimizationScenarioDto(
     IReadOnlyList<RouteOptimizationReasonDto> Reasons,
     IReadOnlyList<string> Warnings,
     IReadOnlyList<RouteCityReallocationDto> CityReallocations,
-    RouteTruckChangeDto? TruckChange);
+    RouteTruckChangeDto? TruckChange,
+    IReadOnlyList<RouteSequenceOptimizationDto>? RouteSequences = null);
 
 public sealed record RouteOptimizationMetricsDto(
     Guid RouteId,
@@ -91,6 +92,26 @@ public sealed record RouteTruckChangeDto(
     decimal? OccupancyBefore,
     decimal OccupancyAfter,
     IReadOnlyList<RouteOptimizationReasonDto> Reasons);
+
+public sealed record RouteSequenceOptimizationDto(
+    Guid RouteId,
+    string RouteName,
+    IReadOnlyList<RouteSequenceStopDto> CurrentStops,
+    IReadOnlyList<RouteSequenceStopDto> ProposedStops,
+    decimal CurrentDistanceKm,
+    decimal ProposedDistanceKm,
+    decimal DistanceReductionKm,
+    decimal DistanceReductionPercentage,
+    int CurrentDurationMinutes,
+    int ProposedDurationMinutes,
+    int DurationReductionMinutes,
+    string MatrixMethod);
+
+public sealed record RouteSequenceStopDto(
+    Guid CityId,
+    string CityName,
+    int Sequence,
+    decimal LoadKg);
 
 public interface IRouteOptimizationService
 {
@@ -140,6 +161,35 @@ public interface IDistanceMatrixProvider
         GeoPoint destination,
         CancellationToken cancellationToken);
 }
+
+public interface IRouteTravelMatrixProvider
+{
+    string Method { get; }
+
+    Task<RouteTravelMatrix> GetMatrixAsync(
+        IReadOnlyList<GeoPoint> points,
+        CancellationToken cancellationToken);
+}
+
+public interface IRouteStopSequenceOptimizer
+{
+    Task<RouteStopSequenceResult> OptimizeAsync(
+        IReadOnlyList<OptimizationCity> stops,
+        CancellationToken cancellationToken);
+}
+
+public sealed record RouteTravelMatrix(
+    IReadOnlyList<IReadOnlyList<decimal>> DistancesKm,
+    IReadOnlyList<IReadOnlyList<int>> DurationsMinutes,
+    string Method);
+
+public sealed record RouteStopSequenceResult(
+    IReadOnlyList<OptimizationCity> Stops,
+    decimal CurrentDistanceKm,
+    decimal ProposedDistanceKm,
+    int CurrentDurationMinutes,
+    int ProposedDurationMinutes,
+    string MatrixMethod);
 
 public sealed record GeoPoint(decimal Latitude, decimal Longitude);
 
@@ -201,7 +251,8 @@ public sealed record RouteOptimizationScenarioCandidate(
     IReadOnlyList<RouteOptimizationReasonDto> Reasons,
     IReadOnlyList<string> Warnings,
     IReadOnlyList<RouteCityReallocationDto> CityReallocations,
-    RouteTruckChangeDto? TruckChange);
+    RouteTruckChangeDto? TruckChange,
+    IReadOnlyList<RouteSequenceOptimizationDto>? RouteSequences = null);
 
 public sealed record RouteLatestOptimizationDto(
     RouteOptimizationStatus Status,

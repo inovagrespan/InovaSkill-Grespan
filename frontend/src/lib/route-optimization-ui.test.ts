@@ -21,7 +21,8 @@ describe("route optimization UI", () => {
   );
 
   it("expõe sugestão global pré-processada e consulta por rota usando a data selecionada", () => {
-    expect(routePage).toContain("Sugestão de IA");
+    expect(routePage).toContain("Roteirização calculada");
+    expect(routePage).toContain("O cálculo redesenha a distribuição sugerida");
     expect(routePage).toContain("fetchLatestGlobalRouteOptimization(snapshotDate)");
     expect(routePage).toContain("último job de otimização global já processado");
     expect(routePage).toContain("Plano principal recomendado");
@@ -38,6 +39,11 @@ describe("route optimization UI", () => {
     expect(routePage).toContain("Rota sugerida");
     expect(routePage).toContain("referenceCityName");
     expect(routePage).toContain("Cidades nesta rota");
+    expect(routePage).toContain("Sequência calculada das cidades");
+    expect(routePage).toContain("Cálculo combinatório determinístico com matriz viária");
+    expect(routePage).toContain("sequence.distanceReductionKm");
+    expect(routePage).toContain("sequence.durationReductionMinutes");
+    expect(api).toContain("RouteSequenceOptimization");
     expect(routePage).toContain("buildLocalPlanExplanation");
     expect(routePage).toContain("Movimentos para execução manual");
     expect(routePage).not.toContain("Otimizar todas as rotas");

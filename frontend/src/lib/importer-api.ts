@@ -3461,6 +3461,7 @@ export type RouteOptimizationStatus =
 export type RouteOptimizationConfidence = "High" | "Medium" | "Insufficient";
 export type RouteOptimizationActionType =
   | "BuildBalancedRoutePlan"
+  | "OptimizeStopSequence"
   | "ReallocateCities"
   | "ChangeTruck"
   | "NoChange"
@@ -3510,6 +3511,28 @@ export type RouteTruckChange = {
   reasons: RouteOptimizationReason[];
 };
 
+export type RouteSequenceStop = {
+  cityId: string;
+  cityName: string;
+  sequence: number;
+  loadKg: number;
+};
+
+export type RouteSequenceOptimization = {
+  routeId: string;
+  routeName: string;
+  currentStops: RouteSequenceStop[];
+  proposedStops: RouteSequenceStop[];
+  currentDistanceKm: number;
+  proposedDistanceKm: number;
+  distanceReductionKm: number;
+  distanceReductionPercentage: number;
+  currentDurationMinutes: number;
+  proposedDurationMinutes: number;
+  durationReductionMinutes: number;
+  matrixMethod: string;
+};
+
 export type RouteOptimizationScenario = {
   id: string;
   rank: number;
@@ -3524,6 +3547,7 @@ export type RouteOptimizationScenario = {
   warnings: string[];
   cityReallocations: RouteCityReallocation[];
   truckChange: RouteTruckChange | null;
+  routeSequences: RouteSequenceOptimization[] | null;
 };
 
 export type RouteOptimizationRun = {
