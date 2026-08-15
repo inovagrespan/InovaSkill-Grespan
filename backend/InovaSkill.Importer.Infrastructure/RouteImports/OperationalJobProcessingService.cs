@@ -46,7 +46,10 @@ public sealed class OperationalJobProcessingService(
 
         try
         {
-            await processor.ProcessAsync(job.RelatedEntityId, cancellationToken);
+            if (processor is IProgressReportingOperationalJobProcessor progressReportingProcessor)
+                await progressReportingProcessor.ProcessAsync(job.RelatedEntityId, job.Id, cancellationToken);
+            else
+                await processor.ProcessAsync(job.RelatedEntityId, cancellationToken);
             dbContext.ChangeTracker.Clear();
             job = await dbContext.JobExecutions
                 .SingleAsync(x => x.Id == jobExecutionId, cancellationToken);
@@ -60,8 +63,10 @@ public sealed class OperationalJobProcessingService(
             }
             job.Status = JobExecutionStatus.Completed;
             job.ProgressPercent = 100;
-            job.ProgressMessage = "Concluído";
-            job.ResultJson = JsonSerializer.Serialize(new { relatedEntityId = job.RelatedEntityId, completed = true });
+            job.ProgressMessage = job.ResultJson is null
+                ? "Concluído"
+                : $"Concluído: {job.ProgressMessage}";
+            job.ResultJson ??= JsonSerializer.Serialize(new { relatedEntityId = job.RelatedEntityId, completed = true });
             job.FinishedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
         }

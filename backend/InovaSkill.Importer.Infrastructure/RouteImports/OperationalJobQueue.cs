@@ -43,6 +43,8 @@ public sealed class OperationalJobQueue(
             {
                 OperationalJobCodes.MunicipalityCoordinateEnrichment =>
                     JsonSerializer.Serialize(new { importId = relatedEntityId, reprocessFailed = false }),
+                OperationalJobCodes.CustomerRegistrationAddressEnrichment =>
+                    JsonSerializer.Serialize(new { importId = relatedEntityId }),
                 OperationalJobCodes.WhatsAppMessageProcessing =>
                     JsonSerializer.Serialize(new { receiptId = relatedEntityId }),
                 _ => JsonSerializer.Serialize(new { relatedEntityId })

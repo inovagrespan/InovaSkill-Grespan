@@ -21,4 +21,5 @@ public sealed class RouteImport
     public ICollection<RouteImportError> Errors { get; set; } = [];
     public ICollection<JobExecution> JobExecutions { get; set; } = [];
     public ICollection<Route> Routes { get; set; } = [];
+    public ICollection<CustomerRouteMapping> CustomerRouteMappings { get; set; } = [];
 }

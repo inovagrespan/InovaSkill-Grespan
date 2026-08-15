@@ -165,7 +165,6 @@ describe("operational, finance and reports pages", () => {
 
   it("constrói causas e evidências específicas para a árvore de investigação logística", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.index.tsx"), "utf8");
-    const board = fs.readFileSync(path.resolve(process.cwd(), "src/components/logistics-routes-board.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve(process.cwd(), "src/styles.css"), "utf8");
 
     expect(source).toContain("buildInvestigationFactors");
@@ -193,24 +192,8 @@ describe("operational, finance and reports pages", () => {
     expect(source).not.toContain("demoLogisticsMapCustomers");
     expect(source).toContain("<AreaChart");
     expect(source).not.toContain("<BarChart ");
-    expect(board).toContain("buildTrafficDelayRanking");
-    expect(board).toContain("demoLogisticsMapRoutes");
-    expect(board).toContain("<LogisticsRegionMap customers={demoLogisticsMapCustomers} routes={demoLogisticsMapRoutes} periodDays={periodDays} compact");
-    expect(board).toContain("grid grid-cols-1 gap-4 xl:grid-cols-2");
-    expect(board).toContain("Rotas com mais atrasos por congestionamento");
-    expect(board).toContain("maxTrafficDelayMinutes");
-    expect(board).toContain("INITIAL_TRAFFIC_DELAY_ROUTE_LIMIT = 4");
-    expect(board).toContain("visibleTrafficDelayRanking");
-    expect(board).toContain("trafficDelayRanking.slice(0, INITIAL_TRAFFIC_DELAY_ROUTE_LIMIT)");
-    expect(board).toContain("Exibir mais {hiddenTrafficDelayRouteCount} rotas");
-    expect(board).toContain("setShowAllTrafficDelayRoutes(true)");
-    expect(board).toContain("trafficSeverityClass(route.severity)");
-    expect(board).toContain("formatLogisticsDuration(route.delayMinutes)");
-    expect(board).toContain("route.congestionCount} registros");
     expect(styles).toContain(".logistics-map-headquarters");
     expect(styles).toContain(".logistics-map-popup");
-    expect(styles).toContain(".logistics-city-chart-card");
-    expect(styles).toContain(".dark .logistics-city-chart-card");
     expect(styles).toContain(".logistics-modal-chart");
     expect(styles).toContain(".dark .logistics-modal-chart");
   });

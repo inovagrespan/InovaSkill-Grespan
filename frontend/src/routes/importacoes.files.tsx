@@ -13,13 +13,16 @@ import {
   MAX_UPLOAD_SIZE_BYTES,
   MAX_UPLOAD_SIZE_MEGABYTES,
   fetchImportErrors,
+  fetchImportErrorCandidates,
   fetchImports,
   reprocessImport,
   resolveImportError,
   uploadImport,
   type ImportErrorItem,
+  type ImportErrorCandidate,
   type ImportItem,
 } from "@/lib/importer-api";
+import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
 
 export const Route = createFileRoute("/importacoes/files")({
   component: ImportacoesPage,
@@ -58,6 +61,47 @@ function formatDuration(seconds: number | null): string {
   const h = Math.floor(m / 60);
   if (h <= 0) return `${m}m ${s}s`;
   return `${h}h ${m % 60}m`;
+}
+
+function AssignmentCandidateResolver({ error, resolving, onResolve }: {
+  error: ImportErrorItem;
+  resolving: boolean;
+  onResolve: (value: string) => Promise<void>;
+}) {
+  const [search, setSearch] = useState(error.rawValue);
+  const [items, setItems] = useState<ImportErrorCandidate[]>([]);
+  const [expanded, setExpanded] = useState(false);
+  const debouncedSearch = useDebouncedValue(search, TEXT_SEARCH_DEBOUNCE_MS);
+  useEffect(() => {
+    if (!expanded) return;
+    let active = true;
+    fetchImportErrorCandidates(error.id, debouncedSearch)
+      .then(result => { if (active) setItems(result.items); })
+      .catch(() => { if (active) setItems([]); });
+    return () => { active = false; };
+  }, [error.id, debouncedSearch, expanded]);
+  if (!expanded) {
+    return <Button type="button" size="sm" variant="outline" className="mt-2"
+      onClick={() => setExpanded(true)}>Revisar vínculo</Button>;
+  }
+  return (
+    <div className="mt-2 space-y-2">
+      <input value={search} onChange={event => setSearch(event.target.value)}
+        aria-label={`Buscar candidato para ${error.rawValue}`}
+        className="flex h-8 w-full rounded-md border border-input bg-background px-3 text-xs"
+        placeholder="Buscar cliente ou rota..." />
+      <div className="max-h-40 space-y-1 overflow-auto">
+        {items.map(item => (
+          <Button key={item.id} type="button" variant="outline" size="sm" disabled={resolving}
+            className="h-auto w-full justify-start py-2 text-left" onClick={() => void onResolve(item.id)}>
+            <span><span className="block">{item.label}</span>
+              <span className="block text-xs text-muted-foreground">{item.detail}</span></span>
+          </Button>
+        ))}
+        {items.length === 0 && <p className="text-xs text-muted-foreground">Nenhum candidato encontrado.</p>}
+      </div>
+    </div>
+  );
 }
 
 function ImportacoesPage() {
@@ -447,7 +491,11 @@ function ImportacoesPage() {
                             {err.status === "Resolved" ? "Resolvido" : "Pendente"}
                           </Badge>
                         </div>
-                        {err.status === "Pending" && (
+                        {err.status === "Pending" && (err.field === "customer_id" || err.field === "route_id") && (
+                          <AssignmentCandidateResolver error={err} resolving={resolvingErrorId === err.id}
+                            onResolve={value => handleResolveError(err.id, value)} />
+                        )}
+                        {err.status === "Pending" && err.field !== "customer_id" && err.field !== "route_id" && (
                           <div className="mt-2 space-y-1">
                             <div className="flex items-center gap-2">
                               <input

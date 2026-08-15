@@ -66,13 +66,6 @@ public static class ApiAccessPolicy
             return AllApplicationRoles.Contains(normalizedRole);
         }
 
-        if (path.StartsWith("/api/route-optimization-runs", StringComparison.OrdinalIgnoreCase))
-        {
-            return isMutation
-                ? normalizedRole is AppUserRoles.Logistica or AppUserRoles.Admin or AppUserRoles.AdminSystem
-                : AllApplicationRoles.Contains(normalizedRole);
-        }
-
         if (path.StartsWith("/api/production", StringComparison.OrdinalIgnoreCase))
         {
             return LogisticsRoles.Contains(normalizedRole);

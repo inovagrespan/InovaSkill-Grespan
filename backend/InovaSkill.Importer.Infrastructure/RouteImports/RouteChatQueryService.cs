@@ -12,6 +12,8 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
     private const string InferredByMunicipalityRelationshipType = "InferredByMunicipality";
     private const string InferredByMunicipalityRelationshipDescription =
         "Enquanto não existir vínculo manual cliente-rota, o relacionamento é inferido pelo município do cliente e pelas cidades reconhecidas da rota.";
+    private const string ImportedRelationshipDescription =
+        "Relacionamento oficial importado da planilha de vínculos entre clientes, dias e rotas.";
 
     public async Task<IReadOnlyList<RouteChatSummaryDto>> SearchRoutesAsync(
         string searchTerm,
@@ -326,11 +328,14 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
                 item.snapshot.CustomerType))
             .ToListAsync(cancellationToken);
 
+        var imported = await dbContext.DataSources.AsNoTracking().AnyAsync(source =>
+            source.Code == CustomerRouteAssignmentImportCodes.DataSource && source.CurrentImportId != null,
+            cancellationToken);
         return new RouteChatRouteCustomersDto(
             route.Id,
             route.Name,
-            InferredByMunicipalityRelationshipType,
-            InferredByMunicipalityRelationshipDescription,
+            imported ? RouteCustomerAssignmentSource.Imported.ToString() : InferredByMunicipalityRelationshipType,
+            imported ? ImportedRelationshipDescription : InferredByMunicipalityRelationshipDescription,
             customers);
     }
 

@@ -16,15 +16,10 @@ describe("filtros de rotas", () => {
 
   it("exibe apenas informações operacionais da rota", () => {
     const route = fs.readFileSync(path.resolve(process.cwd(), "src/routes/rotas.tsx"), "utf8");
-    const logisticsRoute = fs.readFileSync(path.resolve(process.cwd(), "src/routes/logistica.rotas.tsx"), "utf8");
-
     expect(route).not.toContain(">Importadas<");
-
-    for (const routeFile of [route, logisticsRoute]) {
-      expect(routeFile).not.toContain("Arquivo:");
-      expect(routeFile).not.toContain("Importado:");
-      expect(routeFile).toContain("cidade(s)");
-      expect(routeFile).toContain("entrega(s)");
-    }
+    expect(route).not.toContain("Arquivo:");
+    expect(route).not.toContain("Importado:");
+    expect(route).toContain("cidade(s)");
+    expect(route).toContain("entrega(s)");
   });
 });

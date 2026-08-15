@@ -61,6 +61,12 @@ function operationLabel(category: string, description: string): string {
   }[category] ?? category);
 }
 
+const addressStatusLabels = {
+  INVALID_DOCUMENT: "CNPJ inválido",
+  NOT_FOUND: "Endereço não encontrado",
+  FAILED: "Falha na consulta do endereço",
+} as const;
+
 export function CustomerConsumptionDialog({
   id,
   open,
@@ -129,6 +135,34 @@ export function CustomerConsumptionDialog({
                   <div className="flex items-center gap-3">
                     <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><ShoppingBag className="size-4" /></span>
                     <div><p className="text-xs text-muted-foreground">Tipo de cliente</p><p className="text-sm font-semibold">{data.customer.customerType || "Não informado"}</p></div>
+                  </div>
+                  <div className="flex items-start gap-3 border-t border-border pt-3 sm:col-span-2 lg:col-span-4">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><MapPin className="size-4" /></span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Endereço cadastral</p>
+                      {!data.customer.registrationAddress ? (
+                        <p className="text-sm font-semibold">Não consultado</p>
+                      ) : data.customer.registrationAddress.status !== "RESOLVED" ? (
+                        <p className="text-sm font-semibold">
+                          {addressStatusLabels[data.customer.registrationAddress.status]}
+                        </p>
+                      ) : (
+                        <div className="text-sm font-semibold">
+                          <p>{[data.customer.registrationAddress.street, data.customer.registrationAddress.number]
+                            .filter(Boolean).join(", ") || "Logradouro não informado"}</p>
+                          <p className="font-normal text-muted-foreground">
+                            {[data.customer.registrationAddress.neighborhood, data.customer.registrationAddress.complement]
+                              .filter(Boolean).join(" · ") || "Bairro e complemento não informados"}
+                          </p>
+                          <p className="font-normal text-muted-foreground">
+                            {[data.customer.registrationAddress.city, data.customer.registrationAddress.stateCode]
+                              .filter(Boolean).join(" / ")}
+                            {data.customer.registrationAddress.postalCode
+                              ? ` · CEP ${data.customer.registrationAddress.postalCode}` : ""}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </section>
 

@@ -8,7 +8,7 @@ public sealed class GenericJobCatalogTests
     [Theory]
     [InlineData(OperationalJobCodes.ProcessImport, BackgroundJobQueues.Imports, false)]
     [InlineData(OperationalJobCodes.MunicipalityCoordinateEnrichment, BackgroundJobQueues.Default, true)]
-    [InlineData(OperationalJobCodes.RouteOptimization, BackgroundJobQueues.RouteOptimization, true)]
+    [InlineData(OperationalJobCodes.CustomerRegistrationAddressEnrichment, BackgroundJobQueues.Default, true)]
     [InlineData(OperationalJobCodes.WhatsAppMessageProcessing, BackgroundJobQueues.Default, false)]
     public void Catalog_ResolvesEveryJobByCaseInsensitiveKeyWithValidVersionedJson(
         string jobType, string expectedQueue, bool manualRunAllowed)

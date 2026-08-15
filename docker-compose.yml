@@ -17,18 +17,6 @@
       retries: 10
     restart: unless-stopped
 
-  osrm:
-    image: osrm/osrm-backend:latest
-    container_name: inovaskill-osrm
-    profiles:
-      - osrm
-    command: osrm-routed --algorithm mld /data/sudeste-latest.osrm
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./infra/osrm:/data
-    restart: unless-stopped
-
   api:
     container_name: inovaskill-api
     build:
@@ -42,12 +30,10 @@
       DisableHttpsRedirection: "true"
       ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=${POSTGRES_DB:-inovaskill_importer};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
       Jwt__Secret: ${JWT_SECRET:-local-mvp-secret-change-before-production-2026}
-      WhatsApp__WebhookSecret: ${WHATSAPP_WEBHOOK_SECRET:-}
+      WhatsApp__WebhookSecret: ${WHATSAPP_WEBHOOK_SECRET:-local-whatsapp-bridge-secret}
       Storage__ImportsPath: /data/route-imports
-      RouteOptimization__DistanceProvider: ${ROUTE_DISTANCE_PROVIDER:-Geographic}
-      RouteOptimization__OsrmBaseUrl: ${OSRM_BASE_URL:-http://osrm:5000}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      WhatsApp__BaseUrl: ${WHATSAPP_BASE_URL:-http://host.docker.internal:8081}
+      WhatsApp__BaseUrl: http://whatsapp-bridge:8081
       WhatsApp__InstanceName: ${WHATSAPP_INSTANCE_NAME:-grespan}
     volumes:
       - route_imports_data:/data/route-imports
@@ -58,6 +44,25 @@
     mem_limit: 512m
     cpus: 1.0
 
+  whatsapp-bridge:
+    container_name: inovaskill-whatsapp-bridge
+    build:
+      context: ./whatsapp-bridge
+      dockerfile: Dockerfile
+    ports:
+      - "${WHATSAPP_BRIDGE_PORT:-8081}:8081"
+    environment:
+      WHATSAPP_BRIDGE_HOST: 0.0.0.0
+      WHATSAPP_BRIDGE_PORT: 8081
+      WHATSAPP_AUTH_PATH: /app/.data/auth
+      WHATSAPP_WEBHOOK_URL: http://api:8080/api/integrations/whatsapp/webhook
+      WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-local-whatsapp-bridge-secret}
+    volumes:
+      - whatsapp_auth_data:/app/.data/auth
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
+
   worker:
     container_name: inovaskill-worker
     build:
@@ -67,10 +72,8 @@
       DOTNET_ENVIRONMENT: Development
       ConnectionStrings__ImportDb: Host=postgres;Port=5432;Database=${POSTGRES_DB:-inovaskill_importer};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
       Storage__ImportsPath: /data/route-imports
-      RouteOptimization__DistanceProvider: ${ROUTE_DISTANCE_PROVIDER:-Geographic}
-      RouteOptimization__OsrmBaseUrl: ${OSRM_BASE_URL:-http://osrm:5000}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      WhatsApp__BaseUrl: ${WHATSAPP_BASE_URL:-http://host.docker.internal:8081}
+      WhatsApp__BaseUrl: http://whatsapp-bridge:8081
       WhatsApp__InstanceName: ${WHATSAPP_INSTANCE_NAME:-grespan}
     volumes:
       - route_imports_data:/data/route-imports
@@ -99,3 +102,4 @@
 volumes:
   postgres_data:
   route_imports_data:
+  whatsapp_auth_data:

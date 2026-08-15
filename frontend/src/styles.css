@@ -531,15 +531,6 @@
   border-top: 1px solid #e2e8f0;
 }
 
-.logistics-city-chart-card {
-  --logistics-city-chart-bar: #be2434;
-  --logistics-city-chart-grid: rgba(100, 116, 139, 0.16);
-  --logistics-city-chart-axis: #64748b;
-  --logistics-city-chart-text: #172033;
-  --logistics-city-chart-tooltip-bg: rgba(255, 255, 255, 0.98);
-  --logistics-city-chart-tooltip-border: rgba(148, 163, 184, 0.35);
-}
-
 .logistics-modal-chart {
   --logistics-modal-chart-title: #172033;
   --logistics-modal-chart-muted: #64748b;
@@ -562,15 +553,6 @@
   --logistics-modal-chart-tooltip-border: rgba(82, 82, 82, 0.55);
   background: linear-gradient(180deg, rgba(20, 20, 20, 0.98), rgba(10, 10, 10, 0.98));
   border-color: rgba(64, 64, 64, 0.6);
-}
-
-.dark .logistics-city-chart-card {
-  --logistics-city-chart-bar: #e02f45;
-  --logistics-city-chart-grid: rgba(148, 163, 184, 0.11);
-  --logistics-city-chart-axis: #98a4b8;
-  --logistics-city-chart-text: #e5e7eb;
-  --logistics-city-chart-tooltip-bg: rgba(12, 12, 12, 0.98);
-  --logistics-city-chart-tooltip-border: rgba(82, 82, 82, 0.55);
 }
 
 .dark .leaflet-control-zoom a,

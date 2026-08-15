@@ -1,19 +1,28 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Search } from "lucide-react";
+import { Loader2, MapPin, Search } from "lucide-react";
 import { CustomerConsumptionDialog } from "@/components/CustomerConsumptionDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { FeedbackMessage } from "@/components/ui/feedback-message";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchCurrentCustomers, type CurrentCustomerItem } from "@/lib/importer-api";
+import { fetchCurrentCustomers, runOperationalJob, type CurrentCustomerItem } from "@/lib/importer-api";
+import { canCurrentUserAccessProcessingArea } from "@/lib/auth";
 import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
 
 export const Route = createFileRoute("/clientes")({ component: CustomersPage });
 
 const PAGE_SIZE = 25;
+const CUSTOMER_ADDRESS_JOB_TYPE = "CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT";
+const CUSTOMER_ADDRESS_JOB_CONTRACT_VERSION = 1;
+const weekdayLabels: Record<string, string> = {
+  MONDAY: "Segunda", TUESDAY: "Terça", WEDNESDAY: "Quarta",
+  THURSDAY: "Quinta", FRIDAY: "Sexta", SATURDAY: "Sábado", SUNDAY: "Domingo",
+};
 
 function CustomersPage() {
   const [search, setSearch] = useState("");
@@ -24,6 +33,25 @@ function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [startingAddressJob, setStartingAddressJob] = useState(false);
+  const [feedback, setFeedback] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const canRunAddressJob = canCurrentUserAccessProcessingArea();
+
+  async function startAddressEnrichment() {
+    setStartingAddressJob(true);
+    setFeedback(null);
+    try {
+      await runOperationalJob(CUSTOMER_ADDRESS_JOB_TYPE, CUSTOMER_ADDRESS_JOB_CONTRACT_VERSION, {});
+      setFeedback({
+        message: "Enriquecimento iniciado. Acompanhe a execução na Central de Processamentos e atualize a lista ao concluir.",
+        type: "success",
+      });
+    } catch (reason) {
+      setFeedback({ message: (reason as Error).message, type: "error" });
+    } finally {
+      setStartingAddressJob(false);
+    }
+  }
 
   useEffect(() => setPage(1), [debouncedSearch]);
   useEffect(() => {
@@ -50,13 +78,23 @@ function CustomersPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   return (
     <div className="page-shell app-background min-w-0 max-w-full overflow-x-hidden">
-      <header className="animate-soft-enter">
-        <span className="page-header-kicker">Cadastros</span>
-        <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Clientes</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Consulte os clientes da importação atualmente publicada.
-        </p>
+      <header className="animate-soft-enter flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <span className="page-header-kicker">Cadastros</span>
+          <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Clientes</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Consulte os clientes da importação atualmente publicada.
+          </p>
+        </div>
+        {canRunAddressJob && (
+          <Button onClick={() => void startAddressEnrichment()} disabled={startingAddressJob}>
+            {startingAddressJob ? <Loader2 className="mr-2 size-4 animate-spin" /> : <MapPin className="mr-2 size-4" />}
+            Enriquecer endereços
+          </Button>
+        )}
       </header>
+
+      <FeedbackMessage message={feedback?.message ?? null} type={feedback?.type} onDismiss={() => setFeedback(null)} />
 
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
@@ -75,12 +113,12 @@ function CustomersPage() {
           </div>
         </CardHeader>
         <CardContent className="min-w-0 space-y-4">
-          {loading ? <SkeletonTable rows={8} columns={7} /> : items.length === 0 ? (
+          {loading ? <SkeletonTable rows={8} columns={8} /> : items.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
               {debouncedSearch ? "Nenhum cliente encontrado para esta busca." : "Nenhum cliente importado."}
             </p>
           ) : (
-            <Table className="min-w-[1040px] table-fixed">
+            <Table className="min-w-[1240px] table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-24">Código</TableHead>
@@ -90,6 +128,7 @@ function CustomersPage() {
                   <TableHead className="w-28">Tipo</TableHead>
                   <TableHead className="w-16">UF</TableHead>
                   <TableHead className="w-44">Município</TableHead>
+                  <TableHead className="w-52">Rotas</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -104,6 +143,17 @@ function CustomersPage() {
                     <TableCell className="truncate" title={item.customerType}>{item.customerType || "-"}</TableCell>
                     <TableCell>{item.stateCode}</TableCell>
                     <TableCell className="truncate" title={item.municipalityName}>{item.municipalityName}</TableCell>
+                    <TableCell>
+                      {item.routeAssignments.length === 0 ? "—" : (
+                        <div className="flex flex-wrap gap-1">
+                          {item.routeAssignments.map(assignment => (
+                            <Badge key={`${assignment.routeId}-${assignment.weekday}`} variant="outline">
+                              {weekdayLabels[assignment.weekday] ?? assignment.weekday} · {assignment.routeName}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -14,6 +14,7 @@ public sealed class SpreadsheetDataSourceDetector : ISpreadsheetDataSourceDetect
         ["CODIGO", "CODONCLICK", "DESCRICAO", "TIPO", "UNIDADE", "GRUPO"];
     private static readonly string[] InventoryHeaders =
         ["CODIGO", "SALDO EM ESTOQUE", "EMPENHO PARA REQ/PV/RESERVA", "ESTOQUE DISPONIVEL"];
+    private static readonly string[] CustomerRouteAssignmentHeaders = ["DIA", "MERCADO", "ROTA", "CIDADE"];
     private static readonly string[][] FiscalHeaders =
     [
         ["DOCUMENTO"], ["DATA"], ["ITEM"], ["CLIENTE", "CODIGO CLIENTE"], ["LOJA"],
@@ -62,6 +63,8 @@ public sealed class SpreadsheetDataSourceDetector : ISpreadsheetDataSourceDetect
                 matches.Add(InventoryCurrentImportCodes.DataSource);
             if (normalizedSheets.Any(sheet => LooksLikeDailyInventory(sheet.Rows)))
                 matches.Add(DailyInventoryImportCodes.DataSource);
+            if (normalizedSheets.Any(sheet => sheet.Rows.Any(row => CustomerRouteAssignmentHeaders.All(row.Contains))))
+                matches.Add(CustomerRouteAssignmentImportCodes.DataSource);
             if (normalizedSheets.Any(sheet => sheet.Rows.Any(row =>
                     FiscalHeaders.All(group => group.Any(row.Contains)))))
                 matches.Add(FiscalImportCodes.DataSource);

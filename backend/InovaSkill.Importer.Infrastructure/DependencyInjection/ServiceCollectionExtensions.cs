@@ -10,7 +10,6 @@ using InovaSkill.Importer.Api.Assistant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace InovaSkill.Importer.Infrastructure.DependencyInjection;
 
@@ -25,27 +24,29 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<ImportDbContext>(options => options.UseNpgsql(connectionString));
         services.AddHttpClient();
+        services.Configure<BrasilApiOptions>(configuration.GetSection(BrasilApiOptions.SectionName));
+        var brasilApiOptions = configuration.GetSection(BrasilApiOptions.SectionName).Get<BrasilApiOptions>()
+            ?? new BrasilApiOptions();
+        services.AddHttpClient<ICustomerRegistrationAddressProvider, BrasilApiCustomerRegistrationAddressProvider>(client =>
+        {
+            client.BaseAddress = new Uri(brasilApiOptions.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, brasilApiOptions.TimeoutSeconds));
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(brasilApiOptions.UserAgent);
+        });
         services.AddMemoryCache();
         services.AddSingleton<ICacheStore, MemoryCacheStore>();
         services.AddSingleton<IApplicationCache, ResilientApplicationCache>();
-        services.Configure<RouteOptimizationOptions>(
-            configuration.GetSection(RouteOptimizationOptions.SectionName));
         services.Configure<AssistantOptions>(options =>
         {
             configuration.GetSection(AssistantOptions.SectionName).Bind(options);
             options.OpenAiApiKey = configuration["OPENAI_API_KEY"] ?? options.OpenAiApiKey;
         });
         services.Configure<WhatsAppOptions>(configuration.GetSection(WhatsAppOptions.SectionName));
-        services.AddHttpClient<OsrmDistanceMatrixProvider>((serviceProvider, client) =>
-        {
-            var options = serviceProvider.GetRequiredService<IOptions<RouteOptimizationOptions>>().Value;
-            client.BaseAddress = OsrmDistanceMatrixProvider.NormalizeBaseUrl(options.OsrmBaseUrl);
-            client.Timeout = Timeout.InfiniteTimeSpan;
-        });
         services.AddScoped<IImportFileStorage, LocalImportFileStorage>();
         services.AddScoped<ISpreadsheetDataSourceDetector, SpreadsheetDataSourceDetector>();
         services.AddScoped<RoutesSpreadsheetParser>();
         services.AddScoped<CustomersSpreadsheetParser>();
+        services.AddScoped<CustomerRouteAssignmentsSpreadsheetParser>();
         services.AddScoped<FiscalMovementsSpreadsheetParser>();
         services.AddScoped<ProductsSpreadsheetParser>();
         services.AddScoped<InventoryCurrentSpreadsheetParser>();
@@ -57,30 +58,20 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IJobScheduleDispatcher, JobScheduleDispatcher>();
         services.AddScoped<IScheduledJobLauncher, ScheduledJobLauncher>();
         services.AddScoped<IBackgroundJobDispatcher, HangfireBackgroundJobDispatcher>();
-        services.AddScoped<IRouteOptimizationJobDispatcher, HangfireBackgroundJobDispatcher>();
         services.AddScoped<IImportProcessingService, ImportProcessingService>();
         services.AddScoped<IOperationalJobProcessingService, OperationalJobProcessingService>();
         services.AddScoped<IRouteChatQueryService, RouteChatQueryService>();
         services.AddScoped<IBusinessChatQueryService, BusinessChatQueryService>();
-        services.AddScoped<IDistanceMatrixProvider>(serviceProvider =>
-        {
-            var options = serviceProvider.GetRequiredService<IOptions<RouteOptimizationOptions>>().Value;
-            return string.Equals(options.DistanceProvider, RouteDistanceProviderNames.Osrm, StringComparison.OrdinalIgnoreCase)
-                ? serviceProvider.GetRequiredService<OsrmDistanceMatrixProvider>()
-                : new GeographicDistanceMatrixProvider();
-        });
-        services.AddScoped<IRouteOptimizationSolver, SingleRouteOptimizationSolver>();
-        services.AddScoped<IRouteOptimizationSolver, GlobalRouteOptimizationSolver>();
-        services.AddScoped<IRouteOptimizationService, RouteOptimizationService>();
-        services.AddScoped<IRouteOptimizationProcessingService, RouteOptimizationProcessingService>();
         services.AddScoped<IRouteCustomerAssignmentSynchronizer, RouteCustomerAssignmentSynchronizer>();
         services.AddScoped<IDataSourceProcessor, RoutesByCityProcessor>();
         services.AddScoped<IDataSourceProcessor, CustomersProcessor>();
+        services.AddScoped<IDataSourceProcessor, CustomerRouteAssignmentsProcessor>();
         services.AddScoped<IDataSourceProcessor, FiscalMovementsProcessor>();
         services.AddScoped<IDataSourceProcessor, ProductsProcessor>();
         services.AddScoped<IDataSourceProcessor, InventoryCurrentProcessor>();
         services.AddScoped<IDataSourceProcessor, DailyInventoryProcessor>();
         services.AddScoped<IOperationalJobProcessor, MunicipalityCoordinateEnrichmentProcessor>();
+        services.AddScoped<IOperationalJobProcessor, CustomerRegistrationAddressEnrichmentProcessor>();
         services.AddScoped<IWhatsAppGateway, LocalBaileysWhatsAppGateway>();
         services.AddScoped<IAudioTranscriptionService, OpenAiAudioTranscriptionService>();
         services.AddScoped<IWhatsAppMessageQueue, WhatsAppMessageQueue>();
@@ -96,9 +87,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChatTool, ListRoutesByOccupancyChatTool>();
         services.AddScoped<IChatTool, GetRouteCitiesChatTool>();
         services.AddScoped<IChatTool, GetRouteCustomersChatTool>();
-        services.AddScoped<IChatTool, GetLatestGlobalRouteOptimizationChatTool>();
-        services.AddScoped<IChatTool, GetLatestRouteOptimizationChatTool>();
-        services.AddScoped<IChatTool, RequestGlobalRouteOptimizationChatTool>();
         services.AddScoped<IChatTool, SearchCustomersChatTool>();
         services.AddScoped<IChatTool, GetCustomerConsumptionSummaryChatTool>();
         services.AddScoped<IChatTool, ListRecentFiscalDocumentsChatTool>();

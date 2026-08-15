@@ -23,6 +23,15 @@ public sealed class RouteCustomerAssignmentSynchronizer(ImportDbContext dbContex
             return;
         }
 
+        var mappingImportId = await CurrentImportIdAsync(
+            CustomerRouteAssignmentImportCodes.DataSource, cancellationToken);
+        if (mappingImportId.HasValue)
+        {
+            await SyncImportedAssignmentsAsync(routeImportId.Value, customerImportId.Value,
+                mappingImportId.Value, cancellationToken);
+            return;
+        }
+
         if (dbContext.Database.IsNpgsql())
         {
             await SyncInferredAssignmentsInPostgresAsync(
@@ -36,6 +45,41 @@ public sealed class RouteCustomerAssignmentSynchronizer(ImportDbContext dbContex
             routeImportId.Value,
             customerImportId.Value,
             cancellationToken);
+    }
+
+    private async Task SyncImportedAssignmentsAsync(
+        Guid routeImportId, Guid customerImportId, Guid mappingImportId,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.RouteCustomerAssignments.ExecuteDeleteAsync(cancellationToken);
+        var currentCustomerIds = (await dbContext.CustomerSnapshots.AsNoTracking()
+            .Where(x => x.ImportId == customerImportId).Select(x => x.CustomerId).ToListAsync(cancellationToken))
+            .ToHashSet();
+        var mappings = await dbContext.CustomerRouteMappings.AsNoTracking()
+            .Where(x => x.ImportId == mappingImportId && currentCustomerIds.Contains(x.CustomerId))
+            .ToListAsync(cancellationToken);
+        var routes = await dbContext.Routes.AsNoTracking().Where(x => x.ImportId == routeImportId)
+            .Select(x => new { x.Id, x.Name, x.Weekday }).ToListAsync(cancellationToken);
+        var municipalities = await dbContext.CustomerSnapshots.AsNoTracking()
+            .Where(x => x.ImportId == customerImportId)
+            .ToDictionaryAsync(x => x.CustomerId, x => x.MunicipalityId, cancellationToken);
+        var now = DateTime.UtcNow;
+        var assignments = mappings.Select(mapping => new
+            {
+                Mapping = mapping,
+                Route = routes.SingleOrDefault(route => route.Weekday == mapping.Weekday &&
+                    CustomerRouteAssignmentsSpreadsheetParser.Normalize(route.Name) == mapping.NormalizedRouteName)
+            })
+            .Where(x => x.Route is not null)
+            .DistinctBy(x => new { RouteId = x.Route!.Id, x.Mapping.CustomerId })
+            .Select(x => new RouteCustomerAssignment
+            {
+                Id = Guid.NewGuid(), RouteId = x.Route!.Id, CustomerId = x.Mapping.CustomerId,
+                MunicipalityId = municipalities.GetValueOrDefault(x.Mapping.CustomerId),
+                Source = RouteCustomerAssignmentSource.Imported, CreatedAt = now, UpdatedAt = now
+            });
+        dbContext.RouteCustomerAssignments.AddRange(assignments);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task SyncInferredAssignmentsInPostgresAsync(

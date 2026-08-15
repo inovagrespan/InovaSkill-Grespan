@@ -12,7 +12,6 @@ describe("linguagem de dados apresentada ao usuário", () => {
       "src/routes/logistica.index.tsx",
       "src/routes/relatorios.tsx",
       "src/routes/simulacao.tsx",
-      "src/components/RouteVehicleSimulationDialog.tsx",
       "src/components/BusinessAssistant.tsx",
       "src/lib/importer-api.ts",
     ].map(read).join("\n");

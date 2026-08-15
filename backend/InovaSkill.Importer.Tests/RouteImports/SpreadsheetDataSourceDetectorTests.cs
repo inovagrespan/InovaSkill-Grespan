@@ -38,6 +38,16 @@ public sealed class SpreadsheetDataSourceDetectorTests
     }
 
     [Fact]
+    public void Detect_RecognizesCustomerRouteAssignmentsFromHeaders()
+    {
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.AddWorksheet("Rotas Atuais");
+        WriteHeaders(sheet, ["Dia", "Mercado", "Rota", "Cidade"]);
+
+        Assert.Equal(CustomerRouteAssignmentImportCodes.DataSource, Detect(workbook));
+    }
+
+    [Fact]
     public void Detect_RecognizesProductsFromHeaders()
     {
         using var workbook = new XLWorkbook();

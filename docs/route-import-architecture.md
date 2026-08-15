@@ -82,11 +82,15 @@ publicado. Esse job usa `job_executions`, aparece na Central de Processamentos,
 processa apenas municípios de clientes sem coordenada resolvida e não interfere
 no estado da importação de clientes.
 
-Quando o snapshot publicado pertence à fonte `ROUTES_BY_CITY`, a conclusão da
-ativação solicita uma otimização global de rotas com escopo `AllRoutes` e
-enfileira `ProcessRouteOptimizationJob` na fila `route-optimization`. O job de
-importação não executa o solver e termina sem aguardar a otimização; telas e
-chat consultam apenas resultados persistidos desse processamento.
+O enriquecimento opcional de endereço cadastral é iniciado pela Central de
+Processamentos com o job `CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT` e o
+snapshot de clientes publicado, ou com um `ImportId` explícito para auditoria.
+Somente registros classificados como CNPJ são candidatos. O endereço retornado
+pela BrasilAPI é persistido uma única
+vez por cliente em `customer_registration_addresses`; novos snapshots preservam
+e reutilizam esse dado derivado. CNPJ inválido e não encontrado são resultados
+funcionais auditáveis, enquanto indisponibilidade HTTP interrompe a execução
+para aproveitar a política de retry do job.
 
 `GET /api/routes` consulta somente o import atual. Para auditoria,
 `GET /api/route-imports/{importId}/routes` consulta um snapshot específico.

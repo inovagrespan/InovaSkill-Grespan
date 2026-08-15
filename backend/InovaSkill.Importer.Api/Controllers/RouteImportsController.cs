@@ -4,6 +4,7 @@ using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
+using InovaSkill.Importer.Infrastructure.RouteImports;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -178,6 +179,45 @@ public sealed class RouteImportsController(
         return Ok();
     }
 
+    [HttpGet("/api/import-errors/{errorId:guid}/candidates")]
+    public async Task<ActionResult> ErrorCandidates(
+        Guid errorId, [FromQuery] string? search = null,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 50);
+        var error = await dbContext.RouteImportErrors.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == errorId, cancellationToken);
+        if (error is null) return NotFound();
+        var term = search?.Trim().ToUpperInvariant();
+        if (error.Field == CustomerRouteAssignmentImportCodes.CustomerCorrectionField)
+        {
+            var query = dbContext.CustomerSnapshots.AsNoTracking()
+                .Where(x => x.Import!.DataSource!.CurrentImportId == x.ImportId);
+            if (!string.IsNullOrWhiteSpace(term))
+                query = query.Where(x => x.Customer!.ExternalCode.ToUpper().Contains(term) ||
+                    x.TradeName.ToUpper().Contains(term) || x.LegalName.ToUpper().Contains(term));
+            var total = await query.CountAsync(cancellationToken);
+            var items = await query.OrderBy(x => x.TradeName).Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(x => new { id = x.CustomerId, label = x.TradeName + " · " + x.Municipality!.Name,
+                    detail = "Código " + x.Customer!.ExternalCode + "/" + x.Customer.BranchCode }).ToListAsync(cancellationToken);
+            return Ok(new { page, pageSize, total, items });
+        }
+        if (error.Field == CustomerRouteAssignmentImportCodes.RouteCorrectionField)
+        {
+            var query = dbContext.Routes.AsNoTracking()
+                .Where(x => x.Import!.DataSource!.CurrentImportId == x.ImportId);
+            if (!string.IsNullOrWhiteSpace(term)) query = query.Where(x => x.Name.ToUpper().Contains(term));
+            var total = await query.CountAsync(cancellationToken);
+            var items = await query.OrderBy(x => x.Weekday).ThenBy(x => x.Name)
+                .Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(x => new { id = x.Id, label = x.Name, detail = x.Weekday }).ToListAsync(cancellationToken);
+            return Ok(new { page, pageSize, total, items });
+        }
+        return BadRequest(new { message = "Esta pendência não possui candidatos cadastrados." });
+    }
+
     [HttpPost("{id:guid}/reprocess")]
     public async Task<ActionResult> Reprocess(Guid id, CancellationToken cancellationToken)
     {
@@ -250,6 +290,9 @@ public sealed class RouteImportsController(
         {
             CustomerImportCodes.DataSource => new(CustomerImportCodes.DataSource, CustomerImportCodes.ProcessorKey,
                 CustomerImportCodes.DataSourceName, CustomerImportCodes.DataSourceType, DataSourceImportMode.Snapshot),
+            CustomerRouteAssignmentImportCodes.DataSource => new(CustomerRouteAssignmentImportCodes.DataSource,
+                CustomerRouteAssignmentImportCodes.ProcessorKey, CustomerRouteAssignmentImportCodes.DataSourceName,
+                CustomerRouteAssignmentImportCodes.DataSourceType, DataSourceImportMode.Snapshot),
             FiscalImportCodes.DataSource => new(FiscalImportCodes.DataSource, FiscalImportCodes.ProcessorKey,
                 FiscalImportCodes.DataSourceName, FiscalImportCodes.DataSourceType, DataSourceImportMode.Upsert),
             ProductImportCodes.DataSource => new(ProductImportCodes.DataSource, ProductImportCodes.ProcessorKey,
@@ -288,6 +331,14 @@ public sealed class RouteImportsController(
                 && average >= 0,
             "vehicle_type" => await dbContext.VehicleTypes.AnyAsync(
                 x => x.Name == value.Trim(), cancellationToken),
+            CustomerRouteAssignmentImportCodes.CustomerCorrectionField => Guid.TryParse(value, out var customerId) &&
+                await dbContext.CustomerSnapshots.AnyAsync(x => x.CustomerId == customerId &&
+                    x.Import!.DataSource!.CurrentImportId == x.ImportId, cancellationToken),
+            CustomerRouteAssignmentImportCodes.RouteCorrectionField => Guid.TryParse(value, out var routeId) &&
+                await dbContext.Routes.AnyAsync(x => x.Id == routeId &&
+                    x.Import!.DataSource!.CurrentImportId == x.ImportId, cancellationToken),
+            "weekday" => CustomerRouteAssignmentsSpreadsheetParser.IsSupportedWeekday(value.Trim().ToUpperInvariant()),
+            "market_name" or "route_name" or "municipality_name" => !string.IsNullOrWhiteSpace(value),
             _ => false
         };
     }

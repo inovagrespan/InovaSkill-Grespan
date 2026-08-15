@@ -66,7 +66,31 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
                 snapshot.TradeName,
                 snapshot.CustomerType,
                 snapshot.Municipality!.StateCode,
-                municipalityName = snapshot.Municipality.Name
+                municipalityName = snapshot.Municipality.Name,
+                registrationAddress = snapshot.Customer.RegistrationAddress == null ? null : new
+                {
+                    snapshot.Customer.RegistrationAddress.Status,
+                    snapshot.Customer.RegistrationAddress.PostalCode,
+                    snapshot.Customer.RegistrationAddress.StateCode,
+                    snapshot.Customer.RegistrationAddress.City,
+                    snapshot.Customer.RegistrationAddress.Street,
+                    snapshot.Customer.RegistrationAddress.Number,
+                    snapshot.Customer.RegistrationAddress.Complement,
+                    snapshot.Customer.RegistrationAddress.Neighborhood,
+                    snapshot.Customer.RegistrationAddress.FailureReason,
+                    snapshot.Customer.RegistrationAddress.LastAttemptAt,
+                    snapshot.Customer.RegistrationAddress.ResolvedAt
+                },
+                routeAssignments = snapshot.Customer!.RouteAssignments
+                    .Where(assignment => assignment.Route!.Import!.DataSource!.CurrentImportId == assignment.Route.ImportId)
+                    .OrderBy(assignment => assignment.Route!.Weekday).ThenBy(assignment => assignment.Route!.Name)
+                    .Select(assignment => new
+                    {
+                        routeId = assignment.RouteId,
+                        routeName = assignment.Route!.Name,
+                        weekday = assignment.Route.Weekday,
+                        source = assignment.Source.ToString()
+                    }).ToList()
             }).ToListAsync(cancellationToken);
         return Ok(new { page, pageSize, total, items });
     }
@@ -84,7 +108,21 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
             .Where(x => x.CustomerId == id && x.Import!.DataSource!.CurrentImportId == x.ImportId)
             .Select(x => new { id = x.CustomerId, x.Customer!.ExternalCode, x.Customer.BranchCode,
                 x.LegalName, x.TradeName, x.DocumentNumber, x.DocumentType, x.CustomerType,
-                x.Municipality!.StateCode, municipalityName = x.Municipality.Name })
+                x.Municipality!.StateCode, municipalityName = x.Municipality.Name,
+                registrationAddress = x.Customer.RegistrationAddress == null ? null : new
+                {
+                    x.Customer.RegistrationAddress.Status,
+                    x.Customer.RegistrationAddress.PostalCode,
+                    x.Customer.RegistrationAddress.StateCode,
+                    x.Customer.RegistrationAddress.City,
+                    x.Customer.RegistrationAddress.Street,
+                    x.Customer.RegistrationAddress.Number,
+                    x.Customer.RegistrationAddress.Complement,
+                    x.Customer.RegistrationAddress.Neighborhood,
+                    x.Customer.RegistrationAddress.FailureReason,
+                    x.Customer.RegistrationAddress.LastAttemptAt,
+                    x.Customer.RegistrationAddress.ResolvedAt
+                } })
             .SingleOrDefaultAsync(cancellationToken);
         if (customer is null) return NotFound();
         var sales = dbContext.FiscalDocumentItems.AsNoTracking().Where(x =>

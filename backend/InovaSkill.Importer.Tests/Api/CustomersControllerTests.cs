@@ -45,6 +45,15 @@ public sealed class CustomersControllerTests
         db.CustomerSnapshots.AddRange(
             Snapshot(oldImport.Id, customer.Id, municipality.Id, "ANTIGO"),
             Snapshot(currentImport.Id, customer.Id, municipality.Id, "PENIEL 2"));
+        db.CustomerRegistrationAddresses.Add(new CustomerRegistrationAddress
+        {
+            Id = Guid.NewGuid(), CustomerId = customer.Id, DocumentNumber = "07050702000200",
+            Source = "BRASIL_API", Status = CustomerRegistrationAddressStatuses.Resolved,
+            PostalCode = "17500000", StateCode = "SP", City = "MARILIA",
+            Street = "AVENIDA BRASIL", Number = "100", Neighborhood = "CENTRO",
+            LastAttemptAt = DateTime.UtcNow, ResolvedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        });
         await db.SaveChangesAsync();
 
         var result = await new CustomersController(db).List(1, 25, "000224", null, null, null);
@@ -53,6 +62,9 @@ public sealed class CustomersControllerTests
         Assert.Contains("PENIEL 2", json);
         Assert.DoesNotContain("ANTIGO", json);
         Assert.Contains("\"total\":1", json);
+        Assert.Contains("AVENIDA BRASIL", json);
+        Assert.Contains("17500000", json);
+        Assert.Contains(CustomerRegistrationAddressStatuses.Resolved, json);
 
         var cityResult = await new CustomersController(db).List(1, 25, "bady bassitt", null, null, null);
         var cityJson = System.Text.Json.JsonSerializer.Serialize(Assert.IsType<OkObjectResult>(cityResult).Value);
@@ -89,6 +101,14 @@ public sealed class CustomersControllerTests
         await db.SaveChangesAsync();
         customerSource.CurrentImportId = customerImport.Id;
         db.CustomerSnapshots.Add(Snapshot(customerImport.Id, customer.Id, municipality.Id, "MERCADO"));
+        db.CustomerRegistrationAddresses.Add(new CustomerRegistrationAddress
+        {
+            Id = Guid.NewGuid(), CustomerId = customer.Id, DocumentNumber = "07050702000200",
+            Source = "BRASIL_API", Status = CustomerRegistrationAddressStatuses.Resolved,
+            PostalCode = "18800000", StateCode = "SP", City = "PIRAJU",
+            Street = "RUA DAS FLORES", Number = "42", Complement = "SALA 2", Neighborhood = "CENTRO",
+            LastAttemptAt = now, ResolvedAt = now, CreatedAt = now, UpdatedAt = now
+        });
         var reference = new DateOnly(2026, 7, 6);
         AddMovement(db, fiscalSource.Id, fiscalImport.Id, customer.Id, reference, "CURRENT", FiscalMovementCategory.Sale, 100, 2, 25);
         AddMovement(db, fiscalSource.Id, fiscalImport.Id, customer.Id, reference.AddDays(-30), "PREVIOUS", FiscalMovementCategory.Sale, 50, 1, 20);
@@ -119,6 +139,12 @@ public sealed class CustomersControllerTests
         Assert.Contains("\"calculatedSalesAmount\":50", json);
         Assert.Contains("\"issueDate\":\"2026-07-05\"", json);
         Assert.Contains("\"documentNumber\":\"RETURN\"", json);
+        Assert.Contains("\"registrationAddress\":", json);
+        Assert.Contains("\"street\":\"RUA DAS FLORES\"", json);
+        Assert.Contains("\"number\":\"42\"", json);
+        Assert.Contains("\"neighborhood\":\"CENTRO\"", json);
+        Assert.Contains("\"complement\":\"SALA 2\"", json);
+        Assert.Contains("\"postalCode\":\"18800000\"", json);
         Assert.DoesNotContain("\"date\":", json);
 
         var projectionResult = await new CustomersController(db).Projection(customer.Id);

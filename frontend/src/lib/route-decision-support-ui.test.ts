@@ -7,10 +7,8 @@ function read(relativePath: string): string {
 }
 
 describe("route decision support UI", () => {
-  it.each(["src/routes/rotas.tsx", "src/routes/logistica.rotas.tsx"])(
-    "carrega e exibe o apoio à decisão ao abrir detalhes em %s",
-    (routePath) => {
-      const source = read(routePath);
+  it("carrega e exibe o apoio à decisão ao abrir detalhes", () => {
+      const source = read("src/routes/rotas.tsx");
 
       expect(source).toContain("RouteDecisionSupport");
       expect(source).toContain("setDetailVehicleTypes(await fetchVehicleTypes())");
@@ -18,8 +16,7 @@ describe("route decision support UI", () => {
       expect(source).toContain("route={selectedRoute}");
       expect(source).toContain("canRoleUseRouteSimulation");
       expect(source).toContain("{canSimulate && (");
-    },
-  );
+  });
 
   it("mantém análise por IA opcional, explicável e sem alteração automática", () => {
     const component = read("src/components/RouteDecisionSupport.tsx");
