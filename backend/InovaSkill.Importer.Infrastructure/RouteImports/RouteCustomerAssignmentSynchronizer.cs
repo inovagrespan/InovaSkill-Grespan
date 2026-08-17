@@ -51,7 +51,15 @@ public sealed class RouteCustomerAssignmentSynchronizer(ImportDbContext dbContex
         Guid routeImportId, Guid customerImportId, Guid mappingImportId,
         CancellationToken cancellationToken)
     {
-        await dbContext.RouteCustomerAssignments.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.RouteCustomerAssignments
+            .Where(assignment => assignment.Source != RouteCustomerAssignmentSource.Manual)
+            .ExecuteDeleteAsync(cancellationToken);
+        var manualPairs = (await dbContext.RouteCustomerAssignments.AsNoTracking()
+            .Where(assignment => assignment.Source == RouteCustomerAssignmentSource.Manual)
+            .Select(assignment => new { assignment.RouteId, assignment.CustomerId })
+            .ToListAsync(cancellationToken))
+            .Select(pair => (pair.RouteId, pair.CustomerId))
+            .ToHashSet();
         var currentCustomerIds = (await dbContext.CustomerSnapshots.AsNoTracking()
             .Where(x => x.ImportId == customerImportId).Select(x => x.CustomerId).ToListAsync(cancellationToken))
             .ToHashSet();
@@ -72,6 +80,7 @@ public sealed class RouteCustomerAssignmentSynchronizer(ImportDbContext dbContex
             })
             .Where(x => x.Route is not null)
             .DistinctBy(x => new { RouteId = x.Route!.Id, x.Mapping.CustomerId })
+            .Where(x => !manualPairs.Contains((x.Route!.Id, x.Mapping.CustomerId)))
             .Select(x => new RouteCustomerAssignment
             {
                 Id = Guid.NewGuid(), RouteId = x.Route!.Id, CustomerId = x.Mapping.CustomerId,
@@ -215,7 +224,16 @@ public sealed class RouteCustomerAssignmentSynchronizer(ImportDbContext dbContex
             .Distinct()
             .ToArray();
 
-        dbContext.RouteCustomerAssignments.AddRange(pairs.Select(pair => new RouteCustomerAssignment
+        var protectedPairs = (await dbContext.RouteCustomerAssignments.AsNoTracking()
+            .Where(assignment => assignment.Source != RouteCustomerAssignmentSource.InferredByMunicipality)
+            .Select(assignment => new { assignment.RouteId, assignment.CustomerId })
+            .ToListAsync(cancellationToken))
+            .Select(pair => (pair.RouteId, pair.CustomerId))
+            .ToHashSet();
+
+        dbContext.RouteCustomerAssignments.AddRange(pairs
+            .Where(pair => !protectedPairs.Contains((pair.RouteId, pair.CustomerId)))
+            .Select(pair => new RouteCustomerAssignment
         {
             Id = Guid.NewGuid(),
             RouteId = pair.RouteId,

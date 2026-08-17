@@ -7,6 +7,8 @@ import {
   Hash,
   Gift,
   MapPin,
+  Loader2,
+  Route as RouteIcon,
   ReceiptText,
   RotateCcw,
   Scale,
@@ -17,21 +19,32 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { FiscalDocumentDialog } from "@/components/FiscalDocumentDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   fetchCustomerConsumptionSummary,
+  fetchImportedRoutes,
+  addCustomerRouteAssignment,
+  type ImportedRouteItem,
   type CustomerConsumptionSummary,
 } from "@/lib/importer-api";
+import { canCurrentUserManageCustomerRoutes } from "@/lib/auth";
 import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-formatters";
 
 const weightFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
 const percentageFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const compactWeight = (value: number) => `${formatKpiCompactNumber(value)} kg`;
+const ROUTE_OPTIONS_PAGE_SIZE = 100;
+const routeWeekdayLabels: Record<string, string> = {
+  MONDAY: "Segunda", TUESDAY: "Terça", WEDNESDAY: "Quarta",
+  THURSDAY: "Quinta", FRIDAY: "Sexta", SATURDAY: "Sábado", SUNDAY: "Domingo",
+};
 type ChartMetric = "salesWeightKg" | "salesDocumentCount" | "averageSalesWeightPerDocumentKg" |
   "calculatedSalesAmount" | "returnWeightKg" | "bonusWeightKg";
 
@@ -67,6 +80,17 @@ const addressStatusLabels = {
   FAILED: "Falha na consulta do endereço",
 } as const;
 
+async function fetchCurrentRouteOptions(): Promise<ImportedRouteItem[]> {
+  const firstPage = await fetchImportedRoutes(1, ROUTE_OPTIONS_PAGE_SIZE);
+  const totalPages = Math.ceil(firstPage.total / ROUTE_OPTIONS_PAGE_SIZE);
+  if (totalPages <= 1) return firstPage.items;
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) =>
+      fetchImportedRoutes(index + 2, ROUTE_OPTIONS_PAGE_SIZE)),
+  );
+  return [firstPage, ...remainingPages].flatMap(page => page.items);
+}
+
 export function CustomerConsumptionDialog({
   id,
   open,
@@ -80,15 +104,47 @@ export function CustomerConsumptionDialog({
   const [error, setError] = useState("");
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<ChartMetric | null>(null);
+  const [availableRoutes, setAvailableRoutes] = useState<ImportedRouteItem[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState("");
+  const [addingRoute, setAddingRoute] = useState(false);
+  const [routeError, setRouteError] = useState("");
+  const canManageRoutes = canCurrentUserManageCustomerRoutes();
+
+  async function reloadCustomer() {
+    if (!id) return;
+    setData(await fetchCustomerConsumptionSummary(id));
+  }
+
+  async function addToRoute() {
+    if (!id || !selectedRouteId) return;
+    setAddingRoute(true);
+    setRouteError("");
+    try {
+      await addCustomerRouteAssignment(id, selectedRouteId);
+      setSelectedRouteId("");
+      await reloadCustomer();
+    } catch (reason) {
+      setRouteError((reason as Error).message);
+    } finally {
+      setAddingRoute(false);
+    }
+  }
 
   useEffect(() => {
     if (!open || !id) return;
     setData(null);
     setError("");
+    setRouteError("");
+    setSelectedRouteId("");
     fetchCustomerConsumptionSummary(id)
       .then(setData)
       .catch(reason => setError((reason as Error).message));
-  }, [id, open]);
+    if (canManageRoutes) {
+      fetchCurrentRouteOptions()
+        .then(setAvailableRoutes)
+        .catch(reason => setRouteError((reason as Error).message));
+    }
+  }, [id, open, canManageRoutes]);
 
   const variation = data?.metrics.variationPercentage ?? null;
   const variationText = variation === null
@@ -164,6 +220,53 @@ export function CustomerConsumptionDialog({
                       )}
                     </div>
                   </div>
+                </section>
+
+                <section className="rounded-xl border border-border bg-surface p-4 shadow-xs">
+                  <div className="mb-3 flex items-center gap-2">
+                    <RouteIcon className="size-4 text-primary" />
+                    <h3 className="font-display text-lg font-semibold">Rotas do cliente</h3>
+                  </div>
+                  {data.customer.routeAssignments.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-amber-500/50 bg-amber-500/10 px-3 py-3">
+                      <Badge variant="secondary">Sem rota</Badge>
+                      <p className="mt-2 text-sm text-muted-foreground">Este cliente não pertence a nenhuma rota atual.</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {data.customer.routeAssignments.map(assignment => (
+                        <Badge key={`${assignment.routeId}-${assignment.weekday}`} variant="outline">
+                          {routeWeekdayLabels[assignment.weekday] ?? assignment.weekday} · {assignment.routeName}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  {canManageRoutes && (
+                    <div className="mt-4 border-t border-border pt-4">
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">Adicionar a uma rota atual</p>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Select value={selectedRouteId} onValueChange={setSelectedRouteId}>
+                          <SelectTrigger className="min-w-0 flex-1" aria-label="Selecionar rota">
+                            <SelectValue placeholder="Selecione uma rota" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableRoutes
+                              .filter(route => !data.customer.routeAssignments.some(assignment => assignment.routeId === route.id))
+                              .map(route => (
+                                <SelectItem key={route.id} value={route.id}>
+                                  {routeWeekdayLabels[route.weekday] ?? route.weekday} · {route.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <Button onClick={() => void addToRoute()} disabled={!selectedRouteId || addingRoute}>
+                          {addingRoute && <Loader2 className="mr-2 size-4 animate-spin" />}
+                          Adicionar à rota
+                        </Button>
+                      </div>
+                      {routeError && <p className="mt-2 text-sm text-destructive">{routeError}</p>}
+                    </div>
+                  )}
                 </section>
 
                 <section>

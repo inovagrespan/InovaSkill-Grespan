@@ -225,10 +225,40 @@ permissão da simulação de veículo: `vendas`, `logistica`, `admin` e
 o catálogo de veículos não é consultado ao abrir o detalhe.
 
 O subsistema anterior de roteirização foi removido para permitir uma nova
-implementação sem dependências legadas. Não existem atualmente solver, matriz
-de distâncias, execução de otimização, sugestão global, endpoint ou ferramenta
-de chat de roteirização. A importação, consulta, histórico e indicadores básicos
-de rotas permanecem disponíveis e não iniciam processamento de otimização.
+implementação sem dependências legadas. Não existem atualmente solver, execução
+de otimização, sugestão global, endpoint ou ferramenta de chat de roteirização.
+A importação, consulta, histórico e indicadores básicos de rotas permanecem
+disponíveis e não iniciam processamento de otimização.
+
+A nova fundação rodoviária permanece separada de um solver. Existe um cadastro
+singleton de depósito logístico, usado como origem e retorno, com nome, endereço
+informativo e latitude/longitude obrigatórias. A manutenção ocorre em
+`PUT /api/logistics-depot`; Diretor e Logística podem consultar, mas somente
+Logística e administradores podem alterar. `GET /api/osrm/health` usa a
+coordenada cadastrada para verificar se a API OSRM interna está acessível e
+localiza o depósito no grafo.
+
+`IOsrmDailyMatrixService` monta uma entrada para um único `Route.Weekday` e um
+snapshot explícito. O primeiro ponto é o depósito e os demais são municípios
+distintos das `route_entries`, ordenados deterministicamente e limitados a
+`MunicipalityCoordinate` com estado `RESOLVED`. Coordenadas cadastrais de
+clientes não participam desta fase: o objetivo é calcular custos entre blocos
+indivisíveis de cidade, não ordenar entregas porta a porta. Cidade sem vínculo
+municipal ou coordenada resolvida invalida a matriz inteira.
+
+`IOsrmTableClient` consulta `/table/v1/driving` com `duration,distance`, preserva
+custos direcionais e divide matrizes grandes em blocos configuráveis de
+`sources × destinations`. O cliente recompõe o resultado na ordem original e
+rejeita timeout, erro HTTP, resposta vazia, dimensão divergente, valor negativo,
+`null` ou trecho inalcançável. Não existe fallback geográfico nem persistência
+paralela de matrizes. A configuração `Osrm` define URL base, timeout, tamanho do
+bloco e paralelismo máximo.
+
+O depósito possui índice único sobre a chave singleton, suficiente para leitura
+e atualização do único registro. A montagem diária reutiliza os índices já
+existentes de rotas por `ImportId + Weekday + Name`, entradas por rota e
+coordenadas por município; não foi criado índice adicional porque a consulta
+parte do snapshot e do dia antes de percorrer as cidades.
 
 O enriquecimento cadastral de clientes consulta a BrasilAPI pelo CNPJ em um job
 operacional assíncrono. O Worker limita as chamadas pela configuração
@@ -248,16 +278,55 @@ agendado. Sem `importId` explícito, cada execução resolve o snapshot de clien
 publicado naquele momento. Resultados e progresso são persistidos a cada 25
 clientes por padrão no próprio `job_executions`, com contagens de resolvidos,
 inválidos, não encontrados e pendentes; não existe monitoramento paralelo.
+O contrato versão 1 aceita `customerStatus` com `ACTIVE`, `INACTIVE` ou `ALL`;
+quando omitido, usa `ACTIVE`. O filtro é aplicado sobre `Customer.IsActive` antes
+das consultas externas. O botão da tela de Clientes envia `ACTIVE`, enquanto a
+execução manual e os agendamentos na Central podem selecionar os demais valores
+pelo JSON de parâmetros. Valores desconhecidos são rejeitados antes da fila.
+O mesmo contrato aceita `refreshResolved` (padrão `false`); quando habilitado,
+endereços já resolvidos são consultados novamente para atualizar campos novos do
+provedor, incluindo `StreetType`, mapeado de `descricao_tipo_de_logradouro` da
+BrasilAPI. O tipo é persistido separadamente do nome do logradouro para evitar
+duplicação e permitir formatação correta em integrações posteriores.
 O índice único por `CustomerId` sustenta a consulta e impede duplicidade; não há
 índice por status porque o processamento parte dos clientes do snapshot e faz a
 comparação pelo identificador, sem filtrar globalmente por esse campo.
+O job `CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT` geocodifica somente endereços
+cadastrais `RESOLVED` e persiste o resultado em
+`customer_address_coordinates`, relacionado 1:1 a
+`customer_registration_addresses`. Seu contrato versão 1 aceita
+`customerStatus` (`ACTIVE`, `INACTIVE` ou `ALL`, padrão `ACTIVE`) e
+`reprocessFailed` (padrão `false`). A tabela mantém endereço normalizado, fonte,
+status, latitude/longitude, identificador e nome do provedor, datas e falha
+auditável. A unicidade por endereço cadastral garante idempotência; índices por
+endereço normalizado e status sustentam cache e reprocessamento.
+
+O provedor inicial é o Nominatim público, configurado por `Nominatim`. Um gate
+singleton mantém no mínimo 1.000 ms entre o início das requisições da instância,
+sempre sequenciais e com `User-Agent` identificável. A busca é restrita ao
+Brasil e o resultado só é aceito quando município e UF conferem. Coordenadas
+resolvidas para o mesmo endereço normalizado são reutilizadas sem chamada
+externa. HTTP 429 respeita `Retry-After` e interrompe a tentativa para o retry
+do job. A URL configurável permite migrar para Nominatim próprio antes de uso
+produtivo recorrente.
+O texto enviado ao Nominatim combina `StreetType + Street`, número, bairro,
+município, UF, CEP no formato `00000-000` e Brasil. Se o logradouro já contém o
+tipo, ele não é duplicado. Um resultado só recebe status `RESOLVED` quando o
+Nominatim devolve município, UF e `house_number` compatíveis; centroides de rua,
+bairro, CEP ou POI não são tratados como endereço exato e permanecem no fallback
+municipal. A migration que introduziu `StreetType` invalidou as coordenadas
+derivadas anteriores para que fossem recalculadas com essa regra.
 Na tela de Clientes, administradores podem iniciar o enriquecimento diretamente;
 a listagem apresenta somente município e UF do snapshot importado. O endereço
 cadastral persistido fica restrito ao detalhe de consumo: nele, município e UF
 importados continuam identificados como localização operacional, enquanto
 logradouro, número, bairro, complemento, cidade, UF e CEP da BrasilAPI aparecem
-em um bloco cadastral separado. Os demais perfis consultam os resultados, mas não
-recebem a ação administrativa.
+em um bloco cadastral separado. A grade também não exibe vínculos de rota; o
+detalhe lista todas as rotas atuais do cliente e marca explicitamente `Sem rota`
+quando não existe vínculo. Logística, `admin` e `admin_system` podem adicionar o
+cliente a uma rota do snapshot atual, criando um `RouteCustomerAssignment` de
+origem `Manual`; Diretor e Vendas mantêm acesso somente de leitura. Os demais
+perfis consultam os resultados, mas não recebem a ação administrativa.
 
 O card executivo `Taxa de Ocupação` do dashboard logístico usa somente o
 snapshot atual publicado de rotas, sem filtro de data ou comparação com período
@@ -383,6 +452,7 @@ Os controllers atuais atendem:
 - consulta das rotas processadas;
 - consulta do resumo de ocupação do snapshot atual de rotas;
 - manutenção de tipos de veículo;
+- consulta e manutenção do depósito logístico e diagnóstico da API OSRM;
 - consulta, retry e cancelamento de jobs administrativos;
 - catálogo e execução manual de jobs operacionais declarados como executáveis;
 - consulta paginada dos clientes da importação atualmente publicada.
@@ -697,6 +767,11 @@ rota para encontrar o município do cliente e materializar o mesmo vínculo. O
 mais de uma vez. Índices por `RouteId + Source`, `CustomerId + Source` e
 `RouteId + MunicipalityId` cobrem os padrões esperados de listagem por rota,
 auditoria da origem do vínculo e futuras consultas por cliente ou município.
+Vínculos `Manual` são preservados pelas sincronizações posteriores. Quando uma
+planilha importada ou a inferência municipal produzir o mesmo par rota-cliente,
+o vínculo manual existente prevalece e o índice único `RouteId + CustomerId`
+continua impedindo duplicidade; nenhum índice adicional é necessário para a
+inclusão individual por identificadores.
 
 A fonte snapshot `CUSTOMER_ROUTE_ASSIGNMENTS` importa planilhas com `Dia`, `Mercado`,
 `Rota` e `Cidade`. As linhas resolvidas ficam em `customer_route_mappings`, preservando
@@ -1064,6 +1139,15 @@ status, datas e relacionamentos. Importações guardam somente `importId` no
 payload: a fonte persistida da importação seleciona o `IDataSourceProcessor`, e
 o arquivo nunca é incorporado ao JSON.
 
+No enriquecimento de endereços cadastrais, `ResultJson` também funciona como
+checkpoint do mesmo `job_execution`: total, quantidade processada, resultados e
+parâmetros são atualizados a cada lote persistido. Ao retomar depois de uma
+reinicialização ou retentativa do Worker, o processador valida o total e os
+parâmetros do snapshot antes de continuar pelo próximo cliente. Um snapshot
+inválido ou incompatível é ignorado, evitando consumir progresso de outra
+seleção de clientes. O acesso continua pela chave da execução, portanto o
+campo `jsonb` não requer índice de conteúdo.
+
 `job_schedules` mantém agendamentos administrativos com cron, fuso horário,
 payload versionado, estado e auditoria. O fuso padrão é
 `America/Sao_Paulo`; cada disparo cria uma nova `job_execution`, e ocorrências
@@ -1080,12 +1164,13 @@ não tiver uma publicação, a API retorna conflito sem criar uma execução ór
 
 ### Mapa de clientes por município
 
-Clientes reais no mapa usam a precisão municipal. A importação de clientes
+Clientes reais no mapa priorizam a coordenada de endereço resolvida e recorrem
+à precisão municipal quando ela não existe. A importação de clientes
 continua gravando `CustomerSnapshot.MunicipalityId`; a coordenada fica separada
 em `municipality_coordinates`, como enriquecimento externo do cadastro de
 municípios. A tabela guarda `MunicipalityId`, latitude, longitude, fonte,
-status, tentativa, resolução e eventual motivo de falha. Não há coordenada de
-endereço do cliente neste fluxo.
+status, tentativa, resolução e eventual motivo de falha. As coordenadas de
+endereço ficam separadas dos snapshots e das coordenadas municipais.
 
 Quando uma importação de clientes é concluída e publicada como snapshot atual,
 o `ProcessImportHandler` enfileira o job operacional
@@ -1099,13 +1184,23 @@ quando disponível e depois por `StateCode + NormalizedName`. O job atualiza
 quando o município não aparece na fonte.
 
 `GET /api/logistics/map/customers` consulta somente o snapshot atual de clientes
-e retorna pins para clientes cujo município tem coordenada resolvida. Clientes
-sem coordenada não aparecem no mapa, mas são contabilizados em
-`withoutCoordinates`. Para evitar pins sobrepostos na mesma cidade, a API aplica
-um deslocamento visual determinístico em memória; a coordenada persistida
-continua sendo a do município. A tela `/mapa` consome esse endpoint e mantém os
+e prioriza `customer_address_coordinates`, com fallback para
+`municipality_coordinates`. Clientes sem nenhuma fonte não aparecem no mapa e
+são contabilizados em `withoutCoordinates`. Para evitar pins municipais
+sobrepostos, a API aplica deslocamento visual determinístico somente ao fallback;
+coordenadas de endereço permanecem exatas. Cada item informa
+`locationPrecision` como `ADDRESS` ou `MUNICIPALITY`. A tela `/mapa` consome esse endpoint e mantém os
 trajetos demonstrativos como contexto visual enquanto os clientes vêm da API
 real.
+O marcador fixo da matriz representa a Grespan Pães Congelados Ltda., CNPJ
+`10.809.214/0001-67`, na Avenida República, 7000, Distrito Industrial Santo
+Barion, Marília/SP, CEP 17512-035. A coordenada `-22.21389, -49.94583` vem da
+consulta do CEP na BrasilAPI v2; tooltip e popup exibem o endereço completo.
+Quando a precisão é `ADDRESS`, o item também retorna o endereço cadastral
+formatado e o frontend o apresenta no tooltip e no popup do marcador. Marcadores
+municipais informam explicitamente que o endereço não foi geocodificado e que a
+posição é aproximada pela cidade; somente esses marcadores recebem o espalhamento
+visual para evitar sobreposição.
 
 No frontend, `/clientes` é uma listagem cadastral simples, com busca feita no
 backend por código, razão social, nome fantasia, documento ou nome parcial do

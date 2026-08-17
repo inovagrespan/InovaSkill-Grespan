@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  normalizeCustomerConsumptionSummary,
+  type CustomerConsumptionSummary,
+} from "./importer-api";
 
 describe("cadastro de clientes", () => {
   const route = fs.readFileSync(path.resolve(process.cwd(), "src/routes/clientes.tsx"), "utf8");
@@ -24,7 +28,7 @@ describe("cadastro de clientes", () => {
 
   it("mantém tabela e paginação dentro da largura disponível", () => {
     expect(route).toContain("min-w-0 max-w-full overflow-x-hidden");
-    expect(route).toContain('className="min-w-[1240px] table-fixed"');
+    expect(route).toContain('className="min-w-[1040px] table-fixed"');
     expect(route).toContain('<TableHead className="w-24">Código</TableHead>');
     expect(route).toContain("flex flex-col gap-3");
     expect(route).toContain("truncate");
@@ -34,6 +38,7 @@ describe("cadastro de clientes", () => {
     expect(route).toContain("CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT");
     expect(route).toContain("canCurrentUserAccessProcessingArea");
     expect(route).toContain("Enriquecer endereços");
+    expect(route).toContain('customerStatus: "ACTIVE"');
     expect(route).toContain(">UF</TableHead>");
     expect(route).toContain(">Município</TableHead>");
     expect(route).not.toContain("Endereço cadastral");
@@ -49,5 +54,18 @@ describe("cadastro de clientes", () => {
     expect(detail).toContain("registrationAddress.neighborhood");
     expect(detail).toContain("registrationAddress.complement");
     expect(detail).toContain("registrationAddress.postalCode");
+  });
+
+  it("aceita resumo legado sem listas ao abrir os detalhes do cliente", () => {
+    const summaryWithoutLists = {
+      customer: {},
+      metrics: {},
+    } as unknown as CustomerConsumptionSummary;
+
+    const normalized = normalizeCustomerConsumptionSummary(summaryWithoutLists);
+
+    expect(normalized.customer.routeAssignments).toEqual([]);
+    expect(normalized.monthlyTimeline).toEqual([]);
+    expect(normalized.recentMovements).toEqual([]);
   });
 });

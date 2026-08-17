@@ -13,6 +13,8 @@ export type LogisticsMapCustomer = {
   situation: "Atraso" | "Devolução" | "Ruptura" | "Ocorrência" | "Entrega normal";
   route: string;
   priority: "Baixa" | "Média" | "Alta";
+  locationPrecision?: "ADDRESS" | "MUNICIPALITY";
+  address?: string | null;
   lat: number;
   lng: number;
 };
@@ -74,7 +76,13 @@ const cityProfiles: CityProfile[] = [
 const customerTypes: LogisticsCustomerType[] = ["Padaria", "Mercado", "Supermercado", "Restaurante", "Conveniência", "Atacado"];
 const situations: LogisticsMapCustomer["situation"][] = ["Entrega normal", "Entrega normal", "Atraso", "Devolução", "Ruptura", "Ocorrência"];
 
-export const GRESPAN_HEADQUARTERS = { name: "Grespan Matriz", city: "Marília-SP", lat: -22.2139, lng: -49.9458 } as const;
+export const GRESPAN_HEADQUARTERS = {
+  name: "Grespan Matriz",
+  city: "Marília-SP",
+  address: "Avenida República, 7000 - Distrito Industrial Santo Barion - Marília/SP - CEP 17512-035",
+  lat: -22.21389,
+  lng: -49.94583,
+} as const;
 
 const ROUTE_COLORS = ["#dc2626", "#2563eb", "#7c3aed", "#ea580c", "#0891b2", "#16a34a", "#c026d3", "#ca8a04"] as const;
 const ROUTE_CITY_GROUPS = [

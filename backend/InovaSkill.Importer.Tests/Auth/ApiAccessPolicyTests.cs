@@ -22,6 +22,17 @@ public sealed class ApiAccessPolicyTests
     [InlineData(AppUserRoles.Vendas, "/api/vehicle-types", "GET", true)]
     [InlineData(AppUserRoles.Vendas, "/api/vehicle-types", "PUT", false)]
     [InlineData(AppUserRoles.Diretor, "/api/vehicle-types", "PUT", false)]
+    [InlineData(AppUserRoles.Logistica, "/api/logistics-depot", "GET", true)]
+    [InlineData(AppUserRoles.Diretor, "/api/logistics-depot", "GET", true)]
+    [InlineData(AppUserRoles.Diretor, "/api/logistics-depot", "PUT", false)]
+    [InlineData(AppUserRoles.Logistica, "/api/logistics-depot", "PUT", true)]
+    [InlineData(AppUserRoles.Vendas, "/api/logistics-depot", "GET", false)]
+    [InlineData(AppUserRoles.Logistica, "/api/osrm/health", "GET", true)]
+    [InlineData(AppUserRoles.Vendas, "/api/osrm/health", "GET", false)]
+    [InlineData(AppUserRoles.Logistica, "/api/customers/00000000-0000-0000-0000-000000000001/route-assignments", "POST", true)]
+    [InlineData(AppUserRoles.Admin, "/api/customers/00000000-0000-0000-0000-000000000001/route-assignments", "POST", true)]
+    [InlineData(AppUserRoles.Vendas, "/api/customers/00000000-0000-0000-0000-000000000001/route-assignments", "POST", false)]
+    [InlineData(AppUserRoles.Diretor, "/api/customers/00000000-0000-0000-0000-000000000001/route-assignments", "POST", false)]
     public void CanAccess_EnforcesRoleAndOperation(
         string role,
         string path,

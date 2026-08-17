@@ -301,6 +301,7 @@ public sealed class AdminJobsController(
         {
             OperationalJobCodes.MunicipalityCoordinateEnrichment => CustomerImportCodes.DataSource,
             OperationalJobCodes.CustomerRegistrationAddressEnrichment => CustomerImportCodes.DataSource,
+            OperationalJobCodes.CustomerAddressCoordinateEnrichment => CustomerImportCodes.DataSource,
             _ => throw new InvalidOperationException($"Job operacional sem resolvedor: {jobType}.")
         };
 

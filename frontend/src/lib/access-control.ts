@@ -27,6 +27,7 @@ const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
   { path: "/processamentos", roles: ADMIN_ROLES },
   { path: "/importacoes", roles: ADMIN_ROLES },
   { path: "/veiculos/tipos", roles: LOGISTICS_ROLES },
+  { path: "/configuracoes/deposito", roles: LOGISTICS_ROLES },
   { path: "/logistica/rotas", roles: ROUTE_VIEW_ROLES },
   { path: "/logistica", roles: LOGISTICS_ROLES },
   { path: "/rotas", roles: ROUTE_VIEW_ROLES },

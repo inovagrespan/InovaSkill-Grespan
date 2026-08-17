@@ -42,8 +42,34 @@ public sealed class CustomerRegistrationAddressEnrichmentProcessorTests
         var addresses = await db.CustomerRegistrationAddresses.OrderBy(item => item.DocumentNumber).ToListAsync();
         Assert.Equal(3, addresses.Count);
         Assert.Equal(2, addresses.Count(item => item.City == "MARILIA"));
+        Assert.Equal(2, addresses.Count(item => item.StreetType == "RUA"));
         Assert.Equal("BAURU", addresses.Single(item => item.CustomerId == fixture.ResolvedCustomerId).City);
         Assert.DoesNotContain(addresses, item => item.CustomerId == fixture.CpfCustomerId);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RefreshesResolvedAddressWhenExplicitlyRequested()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db);
+        db.CustomerRegistrationAddresses.Add(new CustomerRegistrationAddress
+        {
+            Id = Guid.NewGuid(), CustomerId = fixture.ResolvedCustomerId, DocumentNumber = "33333333000133",
+            Source = "BRASIL_API", Status = CustomerRegistrationAddressStatuses.Resolved,
+            Street = "TESTE", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        });
+        var job = new JobExecution { Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerRegistrationAddressEnrichment,
+            ContractVersion = 1, Queue = BackgroundJobQueues.Default, Trigger = JobExecutionTrigger.Manual,
+            ParametersJson = "{\"customerStatus\":\"ALL\",\"refreshResolved\":true}", Status = JobExecutionStatus.Processing,
+            RelatedEntityId = fixture.ImportId, CreatedAt = DateTime.UtcNow };
+        db.JobExecutions.Add(job); await db.SaveChangesAsync();
+        var provider = new RecordingProvider();
+
+        await CreateProcessor(db, provider).ProcessAsync(fixture.ImportId, job.Id, default);
+
+        Assert.Contains("33333333000133", provider.Cnpjs);
+        var refreshed = await db.CustomerRegistrationAddresses.SingleAsync(x => x.CustomerId == fixture.ResolvedCustomerId);
+        Assert.Equal("RUA", refreshed.StreetType);
     }
 
     [Fact]
@@ -115,6 +141,87 @@ public sealed class CustomerRegistrationAddressEnrichmentProcessorTests
         Assert.Contains("3 resolvidos", job.ProgressMessage);
         Assert.Contains("\"processed\":3", job.ResultJson);
         Assert.Contains("\"pending\":0", job.ResultJson);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ResumesFromPersistedResultCheckpointAfterWorkerRestart()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db);
+        var job = new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerRegistrationAddressEnrichment,
+            ContractVersion = 1, Queue = BackgroundJobQueues.Default, Trigger = JobExecutionTrigger.Manual,
+            ParametersJson = "{\"customerStatus\":\"ALL\",\"refreshResolved\":true}",
+            ResultJson = "{\"total\":3,\"invalid\":0,\"pending\":0,\"notFound\":0,\"resolved\":1,\"processed\":1,\"customerStatus\":\"ALL\",\"refreshResolved\":true}",
+            Status = JobExecutionStatus.Processing, RelatedEntityId = fixture.ImportId, CreatedAt = DateTime.UtcNow
+        };
+        db.JobExecutions.Add(job);
+        await db.SaveChangesAsync();
+        var checkpointedCnpj = await db.CustomerSnapshots
+            .Where(snapshot => snapshot.ImportId == fixture.ImportId && snapshot.DocumentType == "CNPJ")
+            .OrderBy(snapshot => snapshot.CustomerId)
+            .Select(snapshot => snapshot.DocumentNumber)
+            .FirstAsync();
+        var provider = new RecordingProvider();
+
+        await CreateProcessor(db, provider).ProcessAsync(fixture.ImportId, job.Id, CancellationToken.None);
+
+        Assert.DoesNotContain(checkpointedCnpj, provider.Cnpjs);
+        Assert.Equal(2, provider.Cnpjs.Count);
+        Assert.Contains("\"processed\":3", job.ResultJson);
+        Assert.Contains("\"resolved\":3", job.ResultJson);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_IgnoresCheckpointWhenParametersDoNotMatch()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db);
+        var job = new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerRegistrationAddressEnrichment,
+            ContractVersion = 1, Queue = BackgroundJobQueues.Default, Trigger = JobExecutionTrigger.Manual,
+            ParametersJson = "{\"customerStatus\":\"ALL\",\"refreshResolved\":false}",
+            ResultJson = "{\"total\":3,\"invalid\":0,\"pending\":0,\"notFound\":0,\"resolved\":2,\"processed\":2,\"customerStatus\":\"ACTIVE\",\"refreshResolved\":false}",
+            Status = JobExecutionStatus.Processing, RelatedEntityId = fixture.ImportId, CreatedAt = DateTime.UtcNow
+        };
+        db.JobExecutions.Add(job);
+        await db.SaveChangesAsync();
+        var provider = new RecordingProvider();
+
+        await CreateProcessor(db, provider).ProcessAsync(fixture.ImportId, job.Id, CancellationToken.None);
+
+        Assert.Equal(3, provider.Cnpjs.Count);
+        Assert.Contains("\"processed\":3", job.ResultJson);
+    }
+
+    [Theory]
+    [InlineData("INACTIVE", "22222222000122")]
+    [InlineData("ALL", "11111111000111,22222222000122,33333333000133")]
+    public async Task ProcessAsync_AppliesConfiguredCustomerStatus(
+        string customerStatus, string expectedCnpjs)
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db);
+        var inactiveCustomer = await db.Customers.SingleAsync(customer => customer.Id == fixture.FailedCustomerId);
+        inactiveCustomer.IsActive = false;
+        var job = new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerRegistrationAddressEnrichment,
+            ContractVersion = 1, Queue = BackgroundJobQueues.Default, Trigger = JobExecutionTrigger.Manual,
+            ParametersJson = $"{{\"customerStatus\":\"{customerStatus}\"}}",
+            Status = JobExecutionStatus.Processing, RelatedEntityId = fixture.ImportId, CreatedAt = DateTime.UtcNow
+        };
+        db.JobExecutions.Add(job);
+        await db.SaveChangesAsync();
+        var provider = new RecordingProvider();
+
+        await CreateProcessor(db, provider).ProcessAsync(fixture.ImportId, job.Id, CancellationToken.None);
+
+        Assert.Equal(expectedCnpjs.Split(',').Order(), provider.Cnpjs.Order());
+        Assert.Contains($"Filtro {customerStatus}", job.ProgressMessage);
+        Assert.Contains($"\"customerStatus\":\"{customerStatus}\"", job.ResultJson);
     }
 
     [Theory]
@@ -196,7 +303,7 @@ public sealed class CustomerRegistrationAddressEnrichmentProcessorTests
             Cnpjs.Add(cnpj);
             return Task.FromResult(new CustomerRegistrationAddressLookup(
                 CustomerRegistrationAddressStatuses.Resolved,
-                "17500000", "SP", "MARILIA", "RUA TESTE", "10", null, "CENTRO"));
+                "17500000", "SP", "MARILIA", "TESTE", "10", null, "CENTRO", "RUA"));
         }
     }
 
@@ -216,7 +323,7 @@ public sealed class CustomerRegistrationAddressEnrichmentProcessorTests
             if (cnpj == "11111111000111") throw new BrasilApiRateLimitException(cnpj, 6);
             return Task.FromResult(new CustomerRegistrationAddressLookup(
                 CustomerRegistrationAddressStatuses.Resolved,
-                "17500000", "SP", "MARILIA", "RUA TESTE", "10", null, "CENTRO"));
+                "17500000", "SP", "MARILIA", "TESTE", "10", null, "CENTRO", "RUA"));
         }
     }
 }

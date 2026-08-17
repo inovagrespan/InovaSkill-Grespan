@@ -27,6 +27,13 @@ public static class ApiAccessPolicy
         AppUserRoles.AdminSystem
     ];
 
+    private static readonly string[] RouteAssignmentMutationRoles =
+    [
+        AppUserRoles.Logistica,
+        AppUserRoles.Admin,
+        AppUserRoles.AdminSystem
+    ];
+
     public static bool CanAccess(string? role, string path, string method)
     {
         if (path.Equals("/api/login", StringComparison.OrdinalIgnoreCase) ||
@@ -61,9 +68,26 @@ public static class ApiAccessPolicy
                 : AllApplicationRoles.Contains(normalizedRole);
         }
 
+        if (path.StartsWith("/api/logistics-depot", StringComparison.OrdinalIgnoreCase))
+        {
+            return isMutation
+                ? normalizedRole is AppUserRoles.Logistica or AppUserRoles.Admin or AppUserRoles.AdminSystem
+                : LogisticsRoles.Contains(normalizedRole);
+        }
+
+        if (path.StartsWith("/api/osrm/health", StringComparison.OrdinalIgnoreCase))
+        {
+            return LogisticsRoles.Contains(normalizedRole);
+        }
+
         if (path.StartsWith("/api/routes", StringComparison.OrdinalIgnoreCase))
         {
             return AllApplicationRoles.Contains(normalizedRole);
+        }
+
+        if (path.StartsWith("/api/customers", StringComparison.OrdinalIgnoreCase) && isMutation)
+        {
+            return RouteAssignmentMutationRoles.Contains(normalizedRole);
         }
 
         if (path.StartsWith("/api/production", StringComparison.OrdinalIgnoreCase))

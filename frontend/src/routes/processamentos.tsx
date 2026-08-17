@@ -720,7 +720,7 @@ function ProcessamentosPage() {
       </Dialog>
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-2xl border-border bg-surface">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-x-hidden overflow-y-auto border-border bg-surface">
           <DialogHeader>
             <DialogTitle>Detalhes do Job</DialogTitle>
             <DialogDescription>Informações completas do job de processamento.</DialogDescription>
@@ -731,11 +731,11 @@ function ProcessamentosPage() {
               <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">ID do Job</p>
-                  <p className="font-mono text-xs font-medium">{selectedJob.id}</p>
+                  <p className="break-all font-mono text-xs font-medium">{selectedJob.id}</p>
                 </div>
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">Tipo</p>
-                  <p className="font-medium">{selectedJob.jobType}</p>
+                  <p className="break-all font-medium">{selectedJob.jobType}</p>
                 </div>
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">Arquivo</p>
@@ -769,7 +769,9 @@ function ProcessamentosPage() {
                 </div>
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">ID da Importação</p>
-                  <p className="font-mono text-xs font-medium">{selectedJob.importId}</p>
+                  <p className="break-all font-mono text-xs font-medium">
+                    {selectedJob.importId}
+                  </p>
                 </div>
               </div>
 

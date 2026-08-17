@@ -58,7 +58,7 @@ function MapaPage() {
             <Badge variant="outline">Clientes reais</Badge>
           </div>
           <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Mapa de rotas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Visualize clientes reais posicionados pelo município cadastrado.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Visualize clientes pelo endereço geocodificado ou, como fallback, pela cidade cadastrada.</p>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Filtro de atividade">
           {(Object.entries(activityLabels) as [ActivityFilter, string][]).map(([value, label]) => (
@@ -73,7 +73,7 @@ function MapaPage() {
       {!error && withoutCoordinates > 0 && (
         <Alert>
           <AlertDescription>
-            {withoutCoordinates} de {totalCustomers} cliente(s) ainda não têm coordenada municipal resolvida.
+            {withoutCoordinates} de {totalCustomers} cliente(s) ainda não têm coordenada de endereço nem coordenada municipal resolvida.
           </AlertDescription>
         </Alert>
       )}
@@ -100,6 +100,8 @@ function toLogisticsMapCustomer(item: LogisticsMapCustomerItem): LogisticsMapCus
     situation: item.situation,
     route: item.route,
     priority: item.priority,
+    locationPrecision: item.locationPrecision,
+    address: item.address,
     lat: item.lat,
     lng: item.lng,
   };

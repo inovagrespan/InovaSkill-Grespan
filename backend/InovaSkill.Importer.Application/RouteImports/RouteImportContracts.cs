@@ -1,5 +1,6 @@
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Application.WhatsApp;
+using System.Text.Json;
 
 namespace InovaSkill.Importer.Application.RouteImports;
 
@@ -79,8 +80,28 @@ public static class OperationalJobCodes
     public const string ProcessImport = RouteImportCodes.JobType;
     public const string MunicipalityCoordinateEnrichment = "MUNICIPALITY_COORDINATE_ENRICHMENT";
     public const string CustomerRegistrationAddressEnrichment = "CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT";
+    public const string CustomerAddressCoordinateEnrichment = "CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT";
     public const string WhatsAppMessageProcessing = WhatsAppJobCodes.MessageProcessing;
     public const int WorkerExecutionTimeoutMinutes = 30;
+}
+
+public static class CustomerRegistrationAddressCustomerStatuses
+{
+    public const string Active = "ACTIVE";
+    public const string Inactive = "INACTIVE";
+    public const string All = "ALL";
+
+    public static string Read(JsonElement parameters)
+    {
+        if (!parameters.TryGetProperty("customerStatus", out var value) || value.ValueKind == JsonValueKind.Null)
+            return Active;
+        if (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString()))
+            throw new ArgumentException("$.customerStatus deve ser ACTIVE, INACTIVE ou ALL.");
+        var normalized = value.GetString()!.Trim().ToUpperInvariant();
+        return normalized is Active or Inactive or All
+            ? normalized
+            : throw new ArgumentException("$.customerStatus deve ser ACTIVE, INACTIVE ou ALL.");
+    }
 }
 
 public static class BackgroundJobQueues
@@ -122,7 +143,18 @@ public static class OperationalJobCatalog
         AllowConcurrentRuns: false,
         BackgroundJobQueues.Default,
         ContractVersion: 1,
-        ExampleParametersJson: "{}");
+        ExampleParametersJson: "{\"customerStatus\":\"ACTIVE\",\"refreshResolved\":false}");
+
+    public static readonly OperationalJobDefinition CustomerAddressCoordinateEnrichment = new(
+        OperationalJobCodes.CustomerAddressCoordinateEnrichment,
+        "Geocodificar endereços de clientes",
+        "Converte endereços cadastrais resolvidos em latitude/longitude pelo Nominatim.",
+        ManualRunAllowed: true,
+        ScheduleAllowed: false,
+        AllowConcurrentRuns: false,
+        BackgroundJobQueues.Default,
+        ContractVersion: 1,
+        ExampleParametersJson: "{\"customerStatus\":\"ACTIVE\",\"reprocessFailed\":false}");
 
     public static readonly OperationalJobDefinition WhatsAppMessageProcessing = new(
         OperationalJobCodes.WhatsAppMessageProcessing,
@@ -147,7 +179,7 @@ public static class OperationalJobCatalog
         ExampleParametersJson: "{\"importId\":\"00000000-0000-0000-0000-000000000000\"}");
 
     private static readonly IReadOnlyDictionary<string, OperationalJobDefinition> Definitions =
-        new[] { ProcessImport, MunicipalityCoordinateEnrichment, CustomerRegistrationAddressEnrichment, WhatsAppMessageProcessing }
+        new[] { ProcessImport, MunicipalityCoordinateEnrichment, CustomerRegistrationAddressEnrichment, CustomerAddressCoordinateEnrichment, WhatsAppMessageProcessing }
             .ToDictionary(definition => definition.JobType, StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlyCollection<OperationalJobDefinition> All { get; } = Definitions.Values.ToArray();

@@ -13,7 +13,7 @@ public sealed class BrasilApiCustomerRegistrationAddressProviderTests
     public async Task FindByCnpjAsync_MapsRegistrationAddressFromBrasilApi()
     {
         var handler = new StubHandler(HttpStatusCode.OK, """
-            {"cep":"17500-000","uf":"SP","municipio":"MARILIA","logradouro":"AVENIDA BRASIL",
+            {"cep":"17500-000","uf":"SP","municipio":"MARILIA","descricao_tipo_de_logradouro":"AVENIDA","logradouro":"BRASIL",
              "numero":"100","complemento":"SALA 2","bairro":"CENTRO"}
             """);
         var provider = CreateProvider(handler);
@@ -24,7 +24,8 @@ public sealed class BrasilApiCustomerRegistrationAddressProviderTests
         Assert.Equal("17500-000", result.PostalCode);
         Assert.Equal("SP", result.StateCode);
         Assert.Equal("MARILIA", result.City);
-        Assert.Equal("AVENIDA BRASIL", result.Street);
+        Assert.Equal("BRASIL", result.Street);
+        Assert.Equal("AVENIDA", result.StreetType);
         Assert.Equal("100", result.Number);
         Assert.Equal("SALA 2", result.Complement);
         Assert.Equal("CENTRO", result.Neighborhood);
