@@ -162,6 +162,7 @@ Thumbs.db
 
 # OSRM extracts and preprocessed routing graphs
 infra/osrm/
+infra/osrm-brazil/
 
 # Monorepo local runtime data
 uploads/

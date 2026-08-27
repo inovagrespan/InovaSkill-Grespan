@@ -473,6 +473,27 @@
   background: rgba(255, 255, 255, 0.92);
 }
 
+.logistics-map-pin > b {
+  position: absolute;
+  right: -7px;
+  top: -7px;
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 999px;
+  background: #475569;
+  color: white;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.logistics-map-pin--exact > b { background: #047857; }
+.logistics-map-pin--interpolated > b { background: #b45309; }
+.logistics-map-pin--municipality { opacity: 0.82; }
+
 .logistics-map-pin--normal {
   background: #16a34a;
 }

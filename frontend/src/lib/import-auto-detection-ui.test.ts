@@ -11,7 +11,7 @@ describe("upload com identificação automática", () => {
     expect(route).not.toContain("Fonte de dados");
     expect(route).not.toContain("<select");
     expect(route).toContain("Identificação automática");
-    expect(route).toContain("pelo cabeçalho da planilha");
+    expect(route).toContain("planilhas operacionais pelo cabeçalho");
     expect(api).not.toContain('form.append("sourceCode"');
   });
 
@@ -19,5 +19,11 @@ describe("upload com identificação automática", () => {
     expect(MAX_UPLOAD_SIZE_MEGABYTES).toBe(100);
     expect(MAX_UPLOAD_SIZE_BYTES).toBe(100 * 1024 * 1024);
     expect(route).toContain("file.size > MAX_UPLOAD_SIZE_BYTES");
+  });
+
+  it("aceita CSV de coordenadas HERE além das planilhas XLSX", () => {
+    expect(route).toContain('accept=".xlsx,.csv"');
+    expect(route).toContain('/\\.(xlsx|csv)$/i');
+    expect(route).toContain("CSV de coordenadas HERE");
   });
 });

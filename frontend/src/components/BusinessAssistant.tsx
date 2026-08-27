@@ -506,7 +506,13 @@ function normalizeExternalSourceUrl(value: string) {
   }
 }
 
-function AssistantResponseText({ text }: { text: string }) {
+export function AssistantResponseText({
+  text,
+  presentation = "default",
+}: {
+  text: string;
+  presentation?: "default" | "whatsapp";
+}) {
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -521,11 +527,12 @@ function AssistantResponseText({ text }: { text: string }) {
     <div className="space-y-3">
       {blocks.map((block, index) => {
         if (block.type === "heading") {
-          return <h3 key={`${block.type}-${index}`} className="text-sm font-semibold">{block.text}</h3>;
+          return <h3 key={`${block.type}-${index}`} className="text-sm font-semibold">{presentation === "whatsapp" ? "📌 " : ""}{block.text}</h3>;
         }
 
         if (block.type === "paragraph") {
-          return <p key={`${block.type}-${index}`}>{block.text}</p>;
+          const isDataPeriod = block.text.toLocaleLowerCase("pt-BR").startsWith("período dos dados:");
+          return <p key={`${block.type}-${index}`}>{presentation === "whatsapp" && isDataPeriod ? "📅 " : ""}{block.text}</p>;
         }
 
         if (block.type === "bullet-list") {
@@ -541,14 +548,14 @@ function AssistantResponseText({ text }: { text: string }) {
         }
 
         if (block.type === "table") {
-          return <AssistantDataTable key={`${block.type}-${index}`} table={block} />;
+          return <div key={`${block.type}-${index}`} className="space-y-1.5">{presentation === "whatsapp" ? <p className="font-semibold">📊 Dados consultados</p> : null}<AssistantDataTable table={block} /></div>;
         }
 
         if (block.type === "entity-list") {
           return (
             <div key={`${block.type}-${index}`} className="space-y-2">
               {block.items.map((item, itemIndex) => (
-                <EntityDisplayCard key={`${item.kind}-${item.title}-${itemIndex}`} item={item} index={itemIndex} />
+                <EntityDisplayCard key={`${item.kind}-${item.title}-${itemIndex}`} item={item} index={itemIndex} showEmoji={presentation === "whatsapp"} />
               ))}
             </div>
           );
@@ -557,7 +564,7 @@ function AssistantResponseText({ text }: { text: string }) {
         return (
           <div key={`${block.type}-${index}`} className="space-y-2">
             {block.routes.map((route, routeIndex) => (
-              <RouteDisplayCard key={`${route.name}-${routeIndex}`} route={route} index={routeIndex} />
+              <RouteDisplayCard key={`${route.name}-${routeIndex}`} route={route} index={routeIndex} showEmoji={presentation === "whatsapp"} />
             ))}
           </div>
         );
@@ -729,14 +736,18 @@ function AssistantDataTable({ table }: { table: Extract<AssistantBlock, { type: 
   );
 }
 
-function RouteDisplayCard({ route, index }: { route: AssistantRouteDisplay; index: number }) {
+function RouteDisplayCard({ route, index, showEmoji = false }: { route: AssistantRouteDisplay; index: number; showEmoji?: boolean }) {
   return (
     <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 items-start gap-2">
         <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
           {index + 1}
         </span>
-        <span className="min-w-0 flex-1 break-words font-semibold text-foreground">{route.name}</span>
+        {showEmoji ? <span className="shrink-0" aria-hidden="true">🚨</span> : null}
+        <span className="min-w-0 break-words font-semibold text-foreground">{route.name}</span>
+      </div>
+      {(route.occupancy || route.status) && (
+        <div className="ml-7 mt-2 flex flex-wrap gap-2">
         {route.occupancy && (
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
             {route.occupancy}
@@ -747,27 +758,33 @@ function RouteDisplayCard({ route, index }: { route: AssistantRouteDisplay; inde
             {route.status}
           </span>
         )}
-      </div>
-      {route.detail && <p className="mt-1 text-xs text-muted-foreground">{route.detail}</p>}
+        </div>
+      )}
+      {route.detail && <p className="ml-7 mt-2 text-xs text-muted-foreground">{route.detail}</p>}
     </div>
   );
 }
 
-function EntityDisplayCard({ item, index }: { item: AssistantEntityDisplay; index: number }) {
+function EntityDisplayCard({ item, index, showEmoji = false }: { item: AssistantEntityDisplay; index: number; showEmoji?: boolean }) {
   return (
     <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 items-start gap-2">
         <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
           {index + 1}
         </span>
-        <span className="min-w-0 flex-1 break-words font-semibold text-foreground">{item.title}</span>
+        {showEmoji ? <span className="shrink-0" aria-hidden="true">👤</span> : null}
+        <span className="min-w-0 break-words font-semibold text-foreground">{item.title}</span>
+      </div>
+      {item.badges.length > 0 && (
+        <div className="ml-7 mt-2 flex flex-wrap gap-2">
         {item.badges.map((badge) => (
           <span key={badge} className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
             {badge}
           </span>
         ))}
-      </div>
-      {item.detail && <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>}
+        </div>
+      )}
+      {item.detail && <p className="ml-7 mt-2 text-xs text-muted-foreground">{item.detail}</p>}
     </div>
   );
 }

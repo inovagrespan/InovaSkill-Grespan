@@ -16,6 +16,15 @@ export type WhatsAppConnection = {
   providerAvailable: boolean;
 };
 
+export type AssistantSessionUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  inputCostUsd: number;
+  outputCostUsd: number;
+  totalCostUsd: number;
+};
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authFetch(buildGatewayUrl(path), init);
   if (!response.ok) {
@@ -56,3 +65,5 @@ export const simulateWhatsAppMessage = (message: string, sessionId?: string) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, sessionId }),
   });
+export const getAssistantSessionUsage = (sessionId: string) =>
+  api<AssistantSessionUsage>(`assistant/sessions/${sessionId}/usage`);

@@ -169,7 +169,7 @@ function ImportacoesPage() {
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
     if (selectedFiles.length === 0) {
-      setMessage("Selecione ao menos um arquivo XLSX.");
+      setMessage("Selecione ao menos um arquivo XLSX ou CSV.");
       return;
     }
     setUploading(true);
@@ -179,8 +179,8 @@ function ImportacoesPage() {
         if (file.size > MAX_UPLOAD_SIZE_BYTES) {
           throw new Error(`Arquivo '${file.name}' excede o limite de ${MAX_UPLOAD_SIZE_MEGABYTES} MB.`);
         }
-        if (!file.name.toLowerCase().endsWith(".xlsx")) {
-          throw new Error(`Arquivo '${file.name}' não é um XLSX válido.`);
+        if (!/\.(xlsx|csv)$/i.test(file.name)) {
+          throw new Error(`Arquivo '${file.name}' não é um XLSX ou CSV válido.`);
         }
         await uploadImport(file);
       }
@@ -249,7 +249,7 @@ function ImportacoesPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FolderUp className="size-5 text-primary" />
-            Importar arquivo XLSX
+            Importar arquivo XLSX ou CSV
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -257,7 +257,7 @@ function ImportacoesPage() {
             <div className="rounded-lg border border-border bg-muted/35 px-4 py-3 text-sm">
               <p className="font-medium">Identificação automática</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                O sistema reconhece rotas, clientes ou movimentações fiscais pelo cabeçalho da planilha.
+                O sistema reconhece planilhas operacionais pelo cabeçalho e CSV de coordenadas HERE pela extensão.
               </p>
             </div>
             <label className="block cursor-pointer rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 p-6 transition-all duration-200 hover:bg-primary/10">
@@ -265,7 +265,7 @@ function ImportacoesPage() {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Clique para selecionar o arquivo</p>
                   <p className="text-xs text-muted-foreground">
-                    Formato aceito: .xlsx (até {MAX_UPLOAD_SIZE_MEGABYTES} MB)
+                    Formatos aceitos: .xlsx e CSV de coordenadas HERE (até {MAX_UPLOAD_SIZE_MEGABYTES} MB)
                   </p>
                 </div>
                 <div className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/20">
@@ -275,7 +275,7 @@ function ImportacoesPage() {
               </div>
               <input
                 type="file"
-                accept=".xlsx"
+                accept=".xlsx,.csv"
                 className="hidden"
                 onChange={(e) => setSelectedFiles(Array.from(e.target.files ?? []))}
               />

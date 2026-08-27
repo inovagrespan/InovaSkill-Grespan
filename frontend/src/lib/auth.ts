@@ -132,6 +132,11 @@ export function canCurrentUserAccessProcessingArea(): boolean {
   return role === "admin_system" || role === "admin";
 }
 
+export function canCurrentUserManageCustomerRoutes(): boolean {
+  const role = getCurrentUserRole();
+  return role === "logistica" || role === "admin_system" || role === "admin";
+}
+
 export function saveAuthToken(token: string): void {
   getStorage()?.setItem(TOKEN_STORAGE_KEY, token);
   getSessionStorage()?.setItem(SESSION_STORAGE_KEY, "1");

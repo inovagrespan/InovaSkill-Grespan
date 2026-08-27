@@ -30,6 +30,10 @@ describe("business assistant UI", () => {
     expect(component).toContain("entity-list");
     expect(component).toContain("bullet-list");
     expect(component).toContain("AssistantDataTable");
+    expect(component).toContain('aria-hidden="true">🚨');
+    expect(component).toContain('aria-hidden="true">👤');
+    expect(component).toContain('className="ml-7 mt-2 flex flex-wrap gap-2"');
+    expect(component).not.toContain('flex-1 break-words font-semibold text-foreground">{item.title}');
     expect(component).toContain('aria-label="Dados em tabela"');
     expect(component).toContain("\\[CLIENTE\\]");
     expect(component).toContain("cleanListMarker");

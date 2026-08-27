@@ -65,7 +65,8 @@ public sealed class BrasilApiCustomerRegistrationAddressProvider(
                 Clean(payload.Street),
                 Clean(payload.Number),
                 Clean(payload.Complement),
-                Clean(payload.Neighborhood));
+                Clean(payload.Neighborhood),
+                Clean(payload.StreetType));
         }
     }
 
@@ -112,6 +113,7 @@ public sealed class BrasilApiCustomerRegistrationAddressProvider(
         [property: JsonPropertyName("uf")] string? StateCode,
         [property: JsonPropertyName("municipio")] string? City,
         [property: JsonPropertyName("logradouro")] string? Street,
+        [property: JsonPropertyName("descricao_tipo_de_logradouro")] string? StreetType,
         [property: JsonPropertyName("numero")] string? Number,
         [property: JsonPropertyName("complemento")] string? Complement,
         [property: JsonPropertyName("bairro")] string? Neighborhood);

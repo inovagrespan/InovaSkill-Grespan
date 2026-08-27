@@ -3849,7 +3849,8 @@ export type LogisticsMapCustomerItem = {
   priority: "Baixa" | "Média" | "Alta";
   lastDelivery: string;
   nextDelivery: string;
-  locationPrecision: "Municipality";
+  locationPrecision: "ADDRESS_EXACT" | "ADDRESS_INTERPOLATED" | "MUNICIPALITY";
+  address: string | null;
   lat: number;
   lng: number;
   municipalityLat: number;
@@ -3917,16 +3918,18 @@ export type CurrentCustomerItem = {
   }>;
 };
 
+export type CurrentCustomerListItem = Omit<CurrentCustomerItem, "routeAssignments">;
+
 export async function fetchCurrentCustomers(
   page = 1,
   pageSize = 25,
   search = "",
-): Promise<PagedResult<CurrentCustomerItem>> {
+): Promise<PagedResult<CurrentCustomerListItem>> {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search.trim()) params.set("search", search.trim());
   const response = await authFetch(`${API_URL}/api/customers?${params}`);
   if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar clientes."));
-  return (await response.json()) as PagedResult<CurrentCustomerItem>;
+  return (await response.json()) as PagedResult<CurrentCustomerListItem>;
 }
 
 export type FiscalDocumentListItem = {
@@ -3973,7 +3976,7 @@ export type FiscalDocumentDetails = FiscalDocumentListItem & {
   }>;
 };
 export type CustomerConsumptionSummary = {
-  customer: Omit<CurrentCustomerItem, "routeAssignments">;
+  customer: CurrentCustomerItem;
   metrics: {
     salesWeightLast30Days: number;
     salesWeightPrevious30Days: number;
@@ -4059,7 +4062,36 @@ export async function fetchCustomerConsumptionSummary(
   const response = await authFetch(`${API_URL}/api/customers/${id}/consumption-summary`);
   if (!response.ok)
     throw new Error(await parseApiError(response, "Falha ao carregar o consumo do cliente."));
-  return (await response.json()) as CustomerConsumptionSummary;
+  return normalizeCustomerConsumptionSummary(
+    (await response.json()) as CustomerConsumptionSummary,
+  );
+}
+
+export function normalizeCustomerConsumptionSummary(
+  summary: CustomerConsumptionSummary,
+): CustomerConsumptionSummary {
+  return {
+    ...summary,
+    customer: {
+      ...summary.customer,
+      routeAssignments: summary.customer.routeAssignments ?? [],
+    },
+    monthlyTimeline: summary.monthlyTimeline ?? [],
+    recentMovements: summary.recentMovements ?? [],
+  };
+}
+
+export async function addCustomerRouteAssignment(customerId: string, routeId: string): Promise<void> {
+  const response = await authFetch(
+    `${API_URL}/api/customers/${encodeURIComponent(customerId)}/route-assignments`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ routeId }),
+    },
+  );
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao adicionar o cliente à rota."));
 }
 export async function fetchCustomerProjection(id: string): Promise<CustomerProjectionResponse> {
   const response = await authFetch(`${API_URL}/api/customers/${id}/projection`);
@@ -4168,6 +4200,48 @@ export async function deleteVehicleType(id: string): Promise<void> {
   const response = await authFetch(`${API_URL}/api/vehicle-types/${id}`, { method: "DELETE" });
   if (!response.ok)
     throw new Error(await parseApiError(response, "Falha ao excluir tipo de veículo."));
+}
+
+// ─── Logistics depot and OSRM ───────────────────────────────────────────
+
+export type LogisticsDepotItem = {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function fetchLogisticsDepot(): Promise<LogisticsDepotItem | null> {
+  const response = await authFetch(`${API_URL}/api/logistics-depot`);
+  if (response.status === 404) return null;
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar o depósito logístico."));
+  return (await response.json()) as LogisticsDepotItem;
+}
+
+export async function updateLogisticsDepot(input: {
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+}): Promise<LogisticsDepotItem> {
+  const response = await authFetch(`${API_URL}/api/logistics-depot`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao salvar o depósito logístico."));
+  return (await response.json()) as LogisticsDepotItem;
+}
+
+export async function checkOsrmHealth(): Promise<void> {
+  const response = await authFetch(`${API_URL}/api/osrm/health`);
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "O OSRM não está disponível para o depósito configurado."));
 }
 
 // ─── Imported Routes ─────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ using Cronos;
 using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.Persistence;
+using InovaSkill.Importer.Infrastructure.RouteImports;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -93,6 +94,16 @@ public sealed class AdminJobSchedulesController(
         if (!definition.ScheduleAllowed) return "Este job não permite agendamento.";
         if (request.ContractVersion != definition.ContractVersion) return "Versão de contrato não suportada.";
         if (Encoding.UTF8.GetByteCount(request.Parameters.GetRawText()) > GenericJobPolicy.MaximumJsonBytes) return "O JSON excede 1 MB.";
+        if (definition.JobType is OperationalJobCodes.CustomerRegistrationAddressEnrichment or OperationalJobCodes.CustomerAddressCoordinateEnrichment)
+        {
+            try { _ = CustomerRegistrationAddressCustomerStatuses.Read(request.Parameters); }
+            catch (ArgumentException exception) { return exception.Message; }
+            if (definition.JobType == OperationalJobCodes.CustomerRegistrationAddressEnrichment)
+            {
+                try { _ = CustomerRegistrationAddressEnrichmentProcessor.ReadRefreshResolved(request.Parameters); }
+                catch (ArgumentException exception) { return exception.Message; }
+            }
+        }
         try { _ = CronExpression.Parse(request.CronExpression); }
         catch (CronFormatException) { return "Expressão cron inválida."; }
         try { _ = TimeZoneInfo.FindSystemTimeZoneById(request.TimeZoneId); }

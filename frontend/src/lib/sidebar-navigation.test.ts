@@ -21,6 +21,7 @@ describe("sidebar navigation", () => {
       "Simulador WhatsApp",
       "Rotas",
       "Tipos de Veículo",
+      "Depósito",
       "Mapa",
       "Clientes",
       "Notas Fiscais",
@@ -47,6 +48,7 @@ describe("sidebar navigation", () => {
       "Simulador WhatsApp",
       "Rotas",
       "Tipos de Veículo",
+      "Depósito",
       "Mapa",
       "Clientes",
       "Notas Fiscais",
@@ -54,7 +56,7 @@ describe("sidebar navigation", () => {
       "Estoque",
       "Produção",
     ]);
-    expect(adminItems).toHaveLength(16);
+    expect(adminItems).toHaveLength(17);
     expect(adminItems).toContain("Importações");
     expect(adminItems).toContain("Processamento");
     expect(adminItems).toContain("Consumo de IA");
@@ -74,6 +76,8 @@ describe("sidebar navigation", () => {
     expect(source).not.toContain('label: "Alertas"');
     expect(source).toContain('to: "/logistica/rotas"');
     expect(source).toContain('label: "Rotas"');
+    expect(source).toContain('to: "/configuracoes/deposito"');
+    expect(source).toContain('label: "Depósito"');
     expect(source).toContain('to: "/mapa"');
     expect(source).toContain('label: "Mapa"');
     expect(source).not.toContain('to: "/vendas"');

@@ -9,7 +9,6 @@ import {
   MapPin,
   Package,
   Scale,
-  TrendingUp,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -22,24 +21,11 @@ import { formatKpiCompactCurrency, formatKpiCompactNumber } from "@/lib/vendas-f
 
 const numberFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
 const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const percentageFormatter = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "Data não informada";
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.getTime()) ? "Data indisponível" : date.toLocaleDateString("pt-BR");
-}
-
-function formatSignedPercentage(value: number | null): string {
-  if (value == null) return "N/A";
-  return `${value > 0 ? "+" : ""}${percentageFormatter.format(value)}%`;
-}
-
-function commercialQualityTone(classification: string): "neutral" | "success" | "danger" | "info" {
-  if (classification === "Boa venda") return "success";
-  if (classification === "Venda de atenção") return "danger";
-  if (classification === "Sem histórico suficiente" || classification === "Não aplicável") return "info";
-  return "neutral";
 }
 
 export function FiscalDocumentDialog({
@@ -140,37 +126,6 @@ export function FiscalDocumentDialog({
                     valueTooltip={currencyFormatter.format(data.calculatedTotalAmount)}
                     periodLabel="Quantidade × valor unitário" icon={DollarSign}
                     showPercentageChange={false} allowWrapValue />
-                </div>
-              </section>
-
-              <section>
-                <div className="mb-3">
-                  <h3 className="font-display text-lg font-semibold">Qualidade comercial da venda</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Compara o ticket desta nota com o ticket médio histórico de vendas do mesmo cliente.
-                  </p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  <KpiCard className="w-full" title="Qualidade comercial"
-                    value={data.commercialQuality.classification}
-                    valueTooltip={data.commercialQuality.reason}
-                    periodLabel={data.commercialQuality.reason}
-                    icon={TrendingUp} showPercentageChange={false}
-                    tone={commercialQualityTone(data.commercialQuality.classification)}
-                    allowWrapValue />
-                  <KpiCard className="w-full" title="Ticket médio do cliente"
-                    value={data.commercialQuality.customerAverageTicket == null ? "N/A" : formatKpiCompactCurrency(data.commercialQuality.customerAverageTicket)}
-                    valueTooltip={data.commercialQuality.customerAverageTicket == null ? "Sem histórico suficiente" : currencyFormatter.format(data.commercialQuality.customerAverageTicket)}
-                    periodLabel={`${data.commercialQuality.historicalSaleDocumentCount} venda(s) anteriores na base`}
-                    icon={DollarSign} showPercentageChange={false}
-                    tone={data.commercialQuality.customerAverageTicket == null ? "info" : "neutral"}
-                    allowWrapValue />
-                  <KpiCard className="w-full" title="Ticket da NF vs média"
-                    value={formatSignedPercentage(data.commercialQuality.ticketVariationPercentage)}
-                    valueTooltip={formatSignedPercentage(data.commercialQuality.ticketVariationPercentage)}
-                    periodLabel="Diferença contra o histórico do cliente"
-                    icon={TrendingUp} showPercentageChange={false}
-                    tone={commercialQualityTone(data.commercialQuality.classification)} />
                 </div>
               </section>
 

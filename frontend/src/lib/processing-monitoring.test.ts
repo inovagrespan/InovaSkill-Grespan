@@ -320,4 +320,16 @@ describe("processing monitoring", () => {
     expect(processamentos).toContain("Promise.all");
     expect(processamentos).toContain("statusFilter");
   });
+
+  it("mantem os detalhes do job acessiveis quando o conteudo excede a viewport", () => {
+    const processamentos = fs.readFileSync(
+      path.resolve(process.cwd(), "src/routes/processamentos.tsx"),
+      "utf8",
+    );
+
+    expect(processamentos).toContain(
+      'className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-x-hidden overflow-y-auto border-border bg-surface"',
+    );
+    expect(processamentos.match(/className="break-all/g)).toHaveLength(3);
+  });
 });

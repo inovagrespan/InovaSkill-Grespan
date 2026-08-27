@@ -144,6 +144,25 @@ public sealed class AssistantController(
                 message.CreatedAt)).ToList()));
     }
 
+    [HttpGet("sessions/{sessionId:guid}/usage")]
+    public async Task<ActionResult<AssistantSessionUsageResponse>> GetSessionUsage(
+        Guid sessionId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (consumptionService is null) return Ok(new AssistantSessionUsageResponse(0, 0, 0, 0, 0, 0));
+
+        var usage = await consumptionService.GetSessionUsageAsync(sessionId, userId, cancellationToken);
+        if (usage is null) return NotFound();
+        return Ok(new AssistantSessionUsageResponse(
+            usage.InputTokens,
+            usage.OutputTokens,
+            usage.TotalTokens,
+            usage.InputCostUsd,
+            usage.OutputCostUsd,
+            usage.TotalCostUsd));
+    }
+
     private bool TryGetUserId(out long userId)
     {
         var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");

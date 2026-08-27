@@ -14,7 +14,7 @@ describe("exploração de fatos fiscais", () => {
   });
 
   it("apresenta detalhes da nota no mesmo padrão visual dos clientes", () => {
-    expect(fiscalDialog.match(/<KpiCard/g)?.length).toBe(7);
+    expect(fiscalDialog.match(/<KpiCard/g)?.length).toBe(4);
     expect(fiscalDialog).toContain("Resumo da nota");
     expect(fiscalDialog).toContain("Quantidade × valor unitário");
     expect(fiscalDialog).toContain("data.calculatedTotalAmount");
@@ -24,15 +24,11 @@ describe("exploração de fatos fiscais", () => {
     expect(fiscalDialog).toContain("valueTooltip=");
   });
 
-  it("mostra qualidade comercial e compara o ticket da NF contra o histórico do cliente", () => {
-    expect(fiscalDialog).toContain("Qualidade comercial da venda");
-    expect(fiscalDialog).toContain("Ticket médio do cliente");
-    expect(fiscalDialog).toContain("Ticket da NF vs média");
-    expect(fiscalDialog).toContain("data.commercialQuality.classification");
-    expect(fiscalDialog).toContain("data.commercialQuality.customerAverageTicket");
-    expect(fiscalDialog).toContain("data.commercialQuality.ticketVariationPercentage");
-    expect(fiscalDialog).toContain("formatSignedPercentage");
-    expect(fiscalDialog).toContain("commercialQualityTone");
+  it("mantém somente o resumo e os itens, sem qualidade comercial", () => {
+    expect(fiscalDialog).not.toContain("Qualidade comercial da venda");
+    expect(fiscalDialog).not.toContain("Ticket médio do cliente");
+    expect(fiscalDialog).not.toContain("Ticket da NF vs média");
+    expect(fiscalDialog).not.toContain("data.commercialQuality");
   });
 
   it("mantém o diálogo de consumo integrado ao detalhe da nota", () => {

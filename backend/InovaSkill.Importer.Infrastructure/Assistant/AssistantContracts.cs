@@ -30,3 +30,11 @@ public sealed record AssistantConversationMessageResponse(
 public sealed record AssistantConversationResponse(
     Guid SessionId,
     IReadOnlyList<AssistantConversationMessageResponse> Messages);
+
+public sealed record AssistantSessionUsageResponse(
+    long InputTokens,
+    long OutputTokens,
+    long TotalTokens,
+    decimal InputCostUsd,
+    decimal OutputCostUsd,
+    decimal TotalCostUsd);

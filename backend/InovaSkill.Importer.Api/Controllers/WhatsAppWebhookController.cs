@@ -43,7 +43,7 @@ public sealed class WhatsAppWebhookController(
         string phone;
         try { phone = NormalizeRemoteJid(remoteJid); }
         catch (ArgumentException) { return Ok(); }
-        var link = await db.WhatsAppUserLinks.AsNoTracking()
+        var link = await db.WhatsAppUserLinks
             .SingleOrDefaultAsync(x => x.NormalizedPhone == phone && x.Status == WhatsAppUserLinkStatuses.Active, cancellationToken);
         if (link is null) return Ok();
         var existingReceiptId = await db.WhatsAppMessageReceipts.AsNoTracking()
@@ -61,17 +61,54 @@ public sealed class WhatsAppWebhookController(
         if (string.IsNullOrWhiteSpace(text) && !hasAudio) return Ok();
 
         var now = DateTime.UtcNow;
+        var floodWindowStart = now.AddSeconds(-Math.Max(1, options.Value.FloodWindowSeconds));
+        var recentAcceptedMessages = await db.WhatsAppMessageReceipts.AsNoTracking().CountAsync(
+            x => x.WhatsAppUserLinkId == link.Id &&
+                 x.Direction == WhatsAppMessageDirections.Inbound &&
+                 x.CreatedAt >= floodWindowStart &&
+                 x.Status != WhatsAppMessageStatuses.RateLimited &&
+                 x.Status != WhatsAppMessageStatuses.RateLimitNotice &&
+                 x.Status != WhatsAppMessageStatuses.RateLimitNoticeSent,
+            cancellationToken);
+        var floodDecision = WhatsAppFloodPolicy.Evaluate(
+            now,
+            link.FloodBlockedUntil,
+            recentAcceptedMessages,
+            options.Value.FloodMaximumMessages,
+            TimeSpan.FromSeconds(Math.Max(1, options.Value.FloodCooldownSeconds)));
+        if (floodDecision.ShouldNotify)
+        {
+            if (db.Database.IsRelational())
+            {
+                var claimedNotice = await db.WhatsAppUserLinks
+                    .Where(x => x.Id == link.Id && (x.FloodBlockedUntil == null || x.FloodBlockedUntil <= now))
+                    .ExecuteUpdateAsync(
+                        setters => setters.SetProperty(x => x.FloodBlockedUntil, floodDecision.BlockedUntil),
+                        cancellationToken);
+                if (claimedNotice == 0) floodDecision = floodDecision with { ShouldNotify = false };
+            }
+            else
+            {
+                link.FloodBlockedUntil = floodDecision.BlockedUntil;
+            }
+        }
         var receipt = new WhatsAppMessageReceipt
         {
             Id = Guid.NewGuid(), ProviderMessageId = providerId, WhatsAppUserLinkId = link.Id,
             Direction = WhatsAppMessageDirections.Inbound, MessageType = hasAudio ? "audio" : "text",
             TextContent = text?.Trim(), MediaReference = hasAudio ? data.GetRawText() : null,
-            Status = WhatsAppMessageStatuses.Received, CreatedAt = now, UpdatedAt = now
+            Status = floodDecision.Allowed
+                ? WhatsAppMessageStatuses.Received
+                : floodDecision.ShouldNotify
+                    ? WhatsAppMessageStatuses.RateLimitNotice
+                    : WhatsAppMessageStatuses.RateLimited,
+            CreatedAt = now, UpdatedAt = now
         };
         db.WhatsAppMessageReceipts.Add(receipt);
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateException) { return Ok(); }
-        await queue.TryQueueAsync(receipt.Id, cancellationToken);
+        if (floodDecision.Allowed || floodDecision.ShouldNotify)
+            await queue.TryQueueAsync(receipt.Id, cancellationToken);
         return Accepted();
     }
 

@@ -16,7 +16,9 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<RouteEntry> RouteEntries => Set<RouteEntry>();
     public DbSet<Municipality> Municipalities => Set<Municipality>();
     public DbSet<MunicipalityCoordinate> MunicipalityCoordinates => Set<MunicipalityCoordinate>();
+    public DbSet<LogisticsDepot> LogisticsDepots => Set<LogisticsDepot>();
     public DbSet<CustomerRegistrationAddress> CustomerRegistrationAddresses => Set<CustomerRegistrationAddress>();
+    public DbSet<CustomerAddressCoordinate> CustomerAddressCoordinates => Set<CustomerAddressCoordinate>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerSnapshot> CustomerSnapshots => Set<CustomerSnapshot>();
     public DbSet<RouteCustomerAssignment> RouteCustomerAssignments => Set<RouteCustomerAssignment>();
@@ -339,6 +341,23 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<LogisticsDepot>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Address).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Latitude).HasPrecision(9, 6).IsRequired();
+            entity.Property(x => x.Longitude).HasPrecision(9, 6).IsRequired();
+            entity.Property<short>("SingletonKey").HasDefaultValue((short)1);
+            entity.HasIndex("SingletonKey").IsUnique();
+            entity.ToTable("logistics_depots", table =>
+            {
+                table.HasCheckConstraint("CK_logistics_depots_singleton", "\"SingletonKey\" = 1");
+                table.HasCheckConstraint("CK_logistics_depots_latitude", "\"Latitude\" BETWEEN -90 AND 90");
+                table.HasCheckConstraint("CK_logistics_depots_longitude", "\"Longitude\" BETWEEN -180 AND 180");
+            });
+        });
+
         modelBuilder.Entity<Customer>(entity =>
         {
             entity.ToTable("customers");
@@ -378,6 +397,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.StateCode).HasMaxLength(2);
             entity.Property(x => x.City).HasMaxLength(256);
             entity.Property(x => x.Street).HasMaxLength(512);
+            entity.Property(x => x.StreetType).HasMaxLength(64);
             entity.Property(x => x.Number).HasMaxLength(64);
             entity.Property(x => x.Complement).HasMaxLength(256);
             entity.Property(x => x.Neighborhood).HasMaxLength(256);
@@ -385,6 +405,27 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasIndex(x => x.CustomerId).IsUnique();
             entity.HasOne(x => x.Customer).WithOne(x => x.RegistrationAddress)
                 .HasForeignKey<CustomerRegistrationAddress>(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CustomerAddressCoordinate>(entity =>
+        {
+            entity.ToTable("customer_address_coordinates");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.NormalizedAddress).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.Source).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Precision).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Latitude).HasPrecision(9, 6);
+            entity.Property(x => x.Longitude).HasPrecision(9, 6);
+            entity.Property(x => x.ProviderPlaceId).HasMaxLength(64);
+            entity.Property(x => x.DisplayName).HasMaxLength(1024);
+            entity.Property(x => x.FailureReason).HasMaxLength(1024);
+            entity.HasIndex(x => x.CustomerRegistrationAddressId).IsUnique();
+            entity.HasIndex(x => x.NormalizedAddress);
+            entity.HasIndex(x => x.Status);
+            entity.HasOne(x => x.CustomerRegistrationAddress).WithOne(x => x.Coordinate)
+                .HasForeignKey<CustomerAddressCoordinate>(x => x.CustomerRegistrationAddressId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

@@ -9,6 +9,7 @@ public sealed record CustomerRegistrationAddressLookup(
     string? Number = null,
     string? Complement = null,
     string? Neighborhood = null,
+    string? StreetType = null,
     string? FailureReason = null);
 
 public interface ICustomerRegistrationAddressProvider

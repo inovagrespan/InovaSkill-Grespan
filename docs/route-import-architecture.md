@@ -92,6 +92,17 @@ e reutilizam esse dado derivado. CNPJ inválido e não encontrado são resultado
 funcionais auditáveis, enquanto indisponibilidade HTTP interrompe a execução
 para aproveitar a política de retry do job.
 
+O job posterior `CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT` transforma endereços
+cadastrais resolvidos em coordenadas pelo Nominatim e persiste os resultados em
+`customer_address_coordinates`. A execução pública é sequencial, identificada
+e limitada globalmente a uma chamada por segundo, com cache pelo endereço
+normalizado. O mapa usa essa coordenada quando resolvida e recorre a
+`municipality_coordinates` nos demais casos.
+O endereço cadastral persiste separadamente o tipo de logradouro retornado em
+`descricao_tipo_de_logradouro`. A consulta combina tipo, logradouro, número,
+bairro, cidade, UF e CEP formatado; somente resultados que confirmam o número,
+município e UF são aceitos como coordenada de endereço.
+
 `GET /api/routes` consulta somente o import atual. Para auditoria,
 `GET /api/route-imports/{importId}/routes` consulta um snapshot específico.
 No frontend, o usuário escolhe snapshots históricos somente pela data. Se

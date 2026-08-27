@@ -6,8 +6,10 @@ using InovaSkill.Importer.Infrastructure.Persistence;
 using InovaSkill.Importer.Infrastructure.WhatsApp;
 using InovaSkill.Importer.Application.WhatsApp;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace InovaSkill.Importer.Tests.Api;
 
@@ -102,10 +104,66 @@ public sealed class WhatsAppIntegrationTests
         Assert.Empty(db.WhatsAppUserLinks);
     }
 
+    [Fact]
+    public async Task Webhook_QueuesSingleNoticeAndDoesNotQueueMessagesDuringFloodCooldown()
+    {
+        await using var db = CreateDatabase();
+        var link = new WhatsAppUserLink
+        {
+            Id = Guid.NewGuid(), UserId = 12, NormalizedPhone = "+5511999999999",
+            Status = WhatsAppUserLinkStatuses.Active, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        };
+        db.AppUsers.Add(new AppUser { Id = 12, Name = "Flood", Email = "flood@test", PasswordHash = "hash", Role = AppUserRoles.Vendas });
+        db.WhatsAppUserLinks.Add(link);
+        for (var index = 0; index < 8; index++)
+        {
+            db.WhatsAppMessageReceipts.Add(new WhatsAppMessageReceipt
+            {
+                Id = Guid.NewGuid(), ProviderMessageId = $"existing-{index}", WhatsAppUserLinkId = link.Id,
+                Direction = WhatsAppMessageDirections.Inbound, MessageType = "text",
+                Status = WhatsAppMessageStatuses.Completed, TextContent = "mensagem",
+                CreatedAt = DateTime.UtcNow.AddSeconds(-index), UpdatedAt = DateTime.UtcNow
+            });
+        }
+        await db.SaveChangesAsync();
+        var queue = new CapturingQueue();
+        var controller = CreateWebhookController(db, queue);
+
+        await controller.Receive(WebhookPayload("blocked-1"), default);
+        await controller.Receive(WebhookPayload("blocked-2"), default);
+
+        Assert.Single(queue.ReceiptIds);
+        Assert.Equal(WhatsAppMessageStatuses.RateLimitNotice,
+            (await db.WhatsAppMessageReceipts.SingleAsync(x => x.ProviderMessageId == "blocked-1")).Status);
+        Assert.Equal(WhatsAppMessageStatuses.RateLimited,
+            (await db.WhatsAppMessageReceipts.SingleAsync(x => x.ProviderMessageId == "blocked-2")).Status);
+        Assert.NotNull((await db.WhatsAppUserLinks.SingleAsync()).FloodBlockedUntil);
+    }
+
     private static ImportDbContext CreateDatabase() => new(new DbContextOptionsBuilder<ImportDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
     private static WhatsAppUserLinkService CreateService(ImportDbContext db, IWhatsAppGateway gateway) =>
         new(db, gateway, Options.Create(new WhatsAppOptions { VerificationCodeLifetimeMinutes = 10, MaximumVerificationAttempts = 5 }));
+    private static WhatsAppWebhookController CreateWebhookController(ImportDbContext db, IWhatsAppMessageQueue queue)
+    {
+        var controller = new WhatsAppWebhookController(db, queue, Options.Create(new WhatsAppOptions
+        {
+            WebhookSecret = "test-secret", FloodMaximumMessages = 8, FloodWindowSeconds = 30, FloodCooldownSeconds = 30
+        }));
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        controller.Request.Headers["X-Webhook-Secret"] = "test-secret";
+        return controller;
+    }
+
+    private static JsonElement WebhookPayload(string providerId) => JsonSerializer.SerializeToElement(new
+    {
+        @event = "messages.upsert",
+        data = new
+        {
+            key = new { fromMe = false, remoteJid = "5511999999999@s.whatsapp.net", id = providerId },
+            message = new { conversation = "mensagem" }
+        }
+    });
 
     private sealed class CapturingGateway : IWhatsAppGateway
     {
@@ -128,5 +186,15 @@ public sealed class WhatsAppIntegrationTests
         public Task<WhatsAppGatewayQrCode?> GetQrCodeAsync(CancellationToken cancellationToken) => throw new HttpRequestException();
         public Task DisconnectAsync(CancellationToken cancellationToken) => throw new HttpRequestException();
         public Task<Stream> DownloadMediaAsync(string providerMessageId, CancellationToken cancellationToken) => throw new HttpRequestException();
+    }
+
+    private sealed class CapturingQueue : IWhatsAppMessageQueue
+    {
+        public List<Guid> ReceiptIds { get; } = [];
+        public Task<Guid?> TryQueueAsync(Guid receiptId, CancellationToken cancellationToken)
+        {
+            ReceiptIds.Add(receiptId);
+            return Task.FromResult<Guid?>(Guid.NewGuid());
+        }
     }
 }

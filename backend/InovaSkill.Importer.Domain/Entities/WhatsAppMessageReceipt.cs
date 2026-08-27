@@ -32,4 +32,8 @@ public static class WhatsAppMessageStatuses
     public const string Processing = "processing";
     public const string Completed = "completed";
     public const string Failed = "failed";
+    public const string Grouped = "grouped";
+    public const string RateLimited = "rate_limited";
+    public const string RateLimitNotice = "rate_limit_notice";
+    public const string RateLimitNoticeSent = "rate_limit_notice_sent";
 }

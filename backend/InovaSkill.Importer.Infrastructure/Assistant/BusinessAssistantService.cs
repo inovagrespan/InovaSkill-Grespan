@@ -88,10 +88,11 @@ public sealed class BusinessAssistantService(
         {
             toolDefinitions.Add(ExternalResearchDefinition());
         }
+        var modelInstructions = BuildModelInstructions(channel);
         var response = await SendToModelAsync(
             new ChatModelRequest(
                 configuredModel,
-                AssistantPrompts.LogisticsSystemPrompt,
+                modelInstructions,
                 messages,
                 toolDefinitions),
             cancellationToken);
@@ -166,7 +167,7 @@ public sealed class BusinessAssistantService(
             response = await SendToModelAsync(
                 new ChatModelRequest(
                     configuredModel,
-                    AssistantPrompts.LogisticsSystemPrompt,
+                    modelInstructions,
                     messages,
                     toolDefinitions,
                     response.ResponseId),
@@ -202,6 +203,11 @@ public sealed class BusinessAssistantService(
         }
         return answerResponse;
     }
+
+    private static string BuildModelInstructions(string channel) =>
+        channel.Equals(ChatSessionChannels.WhatsApp, StringComparison.OrdinalIgnoreCase)
+            ? $"{AssistantPrompts.LogisticsSystemPrompt}\n\n{AssistantPrompts.WhatsAppConversationPrompt}"
+            : AssistantPrompts.LogisticsSystemPrompt;
 
     private static bool IsPersonalConversation(string question)
     {

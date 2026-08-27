@@ -47,6 +47,35 @@ public sealed class CustomerRegistrationAddressJobLauncherTests
         Assert.Equal(job.Id, dispatcher.OperationalJobId);
     }
 
+    [Fact]
+    public async Task LaunchAsync_RejectsInvalidCustomerStatusBeforeDispatching()
+    {
+        await using var db = new ImportDbContext(new DbContextOptionsBuilder<ImportDbContext>()
+            .UseInMemoryDatabase($"customer-address-invalid-filter-{Guid.NewGuid()}").Options);
+        await db.Database.EnsureCreatedAsync();
+        var launcher = new JobExecutionLauncher(db, new RecordingDispatcher());
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => launcher.LaunchAsync(
+            new JobLaunchRequest(OperationalJobCodes.CustomerRegistrationAddressEnrichment, 1,
+                "{\"customerStatus\":\"UNKNOWN\"}", JobExecutionTrigger.Manual), default));
+
+        Assert.Contains("ACTIVE, INACTIVE ou ALL", exception.Message);
+        Assert.Empty(db.JobExecutions);
+    }
+
+    [Fact]
+    public async Task LaunchAsync_RejectsInvalidCoordinateReprocessFlagBeforeDispatching()
+    {
+        await using var db = new ImportDbContext(new DbContextOptionsBuilder<ImportDbContext>()
+            .UseInMemoryDatabase($"coordinate-invalid-flag-{Guid.NewGuid()}").Options);
+        var launcher = new JobExecutionLauncher(db, new RecordingDispatcher());
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => launcher.LaunchAsync(
+            new JobLaunchRequest(OperationalJobCodes.CustomerAddressCoordinateEnrichment, 1,
+                "{\"reprocessFailed\":\"yes\"}", JobExecutionTrigger.Manual), default));
+        Assert.Contains("booleano", exception.Message);
+        Assert.Empty(db.JobExecutions);
+    }
+
     private sealed class RecordingDispatcher : IBackgroundJobDispatcher
     {
         public Guid? OperationalJobId { get; private set; }

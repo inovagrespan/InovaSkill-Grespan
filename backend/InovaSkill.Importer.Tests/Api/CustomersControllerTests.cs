@@ -65,6 +65,7 @@ public sealed class CustomersControllerTests
         Assert.Contains("AVENIDA BRASIL", json);
         Assert.Contains("17500000", json);
         Assert.Contains(CustomerRegistrationAddressStatuses.Resolved, json);
+        Assert.DoesNotContain("routeAssignments", json);
 
         var cityResult = await new CustomersController(db).List(1, 25, "bady bassitt", null, null, null);
         var cityJson = System.Text.Json.JsonSerializer.Serialize(Assert.IsType<OkObjectResult>(cityResult).Value);
@@ -89,17 +90,33 @@ public sealed class CustomersControllerTests
             Name = "Fiscal", Type = "EXCEL", ImportMode = DataSourceImportMode.Upsert,
             NextImportVersion = 2, Active = true, CreatedAt = now, UpdatedAt = now
         };
-        db.AddRange(customerSource, fiscalSource);
+        var routeSource = new DataSource {
+            Id = Guid.NewGuid(), Code = RouteImportCodes.DataSource, ProcessorKey = "routes",
+            Name = "Rotas", Type = "EXCEL", ImportMode = DataSourceImportMode.Snapshot,
+            NextImportVersion = 2, Active = true, CreatedAt = now, UpdatedAt = now
+        };
+        db.AddRange(customerSource, fiscalSource, routeSource);
         await db.SaveChangesAsync();
         var customerImport = Import(customerSource.Id, 1);
         var fiscalImport = Import(fiscalSource.Id, 1);
+        var routeImport = Import(routeSource.Id, 1);
         var municipality = new Municipality { Id = Guid.NewGuid(), StateCode = "SP", Name = "PIRAJU",
             NormalizedName = "PIRAJU", CreatedAt = now };
         var customer = new Customer { Id = Guid.NewGuid(), DataSourceId = customerSource.Id,
             ExternalCode = "001091", BranchCode = "01", CreatedAt = now };
-        db.AddRange(customerImport, fiscalImport, municipality, customer);
+        db.AddRange(customerImport, fiscalImport, routeImport, municipality, customer);
         await db.SaveChangesAsync();
         customerSource.CurrentImportId = customerImport.Id;
+        routeSource.CurrentImportId = routeImport.Id;
+        var assignedRoute = new Route { Id = Guid.NewGuid(), ImportId = routeImport.Id,
+            Name = "ROTA NORTE", Weekday = "MONDAY", VehicleTypeId = Guid.NewGuid(), CreatedAt = now };
+        var availableRoute = new Route { Id = Guid.NewGuid(), ImportId = routeImport.Id,
+            Name = "ROTA SUL", Weekday = "TUESDAY", VehicleTypeId = Guid.NewGuid(), CreatedAt = now };
+        db.Routes.AddRange(assignedRoute, availableRoute);
+        db.RouteCustomerAssignments.Add(new RouteCustomerAssignment {
+            Id = Guid.NewGuid(), CustomerId = customer.Id, RouteId = assignedRoute.Id,
+            MunicipalityId = municipality.Id, Source = RouteCustomerAssignmentSource.Imported,
+            CreatedAt = now, UpdatedAt = now });
         db.CustomerSnapshots.Add(Snapshot(customerImport.Id, customer.Id, municipality.Id, "MERCADO"));
         db.CustomerRegistrationAddresses.Add(new CustomerRegistrationAddress
         {
@@ -145,7 +162,21 @@ public sealed class CustomersControllerTests
         Assert.Contains("\"neighborhood\":\"CENTRO\"", json);
         Assert.Contains("\"complement\":\"SALA 2\"", json);
         Assert.Contains("\"postalCode\":\"18800000\"", json);
+        Assert.Contains("\"routeName\":\"ROTA NORTE\"", json);
+        Assert.Contains("\"weekday\":\"MONDAY\"", json);
         Assert.DoesNotContain("\"date\":", json);
+
+        var addResult = await new CustomersController(db).AddRouteAssignment(
+            customer.Id, new AddCustomerRouteAssignmentRequest(availableRoute.Id));
+        Assert.IsType<CreatedResult>(addResult);
+        var manual = await db.RouteCustomerAssignments.SingleAsync(assignment =>
+            assignment.CustomerId == customer.Id && assignment.RouteId == availableRoute.Id);
+        Assert.Equal(RouteCustomerAssignmentSource.Manual, manual.Source);
+        Assert.Equal(municipality.Id, manual.MunicipalityId);
+
+        var duplicateResult = await new CustomersController(db).AddRouteAssignment(
+            customer.Id, new AddCustomerRouteAssignmentRequest(availableRoute.Id));
+        Assert.IsType<ConflictObjectResult>(duplicateResult);
 
         var projectionResult = await new CustomersController(db).Projection(customer.Id);
         var projectionJson = System.Text.Json.JsonSerializer.Serialize(

@@ -25,7 +25,12 @@ function escapeHtml(value: string): string {
 
 function customerPopup(customer: LogisticsMapCustomer): string {
   const activityLabel = customer.isActive ? "Ativo" : "Inativo";
-  return `<div class="logistics-map-popup"><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.city)} · ${escapeHtml(customer.type)}</span><hr/><span><b>Atividade:</b> ${activityLabel}</span><span><b>Status:</b> ${escapeHtml(customer.status)}</span><span><b>Última entrega:</b> ${escapeHtml(customer.lastDelivery)}</span><span><b>Próxima entrega:</b> ${escapeHtml(customer.nextDelivery)}</span><span><b>Situação:</b> ${escapeHtml(customer.situation)}</span><span><b>Rota:</b> ${escapeHtml(customer.route)}</span><span><b>Prioridade:</b> ${escapeHtml(customer.priority)}</span></div>`;
+  const isAddress = customer.locationPrecision !== "MUNICIPALITY";
+  const precision = customer.locationPrecision === "ADDRESS_INTERPOLATED" ? "número interpolado" : "número exato";
+  const location = isAddress && customer.address
+    ? `<span><b>Endereço:</b> ${escapeHtml(customer.address)}</span><span><b>Precisão:</b> ${precision}</span>`
+    : `<span><b>Endereço:</b> não geocodificado</span><span><b>Precisão:</b> posição aproximada pela cidade (${escapeHtml(customer.city)})</span>`;
+  return `<div class="logistics-map-popup"><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.city)} · ${escapeHtml(customer.type)}</span><hr/>${location}<hr/><span><b>Atividade:</b> ${activityLabel}</span><span><b>Status:</b> ${escapeHtml(customer.status)}</span><span><b>Última entrega:</b> ${escapeHtml(customer.lastDelivery)}</span><span><b>Próxima entrega:</b> ${escapeHtml(customer.nextDelivery)}</span><span><b>Situação:</b> ${escapeHtml(customer.situation)}</span><span><b>Rota:</b> ${escapeHtml(customer.route)}</span><span><b>Prioridade:</b> ${escapeHtml(customer.priority)}</span></div>`;
 }
 
 function createHeadquartersIcon(): L.DivIcon {
@@ -34,9 +39,13 @@ function createHeadquartersIcon(): L.DivIcon {
 
 function createCustomerPinIcon(customer: LogisticsMapCustomer): L.DivIcon {
   const statusClass = customer.isActive ? "normal" : "critical";
+  const precisionClass = customer.locationPrecision === "ADDRESS_EXACT" ? "exact"
+    : customer.locationPrecision === "ADDRESS_INTERPOLATED" ? "interpolated" : "municipality";
+  const precisionLabel = customer.locationPrecision === "ADDRESS_EXACT" ? "E"
+    : customer.locationPrecision === "ADDRESS_INTERPOLATED" ? "I" : "~";
   return L.divIcon({
     className: "logistics-map-customer-icon",
-    html: `<span class="logistics-map-pin logistics-map-pin--${statusClass}"><i></i></span>`,
+    html: `<span class="logistics-map-pin logistics-map-pin--${statusClass} logistics-map-pin--${precisionClass}"><i></i><b>${precisionLabel}</b></span>`,
     iconSize: [28, 36],
     iconAnchor: [14, 34],
     popupAnchor: [0, -32],
@@ -79,7 +88,10 @@ export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact
     if (!containerRef.current || mapRef.current) return;
     const map = L.map(containerRef.current, { center: [GRESPAN_HEADQUARTERS.lat, GRESPAN_HEADQUARTERS.lng], zoom: REGIONAL_ZOOM, zoomControl: true, scrollWheelZoom: true });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors", maxZoom: 18 }).addTo(map);
-    L.marker([GRESPAN_HEADQUARTERS.lat, GRESPAN_HEADQUARTERS.lng], { icon: createHeadquartersIcon(), zIndexOffset: 1000 }).bindPopup(`<div class="logistics-map-popup"><strong>${GRESPAN_HEADQUARTERS.name}</strong><span>${GRESPAN_HEADQUARTERS.city}</span><span><b>Base principal da operação logística</b></span></div>`).addTo(map);
+    L.marker([GRESPAN_HEADQUARTERS.lat, GRESPAN_HEADQUARTERS.lng], { icon: createHeadquartersIcon(), zIndexOffset: 1000 })
+      .bindTooltip(`${escapeHtml(GRESPAN_HEADQUARTERS.name)}<br/>${escapeHtml(GRESPAN_HEADQUARTERS.address)}`, { direction: "top" })
+      .bindPopup(`<div class="logistics-map-popup"><strong>${escapeHtml(GRESPAN_HEADQUARTERS.name)}</strong><span>${escapeHtml(GRESPAN_HEADQUARTERS.address)}</span><hr/><span><b>Matriz geocodificada pelo CEP cadastral</b></span></div>`)
+      .addTo(map);
     customerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     window.setTimeout(() => map.invalidateSize(), 0);
@@ -120,7 +132,10 @@ export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact
     for (const customer of filtered) {
       const marker = L.marker([customer.lat, customer.lng], { icon: createCustomerPinIcon(customer), zIndexOffset: 500 });
       marker.bindPopup(customerPopup(customer), { maxWidth: 310 });
-      marker.bindTooltip(customer.name, { direction: "top", offset: [0, -7] });
+      const locationTooltip = customer.locationPrecision !== "MUNICIPALITY" && customer.address
+        ? customer.address
+        : `${customer.city} · posição aproximada`;
+      marker.bindTooltip(`<b>${escapeHtml(customer.name)}</b><br/>${escapeHtml(locationTooltip)}`, { direction: "top", offset: [0, -7] });
       layer.addLayer(marker);
     }
   }, [city, filtered, periodDays, routes, filtered.length]);
@@ -144,7 +159,7 @@ export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact
         <div className={compact ? "flex flex-wrap gap-3 sm:col-span-2" : "flex flex-wrap gap-3 xl:justify-end"}><Button variant="outline" onClick={recenterHeadquarters}><LocateFixed className="mr-2 size-4" />Centralizar matriz</Button><Button variant="outline" onClick={showAllCustomers}><Users className="mr-2 size-4" />Mostrar clientes</Button></div>
       </div>
       <div className="relative z-0 overflow-hidden rounded-xl border border-border shadow-sm"><div ref={containerRef} className={compact ? "h-[390px] min-h-[360px] w-full md:h-[430px]" : "h-[500px] min-h-[420px] w-full md:h-[560px]"} /><div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border bg-background/95 px-3 py-2 text-xs font-medium shadow-sm backdrop-blur">{filtered.length} clientes visíveis</div></div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Legenda:</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><i className="size-6 border-t-2 border-dashed border-primary" />Trajeto estimado</span>}<span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-emerald-600" />Cliente normal</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-amber-500" />Cliente em atenção</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-red-600" />Cliente crítico</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><TrafficCone className="size-3.5 text-red-600" />Congestionamento</span>}</div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Legenda:</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><i className="size-6 border-t-2 border-dashed border-primary" />Trajeto estimado</span>}<span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-emerald-600" />Cliente normal</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-red-600" />Cliente inativo</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-emerald-700 px-1 text-[10px] text-white">E</b>Endereço exato</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-slate-600 px-1 text-[10px] text-white">~</b>Aproximado pela cidade</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><TrafficCone className="size-3.5 text-red-600" />Congestionamento</span>}</div>
     </div>
   );
 }

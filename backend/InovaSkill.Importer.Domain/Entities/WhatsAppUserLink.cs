@@ -11,6 +11,7 @@ public sealed class WhatsAppUserLink
     public DateTime? VerificationExpiresAt { get; set; }
     public int VerificationAttempts { get; set; }
     public DateTime? ConfirmedAt { get; set; }
+    public DateTime? FloodBlockedUntil { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public ICollection<ChatSession> ChatSessions { get; set; } = [];

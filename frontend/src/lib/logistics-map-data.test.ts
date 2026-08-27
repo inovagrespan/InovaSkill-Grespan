@@ -11,6 +11,9 @@ describe("logistics map demo fallback", () => {
     expect(customers.map((customer) => customer.city)).toEqual(expect.arrayContaining(["Marília", "Tupã", "Bauru", "Garça", "Pompeia", "Lins", "Lençóis Paulista"]));
     expect(new Set(customers.map((customer) => customer.status))).toEqual(new Set(["Normal", "Atenção", "Crítico"]));
     expect(GRESPAN_HEADQUARTERS.city).toBe("Marília-SP");
+    expect(GRESPAN_HEADQUARTERS.address).toBe("Avenida República, 7000 - Distrito Industrial Santo Barion - Marília/SP - CEP 17512-035");
+    expect(GRESPAN_HEADQUARTERS.lat).toBe(-22.21389);
+    expect(GRESPAN_HEADQUARTERS.lng).toBe(-49.94583);
   });
 
   it("gera dados completos e coordenadas distintas para os alfinetes individuais", () => {
@@ -48,13 +51,28 @@ describe("logistics map demo fallback", () => {
     expect(source).toContain("Próxima entrega");
     expect(source).toContain("Prioridade");
     expect(source).toContain("createCustomerPinIcon");
+    expect(source).toContain("Matriz geocodificada pelo CEP cadastral");
     expect(source).toContain('logistics-map-pin--${statusClass}');
+    expect(source).toContain('logistics-map-pin--${precisionClass}');
+    expect(source).toContain("número exato");
+    expect(source).toContain("número interpolado");
+    expect(source).toContain("posição aproximada pela cidade");
+    expect(source).toContain("customer.address");
     expect(source).toContain("L.marker([customer.lat, customer.lng]");
     expect(source).toContain("createCongestionIcon");
     expect(styles).toContain(".logistics-map-pin--normal");
     expect(styles).toContain(".logistics-map-pin--attention");
     expect(styles).toContain(".logistics-map-pin--critical");
+    expect(styles).toContain(".logistics-map-pin--exact");
+    expect(styles).toContain(".logistics-map-pin--interpolated");
+    expect(styles).toContain(".logistics-map-pin--municipality");
     expect(styles).toContain(".logistics-map-congestion--critical");
+  });
+
+  it("informa que o mapa operacional exibe somente localizações exatas", () => {
+    const route = fs.readFileSync(path.resolve(process.cwd(), "src/routes/mapa.tsx"), "utf8");
+    expect(route).toContain("somente clientes com endereço geocodificado em localização exata");
+    expect(route).toContain("não possuem localização exata e não são exibidos no mapa");
   });
 
   it("cria trajetos para todas as cidades e associa congestionamentos às rotas", () => {

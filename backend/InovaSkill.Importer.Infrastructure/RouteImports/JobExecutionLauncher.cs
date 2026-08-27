@@ -21,10 +21,24 @@ public sealed class JobExecutionLauncher(
             throw new ArgumentException("O JSON de parâmetros excede o limite de 1 MB.");
 
         using var document = ParseObject(request.ParametersJson);
+        if (definition.JobType is OperationalJobCodes.CustomerRegistrationAddressEnrichment or OperationalJobCodes.CustomerAddressCoordinateEnrichment)
+        {
+            _ = CustomerRegistrationAddressCustomerStatuses.Read(document.RootElement);
+            if (definition.JobType == OperationalJobCodes.CustomerRegistrationAddressEnrichment)
+                _ = CustomerRegistrationAddressEnrichmentProcessor.ReadRefreshResolved(document.RootElement);
+            if (definition.JobType == OperationalJobCodes.CustomerAddressCoordinateEnrichment)
+            {
+                _ = CustomerAddressCoordinateEnrichmentProcessor.ReadReprocessFailed(document.RootElement);
+                _ = CustomerAddressCoordinateEnrichmentProcessor.ReadMaximumRequests(document.RootElement);
+            }
+        }
         var relatedEntityId = definition.JobType switch
         {
             OperationalJobCodes.MunicipalityCoordinateEnrichment => ReadRequiredGuid(document.RootElement, "importId"),
             OperationalJobCodes.CustomerRegistrationAddressEnrichment =>
+                ReadOptionalGuid(document.RootElement, "importId") ??
+                await ResolveCurrentCustomerImportIdAsync(cancellationToken),
+            OperationalJobCodes.CustomerAddressCoordinateEnrichment =>
                 ReadOptionalGuid(document.RootElement, "importId") ??
                 await ResolveCurrentCustomerImportIdAsync(cancellationToken),
             OperationalJobCodes.ProcessImport => ReadRequiredGuid(document.RootElement, "importId"),
@@ -32,6 +46,11 @@ public sealed class JobExecutionLauncher(
             _ => throw new InvalidOperationException($"Job sem lançador: {definition.JobType}.")
         };
         await ValidateReferenceAsync(definition.JobType, relatedEntityId, cancellationToken);
+        if (!definition.AllowConcurrentRuns && await db.JobExecutions.AnyAsync(job =>
+            job.JobType == definition.JobType &&
+            (job.Status == JobExecutionStatus.Queued || job.Status == JobExecutionStatus.Processing ||
+             job.Status == JobExecutionStatus.Retrying), cancellationToken))
+            throw new ArgumentException("Já existe uma execução deste serviço na fila ou em processamento.");
 
         var now = DateTime.UtcNow;
         var job = new JobExecution
@@ -76,7 +95,8 @@ public sealed class JobExecutionLauncher(
         var exists = jobType switch
         {
             OperationalJobCodes.ProcessImport or OperationalJobCodes.MunicipalityCoordinateEnrichment or
-                OperationalJobCodes.CustomerRegistrationAddressEnrichment =>
+                OperationalJobCodes.CustomerRegistrationAddressEnrichment or
+                OperationalJobCodes.CustomerAddressCoordinateEnrichment =>
                 await db.RouteImports.AnyAsync(item => item.Id == id, cancellationToken),
             OperationalJobCodes.WhatsAppMessageProcessing =>
                 await db.WhatsAppMessageReceipts.AnyAsync(item => item.Id == id, cancellationToken),

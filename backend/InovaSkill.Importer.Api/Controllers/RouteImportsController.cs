@@ -28,15 +28,25 @@ public sealed class RouteImportsController(
         IFormFile file,
         CancellationToken cancellationToken = default)
     {
-        if (file.Length == 0 || !string.Equals(Path.GetExtension(file.FileName), ".xlsx", StringComparison.OrdinalIgnoreCase))
+        var extension = Path.GetExtension(file.FileName);
+        if (file.Length == 0 ||
+            (!string.Equals(extension, ".xlsx", StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(extension, ".csv", StringComparison.OrdinalIgnoreCase)))
         {
-            return BadRequest(new { message = "Selecione um arquivo XLSX válido." });
+            return BadRequest(new { message = "Selecione um arquivo XLSX ou CSV válido." });
         }
         string sourceCode;
         try
         {
-            await using var detectionContent = file.OpenReadStream();
-            sourceCode = dataSourceDetector.Detect(detectionContent);
+            if (string.Equals(extension, ".csv", StringComparison.OrdinalIgnoreCase))
+            {
+                sourceCode = HereCustomerCoordinateImportCodes.DataSource;
+            }
+            else
+            {
+                await using var detectionContent = file.OpenReadStream();
+                sourceCode = dataSourceDetector.Detect(detectionContent);
+            }
         }
         catch (StructuralImportException exception)
         {
@@ -290,6 +300,9 @@ public sealed class RouteImportsController(
         {
             CustomerImportCodes.DataSource => new(CustomerImportCodes.DataSource, CustomerImportCodes.ProcessorKey,
                 CustomerImportCodes.DataSourceName, CustomerImportCodes.DataSourceType, DataSourceImportMode.Snapshot),
+            HereCustomerCoordinateImportCodes.DataSource => new(HereCustomerCoordinateImportCodes.DataSource,
+                HereCustomerCoordinateImportCodes.ProcessorKey, HereCustomerCoordinateImportCodes.DataSourceName,
+                HereCustomerCoordinateImportCodes.DataSourceType, DataSourceImportMode.Upsert),
             CustomerRouteAssignmentImportCodes.DataSource => new(CustomerRouteAssignmentImportCodes.DataSource,
                 CustomerRouteAssignmentImportCodes.ProcessorKey, CustomerRouteAssignmentImportCodes.DataSourceName,
                 CustomerRouteAssignmentImportCodes.DataSourceType, DataSourceImportMode.Snapshot),

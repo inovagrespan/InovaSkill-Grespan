@@ -1,4 +1,6 @@
 using InovaSkill.Importer.Application.RouteImports;
+using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -80,17 +82,7 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
                     snapshot.Customer.RegistrationAddress.FailureReason,
                     snapshot.Customer.RegistrationAddress.LastAttemptAt,
                     snapshot.Customer.RegistrationAddress.ResolvedAt
-                },
-                routeAssignments = snapshot.Customer!.RouteAssignments
-                    .Where(assignment => assignment.Route!.Import!.DataSource!.CurrentImportId == assignment.Route.ImportId)
-                    .OrderBy(assignment => assignment.Route!.Weekday).ThenBy(assignment => assignment.Route!.Name)
-                    .Select(assignment => new
-                    {
-                        routeId = assignment.RouteId,
-                        routeName = assignment.Route!.Name,
-                        weekday = assignment.Route.Weekday,
-                        source = assignment.Source.ToString()
-                    }).ToList()
+                }
             }).ToListAsync(cancellationToken);
         return Ok(new { page, pageSize, total, items });
     }
@@ -122,7 +114,17 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
                     x.Customer.RegistrationAddress.FailureReason,
                     x.Customer.RegistrationAddress.LastAttemptAt,
                     x.Customer.RegistrationAddress.ResolvedAt
-                } })
+                },
+                routeAssignments = x.Customer.RouteAssignments
+                    .Where(assignment => assignment.Route!.Import!.DataSource!.CurrentImportId == assignment.Route.ImportId)
+                    .OrderBy(assignment => assignment.Route!.Weekday).ThenBy(assignment => assignment.Route!.Name)
+                    .Select(assignment => new
+                    {
+                        routeId = assignment.RouteId,
+                        routeName = assignment.Route!.Name,
+                        weekday = assignment.Route.Weekday,
+                        source = assignment.Source.ToString()
+                    }).ToList() })
             .SingleOrDefaultAsync(cancellationToken);
         if (customer is null) return NotFound();
         var sales = dbContext.FiscalDocumentItems.AsNoTracking().Where(x =>
@@ -211,6 +213,50 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
         }, monthlyTimeline, recentMovements = movements });
     }
 
+    [HttpPost("{id:guid}/route-assignments")]
+    public async Task<ActionResult> AddRouteAssignment(
+        Guid id, [FromBody] AddCustomerRouteAssignmentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var customer = await dbContext.CustomerSnapshots.AsNoTracking()
+            .Where(snapshot => snapshot.CustomerId == id &&
+                snapshot.Import!.DataSource!.CurrentImportId == snapshot.ImportId)
+            .Select(snapshot => new { snapshot.CustomerId, snapshot.MunicipalityId })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (customer is null) return NotFound(new { message = "Cliente atual não encontrado." });
+
+        var route = await dbContext.Routes.AsNoTracking()
+            .Where(item => item.Id == request.RouteId &&
+                item.Import!.DataSource!.CurrentImportId == item.ImportId)
+            .Select(item => new { item.Id, item.Name, item.Weekday })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (route is null) return BadRequest(new { message = "Selecione uma rota do snapshot atual." });
+
+        if (await dbContext.RouteCustomerAssignments.AnyAsync(
+            assignment => assignment.CustomerId == id && assignment.RouteId == route.Id,
+            cancellationToken))
+        {
+            return Conflict(new { message = "O cliente já pertence a esta rota." });
+        }
+
+        var now = DateTime.UtcNow;
+        dbContext.RouteCustomerAssignments.Add(new RouteCustomerAssignment
+        {
+            Id = Guid.NewGuid(), CustomerId = id, RouteId = route.Id,
+            MunicipalityId = customer.MunicipalityId,
+            Source = RouteCustomerAssignmentSource.Manual,
+            CreatedAt = now, UpdatedAt = now
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Created($"/api/customers/{id}/route-assignments/{route.Id}", new
+        {
+            routeId = route.Id,
+            routeName = route.Name,
+            weekday = route.Weekday,
+            source = RouteCustomerAssignmentSource.Manual.ToString()
+        });
+    }
+
     [HttpGet("{id:guid}/projection")]
     public async Task<ActionResult> Projection(Guid id, CancellationToken cancellationToken = default)
     {
@@ -285,3 +331,5 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
         });
     }
 }
+
+public sealed record AddCustomerRouteAssignmentRequest(Guid RouteId);

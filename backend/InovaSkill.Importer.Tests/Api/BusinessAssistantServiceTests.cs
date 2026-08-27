@@ -1,4 +1,5 @@
 using InovaSkill.Importer.Api.Assistant;
+using InovaSkill.Importer.Domain.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -35,6 +36,34 @@ public sealed class BusinessAssistantServiceTests
         Assert.Equal("Prazer, Leonardo! Como posso ajudar?", response.Answer);
         Assert.Empty(model.ScopeRequests);
         Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task AnswerAsync_UsesFriendlyConversationInstructionsOnlyOnWhatsApp()
+    {
+        var whatsAppModel = new FakeModelClient([
+            new ChatModelResponse("response-1", "Oi! Que bom falar com você 😊 Como posso ajudar?", [])
+        ]);
+        var webModel = new FakeModelClient([
+            new ChatModelResponse("response-2", "Olá! Como posso ajudar?", [])
+        ]);
+
+        await CreateService(whatsAppModel, []).AnswerAsync(
+            null,
+            "Oi, tudo bem?",
+            new ChatExecutionContext(1, "logistica"),
+            default,
+            ChatSessionChannels.WhatsApp);
+        await CreateService(webModel, []).AnswerAsync(
+            null,
+            "Oi, tudo bem?",
+            new ChatExecutionContext(1, "logistica"),
+            default);
+
+        Assert.Contains("converse de forma acolhedora, natural e próxima", whatsAppModel.Requests[0].Instructions);
+        Assert.Contains("Use no máximo um emoji amigável", whatsAppModel.Requests[0].Instructions);
+        Assert.Contains("preserve integralmente as regras de confiabilidade", whatsAppModel.Requests[0].Instructions);
+        Assert.DoesNotContain("converse de forma acolhedora, natural e próxima", webModel.Requests[0].Instructions);
     }
 
     [Fact]

@@ -87,6 +87,32 @@ public sealed class AiConsumptionService(
         await CreateAlertsAsync(execution.UserId, cancellationToken);
     }
 
+    public async Task<AiSessionUsage?> GetSessionUsageAsync(
+        Guid sessionId,
+        long userId,
+        CancellationToken cancellationToken)
+    {
+        var ownsSession = await db.ChatSessions.AsNoTracking()
+            .AnyAsync(x => x.Id == sessionId && x.UserId == userId, cancellationToken);
+        if (!ownsSession) return null;
+
+        var calls = await db.AiProviderCalls.AsNoTracking()
+            .Where(x => x.ResponseExecution.ChatSessionId == sessionId && x.ResponseExecution.UserId == userId)
+            .Select(x => new { x.InputTokens, x.OutputTokens, x.InputCostUsd, x.OutputCostUsd })
+            .ToListAsync(cancellationToken);
+        var inputTokens = calls.Sum(x => (long)x.InputTokens);
+        var outputTokens = calls.Sum(x => (long)x.OutputTokens);
+        var inputCostUsd = calls.Sum(x => x.InputCostUsd);
+        var outputCostUsd = calls.Sum(x => x.OutputCostUsd);
+        return new AiSessionUsage(
+            inputTokens,
+            outputTokens,
+            inputTokens + outputTokens,
+            inputCostUsd,
+            outputCostUsd,
+            inputCostUsd + outputCostUsd);
+    }
+
     public async Task<AiConsumptionSettings> GetSettingsAsync(CancellationToken cancellationToken)
     {
         var settings = await db.AiConsumptionSettings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
@@ -144,3 +170,11 @@ public sealed class AiConsumptionService(
 }
 
 public sealed record AiUsageAdmission(bool Allowed, long ConsumedTokens, long TokenLimit);
+
+public sealed record AiSessionUsage(
+    long InputTokens,
+    long OutputTokens,
+    long TotalTokens,
+    decimal InputCostUsd,
+    decimal OutputCostUsd,
+    decimal TotalCostUsd);

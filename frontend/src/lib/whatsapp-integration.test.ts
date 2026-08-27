@@ -11,6 +11,14 @@ describe("integração com WhatsApp", () => {
   it("oferece simulador visual sem enviar mensagens ao WhatsApp real", () => {
     const simulator = readFileSync("src/routes/simulador-whatsapp.tsx", "utf8");
     expect(simulator).toContain("simulateWhatsAppMessage");
+    expect(simulator).toContain("AssistantResponseText");
+    expect(simulator).toContain('presentation="whatsapp"');
+    expect(simulator).toContain('message.role === "assistant"');
+    expect(simulator).toContain("max-w-[94%]");
+    expect(simulator).toContain("getAssistantSessionUsage");
+    expect(simulator).toContain("Consumo desta conversa");
+    expect(simulator).toContain("usage.totalTokens");
+    expect(simulator).toContain("setUsage(EMPTY_USAGE)");
     expect(simulator).toContain("As mensagens desta tela não são enviadas ao WhatsApp real");
     expect(simulator).not.toContain("getWhatsAppConnection");
   });

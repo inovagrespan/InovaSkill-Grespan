@@ -52,6 +52,7 @@ const items = [
   { to: "/simulador-whatsapp", label: "Simulador WhatsApp", icon: MessageCircle },
   { to: "/logistica/rotas", label: "Rotas", icon: Route },
   { to: "/veiculos/tipos", label: "Tipos de Veículo", icon: Truck },
+  { to: "/configuracoes/deposito", label: "Depósito", icon: Map },
   { to: "/mapa", label: "Mapa", icon: Map },
   { to: "/clientes", label: "Clientes", icon: Users },
   { to: "/notas-fiscais", label: "Notas Fiscais", icon: FileText },
