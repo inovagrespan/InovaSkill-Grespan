@@ -157,6 +157,40 @@ public sealed class RoutesControllerTests
         Assert.IsType<BadRequestObjectResult>(response);
     }
 
+    [Fact]
+    public async Task List_NormalizesWeekdayAndFiltersBeforePagination()
+    {
+        await using var db = CreateDbContext();
+        var source = CreateSource();
+        var routeImport = CreateImport(
+            source.Id, 1, RouteImportStatus.Completed,
+            new DateTime(2026, 7, 5, 12, 0, 0, DateTimeKind.Utc));
+        source.CurrentImportId = routeImport.Id;
+        var vehicle = CreateVehicle();
+        var tuesdayRoute = CreateRoute(routeImport.Id, vehicle.Id, "Rota de terça", 0.80m);
+        tuesdayRoute.Weekday = "TUESDAY";
+        db.AddRange(source, routeImport, vehicle, tuesdayRoute);
+        db.AddRange(
+            CreateRoute(routeImport.Id, vehicle.Id, "Rota de segunda A", 0.80m),
+            CreateRoute(routeImport.Id, vehicle.Id, "Rota de segunda B", 0.80m));
+        await db.SaveChangesAsync();
+
+        var response = await new RoutesController(db).List(
+            page: 1,
+            pageSize: 1,
+            weekday: " tuesday ",
+            cancellationToken: default);
+        var json = SerializeOkResult(response);
+
+        Assert.Equal(1, json.RootElement.GetProperty("total").GetInt32());
+        Assert.Equal(
+            "Rota de terça",
+            json.RootElement.GetProperty("items")[0].GetProperty("Name").GetString());
+        Assert.Equal(
+            "TUESDAY",
+            json.RootElement.GetProperty("items")[0].GetProperty("Weekday").GetString());
+    }
+
     [Theory]
     [InlineData("rota interior", "Rota Interior")]
     [InlineData("bady bassitt", "Rota Interior")]

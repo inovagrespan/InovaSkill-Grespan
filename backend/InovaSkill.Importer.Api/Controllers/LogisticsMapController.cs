@@ -62,6 +62,7 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
                 item.Latitude,
                 item.Longitude,
                 item.Precision,
+                item.Source,
                 item.CustomerRegistrationAddress.StreetType,
                 item.CustomerRegistrationAddress.Street,
                 item.CustomerRegistrationAddress.Number,
@@ -75,6 +76,9 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
             {
                 coordinates.TryGetValue(snapshot.MunicipalityId, out var coordinate);
                 addressCoordinates.TryGetValue(snapshot.CustomerId, out var addressCoordinate);
+                var coordinatePrecision = addressCoordinate is null
+                    ? AddressCoordinateMatchLevels.Municipality
+                    : ResolveCoordinatePrecision(addressCoordinate.Precision, addressCoordinate.Source);
                 return new CustomerMapRow(
                     snapshot.CustomerId,
                     snapshot.Customer!.ExternalCode,
@@ -89,8 +93,15 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
                     addressCoordinate?.Latitude ?? coordinate?.Latitude,
                     addressCoordinate?.Longitude ?? coordinate?.Longitude,
                     addressCoordinate is null ? "MUNICIPALITY" :
-                        addressCoordinate.Precision == CustomerAddressCoordinatePrecisions.Interpolated
-                            ? "ADDRESS_INTERPOLATED" : "ADDRESS_EXACT",
+                        coordinatePrecision == AddressCoordinateMatchLevels.Exact
+                            ? "ADDRESS_EXACT"
+                            : coordinatePrecision == CustomerAddressCoordinatePrecisions.Interpolated
+                                ? "ADDRESS_INTERPOLATED"
+                                : "ADDRESS_APPROXIMATE",
+                    coordinatePrecision == AddressCoordinateMatchLevels.Exact
+                        ? "EXACT"
+                        : "APPROXIMATE",
+                    coordinatePrecision,
                     addressCoordinate is null ? null : FormatAddress(
                         addressCoordinate.StreetType, addressCoordinate.Street, addressCoordinate.Number, addressCoordinate.Neighborhood,
                         addressCoordinate.City, addressCoordinate.StateCode, addressCoordinate.PostalCode),
@@ -103,8 +114,7 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
             .ToList();
 
         var visibleRows = rows
-            .Where(item => item.LocationPrecision == "ADDRESS_EXACT" &&
-                item.Latitude.HasValue && item.Longitude.HasValue)
+            .Where(item => item.Latitude.HasValue && item.Longitude.HasValue)
             .GroupBy(item => item.MunicipalityId)
             .SelectMany(group =>
             {
@@ -128,6 +138,8 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
         var radius = CustomerPinBaseRadiusDegrees +
             (index % CustomerPinRadiusStepCount) * CustomerPinRadiusStepDegrees;
         if (municipalityCustomerCount == 1) radius = 0;
+        var shouldSpreadMunicipalityCoordinate =
+            row.CoordinatePrecision == AddressCoordinateMatchLevels.Municipality;
         return new
         {
             id = row.CustomerId,
@@ -145,11 +157,15 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
             lastDelivery = "Não disponível",
             nextDelivery = "Não disponível",
             locationPrecision = row.LocationPrecision,
+            coordinateAccuracy = row.CoordinateAccuracy,
+            coordinatePrecision = row.CoordinatePrecision,
             address = row.Address,
-            lat = row.LocationPrecision != "MUNICIPALITY" ? Math.Round((double)row.Latitude!.Value, 6) :
-                Math.Round((double)row.Latitude!.Value + Math.Cos(angle) * (double)radius, 6),
-            lng = row.LocationPrecision != "MUNICIPALITY" ? Math.Round((double)row.Longitude!.Value, 6) :
-                Math.Round((double)row.Longitude!.Value + Math.Sin(angle) * (double)radius, 6),
+            lat = shouldSpreadMunicipalityCoordinate
+                ? Math.Round((double)row.Latitude!.Value + Math.Cos(angle) * (double)radius, 6)
+                : Math.Round((double)row.Latitude!.Value, 6),
+            lng = shouldSpreadMunicipalityCoordinate
+                ? Math.Round((double)row.Longitude!.Value + Math.Sin(angle) * (double)radius, 6)
+                : Math.Round((double)row.Longitude!.Value, 6),
             municipalityLat = row.MunicipalityLatitude,
             municipalityLng = row.MunicipalityLongitude
         };
@@ -167,6 +183,17 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
             .Where(value => !string.IsNullOrWhiteSpace(value)));
     }
 
+    private static string ResolveCoordinatePrecision(string persistedPrecision, string source)
+    {
+        var sourcePrecision = CustomerAddressCoordinateEnrichmentProcessor.MatchLevelFromSource(source);
+        if (sourcePrecision is not null) return sourcePrecision;
+        if (persistedPrecision is AddressCoordinateMatchLevels.Exact or AddressCoordinateMatchLevels.Street or
+            AddressCoordinateMatchLevels.PostalCode or AddressCoordinateMatchLevels.Municipality or
+            CustomerAddressCoordinatePrecisions.Interpolated)
+            return persistedPrecision;
+        return AddressCoordinateMatchLevels.Municipality;
+    }
+
     private sealed record CustomerMapRow(
         Guid CustomerId,
         string ExternalCode,
@@ -181,6 +208,8 @@ public sealed class LogisticsMapController(ImportDbContext dbContext) : Controll
         decimal? Latitude,
         decimal? Longitude,
         string LocationPrecision,
+        string CoordinateAccuracy,
+        string CoordinatePrecision,
         string? Address,
         decimal? MunicipalityLatitude,
         decimal? MunicipalityLongitude);

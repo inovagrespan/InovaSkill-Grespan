@@ -38,6 +38,28 @@ public sealed class OsrmDailyMatrixServiceTests
         Assert.Null(client.Request);
     }
 
+    [Fact]
+    public async Task GetForDayAsync_DoesNotSendExcludedStopToMatrix()
+    {
+        await using var db = Context();
+        var fixture = await SeedAsync(db, includeCoordinate: true);
+        var mondayId = await db.Routes.Where(route => route.ImportId == fixture.ImportId && route.Weekday == "MONDAY")
+            .Select(route => route.Id).SingleAsync();
+        db.RouteEntries.Add(new RouteEntry
+        {
+            Id = Guid.NewGuid(), RouteId = mondayId, Name = "FORA", AveragePerDay = 0,
+            IsExcludedFromOptimization = true, Sequence = 3, CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var client = new CapturingClient();
+
+        await new OsrmDailyMatrixService(db, client).GetForDayAsync(fixture.ImportId, "MONDAY", default);
+
+        var request = Assert.IsType<OsrmTableRequest>(client.Request);
+        Assert.Equal(2, request.Points.Count);
+        Assert.DoesNotContain(request.Points, point => point.Id == Guid.Empty);
+    }
+
     private static async Task<(Guid ImportId, Guid MunicipalityId)> SeedAsync(ImportDbContext db, bool includeCoordinate)
     {
         var now = DateTime.UtcNow;

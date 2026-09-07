@@ -72,6 +72,12 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
                 registrationAddress = snapshot.Customer.RegistrationAddress == null ? null : new
                 {
                     snapshot.Customer.RegistrationAddress.Status,
+                    snapshot.Customer.RegistrationAddress.Source,
+                    addressCompleteness = string.IsNullOrWhiteSpace(snapshot.Customer.RegistrationAddress.Street)
+                        ? CustomerAddressCompleteness.PostalOnly
+                        : string.IsNullOrWhiteSpace(snapshot.Customer.RegistrationAddress.Number)
+                            ? CustomerAddressCompleteness.WithoutNumber
+                            : CustomerAddressCompleteness.Complete,
                     snapshot.Customer.RegistrationAddress.PostalCode,
                     snapshot.Customer.RegistrationAddress.StateCode,
                     snapshot.Customer.RegistrationAddress.City,
@@ -104,6 +110,12 @@ public sealed class CustomersController(ImportDbContext dbContext) : ControllerB
                 registrationAddress = x.Customer.RegistrationAddress == null ? null : new
                 {
                     x.Customer.RegistrationAddress.Status,
+                    x.Customer.RegistrationAddress.Source,
+                    addressCompleteness = string.IsNullOrWhiteSpace(x.Customer.RegistrationAddress.Street)
+                        ? CustomerAddressCompleteness.PostalOnly
+                        : string.IsNullOrWhiteSpace(x.Customer.RegistrationAddress.Number)
+                            ? CustomerAddressCompleteness.WithoutNumber
+                            : CustomerAddressCompleteness.Complete,
                     x.Customer.RegistrationAddress.PostalCode,
                     x.Customer.RegistrationAddress.StateCode,
                     x.Customer.RegistrationAddress.City,

@@ -135,7 +135,7 @@ public sealed class RoutesController(ImportDbContext dbContext) : ControllerBase
                 item.Weekday,
                 vehicleTypeId = item.VehicleTypeId,
                 vehicleType = item.VehicleType!.Name,
-                vehicleCapacityKg = item.VehicleType.CapacityKg,
+                vehicleCapacityKg = item.VehicleCapacityKgSnapshot > 0 ? item.VehicleCapacityKgSnapshot : (decimal?)null,
                 item.TotalWeightKg,
                 item.TotalVolumeM3,
                 item.TotalPallets,
@@ -152,9 +152,11 @@ public sealed class RoutesController(ImportDbContext dbContext) : ControllerBase
                 {
                     entry.Id,
                     entry.Sequence,
+                    entry.SourceRowNumber,
                     entry.Name,
                     entry.Deliveries,
                     entry.AveragePerDay,
+                    entry.IsExcludedFromOptimization,
                     entry.Note
                 }).ToList()
             })
@@ -174,6 +176,7 @@ public sealed class RoutesController(ImportDbContext dbContext) : ControllerBase
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, MaximumPageSize);
+        var normalizedWeekday = weekday?.Trim().ToUpperInvariant();
         var normalizedOccupancyLevel = occupancyLevel?.Trim().ToLowerInvariant();
 
         if (!string.IsNullOrEmpty(normalizedOccupancyLevel) &&
@@ -193,9 +196,9 @@ public sealed class RoutesController(ImportDbContext dbContext) : ControllerBase
         var query = dbContext.Routes.AsNoTracking()
             .Where(route => route.ImportId == importId.Value);
 
-        if (!string.IsNullOrWhiteSpace(weekday))
+        if (!string.IsNullOrWhiteSpace(normalizedWeekday))
         {
-            query = query.Where(route => route.Weekday == weekday);
+            query = query.Where(route => route.Weekday == normalizedWeekday);
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -237,7 +240,7 @@ public sealed class RoutesController(ImportDbContext dbContext) : ControllerBase
                 route.Weekday,
                 vehicleTypeId = route.VehicleTypeId,
                 vehicleType = route.VehicleType!.Name,
-                vehicleCapacityKg = route.VehicleType.CapacityKg,
+                vehicleCapacityKg = route.VehicleCapacityKgSnapshot > 0 ? route.VehicleCapacityKgSnapshot : (decimal?)null,
                 route.TotalWeightKg,
                 route.TotalVolumeM3,
                 route.TotalPallets,

@@ -17,10 +17,13 @@ fica persistida em `CustomerAddressCoordinate.Precision` como `EXACT` ou
 `INTERPOLATED`, sem alterar o contrato da importação cadastral de clientes.
 
 `GET /api/logistics/map/customers` mantém a classificação interna
-`ADDRESS_EXACT`, `ADDRESS_INTERPOLATED` ou `MUNICIPALITY`, mas publica como itens
-visíveis somente clientes `ADDRESS_EXACT`. Coordenadas interpoladas e municipais
-permanecem persistidas para auditoria e enriquecimentos futuros, sem gerar
-marcadores no mapa operacional.
+`ADDRESS_EXACT`, `ADDRESS_INTERPOLATED`, `ADDRESS_APPROXIMATE` ou `MUNICIPALITY`
+e publica todo cliente que possua uma coordenada utilizável. O frontend aplica o
+filtro de precisão, iniciado em todas as localizações, e permite restringir a
+visualização a coordenadas exatas ou aproximadas. Coordenadas interpoladas, de
+logradouro, CEP e município continuam identificadas como aproximações nos
+marcadores. `withoutCoordinates` contabiliza somente clientes sem latitude e
+longitude em qualquer uma das fontes disponíveis.
 A leitura parte do snapshot atual pelo índice existente de `ImportId`; como o
 arquivo pode omitir zeros à esquerda, a comparação final ocorre em memória sobre
 esse conjunto já delimitado. Não foi criado índice especializado adicional.
@@ -135,6 +138,13 @@ O layout raiz fornece o `QueryClient`, controla autenticação das rotas privada
 tema e barra lateral. Requisições autenticadas passam pelos clientes de
 `src/lib`, que centralizam a URL da API e o token JWT.
 
+Endereços que não correspondem a uma rota conhecida exibem uma página 404
+customizada do Conecta360, preservando o layout privado para usuários
+autenticados e oferecendo retorno ao histórico ou ao painel. O controle de
+acesso continua sendo aplicado antes da renderização para toda rota válida;
+caminhos inexistentes autenticados seguem ao fallback em vez de serem
+confundidos com uma rota sem permissão.
+
 Todas as telas privadas também renderizam o painel flutuante `CONECTA360`. O
 painel mantém o histórico persistido e isolado pelo usuário autenticado. Na
 página completa, o chat ocupa toda a área de conteúdo sem moldura externa e uma
@@ -186,6 +196,22 @@ processamentos; administradores acessam todos os módulos. Usuários com o perfi
 genérico `gestor` não recebem acesso funcional até serem classificados em um
 perfil explícito.
 
+O perfil `admin_system` possui uma área exclusiva de administração de usuários
+em `/administracao/usuarios`. O cadastro envia nome, e-mail, senha e perfil
+funcional para `POST /api/admin/users`; a política da API restringe esse contrato
+ao `admin_system`, valida duplicidade e permite atribuir somente os perfis
+funcionais reconhecidos pela aplicação. A criação é síncrona por ser uma única
+operação transacional sobre `AppUsers` e reutiliza os índices únicos existentes
+de nome e e-mail, sem exigir índice adicional.
+
+No menu lateral expandido, os atalhos são condensados por domínio nos grupos
+sanfonados `Inteligência Artificial`, `WhatsApp`, `Logística`, `Cadastros` e
+`Administração`; o Dashboard permanece como acesso principal independente. Cada
+grupo contém somente as rotas permitidas ao perfil autenticado e inicia aberto
+quando a rota atual pertence a ele. Quando resta apenas um item visível, o
+atalho continua direto, e a sidebar recolhida preserva ícones individuais com
+tooltip.
+
 Buscas textuais reativas usam `useDebouncedValue` e o intervalo compartilhado
 `TEXT_SEARCH_DEBOUNCE_MS`, de 300 ms. O intervalo compartilhado evita uma
 requisição por tecla sem tornar a busca perceptivelmente lenta. Consultas mais pesadas podem usar
@@ -214,8 +240,9 @@ referência livre, sem limitar a navegação aos dias que possuem planilha. A AP
 resolve a versão aplicável escolhendo o snapshot `Completed` mais recente que
 estava concluído até o fim do dia solicitado no fuso `America/Sao_Paulo`; antes
 do primeiro snapshot, a consulta retorna vazia. Versões `NeedsReview` não compõem esse histórico por não
-representarem estado publicado. A consulta também aceita criticidade e aplica o
-filtro antes da paginação, preservando totais coerentes.
+representarem estado publicado. A consulta também aceita dia da semana e
+criticidade, normaliza o dia para o identificador canônico em caixa alta e
+aplica os filtros antes da paginação, preservando totais coerentes.
 Busca por rotas também é executada no banco, sem filtragem local no frontend, e
 compara o nome da rota ou o nome de qualquer cidade da rota. O termo recebido é
 compactado, convertido para caixa alta e tem os acentos removidos antes da
@@ -249,19 +276,52 @@ permissão da simulação de veículo: `vendas`, `logistica`, `admin` e
 `admin_system`. Para os demais perfis, esses componentes não são renderizados e
 o catálogo de veículos não é consultado ao abrir o detalhe.
 
-O subsistema anterior de roteirização foi removido para permitir uma nova
-implementação sem dependências legadas. Não existem atualmente solver, execução
-de otimização, sugestão global, endpoint ou ferramenta de chat de roteirização.
-A importação, consulta, histórico e indicadores básicos de rotas permanecem
-disponíveis e não iniciam processamento de otimização.
+O subsistema anterior de roteirização foi substituído por uma simulação diária
+baseada no pacote oficial Google OR-Tools para .NET. O job
+`DAILY_ROUTE_OPTIMIZATION` é configurável por cron na Central de Processamentos,
+resolve o snapshot publicado e processa cada dia de forma independente. A
+simulação não altera a importação nem publica rotas operacionais. Usuários com
+permissão de simulação também podem enfileirá-la pelo botão `Recalcular sugestões` da
+tela de Rotas, que chama `POST /api/route-optimizations/simulate`; o cálculo
+continua ocorrendo exclusivamente no Worker. O recálculo sempre resolve o
+snapshot atualmente publicado; consultas históricas permanecem disponíveis em
+modo somente leitura. A tela alterna entre `Rotas reais` e `Sugestões`, com
+filtros compartilhados de data e dia da semana. O dia é enviado tanto para
+`GET /api/routes` quanto para `GET /api/route-optimizations`, mantendo a seleção
+ao alternar a visão. As sugestões mantêm cards equivalentes aos reais,
+agrupados por dia, e o detalhe informa sequência municipal, peso por parada,
+distância, duração, veículo adicional e ociosidade. Como o problema usa blocos
+municipais, a interface não apresenta contagem de entregas inventada.
+Na comparação diária, `ProposedVehicleCount` representa somente veículos com ao
+menos uma parada. Veículos existentes sem carga continuam persistidos e
+aparecem nos cards como ociosos, mas não inflam o KPI `Veículos em rota`;
+`AdditionalVehicleCount` e `AdditionalCapacityKg` também consideram somente
+veículos adicionais efetivamente utilizados. A API recalcula essas três
+métricas a partir da distribuição persistida para manter corretos inclusive os
+resultados históricos criados antes dessa regra.
+Os KPIs do dia usam cartões visuais por categoria e separam valor atual,
+sugestão e impacto. Distância e duração exibem a variação percentual com base
+explícita; base atual zero com proposta diferente aparece como `Sem base`, sem
+produzir divisão por zero. Veículos exibem a variação absoluta, capacidade é
+identificada como introduzida e carga total informa que foi preservada.
+O card diário também materializa visualmente a movimentação reconstruída pelos
+veículos persistidos: quantidade e capacidade de veículos existentes liberados,
+quantidade e capacidade dos veículos introduzidos e os dois saldos líquidos.
+Como a redistribuição é global no dia, a tela não inventa um pareamento direto
+entre um veículo liberado e outro introduzido.
 
-A nova fundação rodoviária permanece separada de um solver. Existe um cadastro
+A fundação rodoviária permanece separada do solver. Existe um cadastro
 singleton de depósito logístico, usado como origem e retorno, com nome, endereço
 informativo e latitude/longitude obrigatórias. A manutenção ocorre em
 `PUT /api/logistics-depot`; Diretor e Logística podem consultar, mas somente
 Logística e administradores podem alterar. `GET /api/osrm/health` usa a
 coordenada cadastrada para verificar se a API OSRM interna está acessível e
 localiza o depósito no grafo.
+
+Ambientes novos recebem idempotentemente a matriz da Grespan como depósito
+inicial (`Avenida República, 7000`, Marília; `-22.213890, -49.945830`). A carga
+inicial ocorre somente quando a tabela está vazia e nunca sobrescreve uma
+configuração posteriormente editada pela operação.
 
 `IOsrmDailyMatrixService` monta uma entrada para um único `Route.Weekday` e um
 snapshot explícito. O primeiro ponto é o depósito e os demais são municípios
@@ -270,6 +330,52 @@ distintos das `route_entries`, ordenados deterministicamente e limitados a
 clientes não participam desta fase: o objetivo é calcular custos entre blocos
 indivisíveis de cidade, não ordenar entregas porta a porta. Cidade sem vínculo
 municipal ou coordenada resolvida invalida a matriz inteira.
+
+Antes da validação, o processador tenta completar vínculos municipais ausentes
+por correspondência única do nome normalizado no cadastro e na base municipal
+embutida. Para rótulos operacionais com parênteses, o último trecho entre
+parênteses também é candidato. A associação encontrada é persistida na entrada
+importada. Nomes ambíguos ou sem correspondência não são inferidos: o resultado
+diário fica como dados insuficientes e informa nominalmente as cidades sem
+vínculo, sem coordenada ou com peso inválido.
+
+O solver OR-Tools é isolado por `Route.Weekday`: cidade, carga,
+rota e veículo nunca atravessam dias. Cada município e a soma de sua
+`Média/Dia` constituem inicialmente um bloco. Quando essa carga excede a maior
+capacidade de veículo cadastrada, o processador a divide deterministicamente em
+parcelas de no máximo essa capacidade, permitindo que o mesmo município seja
+atendido por mais de um caminhão no mesmo dia. Blocos que já cabem em um único
+veículo permanecem indivisíveis. Nenhum veículo pode ultrapassar 100% da
+capacidade e a soma das parcelas deve conservar exatamente a carga municipal.
+A frota inicial é composta pelos veículos das
+rotas daquele dia; quando ela for insuficiente, a simulação poderá acrescentar
+instâncias virtuais de tipos cadastrados com capacidade válida, sem criar
+cadastros ou alterar o snapshot. Entre soluções que acrescentem a mesma
+quantidade de veículos, prevalece a menor capacidade total adicional. Assim, um
+excedente que caiba em Acelo não deve provocar a escolha de um Toco, desde que a
+indivisibilidade dos blocos seja respeitada. Distância, duração e equilíbrio de
+ocupação são avaliados somente depois dessas restrições de viabilidade e
+dimensionamento da frota. O CP-SAT minimiza primeiro a quantidade e depois a
+capacidade dos veículos adicionais, com quebra de simetria entre instâncias
+virtuais equivalentes. A atribuição viável encontrada é convertida em solução
+inicial do Routing Solver; se a busca rodoviária atingir o timeout, essa
+solução continua disponível em vez de ser descartada. Antes da persistência, um
+validador confirma bloco exatamente uma vez, conservação da carga, capacidades,
+trechos da matriz e consistência dos totais.
+
+Os resultados ficam em `daily_route_optimization_results`,
+`daily_route_optimization_vehicles` e `daily_route_optimization_stops`, com
+unicidade por snapshot e dia. Uma nova conclusão substitui esse resultado,
+enquanto uma falha técnica preserva a última sugestão válida e
+`job_executions` mantém o histórico técnico. Apenas `Optimized` persiste
+veículos e paradas; os demais estados registram o diagnóstico sem distribuição
+alternativa. A API expõe resumo por
+snapshot/data em `GET /api/route-optimizations` e detalhe em
+`GET /api/route-optimizations/{id}`. O resumo informa `isCurrentSnapshot` e a
+última execução do snapshot, com estado, progresso, erro e datas. O frontend
+consulta jobs ativos a cada cinco segundos e recarrega os resultados ao chegar
+a um estado terminal. Execução concorrente retorna HTTP 409 com mensagem de
+domínio.
 
 `IOsrmTableClient` consulta `/table/v1/driving` com `duration,distance`, preserva
 custos direcionais e divide matrizes grandes em blocos configuráveis de
@@ -284,6 +390,51 @@ e atualização do único registro. A montagem diária reutiliza os índices já
 existentes de rotas por `ImportId + Weekday + Name`, entradas por rota e
 coordenadas por município; não foi criado índice adicional porque a consulta
 parte do snapshot e do dia antes de percorrer as cidades.
+O polling consulta a última execução por tipo e snapshot ordenada pela criação;
+por isso `job_executions` possui o índice composto
+`JobType + RelatedEntityId + CreatedAt`. A seletividade por tipo e entidade e a
+ordenação temporal justificam o custo adicional de escrita.
+
+### Remediação de dados da otimização diária
+
+Um resultado `InsufficientData` persiste todas as causas em
+`daily_route_optimization_issues`; o avaliador compartilhado não interrompe na
+primeira falha e cobre vínculo municipal, peso não positivo, coordenada ausente
+e capacidade de veículo ausente. Resultados legados sem linhas estruturadas são
+avaliados em leitura. `reason` permanece como resumo compatível. O otimizador é
+somente leitura sobre `routes` e `route_entries` e nunca corrige
+`MunicipalityId` implicitamente.
+
+No snapshot operacional atual, Diretor, Vendas, Logística, `admin` e
+`admin_system` editam as pendências diretamente no modal e publicam a versão
+derivada; qualquer consulta a snapshot histórico permanece em modo somente
+leitura.
+
+As correções operacionais criam um novo `imports` com `DerivedFromImportId`,
+reutilizando o mesmo `FilePath` imutável. O Worker bloqueia a fonte, confirma que
+o pai ainda é o snapshot atual, clona rotas e entradas, aplica
+`route_import_corrections`, recalcula os totais e somente então publica a versão.
+`route_entries.IsExcludedFromOptimization` preserva a parada no detalhe, mas a
+remove da matriz, dos blocos e das métricas; apenas peso exatamente zero pode
+receber essa marca. `routes.VehicleCapacityKgSnapshot` congela a capacidade usada
+por cada versão, embora a correção também atualize `vehicle_types` para
+importações futuras.
+
+`municipality_aliases` é único por `DataSourceId + NormalizedAlias` e reaplica o
+vínculo nas ocorrências equivalentes e nos próximos imports. Coordenadas manuais
+usam a origem auditável `MANUAL_AUDITADO`; coordenadas oficiais conservam a
+origem do catálogo embutido. Dias afetados ficam em
+`route_import_affected_weekdays`. Resultados de outros dias são clonados com
+`InheritedFromResultId` e rotas remapeadas; somente os afetados entram em um novo
+`DAILY_ROUTE_OPTIMIZATION` com `weekdays[]`. O `PROCESS_IMPORT` pai e o job do
+solver são relacionados por `ParentJobExecutionId`, mantendo fila, progresso,
+falha e retry exclusivamente em `job_executions` e na Central de Processamentos.
+
+Os índices especializados refletem os acessos reais: alias por fonte/nome
+normalizado, correções por import/tipo, issues por resultado/código, derivação de
+imports, herança de resultados e relação pai/filho entre jobs. A origem de aba,
+cabeçalho e linha é nullable porque snapshots legados podem exigir localização
+segura no XLSX preservado.
 
 O enriquecimento cadastral de clientes consulta a BrasilAPI pelo CNPJ em um job
 operacional assíncrono. O Worker limita as chamadas pela configuração
@@ -296,13 +447,19 @@ tentativas, o CNPJ permanece pendente e o job continua nos demais clientes, sem
 registrar a indisponibilidade temporária como falha cadastral. A
 relação única por `CustomerId` reaproveita o resultado entre versões da fonte;
 resultados resolvidos, inválidos ou não encontrados não são consultados outra
-vez. O endereço representa o cadastro do CNPJ, não uma confirmação do local de
-entrega. O job `CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT` reutiliza Hangfire,
+vez. Quando o CNPJ retorna logradouro ou bairro ausente e fornece um CEP válido,
+o mesmo provedor consulta `cep/v2`, valida município e UF e preenche somente os
+campos ausentes. A origem `BRASIL_API_CNPJ_CEP` distingue essa complementação de
+`BRASIL_API_CNPJ`; divergências nunca sobrescrevem o cadastro. O endereço é único
+e representa exclusivamente o cadastro do CNPJ. O job
+`CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT` reutiliza Hangfire,
 `job_executions` e a Central de Processamentos e pode ser iniciado manualmente ou
 agendado. Sem `importId` explícito, cada execução resolve o snapshot de clientes
 publicado naquele momento. Resultados e progresso são persistidos a cada 25
 clientes por padrão no próprio `job_executions`, com contagens de resolvidos,
-inválidos, não encontrados e pendentes; não existe monitoramento paralelo.
+inválidos, não encontrados, pendentes, completos, sem número, somente CEP,
+complementados pelo CEP, CEPs incompatíveis/não encontrados e falhas técnicas;
+não existe monitoramento paralelo.
 O contrato versão 1 aceita `customerStatus` com `ACTIVE`, `INACTIVE` ou `ALL`;
 quando omitido, usa `ACTIVE`. O filtro é aplicado sobre `Customer.IsActive` antes
 das consultas externas. O botão da tela de Clientes envia `ACTIVE`, enquanto a
@@ -313,47 +470,110 @@ endereços já resolvidos são consultados novamente para atualizar campos novos
 provedor, incluindo `StreetType`, mapeado de `descricao_tipo_de_logradouro` da
 BrasilAPI. O tipo é persistido separadamente do nome do logradouro para evitar
 duplicação e permitir formatação correta em integrações posteriores.
+Também aceita `refreshMissingNumber` (padrão `false`), que consulta novamente
+somente resultados resolvidos cujo número ainda está ausente. Assim é possível
+tentar completar o número sem consumir chamadas para todos os endereços já
+finalizados; se o provedor continuar sem número, o campo permanece opcional.
+`refreshIncomplete` (padrão `false`) reprocessa somente resultados resolvidos
+sem logradouro, permitindo a complementação dos dados legados sem consultar
+novamente toda a base. A API deriva `addressCompleteness` como `COMPLETE`,
+`WITHOUT_NUMBER` ou `POSTAL_ONLY`; CEP geral de município pode permanecer no
+último nível sem que rua ou número sejam inferidos.
 O índice único por `CustomerId` sustenta a consulta e impede duplicidade; não há
 índice por status porque o processamento parte dos clientes do snapshot e faz a
 comparação pelo identificador, sem filtrar globalmente por esse campo.
+Não existe fonte paralela de endereço de entrega ou classificação A–G. O fluxo
+de endereço possui dois jobs independentes e observáveis na Central de
+Processamentos: `CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT` consulta
+a BrasilAPI para clientes ainda sem resultado cadastral e, com
+`refreshResolved=true`, tenta atualizar inclusive o número quando o provedor o
+possuir; por fim, `CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT` converte o endereço
+cadastral resolvido em coordenadas. A grafia oficial vem da resposta da API, não
+de transformação textual ou correção aproximada local. A ausência de número é
+aceita e os níveis de precisão da geocodificação deixam explícito quando a
+coordenada representa rua, CEP ou apenas município.
 O job `CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT` geocodifica somente endereços
 cadastrais `RESOLVED` e persiste o resultado em
 `customer_address_coordinates`, relacionado 1:1 a
 `customer_registration_addresses`. Seu contrato versão 1 aceita
 `customerStatus` (`ACTIVE`, `INACTIVE` ou `ALL`, padrão `ACTIVE`) e
-`reprocessFailed` (padrão `false`). O parâmetro opcional `maximumRequests` limita
-as chamadas externas da execução entre 1 e 10.000, sem contar resultados já
-resolvidos ou recuperados do cache; endereços ainda não tentados pelo Google são
-priorizados antes dos reprocessamentos anteriores. A tabela mantém endereço normalizado, fonte,
+`reprocessFailed` (padrão `false`), `refreshApproximate` (padrão `false`) e
+`maximumRequests` opcional entre 1 e 10.000. O limite conta somente chamadas
+externas, sem incluir resultados ignorados ou recuperados do cache. Quando
+`refreshApproximate=true`, resultados resolvidos por rua, CEP ou município que
+já possuem logradouro cadastral voltam ao provedor para tentar promoção para
+endereço exato ou uma precisão melhor; o cache aproximado é ignorado nessa
+tentativa e a coordenada anterior é preservada se o provedor não resolver a
+nova consulta. A tabela mantém endereço normalizado, fonte,
 status, latitude/longitude, identificador e nome do provedor, datas e falha
 auditável. A unicidade por endereço cadastral garante idempotência; índices por
 endereço normalizado e status sustentam cache e reprocessamento.
+O identificador opaco retornado pelo provedor aceita até 512 caracteres, pois o
+`place_id` do Geoapify pode exceder o limite legado de 64. Esse campo não recebe
+índice: não participa de filtros, junções ou ordenações e indexá-lo aumentaria o
+custo de escrita sem atender ao padrão real de acesso.
 
-O provedor inicial é o Nominatim público, configurado por `Nominatim`. Um gate
-singleton mantém no mínimo 1.000 ms entre o início das requisições da instância,
-sempre sequenciais e com `User-Agent` identificável. A busca é restrita ao
-Brasil e o resultado só é aceito quando município e UF conferem. Coordenadas
-resolvidas para o mesmo endereço normalizado são reutilizadas sem chamada
-externa. HTTP 429 respeita `Retry-After` e interrompe a tentativa para o retry
-do job. A URL configurável permite migrar para Nominatim próprio antes de uso
-produtivo recorrente.
-O texto enviado ao Nominatim combina `StreetType + Street`, número, bairro,
+O contrato `ICustomerAddressCoordinateProvider` isola o provedor externo. A
+seção `Geocoding:Provider` seleciona explicitamente `Google`, `Geoapify` ou
+`Nominatim`. O Google é a configuração padrão e recorre ao Nominatim quando
+`GOOGLE_MAPS_API_KEY` não está preenchida. O Geoapify usa a Geocoding API em
+`Geoapify:BaseUrl`, restringe resultados ao Brasil e exige a chave em
+`Geoapify:ApiKey`; a chave é fornecida por user-secrets no desenvolvimento ou
+pela variável `GEOAPIFY_API_KEY` no Docker e não é versionada. Município, UF e,
+na precisão exata, número devem conferir antes de a coordenada ser aceita.
+O log informativo do cliente HTTP Geoapify fica desabilitado porque a API exige
+a chave na query string; falhas continuam registradas sem expor a credencial.
+Origens `GEOAPIFY_EXACT`, `GEOAPIFY_STREET` e `GEOAPIFY_MUNICIPALITY` mantêm a
+mesma semântica auditável das origens anteriores.
+
+Quando `Google` é selecionado e possui chave, a integração usa o Google
+Geocoding v4, envia a credencial no cabeçalho `X-Goog-Api-Key` e limita a
+resposta por máscara de campos. Somente `street_address` com granularidade
+`ROOFTOP`, número, município e UF compatíveis é aceito como exato. Um gate
+singleton limita o início das chamadas a uma a cada 500 ms por padrão e HTTP
+429 é repetido somente para o endereço atual com espera exponencial.
+
+Quando `Nominatim` é selecionado, um gate singleton mantém no mínimo 1.000 ms
+entre o início das requisições da instância, sempre sequenciais e com
+`User-Agent` identificável. Em ambos os provedores, a busca é restrita ao Brasil
+e coordenadas resolvidas para o mesmo endereço normalizado são reutilizadas sem
+chamada externa. HTTP 429 interrompe a tentativa para o retry do job. Falhas
+transitórias de transporte recebem até três novas tentativas com espera
+incremental configurável na seção do provedor; a validação do certificado
+permanece obrigatória.
+Quando o endereço não possui número e contém um CEP válido, o provedor consulta
+primeiro o CEP v2 da BrasilAPI, reduzindo o uso do Nominatim e retornando uma
+coordenada aproximada de nível `POSTAL_CODE`. Se o CEP não for resolvido, o
+fluxo mantém os fallbacks de logradouro e município no provedor selecionado. Para endereços
+com número, o texto enviado combina `StreetType + Street`, número, bairro,
 município, UF, CEP no formato `00000-000` e Brasil. Se o logradouro já contém o
-tipo, ele não é duplicado. Um resultado só recebe status `RESOLVED` quando o
-Nominatim devolve município, UF e `house_number` compatíveis; centroides de rua,
-bairro, CEP ou POI não são tratados como endereço exato e permanecem no fallback
-municipal. A migration que introduziu `StreetType` invalidou as coordenadas
-derivadas anteriores para que fossem recalculadas com essa regra.
-Quando `GOOGLE_MAPS_API_KEY` está configurada, o mesmo contrato seleciona o Google
-Geocoding v4 no lugar do Nominatim, sem criar job, tabela ou monitoramento
-paralelo. A chave segue no cabeçalho `X-Goog-Api-Key` e uma máscara limita os
-campos retornados. Somente resultados `street_address` com granularidade
-`ROOFTOP`, número, município e UF compatíveis são persistidos como `RESOLVED`,
-com fonte `GOOGLE_GEOCODING`; resultados interpolados, parciais ou aproximados
-continuam como `NOT_FOUND`. Um gate singleton limita o início das chamadas a uma
-a cada 500 ms por padrão; HTTP 429 retenta apenas o endereço atual com espera
-exponencial configurável, evitando reiniciar o lote e repetir chamadas cobradas.
-Sem a chave, o Nominatim permanece como fallback.
+tipo, ele não é duplicado. A resolução ocorre em níveis auditáveis: endereço
+com número confirmado (`GOOGLE_GEOCODING`, `GEOAPIFY_EXACT` ou
+`NOMINATIM_EXACT`), logradouro sem número confirmado (`GEOAPIFY_STREET` ou `NOMINATIM_STREET`), CEP validado pela BrasilAPI
+(`BRASIL_API_POSTAL_CODE`) e, por último, centro municipal
+(`GEOAPIFY_MUNICIPALITY` ou `NOMINATIM_MUNICIPALITY`). Município e UF devem conferir em todos os níveis;
+o fallback por CEP também exige cidade, UF e coordenadas no retorno da
+BrasilAPI. Coordenadas aproximadas recebem uma justificativa persistida e não
+são apresentadas como endereço exato. O resultado do job separa as contagens
+por nível de precisão, além de cache, não encontrados, falhas e pendentes.
+O resumo também separa candidatos percorridos, coordenadas previamente
+resolvidas ignoradas e chamadas efetivamente enviadas ao provedor. Assim, uma
+reexecução idempotente não apresenta registros apenas verificados como novas
+geocodificações. Falhas definitivas são agrupadas em categorias estáveis para
+dados insuficientes, CEP inválido ou incompatível, divergência de município/UF
+e esgotamento dos fallbacks. Timeout, resposta HTTP inválida e rate limit
+continuam como falhas técnicas recuperáveis do job.
+Em reprocessamentos, coordenadas existentes com `NOT_FOUND` ou `FAILED` são
+carregadas com rastreamento e atualizadas no mesmo registro 1:1; o progresso só
+contabiliza resolução depois que essa alteração participa do lote persistido.
+O contrato do mapa deriva `coordinateAccuracy` e `coordinatePrecision` da
+precisão e da fonte persistidas. Google predial, Geoapify/Nominatim exatos e
+HERE com número exato são `EXACT`; interpolação, rua, CEP e município permanecem
+auditáveis como aproximações. A API publica ambas as categorias quando há
+coordenada utilizável, e somente a ausência de coordenada de endereço e de
+fallback municipal entra em `withoutCoordinates`. O filtro de precisão é
+aplicado no frontend, mostra todas as categorias por padrão e permite selecionar
+somente exatas ou somente aproximadas sem nova consulta à API.
 Na tela de Clientes, administradores podem iniciar o enriquecimento diretamente;
 a listagem apresenta somente município e UF do snapshot importado. O endereço
 cadastral persistido fica restrito ao detalhe de consumo: nele, município e UF
@@ -535,8 +755,8 @@ Os controllers atuais atendem:
 - consulta paginada dos clientes da importação atualmente publicada.
 - consulta paginada e detalhe de documentos fiscais, além do resumo histórico de
   consumo em vendas por cliente e da taxa fiscal de devolução por peso.
-- consulta de clientes reais para mapa logístico, posicionados pela coordenada
-  do município cadastrado.
+- consulta de clientes reais para mapa logístico, priorizando a coordenada do
+  endereço e usando a coordenada municipal como fallback aproximado.
 - upload versionado de cadastro de produtos, estoque atual e controle diário de
   estoque pelo mesmo endpoint genérico de importações.
 - consulta paginada de produtos, detalhe do produto, estoque atual e métricas
@@ -836,7 +1056,7 @@ fila paralela de alertas.
 
 `Domain/Entities` contém usuários, fontes de dados, importações,
 erros, execuções, tipos de veículo, rotas, entradas de rota, clientes, vínculos
-cliente-rota, snapshots de clientes, municípios compartilhados, coordenadas
+cliente-rota, perfis de entrega, snapshots de clientes, municípios compartilhados, coordenadas
 municipais, produtos, snapshots de estoque e registros diários de estoque. Os
 estados da importação e a origem do vínculo cliente-rota ficam em `Domain/Enums`.
 
@@ -866,6 +1086,7 @@ por município. Depois da publicação, o sincronizador substitui todas as infer
 associações `Imported`; clientes não presentes ficam sem rota. Os índices por import e
 cliente atendem a reconstrução, e o índice por import, dia e nome normalizado atende a
 resolução contra novos snapshots de rotas.
+
 ### Infrastructure
 
 `ImportDbContext` mapeia as entidades para PostgreSQL. A configuração de
@@ -1088,6 +1309,11 @@ O parser localiza o cabeçalho pelas oito colunas obrigatórias nas primeiras
 linhas da aba, permitindo títulos de relatório antes de `Codigo`, sem depender
 de um número fixo de linha.
 
+O único endereço do cliente fica em `customer_registration_addresses`; a antiga
+fonte de classificação/endereço de entrega foi removida. Os registros genéricos
+de imports já executados permanecem para auditoria, mas a tabela derivada
+`customer_delivery_profiles` não existe e a fonte não aceita novos uploads.
+
 ### Movimentações fiscais
 
 A fonte `FISCAL_MOVEMENTS` reutiliza o upload, storage, fila, Worker e ciclo de
@@ -1203,14 +1429,16 @@ polling impede que a tela preserve indefinidamente um estado antigo depois que
 o Worker conclui o job. A interface separa esse fluxo em duas abas: a aba
 `Monitoramento` concentra indicadores e o histórico das execuções, enquanto
 `Serviços disponíveis` apresenta o catálogo de serviços operacionais que podem
-ser iniciados manualmente. Ambas continuam usando os mesmos contratos e o ciclo
-de vida centralizado em `job_executions`.
+ser iniciados manualmente. Essa grade filtra `ManualRunAllowed` e não renderiza
+jobs internos, de webhook ou exclusivos de outros fluxos como cartões
+desabilitados. Ambas continuam usando os mesmos contratos e o ciclo de vida
+centralizado em `job_executions`.
 `GET /api/admin/jobs/definitions` expõe apenas jobs operacionais declarados no
 catálogo da Application, e `POST /api/admin/jobs/definitions/{jobType}/run`
 permite executar manualmente somente os que possuem `ManualRunAllowed`. Jobs de
-importação de planilha não entram nesse catálogo porque dependem de upload,
-arquivo e import específico; eles continuam sendo criados por upload,
-reprocessamento ou retry técnico.
+importação de planilha dependem de upload, arquivo e import específico; por isso
+não aparecem entre os serviços executáveis e continuam sendo criados por
+upload, reprocessamento ou retry técnico.
 
 O catálogo de jobs é indexado por `JobType`, com busca sem diferença entre
 maiúsculas e minúsculas. Cada definição declara fila, versão do contrato,
@@ -1246,7 +1474,7 @@ o enriquecimento municipal usa a importação atual de clientes e a detecção d
 clientes inativos usa a importação fiscal atual. Se a fonte necessária ainda
 não tiver uma publicação, a API retorna conflito sem criar uma execução órfã.
 
-### Mapa de clientes por município
+### Mapa de clientes geocodificados
 
 Clientes reais no mapa priorizam a coordenada de endereço resolvida e recorrem
 à precisão municipal quando ela não existe. A importação de clientes
@@ -1272,19 +1500,27 @@ e prioriza `customer_address_coordinates`, com fallback para
 `municipality_coordinates`. Clientes sem nenhuma fonte não aparecem no mapa e
 são contabilizados em `withoutCoordinates`. Para evitar pins municipais
 sobrepostos, a API aplica deslocamento visual determinístico somente ao fallback;
-coordenadas de endereço permanecem exatas. Cada item informa
-`locationPrecision` como `ADDRESS` ou `MUNICIPALITY`. A tela `/mapa` consome esse endpoint e mantém os
+coordenadas de endereço, rua e CEP permanecem no ponto retornado pelo provedor.
+Cada item informa `locationPrecision` como `ADDRESS_EXACT`,
+`ADDRESS_INTERPOLATED`, `ADDRESS_APPROXIMATE` ou `MUNICIPALITY`,
+`coordinateAccuracy` como `EXACT` ou `APPROXIMATE` e `coordinatePrecision` como
+`EXACT`, `INTERPOLATED`, `STREET`, `POSTAL_CODE` ou `MUNICIPALITY`. A tela usa
+`E` para endereço e número confirmados, `I` para número interpolado, `~` para rua
+ou CEP e `C` quando existe somente a coordenada municipal. O filtro de precisão
+é local à tela, começa em todas as localizações e pode restringir os marcadores a
+exatos ou aproximados; as opções de cidade continuam derivadas do conjunto
+completo recebido da API. A tela `/mapa` consome esse endpoint e mantém os
 trajetos demonstrativos como contexto visual enquanto os clientes vêm da API
 real.
 O marcador fixo da matriz representa a Grespan Pães Congelados Ltda., CNPJ
 `10.809.214/0001-67`, na Avenida República, 7000, Distrito Industrial Santo
 Barion, Marília/SP, CEP 17512-035. A coordenada `-22.21389, -49.94583` vem da
 consulta do CEP na BrasilAPI v2; tooltip e popup exibem o endereço completo.
-Quando a precisão é `ADDRESS`, o item também retorna o endereço cadastral
-formatado e o frontend o apresenta no tooltip e no popup do marcador. Marcadores
-municipais informam explicitamente que o endereço não foi geocodificado e que a
-posição é aproximada pela cidade; somente esses marcadores recebem o espalhamento
-visual para evitar sobreposição.
+Quando `locationPrecision` identifica uma coordenada de endereço, o item também
+retorna o endereço cadastral formatado e o frontend o apresenta no tooltip e no
+popup do marcador. Marcadores municipais informam explicitamente que o endereço
+não foi geocodificado e que a posição é aproximada pela cidade; somente esses
+marcadores recebem o espalhamento visual para evitar sobreposição.
 
 No frontend, `/clientes` é uma listagem cadastral simples, com busca feita no
 backend por código, razão social, nome fantasia, documento ou nome parcial do
@@ -1308,9 +1544,11 @@ ambíguos preservam `RouteEntry.Name` e ficam sem associação, sem inventar UF.
 
 Os índices acompanham os padrões reais de leitura:
 
-- rotas usam `ImportId + Weekday + Name` para listagem, `ImportId +
-  OverallOccupancy` para criticidade e índices GIN trigram sobre o nome da rota
-  e da cidade para buscas textuais com `contains`;
+- rotas usam `ImportId + Weekday + Name` para listagem e para o filtro de dia
+  dentro do snapshot, `ImportId + OverallOccupancy` para criticidade e índices
+  GIN trigram sobre o nome da rota e da cidade para buscas textuais com
+  `contains`; o novo uso do filtro de dia é atendido pelo índice composto já
+  existente e não exige outro índice;
 - clientes mantêm a unicidade por fonte, filial e código, além de
   `DataSourceId + ExternalCode + BranchCode` para a ordenação da listagem;
 - snapshots usam `ImportId + CustomerId` para idempotência, `ImportId +

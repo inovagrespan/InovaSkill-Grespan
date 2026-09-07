@@ -9,8 +9,11 @@ public sealed class Route
     public RouteImport? Import { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Weekday { get; set; } = string.Empty;
+    public string? SourceSheetName { get; set; }
+    public int? SourceHeaderRowNumber { get; set; }
     public Guid VehicleTypeId { get; set; }
     public VehicleType? VehicleType { get; set; }
+    public decimal VehicleCapacityKgSnapshot { get; set; }
     public decimal TotalWeightKg { get; set; }
     public decimal? TotalVolumeM3 { get; set; }
     public int? TotalPallets { get; set; }

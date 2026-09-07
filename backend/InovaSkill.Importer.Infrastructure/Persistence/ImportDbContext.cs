@@ -9,6 +9,9 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<DataSource> DataSources => Set<DataSource>();
     public DbSet<RouteImport> RouteImports => Set<RouteImport>();
     public DbSet<RouteImportError> RouteImportErrors => Set<RouteImportError>();
+    public DbSet<RouteImportCorrection> RouteImportCorrections => Set<RouteImportCorrection>();
+    public DbSet<RouteImportAffectedWeekday> RouteImportAffectedWeekdays => Set<RouteImportAffectedWeekday>();
+    public DbSet<MunicipalityAlias> MunicipalityAliases => Set<MunicipalityAlias>();
     public DbSet<JobExecution> JobExecutions => Set<JobExecution>();
     public DbSet<JobSchedule> JobSchedules => Set<JobSchedule>();
     public DbSet<VehicleType> VehicleTypes => Set<VehicleType>();
@@ -17,6 +20,10 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<Municipality> Municipalities => Set<Municipality>();
     public DbSet<MunicipalityCoordinate> MunicipalityCoordinates => Set<MunicipalityCoordinate>();
     public DbSet<LogisticsDepot> LogisticsDepots => Set<LogisticsDepot>();
+    public DbSet<DailyRouteOptimizationResult> DailyRouteOptimizationResults => Set<DailyRouteOptimizationResult>();
+    public DbSet<DailyRouteOptimizationVehicle> DailyRouteOptimizationVehicles => Set<DailyRouteOptimizationVehicle>();
+    public DbSet<DailyRouteOptimizationStop> DailyRouteOptimizationStops => Set<DailyRouteOptimizationStop>();
+    public DbSet<DailyRouteOptimizationIssue> DailyRouteOptimizationIssues => Set<DailyRouteOptimizationIssue>();
     public DbSet<CustomerRegistrationAddress> CustomerRegistrationAddresses => Set<CustomerRegistrationAddress>();
     public DbSet<CustomerAddressCoordinate> CustomerAddressCoordinates => Set<CustomerAddressCoordinate>();
     public DbSet<Customer> Customers => Set<Customer>();
@@ -81,8 +88,62 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.FailureMessage).HasMaxLength(1024);
             entity.HasIndex(x => new { x.Status, x.CreatedAt });
             entity.HasIndex(x => new { x.DataSourceId, x.Version }).IsUnique();
+            entity.HasIndex(x => x.DerivedFromImportId);
             entity.HasOne(x => x.DataSource).WithMany(x => x.Imports)
                 .HasForeignKey(x => x.DataSourceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.DerivedFromImport).WithMany()
+                .HasForeignKey(x => x.DerivedFromImportId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CreatedByUser).WithMany()
+                .HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RouteImportCorrection>(entity =>
+        {
+            entity.ToTable("route_import_corrections");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.SourceLabel).HasMaxLength(256);
+            entity.Property(x => x.OriginalWeightKg).HasPrecision(18, 3);
+            entity.Property(x => x.CorrectedWeightKg).HasPrecision(18, 3);
+            entity.Property(x => x.OriginalCapacityKg).HasPrecision(18, 3);
+            entity.Property(x => x.CorrectedCapacityKg).HasPrecision(18, 3);
+            entity.Property(x => x.OriginalLatitude).HasPrecision(9, 6);
+            entity.Property(x => x.OriginalLongitude).HasPrecision(9, 6);
+            entity.Property(x => x.CorrectedLatitude).HasPrecision(9, 6);
+            entity.Property(x => x.CorrectedLongitude).HasPrecision(9, 6);
+            entity.HasIndex(x => new { x.DerivedImportId, x.Kind });
+            entity.HasIndex(x => x.SourceRouteEntryId);
+            entity.HasOne(x => x.DerivedImport).WithMany(x => x.Corrections)
+                .HasForeignKey(x => x.DerivedImportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.RequestedByUser).WithMany()
+                .HasForeignKey(x => x.RequestedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Municipality>().WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<VehicleType>().WithMany().HasForeignKey(x => x.VehicleTypeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Route>().WithMany().HasForeignKey(x => x.SourceRouteId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<RouteEntry>().WithMany().HasForeignKey(x => x.SourceRouteEntryId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RouteImportAffectedWeekday>(entity =>
+        {
+            entity.ToTable("route_import_affected_weekdays");
+            entity.HasKey(x => new { x.ImportId, x.Weekday });
+            entity.Property(x => x.Weekday).HasMaxLength(16);
+            entity.HasOne(x => x.Import).WithMany(x => x.AffectedWeekdays)
+                .HasForeignKey(x => x.ImportId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MunicipalityAlias>(entity =>
+        {
+            entity.ToTable("municipality_aliases");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Alias).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.NormalizedAlias).HasMaxLength(256).IsRequired();
+            entity.HasIndex(x => new { x.DataSourceId, x.NormalizedAlias }).IsUnique();
+            entity.HasIndex(x => x.MunicipalityId);
+            entity.HasOne(x => x.DataSource).WithMany().HasForeignKey(x => x.DataSourceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.UpdatedByUser).WithMany().HasForeignKey(x => x.UpdatedByUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<RouteImportError>(entity =>
@@ -114,8 +175,10 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
             entity.Property(x => x.ErrorMessage).HasMaxLength(1024);
             entity.HasIndex(x => new { x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.JobType, x.RelatedEntityId, x.CreatedAt });
             entity.HasIndex(x => x.ScheduleId);
             entity.HasIndex(x => x.RetriedFromJobExecutionId);
+            entity.HasIndex(x => x.ParentJobExecutionId);
             entity.HasOne(x => x.Import).WithMany(x => x.JobExecutions)
                 .HasForeignKey(x => x.RelatedEntityId).OnDelete(DeleteBehavior.NoAction)
                 .IsRequired(false);
@@ -123,6 +186,8 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
                 .HasForeignKey(x => x.ScheduleId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.RetriedFromJobExecution).WithMany()
                 .HasForeignKey(x => x.RetriedFromJobExecutionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.ParentJobExecution).WithMany()
+                .HasForeignKey(x => x.ParentJobExecutionId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<JobSchedule>(entity =>
@@ -285,7 +350,9 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Weekday).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.SourceSheetName).HasMaxLength(128);
             entity.Property(x => x.TotalWeightKg).HasPrecision(18, 3);
+            entity.Property(x => x.VehicleCapacityKgSnapshot).HasPrecision(18, 3);
             entity.Property(x => x.TotalVolumeM3).HasPrecision(18, 3);
             entity.Property(x => x.WeightOccupancy).HasPrecision(12, 6);
             entity.Property(x => x.VolumeOccupancy).HasPrecision(12, 6);
@@ -312,6 +379,69 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
                 .HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Municipality).WithMany()
                 .HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DailyRouteOptimizationResult>(entity =>
+        {
+            entity.ToTable("daily_route_optimization_results");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Weekday).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(1024);
+            entity.Property(x => x.CurrentDistanceMeters).HasPrecision(18, 3);
+            entity.Property(x => x.CurrentDurationSeconds).HasPrecision(18, 3);
+            entity.Property(x => x.ProposedDistanceMeters).HasPrecision(18, 3);
+            entity.Property(x => x.ProposedDurationSeconds).HasPrecision(18, 3);
+            entity.Property(x => x.AdditionalCapacityKg).HasPrecision(18, 3);
+            entity.Property(x => x.TotalWeightKg).HasPrecision(18, 3);
+            entity.HasIndex(x => new { x.RouteImportId, x.Weekday }).IsUnique();
+            entity.HasIndex(x => x.InheritedFromResultId);
+            entity.HasOne(x => x.RouteImport).WithMany().HasForeignKey(x => x.RouteImportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.JobExecution).WithMany().HasForeignKey(x => x.JobExecutionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.InheritedFromResult).WithMany().HasForeignKey(x => x.InheritedFromResultId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<DailyRouteOptimizationIssue>(entity =>
+        {
+            entity.ToTable("daily_route_optimization_issues");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Message).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.CurrentValue).HasMaxLength(256);
+            entity.HasIndex(x => new { x.ResultId, x.Code });
+            entity.HasIndex(x => x.RouteEntryId);
+            entity.HasOne(x => x.Result).WithMany(x => x.Issues).HasForeignKey(x => x.ResultId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Route).WithMany().HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.RouteEntry).WithMany().HasForeignKey(x => x.RouteEntryId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.VehicleType).WithMany().HasForeignKey(x => x.VehicleTypeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DailyRouteOptimizationVehicle>(entity =>
+        {
+            entity.ToTable("daily_route_optimization_vehicles");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CapacityKg).HasPrecision(18, 3);
+            entity.Property(x => x.LoadKg).HasPrecision(18, 3);
+            entity.Property(x => x.Occupancy).HasPrecision(12, 6);
+            entity.Property(x => x.DistanceMeters).HasPrecision(18, 3);
+            entity.Property(x => x.DurationSeconds).HasPrecision(18, 3);
+            entity.HasIndex(x => new { x.ResultId, x.Sequence }).IsUnique();
+            entity.HasOne(x => x.Result).WithMany(x => x.Vehicles).HasForeignKey(x => x.ResultId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.VehicleType).WithMany().HasForeignKey(x => x.VehicleTypeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SourceRoute).WithMany().HasForeignKey(x => x.SourceRouteId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DailyRouteOptimizationStop>(entity =>
+        {
+            entity.ToTable("daily_route_optimization_stops");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.WeightKg).HasPrecision(18, 3);
+            entity.Property(x => x.DistanceFromPreviousMeters).HasPrecision(18, 3);
+            entity.Property(x => x.DurationFromPreviousSeconds).HasPrecision(18, 3);
+            entity.HasIndex(x => new { x.VehicleId, x.Sequence }).IsUnique();
+            entity.HasOne(x => x.Vehicle).WithMany(x => x.Stops).HasForeignKey(x => x.VehicleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Municipality>(entity =>
@@ -418,7 +548,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.Precision).HasMaxLength(32).IsRequired();
             entity.Property(x => x.Latitude).HasPrecision(9, 6);
             entity.Property(x => x.Longitude).HasPrecision(9, 6);
-            entity.Property(x => x.ProviderPlaceId).HasMaxLength(64);
+            entity.Property(x => x.ProviderPlaceId).HasMaxLength(512);
             entity.Property(x => x.DisplayName).HasMaxLength(1024);
             entity.Property(x => x.FailureReason).HasMaxLength(1024);
             entity.HasIndex(x => x.CustomerRegistrationAddressId).IsUnique();

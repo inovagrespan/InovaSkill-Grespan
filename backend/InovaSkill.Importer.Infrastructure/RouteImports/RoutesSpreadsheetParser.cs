@@ -6,8 +6,20 @@ using InovaSkill.Importer.Application.RouteImports;
 namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
 public sealed record SpreadsheetCorrection(string SheetName, int RowNumber, string Field, string Value);
-public sealed record ParsedRouteEntry(int Sequence, string Name, int Deliveries, decimal AveragePerDay, string? Note);
-public sealed record ParsedRoute(string Name, string Weekday, string VehicleType, IReadOnlyList<ParsedRouteEntry> Entries)
+public sealed record ParsedRouteEntry(
+    int Sequence,
+    int SourceRowNumber,
+    string Name,
+    int Deliveries,
+    decimal AveragePerDay,
+    string? Note);
+public sealed record ParsedRoute(
+    string Name,
+    string Weekday,
+    string VehicleType,
+    string SourceSheetName,
+    int SourceHeaderRowNumber,
+    IReadOnlyList<ParsedRouteEntry> Entries)
 {
     public decimal VehicleCapacityKg { get; init; }
 }
@@ -148,6 +160,7 @@ public sealed class RoutesSpreadsheetParser
 
             current.Entries.Add(new ParsedRouteEntry(
                 current.Entries.Count + 1,
+                rowNumber,
                 entryName,
                 deliveries,
                 averagePerDay,
@@ -210,6 +223,8 @@ public sealed class RoutesSpreadsheetParser
             draft.Name,
             draft.Weekday,
             vehicleType,
+            draft.SheetName,
+            draft.HeaderRowNumber,
             draft.Entries)
         {
             VehicleCapacityKg = draft.VehicleCapacityKg

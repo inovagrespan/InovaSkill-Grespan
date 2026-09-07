@@ -76,6 +76,21 @@ public sealed class CustomerRegistrationAddressJobLauncherTests
         Assert.Empty(db.JobExecutions);
     }
 
+    [Fact]
+    public async Task LaunchAsync_RejectsInvalidRefreshMissingNumberFlagBeforeDispatching()
+    {
+        await using var db = new ImportDbContext(new DbContextOptionsBuilder<ImportDbContext>()
+            .UseInMemoryDatabase($"customer-address-invalid-number-flag-{Guid.NewGuid()}").Options);
+        var launcher = new JobExecutionLauncher(db, new RecordingDispatcher());
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => launcher.LaunchAsync(
+            new JobLaunchRequest(OperationalJobCodes.CustomerRegistrationAddressEnrichment, 1,
+                "{\"refreshMissingNumber\":\"yes\"}", JobExecutionTrigger.Manual), default));
+
+        Assert.Contains("refreshMissingNumber", exception.Message);
+        Assert.Empty(db.JobExecutions);
+    }
+
     private sealed class RecordingDispatcher : IBackgroundJobDispatcher
     {
         public Guid? OperationalJobId { get; private set; }

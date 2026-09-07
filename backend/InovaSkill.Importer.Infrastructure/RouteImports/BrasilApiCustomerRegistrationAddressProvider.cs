@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Globalization;
+using System.Text;
 using System.Text.Json.Serialization;
 using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Entities;
@@ -57,7 +59,7 @@ public sealed class BrasilApiCustomerRegistrationAddressProvider(
             response.EnsureSuccessStatusCode();
             var payload = await response.Content.ReadFromJsonAsync<BrasilApiCnpjResponse>(cancellationToken)
                 ?? throw new HttpRequestException("A BrasilAPI retornou uma resposta vazia.");
-            return new CustomerRegistrationAddressLookup(
+            var lookup = new CustomerRegistrationAddressLookup(
                 CustomerRegistrationAddressStatuses.Resolved,
                 Clean(payload.PostalCode),
                 Clean(payload.StateCode),
@@ -67,6 +69,57 @@ public sealed class BrasilApiCustomerRegistrationAddressProvider(
                 Clean(payload.Complement),
                 Clean(payload.Neighborhood),
                 Clean(payload.StreetType));
+            return string.IsNullOrWhiteSpace(lookup.Street) || string.IsNullOrWhiteSpace(lookup.Neighborhood)
+                ? await ComplementFromPostalCodeAsync(lookup, cancellationToken)
+                : lookup;
+        }
+    }
+
+    private async Task<CustomerRegistrationAddressLookup> ComplementFromPostalCodeAsync(
+        CustomerRegistrationAddressLookup current, CancellationToken cancellationToken)
+    {
+        var digits = new string((current.PostalCode ?? string.Empty).Where(char.IsDigit).ToArray());
+        if (digits.Length != 8) return current with
+        {
+            PostalCodeEnrichmentStatus = PostalCodeEnrichmentStatuses.NotFound,
+            FailureReason = "O endereço cadastral está incompleto e não possui CEP válido para complementação."
+        };
+
+        try
+        {
+            await WaitForRateLimitAsync(cancellationToken);
+            using var response = await httpClient.GetAsync($"cep/v2/{digits}", cancellationToken);
+            if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound)
+                return current with { PostalCodeEnrichmentStatus = PostalCodeEnrichmentStatuses.NotFound };
+            response.EnsureSuccessStatusCode();
+            var postal = await response.Content.ReadFromJsonAsync<BrasilApiPostalCodeResponse>(cancellationToken);
+            if (postal is null) throw new HttpRequestException("A BrasilAPI retornou uma resposta de CEP vazia.");
+            if (!SameText(postal.City, current.City) ||
+                !string.Equals(Clean(postal.StateCode), current.StateCode, StringComparison.OrdinalIgnoreCase))
+                return current with { PostalCodeEnrichmentStatus = PostalCodeEnrichmentStatuses.Incompatible };
+
+            var street = Clean(current.Street) ?? Clean(postal.Street);
+            var neighborhood = Clean(current.Neighborhood) ?? Clean(postal.Neighborhood);
+            var complemented = !string.Equals(street, current.Street, StringComparison.Ordinal) ||
+                !string.Equals(neighborhood, current.Neighborhood, StringComparison.Ordinal);
+            return current with
+            {
+                Street = street,
+                Neighborhood = neighborhood,
+                Source = complemented ? "BRASIL_API_CNPJ_CEP" : current.Source,
+                PostalCodeEnrichmentStatus = complemented
+                    ? PostalCodeEnrichmentStatuses.Complemented
+                    : PostalCodeEnrichmentStatuses.NotFound
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception exception)
+        {
+            return current with
+            {
+                PostalCodeEnrichmentStatus = PostalCodeEnrichmentStatuses.TechnicalFailure,
+                FailureReason = $"Falha ao complementar o endereço pelo CEP: {exception.Message}"
+            };
         }
     }
 
@@ -108,6 +161,14 @@ public sealed class BrasilApiCustomerRegistrationAddressProvider(
     private static string? Clean(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static bool SameText(string? left, string? right) =>
+        NormalizeText(left) == NormalizeText(right);
+
+    private static string NormalizeText(string? value) => string.Concat((value ?? string.Empty)
+        .Normalize(NormalizationForm.FormD)
+        .Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark))
+        .Normalize(NormalizationForm.FormC).Trim().ToUpperInvariant();
+
     private sealed record BrasilApiCnpjResponse(
         [property: JsonPropertyName("cep")] string? PostalCode,
         [property: JsonPropertyName("uf")] string? StateCode,
@@ -117,6 +178,12 @@ public sealed class BrasilApiCustomerRegistrationAddressProvider(
         [property: JsonPropertyName("numero")] string? Number,
         [property: JsonPropertyName("complemento")] string? Complement,
         [property: JsonPropertyName("bairro")] string? Neighborhood);
+
+    private sealed record BrasilApiPostalCodeResponse(
+        [property: JsonPropertyName("state")] string? StateCode,
+        [property: JsonPropertyName("city")] string? City,
+        [property: JsonPropertyName("street")] string? Street,
+        [property: JsonPropertyName("neighborhood")] string? Neighborhood);
 }
 
 public sealed class BrasilApiRateLimitException(string cnpj, int attempts)

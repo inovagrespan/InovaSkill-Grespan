@@ -13,6 +13,7 @@ import { SkeletonList, SkeletonModalContent } from "@/components/ui/skeleton";
 import { RouteSnapshotDateSelect } from "@/components/RouteSnapshotDateSelect";
 import { RouteOccupancyIndicator } from "@/components/RouteOccupancyIndicator";
 import { RouteDecisionSupport } from "@/components/RouteDecisionSupport";
+import { RouteOptimizationSimulation } from "@/components/RouteOptimizationSimulation";
 import {
   fetchImportedRoutes,
   fetchImportedRouteDetail,
@@ -22,7 +23,7 @@ import {
   type VehicleTypeItem,
 } from "@/lib/importer-api";
 import { getCurrentUserRole } from "@/lib/auth";
-import { canRoleUseRouteSimulation } from "@/lib/access-control";
+import { canRoleResolveRouteIssues, canRoleUseRouteSimulation } from "@/lib/access-control";
 import { formatCapacityKg, formatRouteLoadKg, type OccupancyLevel } from "@/lib/route-occupancy";
 import { getCurrentLocalDate } from "@/lib/route-snapshot-history";
 import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
@@ -35,13 +36,17 @@ const weekdayLabels: Record<string, string> = {
   WEDNESDAY: "Quarta",
   THURSDAY: "Quinta",
   FRIDAY: "Sexta",
+  SATURDAY: "Sábado",
+  SUNDAY: "Domingo",
 };
 
 const ALL_OCCUPANCY_LEVELS = "all";
+const ALL_WEEKDAYS = "all";
 
 function RotasPage() {
   const currentRole = getCurrentUserRole();
   const canSimulate = canRoleUseRouteSimulation(currentRole);
+  const canResolveIssues = canRoleResolveRouteIssues(currentRole);
   const [routes, setRoutes] = useState<ImportedRouteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -49,6 +54,8 @@ function RotasPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, TEXT_SEARCH_DEBOUNCE_MS);
   const [snapshotDate, setSnapshotDate] = useState(() => getCurrentLocalDate());
+  const [routeView, setRouteView] = useState<"current" | "suggested">("current");
+  const [weekday, setWeekday] = useState(ALL_WEEKDAYS);
   const [occupancyLevel, setOccupancyLevel] = useState<OccupancyLevel | typeof ALL_OCCUPANCY_LEVELS>(ALL_OCCUPANCY_LEVELS);
   const pageSize = 20;
 
@@ -66,6 +73,7 @@ function RotasPage() {
       const data = await fetchImportedRoutes(p, pageSize, {
         search: debouncedSearch || undefined,
         date: snapshotDate,
+        weekday: weekday === ALL_WEEKDAYS ? undefined : weekday,
         occupancyLevel: occupancyLevel === ALL_OCCUPANCY_LEVELS ? undefined : occupancyLevel,
       });
       setRoutes(data.items);
@@ -81,7 +89,7 @@ function RotasPage() {
 
   useEffect(() => {
     void load(1);
-  }, [debouncedSearch, snapshotDate, occupancyLevel]);
+  }, [debouncedSearch, snapshotDate, weekday, occupancyLevel]);
 
   async function openDetails(route: ImportedRouteItem) {
     setDetailsOpen(true);
@@ -109,23 +117,52 @@ function RotasPage() {
 
   return (
     <div className="page-shell app-background space-y-6">
-      <header className="animate-fade-in">
-        <span className="page-header-kicker">Rotas</span>
-        <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Rotas</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Visualize as rotas importadas e acompanhe indicadores de ocupação e desempenho.
-        </p>
+      <header className="animate-fade-in flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <span className="page-header-kicker">Rotas</span>
+          <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Rotas</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Visualize as rotas importadas e acompanhe indicadores de ocupação e desempenho.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
+            <RouteSnapshotDateSelect value={snapshotDate} onValueChange={setSnapshotDate} />
+            <label className="flex w-full flex-col gap-1.5 text-xs font-medium text-foreground sm:w-44">
+              Dia da semana
+              <Select value={weekday} onValueChange={setWeekday}>
+                <SelectTrigger aria-label="Filtrar por dia da semana" className="bg-surface">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_WEEKDAYS}>Todos os dias</SelectItem>
+                  {Object.entries(weekdayLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <Button variant={routeView === "current" ? "default" : "outline"} onClick={() => setRouteView("current")}>Rotas reais</Button>
+            <Button variant={routeView === "suggested" ? "default" : "outline"} onClick={() => setRouteView("suggested")}>Sugestões</Button>
+          </div>
+        </div>
       </header>
 
+      {routeView === "suggested" ? (
+        <RouteOptimizationSimulation
+          date={snapshotDate}
+          weekday={weekday === ALL_WEEKDAYS ? undefined : weekday}
+          canSimulate={canSimulate}
+          canResolveIssues={canResolveIssues}
+        />
+      ) : (
       <Card className="animate-soft-enter border-border bg-surface">
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Todas as rotas</CardTitle>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
-              <RouteSnapshotDateSelect
-                value={snapshotDate}
-                onValueChange={setSnapshotDate}
-              />
               <label className="flex w-full flex-col gap-1.5 text-xs font-medium text-foreground sm:w-44">
                 Criticidade
                 <Select value={occupancyLevel} onValueChange={(value) => setOccupancyLevel(value as typeof occupancyLevel)}>
@@ -168,7 +205,9 @@ function RotasPage() {
 
           {!loading && !apiError && routes.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              {search ? "Nenhuma rota encontrada para esta busca." : "Nenhuma rota importada encontrada. Importe um arquivo XLSX na página de Importações para começar."}
+              {search || weekday !== ALL_WEEKDAYS || occupancyLevel !== ALL_OCCUPANCY_LEVELS
+                ? "Nenhuma rota encontrada para os filtros selecionados."
+                : "Nenhuma rota importada encontrada. Importe um arquivo XLSX na página de Importações para começar."}
             </p>
           )}
 
@@ -217,6 +256,7 @@ function RotasPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-w-3xl border-border bg-surface max-h-[90vh] overflow-y-auto">
@@ -270,6 +310,7 @@ function RotasPage() {
                         </span>
                         <div>
                           <p className="font-medium">{entry.name}</p>
+                          {entry.isExcludedFromOptimization && <Badge variant="outline" className="mt-1">Fora da simulação</Badge>}
                           {entry.note && (
                             <p className="text-xs text-muted-foreground">{entry.note}</p>
                           )}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canRoleAccessPath, canRoleUseRouteSimulation, getDefaultPathForRole } from "./access-control";
+import { canRoleAccessPath, canRoleResolveRouteIssues, canRoleUseRouteSimulation, getDefaultPathForRole } from "./access-control";
 
 describe("access control", () => {
   it.each([
@@ -43,5 +43,12 @@ describe("access control", () => {
     [null, false],
   ])("libera simulação e apoio à decisão para %s: %s", (role, expected) => {
     expect(canRoleUseRouteSimulation(role)).toBe(expected);
+  });
+
+  it.each([
+    ["diretor", true], ["vendas", true], ["logistica", true], ["admin", true], ["admin_system", true],
+    [null, false],
+  ])("libera resolução de pendências para %s: %s", (role, expected) => {
+    expect(canRoleResolveRouteIssues(role)).toBe(expected);
   });
 });

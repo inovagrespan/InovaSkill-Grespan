@@ -37,6 +37,7 @@ import { Route as LogisticaMapaRouteImport } from './routes/logistica.mapa'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
 import { Route as ConfiguracoesDepositoRouteImport } from './routes/configuracoes.deposito'
 import { Route as AdministracaoWhatsappRouteImport } from './routes/administracao.whatsapp'
+import { Route as AdministracaoUsuariosRouteImport } from './routes/administracao.usuarios'
 import { Route as AdministracaoMemoriasRouteImport } from './routes/administracao.memorias'
 import { Route as AdministracaoConsumoIaRouteImport } from './routes/administracao.consumo-ia'
 
@@ -180,6 +181,11 @@ const AdministracaoWhatsappRoute = AdministracaoWhatsappRouteImport.update({
   path: '/administracao/whatsapp',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdministracaoUsuariosRoute = AdministracaoUsuariosRouteImport.update({
+  id: '/administracao/usuarios',
+  path: '/administracao/usuarios',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdministracaoMemoriasRoute = AdministracaoMemoriasRouteImport.update({
   id: '/administracao/memorias',
   path: '/administracao/memorias',
@@ -214,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
+  '/administracao/usuarios': typeof AdministracaoUsuariosRoute
   '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
   '/configuracoes/deposito': typeof ConfiguracoesDepositoRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
@@ -244,6 +251,7 @@ export interface FileRoutesByTo {
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
+  '/administracao/usuarios': typeof AdministracaoUsuariosRoute
   '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
   '/configuracoes/deposito': typeof ConfiguracoesDepositoRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
@@ -277,6 +285,7 @@ export interface FileRoutesById {
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
+  '/administracao/usuarios': typeof AdministracaoUsuariosRoute
   '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
   '/configuracoes/deposito': typeof ConfiguracoesDepositoRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
@@ -311,6 +320,7 @@ export interface FileRouteTypes {
     | '/vendas'
     | '/administracao/consumo-ia'
     | '/administracao/memorias'
+    | '/administracao/usuarios'
     | '/administracao/whatsapp'
     | '/configuracoes/deposito'
     | '/importacoes/files'
@@ -341,6 +351,7 @@ export interface FileRouteTypes {
     | '/vendas'
     | '/administracao/consumo-ia'
     | '/administracao/memorias'
+    | '/administracao/usuarios'
     | '/administracao/whatsapp'
     | '/configuracoes/deposito'
     | '/importacoes/files'
@@ -373,6 +384,7 @@ export interface FileRouteTypes {
     | '/vendas'
     | '/administracao/consumo-ia'
     | '/administracao/memorias'
+    | '/administracao/usuarios'
     | '/administracao/whatsapp'
     | '/configuracoes/deposito'
     | '/importacoes/files'
@@ -406,6 +418,7 @@ export interface RootRouteChildren {
   VendasRoute: typeof VendasRoute
   AdministracaoConsumoIaRoute: typeof AdministracaoConsumoIaRoute
   AdministracaoMemoriasRoute: typeof AdministracaoMemoriasRoute
+  AdministracaoUsuariosRoute: typeof AdministracaoUsuariosRoute
   AdministracaoWhatsappRoute: typeof AdministracaoWhatsappRoute
   ConfiguracoesDepositoRoute: typeof ConfiguracoesDepositoRoute
   VeiculosTiposRoute: typeof VeiculosTiposRoute
@@ -609,6 +622,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdministracaoWhatsappRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/administracao/usuarios': {
+      id: '/administracao/usuarios'
+      path: '/administracao/usuarios'
+      fullPath: '/administracao/usuarios'
+      preLoaderRoute: typeof AdministracaoUsuariosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/administracao/memorias': {
       id: '/administracao/memorias'
       path: '/administracao/memorias'
@@ -679,6 +699,7 @@ const rootRouteChildren: RootRouteChildren = {
   VendasRoute: VendasRoute,
   AdministracaoConsumoIaRoute: AdministracaoConsumoIaRoute,
   AdministracaoMemoriasRoute: AdministracaoMemoriasRoute,
+  AdministracaoUsuariosRoute: AdministracaoUsuariosRoute,
   AdministracaoWhatsappRoute: AdministracaoWhatsappRoute,
   ConfiguracoesDepositoRoute: ConfiguracoesDepositoRoute,
   VeiculosTiposRoute: VeiculosTiposRoute,

@@ -8,4 +8,6 @@ public sealed class NominatimOptions
     public int MinimumRequestIntervalMilliseconds { get; set; } = 1000;
     public int TimeoutSeconds { get; set; } = 30;
     public int PersistenceBatchSize { get; set; } = 25;
+    public int TransportMaximumRetries { get; set; } = 3;
+    public int TransportRetryDelayMilliseconds { get; set; } = 500;
 }

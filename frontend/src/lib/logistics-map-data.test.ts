@@ -1,7 +1,50 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { GRESPAN_HEADQUARTERS, buildCustomerCountByCity, buildDemoLogisticsMapCustomers, buildDemoLogisticsMapRoutes, buildTrafficDelayRanking } from "./logistics-map-data";
+import {
+  DEFAULT_LOGISTICS_MAP_PRECISION_FILTER,
+  GRESPAN_HEADQUARTERS,
+  buildCustomerCountByCity,
+  buildDemoLogisticsMapCustomers,
+  buildDemoLogisticsMapRoutes,
+  buildTrafficDelayRanking,
+  filterLogisticsMapCustomersByPrecision,
+  listLogisticsMapCities,
+  type LogisticsMapCustomer,
+} from "./logistics-map-data";
+
+function createCustomer(
+  id: string,
+  city: string,
+  coordinatePrecision: NonNullable<LogisticsMapCustomer["coordinatePrecision"]>,
+): LogisticsMapCustomer {
+  const exact = coordinatePrecision === "EXACT";
+  return {
+    id,
+    name: `Cliente ${id}`,
+    isActive: true,
+    city,
+    type: "Padaria",
+    status: "Normal",
+    lastDelivery: "01/09/2026",
+    nextDelivery: "08/09/2026",
+    situation: "Entrega normal",
+    route: "Rota teste",
+    priority: "Baixa",
+    locationPrecision: exact
+      ? "ADDRESS_EXACT"
+      : coordinatePrecision === "INTERPOLATED"
+        ? "ADDRESS_INTERPOLATED"
+        : coordinatePrecision === "MUNICIPALITY"
+          ? "MUNICIPALITY"
+          : "ADDRESS_APPROXIMATE",
+    coordinateAccuracy: exact ? "EXACT" : "APPROXIMATE",
+    coordinatePrecision,
+    address: exact ? "Rua Exata, 10" : null,
+    lat: -22,
+    lng: -49,
+  };
+}
 
 describe("logistics map demo fallback", () => {
   it("mantém pelo menos sessenta clientes distribuídos na região atendida", () => {
@@ -27,6 +70,7 @@ describe("logistics map demo fallback", () => {
 
   it("mantém mapa interativo com clientes, trânsito, trajetos tracejados, popup e controles", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/components/ui/logistics-region-map.tsx"), "utf8");
+    const api = fs.readFileSync(path.resolve(process.cwd(), "src/lib/importer-api.ts"), "utf8");
     const select = fs.readFileSync(path.resolve(process.cwd(), "src/components/ui/select.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve(process.cwd(), "src/styles.css"), "utf8");
     expect(source).toContain("openstreetmap.org");
@@ -45,6 +89,12 @@ describe("logistics map demo fallback", () => {
     expect(source).toContain("Filtrar por status");
     expect(source).toContain("Filtrar por cidade");
     expect(source).toContain("Filtrar por tipo");
+    expect(source).toContain("Filtrar por precisão");
+    expect(source).toContain("Todas as precisões");
+    expect(source).toContain("Somente exatas");
+    expect(source).toContain("Somente aproximadas");
+    expect(source).toContain("DEFAULT_LOGISTICS_MAP_PRECISION_FILTER");
+    expect(source).toContain("filterLogisticsMapCustomersByPrecision(customers, precision)");
     expect(source).toContain("Centralizar matriz");
     expect(source).toContain("Mostrar clientes");
     expect(source).toContain("Última entrega");
@@ -56,6 +106,10 @@ describe("logistics map demo fallback", () => {
     expect(source).toContain('logistics-map-pin--${precisionClass}');
     expect(source).toContain("número exato");
     expect(source).toContain("número interpolado");
+    expect(source).toContain(">I</b>Número interpolado");
+    expect(source).toContain('customer.coordinatePrecision === "MUNICIPALITY" ? "C" : "~"');
+    expect(source).toContain("posição aproximada pelo logradouro");
+    expect(source).toContain("posição aproximada pelo CEP");
     expect(source).toContain("posição aproximada pela cidade");
     expect(source).toContain("customer.address");
     expect(source).toContain("L.marker([customer.lat, customer.lng]");
@@ -67,12 +121,59 @@ describe("logistics map demo fallback", () => {
     expect(styles).toContain(".logistics-map-pin--interpolated");
     expect(styles).toContain(".logistics-map-pin--municipality");
     expect(styles).toContain(".logistics-map-congestion--critical");
+    expect(api).toContain("municipalityLat: number | null");
+    expect(api).toContain("municipalityLng: number | null");
   });
 
-  it("informa que o mapa operacional exibe somente localizações exatas", () => {
+  it("informa que o mapa operacional exibe localizações exatas e aproximadas", () => {
     const route = fs.readFileSync(path.resolve(process.cwd(), "src/routes/mapa.tsx"), "utf8");
-    expect(route).toContain("somente clientes com endereço geocodificado em localização exata");
-    expect(route).toContain("não possuem localização exata e não são exibidos no mapa");
+    expect(route).toContain("localização exata ou aproximada por endereço, CEP ou cidade");
+    expect(route).toContain("não possuem coordenada disponível e não são exibidos no mapa");
+    expect(route).not.toContain("somente clientes com endereço geocodificado em localização exata");
+  });
+
+  it("mostra todas as precisões por padrão e mantém cidades atendidas apenas por aproximação", () => {
+    const customers = [
+      createCustomer("exact", "Marília", "EXACT"),
+      createCustomer("interpolated", "Tupã", "INTERPOLATED"),
+      createCustomer("street", "Garça", "STREET"),
+      createCustomer("postal", "Pompeia", "POSTAL_CODE"),
+      createCustomer("municipality", "Oriente", "MUNICIPALITY"),
+    ];
+
+    expect(DEFAULT_LOGISTICS_MAP_PRECISION_FILTER).toBe("ALL");
+    const visible = filterLogisticsMapCustomersByPrecision(customers, DEFAULT_LOGISTICS_MAP_PRECISION_FILTER);
+    expect(visible).toEqual(customers);
+    expect(listLogisticsMapCities(visible)).toEqual(["Garça", "Marília", "Oriente", "Pompeia", "Tupã"]);
+  });
+
+  it("troca para somente exatas sem classificar aproximações como endereço exato", () => {
+    const customers = [
+      createCustomer("exact", "Marília", "EXACT"),
+      createCustomer("interpolated", "Tupã", "INTERPOLATED"),
+      createCustomer("street", "Garça", "STREET"),
+      createCustomer("postal", "Pompeia", "POSTAL_CODE"),
+      createCustomer("municipality", "Oriente", "MUNICIPALITY"),
+    ];
+
+    expect(filterLogisticsMapCustomersByPrecision(customers, "EXACT").map((customer) => customer.id)).toEqual(["exact"]);
+  });
+
+  it("reúne interpoladas, logradouro, CEP e município no filtro de aproximadas", () => {
+    const customers = [
+      createCustomer("exact", "Marília", "EXACT"),
+      createCustomer("interpolated", "Tupã", "INTERPOLATED"),
+      createCustomer("street", "Garça", "STREET"),
+      createCustomer("postal", "Pompeia", "POSTAL_CODE"),
+      createCustomer("municipality", "Oriente", "MUNICIPALITY"),
+    ];
+
+    expect(filterLogisticsMapCustomersByPrecision(customers, "APPROXIMATE").map((customer) => customer.coordinatePrecision)).toEqual([
+      "INTERPOLATED",
+      "STREET",
+      "POSTAL_CODE",
+      "MUNICIPALITY",
+    ]);
   });
 
   it("cria trajetos para todas as cidades e associa congestionamentos às rotas", () => {

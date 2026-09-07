@@ -30,6 +30,42 @@ public sealed class CustomerAddressCoordinateEnrichmentProcessorTests
         Assert.Equal(-22.2m, coordinate.Latitude);
         Assert.Single(provider.Queries);
         Assert.Contains("\"resolved\":1", job.ResultJson);
+        Assert.Contains("\"exactCoordinates\":1", job.ResultJson);
+        Assert.Contains("\"interpolatedCoordinates\":0", job.ResultJson);
+        Assert.Contains("\"streetCoordinates\":0", job.ResultJson);
+        Assert.Contains("\"postalCodeCoordinates\":0", job.ResultJson);
+        Assert.Contains("\"municipalityCoordinates\":0", job.ResultJson);
+        Assert.Contains("\"skippedResolved\":0", job.ResultJson);
+        Assert.Contains("\"providerRequests\":1", job.ResultJson);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_CountsInterpolatedCoordinateSeparatelyFromExact()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db, isActive: true);
+        var job = new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerAddressCoordinateEnrichment,
+            RelatedEntityId = fixture.ImportId, ParametersJson = "{}", Queue = "default",
+            Trigger = JobExecutionTrigger.Manual, Status = JobExecutionStatus.Processing, CreatedAt = DateTime.UtcNow
+        };
+        db.JobExecutions.Add(job);
+        await db.SaveChangesAsync();
+        var provider = new RecordingProvider(new AddressCoordinateLookup(
+            CustomerAddressCoordinateStatuses.Resolved, -22.21m, -49.94m, "here-1", "Rua A, 15",
+            "Coordenada interpolada.", CustomerAddressCoordinatePrecisions.Interpolated, "HERE_INTERPOLATED"));
+
+        await new CustomerAddressCoordinateEnrichmentProcessor(db, provider, Options.Create(new NominatimOptions()))
+            .ProcessAsync(fixture.ImportId, job.Id, default);
+
+        var persisted = await db.CustomerAddressCoordinates.SingleAsync();
+        Assert.Equal(CustomerAddressCoordinatePrecisions.Interpolated, persisted.Precision);
+        Assert.Equal("HERE_INTERPOLATED", persisted.Source);
+        Assert.Contains("\"resolved\":1", job.ResultJson);
+        Assert.Contains("\"exactCoordinates\":0", job.ResultJson);
+        Assert.Contains("\"interpolatedCoordinates\":1", job.ResultJson);
+        Assert.Contains("1 interpolados", job.ProgressMessage);
     }
 
     [Fact]
@@ -52,45 +88,142 @@ public sealed class CustomerAddressCoordinateEnrichmentProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_ReprocessFailed_UpdatesExistingCoordinateAndProviderSource()
+    public async Task ProcessAsync_ReprocessFailedPersistsApproximateCoordinateOverExistingNotFoundRecord()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db, true);
+        var address = await db.CustomerRegistrationAddresses.SingleAsync();
+        var coordinate = new CustomerAddressCoordinate
+        {
+            Id = Guid.NewGuid(), CustomerRegistrationAddressId = address.Id,
+            NormalizedAddress = CustomerAddressCoordinateEnrichmentProcessor.NormalizeAddress(address), Source = "NOMINATIM",
+            Status = CustomerAddressCoordinateStatuses.NotFound,
+            FailureReason = "Endereço não encontrado.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        };
+        var job = new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerAddressCoordinateEnrichment,
+            RelatedEntityId = fixture.ImportId,
+            ParametersJson = "{\"customerStatus\":\"ACTIVE\",\"reprocessFailed\":true}",
+            Queue = "default", Trigger = JobExecutionTrigger.Manual,
+            Status = JobExecutionStatus.Processing, CreatedAt = DateTime.UtcNow
+        };
+        db.AddRange(coordinate, job);
+        await db.SaveChangesAsync();
+        var provider = new RecordingProvider(new AddressCoordinateLookup(
+            CustomerAddressCoordinateStatuses.Resolved, -22.21m, -49.94m, "10", "Rua A, Marília",
+            "Coordenada aproximada pelo logradouro; número não confirmado.", AddressCoordinateMatchLevels.Street));
+
+        await new CustomerAddressCoordinateEnrichmentProcessor(db, provider, Options.Create(new NominatimOptions()))
+            .ProcessAsync(fixture.ImportId, job.Id, default);
+
+        db.ChangeTracker.Clear();
+        var persisted = await db.CustomerAddressCoordinates.SingleAsync();
+        Assert.Equal(CustomerAddressCoordinateStatuses.Resolved, persisted.Status);
+        Assert.Equal("TEST_STREET", persisted.Source);
+        Assert.Equal(-22.21m, persisted.Latitude);
+        Assert.Contains("aproximada", persisted.FailureReason);
+        Assert.Contains("\"providerRequests\":1", job.ResultJson);
+        Assert.Contains("\"skippedResolved\":0", job.ResultJson);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SeparatesSkippedResolvedFromProviderRequests()
     {
         await using var db = CreateDb();
         var fixture = await SeedAsync(db, true);
         var address = await db.CustomerRegistrationAddresses.SingleAsync();
         db.CustomerAddressCoordinates.Add(new CustomerAddressCoordinate
         {
-            Id = Guid.NewGuid(),
-            CustomerRegistrationAddressId = address.Id,
+            Id = Guid.NewGuid(), CustomerRegistrationAddressId = address.Id,
             NormalizedAddress = CustomerAddressCoordinateEnrichmentProcessor.NormalizeAddress(address),
-            Source = "NOMINATIM",
-            Status = CustomerAddressCoordinateStatuses.NotFound,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            Source = "BRASIL_API_POSTAL_CODE", Status = CustomerAddressCoordinateStatuses.Resolved,
+            Latitude = -22.2m, Longitude = -49.9m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
         });
         var job = new JobExecution
         {
-            Id = Guid.NewGuid(),
-            JobType = OperationalJobCodes.CustomerAddressCoordinateEnrichment,
-            RelatedEntityId = fixture.ImportId,
-            ParametersJson = "{\"customerStatus\":\"ACTIVE\",\"reprocessFailed\":true}",
-            Queue = "default",
-            Trigger = JobExecutionTrigger.Manual,
-            Status = JobExecutionStatus.Processing,
-            CreatedAt = DateTime.UtcNow
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerAddressCoordinateEnrichment,
+            RelatedEntityId = fixture.ImportId, ParametersJson = "{}", Queue = "default",
+            Trigger = JobExecutionTrigger.Manual, Status = JobExecutionStatus.Processing, CreatedAt = DateTime.UtcNow
         };
         db.JobExecutions.Add(job);
         await db.SaveChangesAsync();
+        var provider = new RecordingProvider();
 
-        await new CustomerAddressCoordinateEnrichmentProcessor(
-            db, new RecordingProvider(), Options.Create(new NominatimOptions { PersistenceBatchSize = 1 }))
+        await new CustomerAddressCoordinateEnrichmentProcessor(db, provider, Options.Create(new NominatimOptions()))
             .ProcessAsync(fixture.ImportId, job.Id, default);
 
-        var coordinate = await db.CustomerAddressCoordinates.SingleAsync();
-        Assert.Equal(CustomerAddressCoordinateStatuses.Resolved, coordinate.Status);
-        Assert.Equal("TEST", coordinate.Source);
-        Assert.Equal(-22.2m, coordinate.Latitude);
+        Assert.Empty(provider.Queries);
+        Assert.Contains("\"processed\":1", job.ResultJson);
+        Assert.Contains("\"skippedResolved\":1", job.ResultJson);
+        Assert.Contains("\"providerRequests\":0", job.ResultJson);
+        Assert.Contains("\"resolved\":0", job.ResultJson);
     }
 
+    [Fact]
+    public async Task ProcessAsync_RefreshApproximatePromotesPostalCodeCoordinateUsingStreetAndNumber()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db, true);
+        var address = await db.CustomerRegistrationAddresses.SingleAsync();
+        db.CustomerAddressCoordinates.Add(new CustomerAddressCoordinate { Id = Guid.NewGuid(), CustomerRegistrationAddressId = address.Id,
+            NormalizedAddress = CustomerAddressCoordinateEnrichmentProcessor.NormalizeAddress(address), Source = "BRASIL_API_POSTAL_CODE",
+            Status = CustomerAddressCoordinateStatuses.Resolved, Latitude = -22.3m, Longitude = -50.3m,
+            FailureReason = "Coordenada aproximada pelo CEP.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        var job = new JobExecution { Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerAddressCoordinateEnrichment,
+            RelatedEntityId = fixture.ImportId, ParametersJson = "{\"customerStatus\":\"ACTIVE\",\"refreshApproximate\":true}",
+            Queue = "default", Trigger = JobExecutionTrigger.Manual, Status = JobExecutionStatus.Processing, CreatedAt = DateTime.UtcNow };
+        db.JobExecutions.Add(job); await db.SaveChangesAsync();
+        var provider = new RecordingProvider(new AddressCoordinateLookup(CustomerAddressCoordinateStatuses.Resolved,
+            -22.21m, -49.94m, "exact", "Rua A, 10", null, AddressCoordinateMatchLevels.Exact, "GEOAPIFY_EXACT"));
+
+        await new CustomerAddressCoordinateEnrichmentProcessor(db, provider, Options.Create(new NominatimOptions()))
+            .ProcessAsync(fixture.ImportId, job.Id, default);
+
+        var persisted = await db.CustomerAddressCoordinates.SingleAsync();
+        Assert.Equal("GEOAPIFY_EXACT", persisted.Source);
+        Assert.Equal(-22.21m, persisted.Latitude);
+        Assert.Single(provider.Queries);
+        Assert.Contains("\"refreshedApproximate\":1", job.ResultJson);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RefreshApproximateRetainsPostalCodeCoordinateWhenProviderDoesNotResolveStreet()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db, true);
+        var address = await db.CustomerRegistrationAddresses.SingleAsync();
+        db.CustomerAddressCoordinates.Add(new CustomerAddressCoordinate { Id = Guid.NewGuid(), CustomerRegistrationAddressId = address.Id,
+            NormalizedAddress = CustomerAddressCoordinateEnrichmentProcessor.NormalizeAddress(address), Source = "BRASIL_API_POSTAL_CODE",
+            Status = CustomerAddressCoordinateStatuses.Resolved, Latitude = -22.3m, Longitude = -50.3m,
+            FailureReason = "Coordenada aproximada pelo CEP.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        var job = new JobExecution { Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerAddressCoordinateEnrichment,
+            RelatedEntityId = fixture.ImportId, ParametersJson = "{\"refreshApproximate\":true}", Queue = "default",
+            Trigger = JobExecutionTrigger.Manual, Status = JobExecutionStatus.Processing, CreatedAt = DateTime.UtcNow };
+        db.JobExecutions.Add(job); await db.SaveChangesAsync();
+        var provider = new RecordingProvider(new AddressCoordinateLookup(CustomerAddressCoordinateStatuses.NotFound,
+            null, null, null, null, "Não encontrado."));
+
+        await new CustomerAddressCoordinateEnrichmentProcessor(db, provider, Options.Create(new NominatimOptions()))
+            .ProcessAsync(fixture.ImportId, job.Id, default);
+
+        var persisted = await db.CustomerAddressCoordinates.SingleAsync();
+        Assert.Equal(CustomerAddressCoordinateStatuses.Resolved, persisted.Status);
+        Assert.Equal("BRASIL_API_POSTAL_CODE", persisted.Source);
+        Assert.Equal(-22.3m, persisted.Latitude);
+        Assert.Contains("\"retainedApproximate\":1", job.ResultJson);
+    }
+
+    [Theory]
+    [InlineData("NOMINATIM", AddressCoordinateMatchLevels.Exact)]
+    [InlineData("HERE_INTERPOLATED", CustomerAddressCoordinatePrecisions.Interpolated)]
+    [InlineData("NOMINATIM_STREET", AddressCoordinateMatchLevels.Street)]
+    [InlineData("GEOAPIFY_STREET", AddressCoordinateMatchLevels.Street)]
+    [InlineData("BRASIL_API_POSTAL_CODE", AddressCoordinateMatchLevels.PostalCode)]
+    [InlineData("NOMINATIM_MUNICIPALITY", AddressCoordinateMatchLevels.Municipality)]
+    [InlineData("GEOAPIFY_MUNICIPALITY", AddressCoordinateMatchLevels.Municipality)]
+    public void MatchLevelFromSource_ClassifiesPersistedPrecision(string source, string expected) =>
+        Assert.Equal(expected, CustomerAddressCoordinateEnrichmentProcessor.MatchLevelFromSource(source));
     [Theory]
     [InlineData("ACTIVE", false)]
     [InlineData("INACTIVE", true)]
@@ -130,7 +263,7 @@ public sealed class CustomerAddressCoordinateEnrichmentProcessorTests
             .ProcessAsync(first.ImportId, job.Id, default);
 
         Assert.Single(provider.Queries);
-        Assert.Contains("\"externalRequests\":1", job.ResultJson);
+        Assert.Contains("\"providerRequests\":1", job.ResultJson);
     }
 
     [Theory]
@@ -173,11 +306,11 @@ public sealed class CustomerAddressCoordinateEnrichmentProcessorTests
         await db.SaveChangesAsync(); return customerId;
     }
 
-    private sealed class RecordingProvider : ICustomerAddressCoordinateProvider
+    private sealed class RecordingProvider(AddressCoordinateLookup? lookup = null) : ICustomerAddressCoordinateProvider
     {
         public string SourceName => "TEST";
         public List<AddressCoordinateQuery> Queries { get; } = [];
         public Task<AddressCoordinateLookup> FindAsync(AddressCoordinateQuery query, CancellationToken cancellationToken)
-        { Queries.Add(query); return Task.FromResult(new AddressCoordinateLookup("RESOLVED", -22.2m, -49.9m, "1", "Rua A", null)); }
+        { Queries.Add(query); return Task.FromResult(lookup ?? new AddressCoordinateLookup("RESOLVED", -22.2m, -49.9m, "1", "Rua A", null)); }
     }
 }

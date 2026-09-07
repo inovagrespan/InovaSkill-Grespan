@@ -10,6 +10,7 @@ public sealed class GenericJobCatalogTests
     [InlineData(OperationalJobCodes.MunicipalityCoordinateEnrichment, BackgroundJobQueues.Default, true)]
     [InlineData(OperationalJobCodes.CustomerRegistrationAddressEnrichment, BackgroundJobQueues.Default, true)]
     [InlineData(OperationalJobCodes.CustomerAddressCoordinateEnrichment, BackgroundJobQueues.Default, true)]
+    [InlineData(OperationalJobCodes.DailyRouteOptimization, BackgroundJobQueues.Default, true)]
     [InlineData(OperationalJobCodes.WhatsAppMessageProcessing, BackgroundJobQueues.Default, false)]
     public void Catalog_ResolvesEveryJobByCaseInsensitiveKeyWithValidVersionedJson(
         string jobType, string expectedQueue, bool manualRunAllowed)
@@ -26,7 +27,7 @@ public sealed class GenericJobCatalogTests
     [Fact]
     public void Catalog_HasUniqueDictionaryKeyForEveryDefinition()
     {
-        Assert.Equal(5, OperationalJobCatalog.All.Count);
-        Assert.Equal(5, OperationalJobCatalog.All.Select(item => item.JobType).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(6, OperationalJobCatalog.All.Count);
+        Assert.Equal(6, OperationalJobCatalog.All.Select(item => item.JobType).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 }

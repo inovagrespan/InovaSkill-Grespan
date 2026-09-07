@@ -56,6 +56,13 @@ describe("cadastro de clientes", () => {
     expect(detail).toContain("registrationAddress.postalCode");
   });
 
+  it("distingue endereço completo, sem número e limitado ao CEP", () => {
+    expect(detail).toContain("Endereço completo");
+    expect(detail).toContain("Número não confirmado");
+    expect(detail).toContain("Somente CEP e município confirmados");
+    expect(detail).toContain("Logradouro não disponível para este CEP");
+  });
+
   it("aceita resumo legado sem listas ao abrir os detalhes do cliente", () => {
     const summaryWithoutLists = {
       customer: {},

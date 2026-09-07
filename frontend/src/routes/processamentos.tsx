@@ -47,6 +47,11 @@ import {
   type JobSchedule,
 } from "@/lib/importer-api";
 import { canCurrentUserAccessProcessingArea } from "@/lib/auth";
+import {
+  geocodingResolutionTotal,
+  parseGeocodingJobResult,
+} from "@/lib/geocoding-job-result";
+import { JOB_STATUS_POLL_INTERVAL_MS } from "@/lib/job-runtime";
 
 export const Route = createFileRoute("/processamentos")({
   beforeLoad: () => {
@@ -56,8 +61,6 @@ export const Route = createFileRoute("/processamentos")({
   },
   component: ProcessamentosPage,
 });
-
-const PROCESSING_REFRESH_INTERVAL_MS = 5_000;
 
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
@@ -97,6 +100,28 @@ function formatDuration(seconds: number | null): string {
 
 function formatInteger(value: number): string {
   return new Intl.NumberFormat("pt-BR").format(value);
+}
+
+function GeocodingResultSummary({ resultJson }: { resultJson?: string | null }) {
+  const result = parseGeocodingJobResult(resultJson);
+  if (!result) return null;
+  const precisionTotal = geocodingResolutionTotal(result);
+  return (
+    <div className="space-y-3 rounded-lg border border-border p-3">
+      <p className="text-sm font-medium">Cobertura da geocodificação nesta execução</p>
+      <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+        <div><p className="text-xs text-muted-foreground">Consultas ao provedor</p><p className="font-medium">{formatInteger(result.providerRequests)}</p></div>
+        <div><p className="text-xs text-muted-foreground">Ignorados</p><p className="font-medium">{formatInteger(result.skippedResolved)}</p></div>
+        <div><p className="text-xs text-muted-foreground">Resolvidos</p><p className="font-medium">{formatInteger(result.resolved)}</p></div>
+        <div><p className="text-xs text-muted-foreground">Não resolvidos</p><p className="font-medium">{formatInteger(result.notFound + result.failed + result.pending)}</p></div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Precisão dos {formatInteger(precisionTotal)} resolvidos: {formatInteger(result.exactCoordinates)} exatos;{" "}
+        {formatInteger(result.streetCoordinates)} por rua; {formatInteger(result.postalCodeCoordinates)} por CEP;{" "}
+        {formatInteger(result.municipalityCoordinates)} por município. Rua, CEP e município são coordenadas aproximadas.
+      </p>
+    </div>
+  );
 }
 
 function ProcessamentosPage() {
@@ -166,7 +191,7 @@ function ProcessamentosPage() {
   useEffect(() => {
     const refreshTimer = window.setInterval(() => {
       void loadData(pageRef.current);
-    }, PROCESSING_REFRESH_INTERVAL_MS);
+    }, JOB_STATUS_POLL_INTERVAL_MS);
     return () => window.clearInterval(refreshTimer);
   }, [statusFilter]);
 
@@ -308,6 +333,9 @@ function ProcessamentosPage() {
   }
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const manuallyRunnableDefinitions = definitions.filter(
+    (definition) => definition.manualRunAllowed,
+  );
 
   const summaryCards = summary
     ? [
@@ -491,13 +519,13 @@ function ProcessamentosPage() {
               </p>
             </CardHeader>
             <CardContent>
-              {definitions.length === 0 ? (
+              {manuallyRunnableDefinitions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   Nenhum serviço disponível para execução.
                 </p>
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
-                  {definitions.map((definition) => (
+                  {manuallyRunnableDefinitions.map((definition) => (
                     <article
                       key={definition.jobType}
                       className="rounded-lg border border-border p-4"
@@ -520,7 +548,6 @@ function ProcessamentosPage() {
                         <Button
                           size="sm"
                           disabled={
-                            !definition.manualRunAllowed ||
                             runningDefinitionType === definition.jobType
                           }
                           onClick={() => openRunDialog(definition)}
@@ -773,6 +800,14 @@ function ProcessamentosPage() {
                     {selectedJob.importId}
                   </p>
                 </div>
+                {selectedJob.parentJobExecutionId && (
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">Execução relacionada</p>
+                    <p className="break-all font-mono text-xs font-medium">
+                      {selectedJob.parentJobExecutionId}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {selectedJob.errorMessage && (
@@ -807,12 +842,16 @@ function ProcessamentosPage() {
                 </div>
               )}
               {selectedJob.resultJson && (
-                <div className="space-y-2 rounded-lg border border-border p-3">
-                  <p className="text-sm font-medium">Resultado</p>
-                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-xs">
-                    {formatJson(selectedJob.resultJson)}
-                  </pre>
-                </div>
+                <>
+                  {selectedJob.jobType === "CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT" &&
+                    <GeocodingResultSummary resultJson={selectedJob.resultJson} />}
+                  <div className="space-y-2 rounded-lg border border-border p-3">
+                    <p className="text-sm font-medium">Resultado</p>
+                    <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-xs">
+                      {formatJson(selectedJob.resultJson)}
+                    </pre>
+                  </div>
+                </>
               )}
 
               <div className="flex gap-2">

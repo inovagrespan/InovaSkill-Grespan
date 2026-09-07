@@ -13,11 +13,47 @@ export type LogisticsMapCustomer = {
   situation: "Atraso" | "Devolução" | "Ruptura" | "Ocorrência" | "Entrega normal";
   route: string;
   priority: "Baixa" | "Média" | "Alta";
-  locationPrecision?: "ADDRESS_EXACT" | "ADDRESS_INTERPOLATED" | "MUNICIPALITY";
+  locationPrecision?: "ADDRESS_EXACT" | "ADDRESS_INTERPOLATED" | "ADDRESS_APPROXIMATE" | "MUNICIPALITY";
+  coordinateAccuracy?: "EXACT" | "APPROXIMATE";
+  coordinatePrecision?: "EXACT" | "INTERPOLATED" | "STREET" | "POSTAL_CODE" | "MUNICIPALITY";
   address?: string | null;
   lat: number;
   lng: number;
 };
+
+export type LogisticsMapPrecisionFilter = "ALL" | "EXACT" | "APPROXIMATE";
+
+export const DEFAULT_LOGISTICS_MAP_PRECISION_FILTER: LogisticsMapPrecisionFilter = "ALL";
+
+const APPROXIMATE_COORDINATE_PRECISIONS = new Set<NonNullable<LogisticsMapCustomer["coordinatePrecision"]>>([
+  "INTERPOLATED",
+  "STREET",
+  "POSTAL_CODE",
+  "MUNICIPALITY",
+]);
+
+function getCustomerCoordinateAccuracy(customer: LogisticsMapCustomer): "EXACT" | "APPROXIMATE" | null {
+  if (customer.coordinatePrecision === "EXACT") return "EXACT";
+  if (customer.coordinatePrecision && APPROXIMATE_COORDINATE_PRECISIONS.has(customer.coordinatePrecision)) {
+    return "APPROXIMATE";
+  }
+  if (customer.coordinateAccuracy) return customer.coordinateAccuracy;
+  if (customer.locationPrecision === "ADDRESS_EXACT") return "EXACT";
+  if (customer.locationPrecision) return "APPROXIMATE";
+  return null;
+}
+
+export function filterLogisticsMapCustomersByPrecision(
+  customers: LogisticsMapCustomer[],
+  precision: LogisticsMapPrecisionFilter,
+): LogisticsMapCustomer[] {
+  if (precision === DEFAULT_LOGISTICS_MAP_PRECISION_FILTER) return customers;
+  return customers.filter((customer) => getCustomerCoordinateAccuracy(customer) === precision);
+}
+
+export function listLogisticsMapCities(customers: LogisticsMapCustomer[]): string[] {
+  return [...new Set(customers.map((customer) => customer.city))].sort((left, right) => left.localeCompare(right, "pt-BR"));
+}
 
 export type LogisticsTrafficPeriodDays = 1 | 7 | 30 | 90;
 export type LogisticsTrafficSeverity = "Moderado" | "Intenso" | "Crítico";

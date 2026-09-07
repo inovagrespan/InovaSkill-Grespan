@@ -34,6 +34,23 @@ public static class ApiAccessPolicy
         AppUserRoles.AdminSystem
     ];
 
+    private static readonly string[] RouteOptimizationMutationRoles =
+    [
+        AppUserRoles.Vendas,
+        AppUserRoles.Logistica,
+        AppUserRoles.Admin,
+        AppUserRoles.AdminSystem
+    ];
+
+    private static readonly string[] RouteOptimizationRemediationRoles =
+    [
+        AppUserRoles.Diretor,
+        AppUserRoles.Vendas,
+        AppUserRoles.Logistica,
+        AppUserRoles.Admin,
+        AppUserRoles.AdminSystem
+    ];
+
     public static bool CanAccess(string? role, string path, string method)
     {
         if (path.Equals("/api/login", StringComparison.OrdinalIgnoreCase) ||
@@ -52,6 +69,11 @@ public static class ApiAccessPolicy
         var isMutation = !HttpMethods.IsGet(method) && !HttpMethods.IsHead(method);
 
         if (path.StartsWith("/api/admin/whatsapp", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedRole == AppUserRoles.AdminSystem;
+        }
+
+        if (path.StartsWith("/api/admin/users", StringComparison.OrdinalIgnoreCase))
         {
             return normalizedRole == AppUserRoles.AdminSystem;
         }
@@ -83,6 +105,15 @@ public static class ApiAccessPolicy
         if (path.StartsWith("/api/routes", StringComparison.OrdinalIgnoreCase))
         {
             return AllApplicationRoles.Contains(normalizedRole);
+        }
+
+        if (path.StartsWith("/api/route-optimizations", StringComparison.OrdinalIgnoreCase))
+        {
+            if (isMutation && path.Contains("/remediations", StringComparison.OrdinalIgnoreCase))
+                return RouteOptimizationRemediationRoles.Contains(normalizedRole);
+            return isMutation
+                ? RouteOptimizationMutationRoles.Contains(normalizedRole)
+                : AllApplicationRoles.Contains(normalizedRole);
         }
 
         if (path.StartsWith("/api/customers", StringComparison.OrdinalIgnoreCase) && isMutation)
