@@ -10,7 +10,7 @@ describe("route simulation access", () => {
 
   it("não exibe a ação individual de simulação na tela principal de rotas", () => {
     expect(source).not.toContain("RouteVehicleSimulationDialog");
-    expect(source).toContain("fetchVehicleTypes()");
+    expect(source).not.toContain("fetchVehicleTypes()");
     expect(source).not.toContain("Simular");
     expect(source).not.toContain("openSimulation(r)");
   });
@@ -22,6 +22,6 @@ describe("route simulation access", () => {
     );
     expect(source).toContain("canRoleUseRouteSimulation(currentRole)");
     expect(accessControl).toContain('["vendas", "logistica", "admin", "admin_system"]');
-    expect(source).toContain("{canSimulate && (");
+    expect(source).toContain('optimization.decision.status === "PENDING" && canSimulate');
   });
 });

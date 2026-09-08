@@ -14,7 +14,7 @@ rota atual quando não houver uma solução válida e comprovadamente melhor.
 > ferramentas e fases descritas nele não devem ser consideradas implementadas
 > sem confirmação neste documento e no código atual.
 
-**Última atualização:** 15 de agosto de 2026.
+**Última atualização:** 3 de setembro de 2026.
 
 ## Regras obrigatórias
 
@@ -198,10 +198,23 @@ e consultará a execução; não executará o solver durante uma requisição HT
 - cada cidade aparece exatamente uma vez na solução;
 - uma cidade não pode ser dividida entre veículos;
 - cidades e veículos não podem atravessar dias;
-- nenhum veículo pode superar sua capacidade;
+- não há faixa mínima ou alvo de ocupação; nenhuma rota pode ultrapassar 100%
+  da capacidade física nominal do veículo;
+- quando a frota própria não comportar todos os blocos dentro dessa margem, o
+  solver poderá criar veículos alugados virtuais usando exclusivamente tipos e
+  capacidades cadastrados no catálogo;
 - todos os veículos saem e retornam ao mesmo depósito;
 - a soma das cargas e o conjunto de cidades devem permanecer idênticos;
 - timeout, inviabilidade ou dados insuficientes nunca geram alteração parcial.
+- duração e horário de retorno são apenas informativos e não limitam a solução;
+- o objetivo de percurso considera o consumo estimado pela distância e pelo
+  rendimento médio do tipo de veículo;
+- apoios alugados são dimensionados pelo peso remanejado e informam diária de
+  Accelo/VUC (R$ 400–600), Toco (R$ 650–900) ou Truck (R$ 900–1.300).
+- o custo compara desvio de frota própria com diária e combustível do aluguel,
+  usando Diesel S10 a R$ 6,90/L;
+- a autonomia preserva 10% de reserva e usa tanques padrão de 200 L no Accelo,
+  300 L no Toco e 300 L no Truck.
 
 ### Saída esperada
 
@@ -243,6 +256,12 @@ Antes de codificar o solver, devem ser fixadas as métricas que comprovam a
 melhoria, como distância rodoviária total, duração estimada, quantidade de
 veículos usados e equilíbrio de ocupação. A ordem de prioridade e os critérios
 de desempate também deverão ser versionados e testados.
+
+Na versão `daily-v2-operational-60-95-rental`, a prioridade é lexicográfica:
+evitar rotas ociosas e críticas, minimizar veículos alugados, minimizar duração rodoviária total
+e, como desempate, distância total. Como ainda não há tarifas de locação
+cadastradas, a proposta informa quantidade e tipo dos alugados, sem afirmar
+economia financeira. A locação é somente uma simulação e não altera a frota.
 
 ## Fases seguintes
 
@@ -327,6 +346,8 @@ status de paradas e funcionamento offline.
 | 15/08/2026 | Cadastrar o depósito como origem e retorno únicos e preparar o OSRM com o mapa completo do Brasil. |
 | 15/08/2026 | Manter a matriz OSRM somente em memória nesta fundação e definir sua auditoria junto ao futuro contrato de otimização. |
 | 15/08/2026 | Integrar o pacote oficial Google OR-Tools para .NET no Worker como próxima etapa do VRP. |
+| 28/08/2026 | Limitar propostas a 95% de ocupação e simular veículos alugados quando a frota própria for insuficiente. |
+| 28/08/2026 | Exigir que toda rota utilizada opere entre 60% e 95%; veículos fora da faixa permanecem sem uso ou tornam o cenário inviável. |
 
 ## Como manter este documento
 

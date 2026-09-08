@@ -32,6 +32,11 @@ public static class ServiceCollectionExtensions
             options.ApiKey = configuration["GOOGLE_MAPS_API_KEY"] ?? options.ApiKey;
         });
         services.Configure<OsrmOptions>(configuration.GetSection(OsrmOptions.SectionName));
+        services.Configure<OpenRouteServiceOptions>(options =>
+        {
+            configuration.GetSection(OpenRouteServiceOptions.SectionName).Bind(options);
+            options.ApiKey = configuration["OPENROUTESERVICE_API_KEY"] ?? options.ApiKey;
+        });
         var brasilApiOptions = configuration.GetSection(BrasilApiOptions.SectionName).Get<BrasilApiOptions>()
             ?? new BrasilApiOptions();
         services.AddHttpClient<ICustomerRegistrationAddressProvider, BrasilApiCustomerRegistrationAddressProvider>(client =>
@@ -62,11 +67,38 @@ public static class ServiceCollectionExtensions
                 ? provider.GetRequiredService<NominatimAddressCoordinateProvider>()
                 : provider.GetRequiredService<GoogleAddressCoordinateProvider>());
         var osrmOptions = configuration.GetSection(OsrmOptions.SectionName).Get<OsrmOptions>() ?? new OsrmOptions();
-        services.AddHttpClient<IOsrmTableClient, OsrmTableClient>(client =>
+        services.AddHttpClient<OsrmTableClient>(client =>
         {
             client.BaseAddress = new Uri(osrmOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, osrmOptions.TimeoutSeconds));
         });
+        services.AddHttpClient<OsrmRouteClient>(client =>
+        {
+            client.BaseAddress = new Uri(osrmOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, osrmOptions.TimeoutSeconds));
+        });
+        var openRouteServiceOptions = configuration.GetSection(OpenRouteServiceOptions.SectionName)
+            .Get<OpenRouteServiceOptions>() ?? new OpenRouteServiceOptions();
+        openRouteServiceOptions.ApiKey = configuration["OPENROUTESERVICE_API_KEY"] ?? openRouteServiceOptions.ApiKey;
+        services.AddHttpClient<OpenRouteServiceRouteGeometryClient>(client =>
+        {
+            client.BaseAddress = new Uri(openRouteServiceOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, openRouteServiceOptions.TimeoutSeconds));
+        });
+        services.AddHttpClient<OpenRouteServiceTableClient>(client =>
+        {
+            client.BaseAddress = new Uri(openRouteServiceOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, openRouteServiceOptions.TimeoutSeconds));
+        });
+        services.AddScoped<IOsrmTableClient>(provider =>
+            string.IsNullOrWhiteSpace(openRouteServiceOptions.ApiKey)
+                ? provider.GetRequiredService<OsrmTableClient>()
+                : provider.GetRequiredService<FallbackOsrmTableClient>());
+        services.AddScoped<FallbackOsrmTableClient>();
+        services.AddScoped<IRouteGeometryClient>(provider =>
+            string.IsNullOrWhiteSpace(openRouteServiceOptions.ApiKey)
+                ? provider.GetRequiredService<OsrmRouteClient>()
+                : provider.GetRequiredService<OpenRouteServiceRouteGeometryClient>());
         services.AddMemoryCache();
         services.AddSingleton<ICacheStore, MemoryCacheStore>();
         services.AddSingleton<IApplicationCache, ResilientApplicationCache>();
@@ -99,6 +131,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBusinessChatQueryService, BusinessChatQueryService>();
         services.AddScoped<IRouteCustomerAssignmentSynchronizer, RouteCustomerAssignmentSynchronizer>();
         services.AddScoped<IOsrmDailyMatrixService, OsrmDailyMatrixService>();
+        services.AddScoped<IDailyRouteOptimizer, OrToolsDailyRouteOptimizer>();
         services.AddScoped<IDataSourceProcessor, RoutesByCityProcessor>();
         services.AddScoped<IDataSourceProcessor, CustomersProcessor>();
         services.AddScoped<IDataSourceProcessor, CustomerRouteAssignmentsProcessor>();
@@ -110,6 +143,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOperationalJobProcessor, MunicipalityCoordinateEnrichmentProcessor>();
         services.AddScoped<IOperationalJobProcessor, CustomerRegistrationAddressEnrichmentProcessor>();
         services.AddScoped<IOperationalJobProcessor, CustomerAddressCoordinateEnrichmentProcessor>();
+        services.AddScoped<IOperationalJobProcessor, DailyRouteOptimizationProcessor>();
         services.AddScoped<IWhatsAppGateway, LocalBaileysWhatsAppGateway>();
         services.AddScoped<IAudioTranscriptionService, OpenAiAudioTranscriptionService>();
         services.AddScoped<IWhatsAppMessageQueue, WhatsAppMessageQueue>();
@@ -118,6 +152,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AiConsumptionService>();
         services.AddScoped<IChatHistoryStore, ChatHistoryStore>();
         services.AddScoped<AssistantScopeClassifier>();
+        services.AddScoped<DieselPriceResearchService>();
         services.AddScoped<KnowledgeMemoryService>();
         services.AddScoped<IChatTool, SearchRoutesChatTool>();
         services.AddScoped<IChatTool, GetRouteDetailsChatTool>();

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Google.OrTools" Version="9.12.4544" />
     <ProjectReference Include="..\InovaSkill.Importer.Application\InovaSkill.Importer.Application.csproj" />
     <ProjectReference Include="..\InovaSkill.Importer.Domain\InovaSkill.Importer.Domain.csproj" />
   </ItemGroup>

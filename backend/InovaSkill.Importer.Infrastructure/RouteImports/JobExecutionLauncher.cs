@@ -42,6 +42,7 @@ public sealed class JobExecutionLauncher(
                 ReadOptionalGuid(document.RootElement, "importId") ??
                 await ResolveCurrentCustomerImportIdAsync(cancellationToken),
             OperationalJobCodes.ProcessImport => ReadRequiredGuid(document.RootElement, "importId"),
+            OperationalJobCodes.DailyRouteOptimization => ReadRequiredGuid(document.RootElement, "importId"),
             OperationalJobCodes.WhatsAppMessageProcessing => ReadRequiredGuid(document.RootElement, "receiptId"),
             _ => throw new InvalidOperationException($"Job sem lançador: {definition.JobType}.")
         };
@@ -95,6 +96,7 @@ public sealed class JobExecutionLauncher(
         var exists = jobType switch
         {
             OperationalJobCodes.ProcessImport or OperationalJobCodes.MunicipalityCoordinateEnrichment or
+                OperationalJobCodes.DailyRouteOptimization or
                 OperationalJobCodes.CustomerRegistrationAddressEnrichment or
                 OperationalJobCodes.CustomerAddressCoordinateEnrichment =>
                 await db.RouteImports.AnyAsync(item => item.Id == id, cancellationToken),

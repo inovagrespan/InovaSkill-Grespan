@@ -7,9 +7,10 @@ para obter matrizes direcionais de duração e distância entre o depósito e as
 coordenadas municipais das cidades de um único dia. O serviço não otimiza nem
 altera rotas.
 
-O conjunto inicial usa o extrato completo do Brasil, perfil veicular `driving`
+O conjunto inicial usa o extrato da região Sudeste do Brasil, perfil veicular `driving`
 e algoritmo MLD. Os artefatos gerados ficam fora do Git em
-`infra/osrm-brazil`.
+`infra/osrm-sudeste`. O extrato abrange Espírito Santo, Minas Gerais, Rio de
+Janeiro e São Paulo; rotas fora dessa cobertura não são calculadas.
 
 ## Preparação em infraestrutura
 
@@ -24,7 +25,7 @@ scripts/run-osrm-brazil.sh
 Os scripts fixam por padrão a imagem
 `ghcr.io/project-osrm/osrm-backend:v5.27.1`, registram URL, checksum, imagem,
 perfil, algoritmo e horário de preparação. `OSRM_IMAGE`, `OSRM_DATA_DIR`,
-`OSRM_PBF_URL`, `OSRM_PORT` e `OSRM_MAX_TABLE_SIZE` permitem configuração
+`OSRM_DATASET_NAME`, `OSRM_PBF_URL`, `OSRM_PORT` e `OSRM_MAX_TABLE_SIZE` permitem configuração
 explícita do ambiente.
 
 O grafo novo deve ser preparado e validado em outro diretório antes da troca do
@@ -38,6 +39,11 @@ API, Worker e frontend são executados localmente. O OSRM não é iniciado pelo
 `docker compose` principal. Quando a integração real for necessária,
 `Osrm:BaseUrl` deve apontar para uma instância previamente preparada e acessível.
 Testes automatizados usam respostas HTTP controladas e não dependem do serviço.
+
+Para evitar o dataset local apenas no desenho do detalhe da rota, configure
+`OPENROUTESERVICE_API_KEY`. A API seleciona então o endpoint gratuito de
+direções do openrouteservice como implementação de `IRouteGeometryClient`; a
+matriz OSRM permanece separada e continua dependendo de uma instância OSRM.
 
 Configuração padrão:
 
@@ -64,4 +70,9 @@ localizou o depósito; HTTP 503 indica depósito ausente, serviço indisponível
 ponto fora do mapa.
 
 Falha, timeout, matriz incompleta, valor nulo ou ponto inalcançável invalidam a
-matriz inteira. Não existe fallback para distância em linha reta.
+matriz inteira. Não existe fallback para distância em linha reta. Quando a
+OpenRouteService está configurada e falha, a matriz completa é recalculada pelo
+OSRM configurado em `Osrm:BaseUrl`. No desenvolvimento local, o padrão usa o
+serviço público `router.project-osrm.org`, pois somente o PostgreSQL sobe no
+Docker; uma implantação controlada pode sobrescrever a URL por configuração e
+usar uma instância própria.

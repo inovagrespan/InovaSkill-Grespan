@@ -4,6 +4,8 @@ import { buildGatewayUrl } from "@/lib/api-url";
 export type AiConsumptionReport = {
   from: string; to: string;
   total: { inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; calls: number; responses: number };
+  performance: { totalQueries: number; completedQueries: number; failedQueries: number; averageMilliseconds: number | null; medianMilliseconds: number | null; p95Milliseconds: number | null; minimumMilliseconds: number | null; maximumMilliseconds: number | null; reductionAgainstTenMinutesPercent: number | null; reductionAgainstTwoHoursPercent: number | null };
+  querySample: Array<{ id: string; userId: number; userName: string; channel: string; question: string; answer: string | null; questionReceivedAt: string; responseCompletedAt: string | null; durationMilliseconds: number | null; status: string }>;
   detailPage: number; detailPageSize: number; detailTotal: number;
   details: Array<{ id: string; responseExecutionId: string; userId: number; userName: string; model: string; purpose: string; status: string; inputTokens: number; outputTokens: number; totalTokens: number; estimatedCostUsd: number; createdAt: string }>;
 };

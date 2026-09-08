@@ -60,7 +60,8 @@ public sealed class BusinessAssistantService(
                 scopeMessages,
                 cancellationToken);
         logger.LogInformation("Pergunta do assistente classificada como {ScopeDecision}.", scopeDecision);
-        await historyStore.AppendAsync(session.SessionId, "user", question, cancellationToken);
+        var questionMessageId = await historyStore.AppendAsync(session.SessionId, "user", question, cancellationToken);
+        if (consumptionService is not null) await consumptionService.SetQuestionMessageAsync(questionMessageId, cancellationToken);
 
         if (scopeDecision == AssistantScopeDecision.OutOfScope)
         {
@@ -230,7 +231,8 @@ public sealed class BusinessAssistantService(
         IReadOnlyList<AssistantSource> sources,
         CancellationToken cancellationToken)
     {
-        await historyStore.AppendAsync(sessionId, "assistant", answer, cancellationToken);
+        var responseMessageId = await historyStore.AppendAsync(sessionId, "assistant", answer, cancellationToken);
+        if (consumptionService is not null) await consumptionService.SetResponseMessageAsync(responseMessageId, cancellationToken);
         if (consultedTools.Count > 0)
         {
             logger.LogInformation(

@@ -12,6 +12,34 @@ namespace InovaSkill.Importer.Tests.Api;
 public sealed class AiConsumptionAdminControllerTests
 {
     [Fact]
+    public async Task Report_CalculatesPerformanceAndReturnsRecentLinkedQuerySample()
+    {
+        await using var db = CreateDb();
+        var user = new AppUser { Id = 1, Name = "Gestor", Email = "gestor@test.com", PasswordHash = "hash", Role = AppUserRoles.Admin };
+        var session = new ChatSession { Id = Guid.NewGuid(), UserId = user.Id, Channel = ChatSessionChannels.Web };
+        var question = new ChatMessage { Id = Guid.NewGuid(), ChatSessionId = session.Id, Role = "user", Content = "Qual é o estoque?", CreatedAt = DateTime.UtcNow.AddMinutes(-2) };
+        var answer = new ChatMessage { Id = Guid.NewGuid(), ChatSessionId = session.Id, Role = "assistant", Content = "Estoque consultado.", CreatedAt = DateTime.UtcNow.AddMinutes(-2).AddSeconds(2) };
+        db.AddRange(user, session, question, answer);
+        db.AiResponseExecutions.AddRange(
+            new AiResponseExecution { Id = Guid.NewGuid(), UserId = user.Id, ChatSessionId = session.Id, QuestionMessageId = question.Id, ResponseMessageId = answer.Id, Status = AiConsumptionStatuses.Completed, CreatedAt = question.CreatedAt, CompletedAt = answer.CreatedAt, DurationMilliseconds = 2_000 },
+            new AiResponseExecution { Id = Guid.NewGuid(), UserId = user.Id, Status = AiConsumptionStatuses.Failed, CreatedAt = DateTime.UtcNow.AddMinutes(-1), CompletedAt = DateTime.UtcNow, DurationMilliseconds = 60_000 });
+        await db.SaveChangesAsync();
+
+        var result = await CreateController(db).Report(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1), null);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        using var payload = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+        var performance = payload.RootElement.GetProperty("performance");
+        Assert.Equal(2, performance.GetProperty("TotalQueries").GetInt32());
+        Assert.Equal(1, performance.GetProperty("CompletedQueries").GetInt32());
+        Assert.Equal(1, performance.GetProperty("FailedQueries").GetInt32());
+        Assert.Equal(2_000, performance.GetProperty("AverageMilliseconds").GetInt64());
+        var sample = Assert.Single(payload.RootElement.GetProperty("querySample").EnumerateArray().ToArray());
+        Assert.Equal("Qual é o estoque?", sample.GetProperty("question").GetString());
+        Assert.Equal("Estoque consultado.", sample.GetProperty("answer").GetString());
+    }
+
+    [Fact]
     public async Task Users_ReturnsOnlyRequestedPageWithStableTotal()
     {
         await using var db = CreateDb();

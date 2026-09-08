@@ -22,6 +22,7 @@ public sealed class AssistantController(
         AssistantQuestionRequest request,
         CancellationToken cancellationToken)
     {
+        var questionReceivedAt = DateTime.UtcNow;
         var question = (request.Message ?? request.Question)?.Trim() ?? string.Empty;
         if (question.Length == 0)
         {
@@ -44,7 +45,7 @@ public sealed class AssistantController(
 
         var admission = consumptionService is null
             ? new AiUsageAdmission(true, 0, 0)
-            : await consumptionService.BeginAsync(userId, role, cancellationToken);
+            : await consumptionService.BeginAsync(userId, role, cancellationToken, ChatSessionChannels.Web, questionReceivedAt);
         if (!admission.Allowed)
         {
             return StatusCode(StatusCodes.Status429TooManyRequests, new ProblemDetails
@@ -73,6 +74,7 @@ public sealed class AssistantController(
         AssistantQuestionRequest request,
         CancellationToken cancellationToken)
     {
+        var questionReceivedAt = DateTime.UtcNow;
         var question = (request.Message ?? request.Question)?.Trim() ?? string.Empty;
         if (question.Length == 0) return BadRequest(new ProblemDetails { Detail = "Digite uma mensagem." });
         if (question.Length > options.Value.MaximumQuestionLength)
@@ -82,7 +84,7 @@ public sealed class AssistantController(
         if (!TryGetUserId(out var userId)) return Unauthorized(new ProblemDetails { Detail = "Usuário autenticado inválido." });
         var admission = consumptionService is null
             ? new AiUsageAdmission(true, 0, 0)
-            : await consumptionService.BeginAsync(userId, role, cancellationToken);
+            : await consumptionService.BeginAsync(userId, role, cancellationToken, ChatSessionChannels.WhatsApp, questionReceivedAt);
         if (!admission.Allowed)
             return StatusCode(StatusCodes.Status429TooManyRequests, new ProblemDetails { Detail = "Seu limite mensal de uso do assistente foi atingido." });
 

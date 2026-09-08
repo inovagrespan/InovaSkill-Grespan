@@ -90,6 +90,7 @@ public static class OperationalJobCodes
     public const string CustomerRegistrationAddressEnrichment = "CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT";
     public const string CustomerAddressCoordinateEnrichment = "CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT";
     public const string WhatsAppMessageProcessing = WhatsAppJobCodes.MessageProcessing;
+    public const string DailyRouteOptimization = DailyRouteOptimizationPolicy.JobType;
     public const int WorkerExecutionTimeoutMinutes = 30;
 }
 
@@ -186,8 +187,19 @@ public static class OperationalJobCatalog
         ContractVersion: 1,
         ExampleParametersJson: "{\"importId\":\"00000000-0000-0000-0000-000000000000\"}");
 
+    public static readonly OperationalJobDefinition DailyRouteOptimization = new(
+        OperationalJobCodes.DailyRouteOptimization,
+        "Otimizar rotas do dia",
+        "Redistribui cidades para reduzir custo de combustível, prioriza frota própria e dimensiona apoio sem faixa mínima de ocupação.",
+        ManualRunAllowed: false,
+        ScheduleAllowed: false,
+        AllowConcurrentRuns: false,
+        BackgroundJobQueues.Default,
+        DailyRouteOptimizationPolicy.ContractVersion,
+        ExampleParametersJson: "{\"importId\":\"00000000-0000-0000-0000-000000000000\",\"weekday\":\"MONDAY\"}");
+
     private static readonly IReadOnlyDictionary<string, OperationalJobDefinition> Definitions =
-        new[] { ProcessImport, MunicipalityCoordinateEnrichment, CustomerRegistrationAddressEnrichment, CustomerAddressCoordinateEnrichment, WhatsAppMessageProcessing }
+        new[] { ProcessImport, MunicipalityCoordinateEnrichment, CustomerRegistrationAddressEnrichment, CustomerAddressCoordinateEnrichment, WhatsAppMessageProcessing, DailyRouteOptimization }
             .ToDictionary(definition => definition.JobType, StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlyCollection<OperationalJobDefinition> All { get; } = Definitions.Values.ToArray();

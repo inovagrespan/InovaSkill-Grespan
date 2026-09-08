@@ -39,8 +39,9 @@ export function RouteOccupancyIndicator({
         }}
         role="progressbar"
         aria-label={`Ocupação ${presentation.label}`}
-        aria-valuenow={isAvailable ? percentage : undefined}
+        aria-valuenow={isAvailable ? visualPercentage : undefined}
         aria-valuemin={0}
+        aria-valuemax={100}
       >
         <div
           className={cn(

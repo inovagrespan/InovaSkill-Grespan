@@ -118,7 +118,7 @@ public sealed class AssistantControllerTests
         public Task<ChatSessionSnapshot> LoadOrCreateAsync(Guid? sessionId, long userId, int maximumMessages, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task AppendAsync(Guid sessionId, string role, string content, CancellationToken cancellationToken) =>
+        public Task<Guid> AppendAsync(Guid sessionId, string role, string content, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<ChatSessionSummary>> ListAsync(long userId, int offset, int maximumSessions, CancellationToken cancellationToken)

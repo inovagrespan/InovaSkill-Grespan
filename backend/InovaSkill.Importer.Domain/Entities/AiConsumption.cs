@@ -5,10 +5,16 @@ public sealed class AiResponseExecution
     public Guid Id { get; set; }
     public long UserId { get; set; }
     public Guid? ChatSessionId { get; set; }
+    public Guid? QuestionMessageId { get; set; }
+    public Guid? ResponseMessageId { get; set; }
+    public string Channel { get; set; } = ChatSessionChannels.Web;
     public string Status { get; set; } = AiConsumptionStatuses.InProgress;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
+    public long? DurationMilliseconds { get; set; }
     public AppUser User { get; set; } = null!;
+    public ChatMessage? QuestionMessage { get; set; }
+    public ChatMessage? ResponseMessage { get; set; }
     public ICollection<AiProviderCall> Calls { get; set; } = [];
 }
 

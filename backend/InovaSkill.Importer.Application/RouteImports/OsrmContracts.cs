@@ -34,6 +34,29 @@ public interface IOsrmTableClient
         CancellationToken cancellationToken);
 }
 
+public sealed record RouteGeometryPoint(
+    Guid Id,
+    string Label,
+    decimal Latitude,
+    decimal Longitude);
+
+public sealed record RouteGeometryResult(
+    string Source,
+    IReadOnlyList<RouteGeometryPoint> Stops,
+    IReadOnlyList<IReadOnlyList<decimal>> Geometry,
+    decimal DistanceMeters,
+    decimal DurationSeconds);
+
+public interface IRouteGeometryClient
+{
+    Task<RouteGeometryResult> GetRouteAsync(
+        IReadOnlyList<RouteGeometryPoint> points,
+        CancellationToken cancellationToken);
+}
+
+public sealed class RouteGeometryException(string message, Exception? innerException = null)
+    : Exception(message, innerException);
+
 public interface IOsrmDailyMatrixService
 {
     Task<OsrmTableResult> GetForDayAsync(

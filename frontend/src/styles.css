@@ -613,3 +613,24 @@
     line-height: 1.45;
   }
 }
+.route-road-map-marker {
+  background: transparent;
+  border: 0;
+}
+
+.route-road-map-marker span {
+  align-items: center;
+  border: 2px solid white;
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 35%);
+  color: white;
+  display: flex;
+  font-size: 11px;
+  font-weight: 700;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.route-road-map-marker--depot { background: #0f172a; }
+.route-road-map-marker--customer { background: #2563eb; }

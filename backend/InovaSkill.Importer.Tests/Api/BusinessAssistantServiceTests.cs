@@ -357,10 +357,10 @@ public sealed class BusinessAssistantServiceTests
             return Task.FromResult(new ChatSessionSnapshot(sessionId ?? SessionId, []));
         }
 
-        public Task AppendAsync(Guid sessionId, string role, string content, CancellationToken cancellationToken)
+        public Task<Guid> AppendAsync(Guid sessionId, string role, string content, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.CompletedTask;
+            return Task.FromResult(Guid.NewGuid());
         }
 
         public Task<IReadOnlyList<ChatSessionSummary>> ListAsync(

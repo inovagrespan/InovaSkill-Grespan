@@ -11,7 +11,9 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<RouteImportError> RouteImportErrors => Set<RouteImportError>();
     public DbSet<JobExecution> JobExecutions => Set<JobExecution>();
     public DbSet<JobSchedule> JobSchedules => Set<JobSchedule>();
+    public DbSet<RouteOptimizationDecision> RouteOptimizationDecisions => Set<RouteOptimizationDecision>();
     public DbSet<VehicleType> VehicleTypes => Set<VehicleType>();
+    public DbSet<LogisticsFuelSettings> LogisticsFuelSettings => Set<LogisticsFuelSettings>();
     public DbSet<Route> Routes => Set<Route>();
     public DbSet<RouteEntry> RouteEntries => Set<RouteEntry>();
     public DbSet<Municipality> Municipalities => Set<Municipality>();
@@ -137,6 +139,19 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasIndex(x => new { x.IsActive, x.NextExecutionAt });
         });
 
+        modelBuilder.Entity<RouteOptimizationDecision>(entity =>
+        {
+            entity.ToTable("route_optimization_decisions");
+            entity.HasKey(x => x.JobExecutionId);
+            entity.Property(x => x.Status).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Justification).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.Status, x.DecidedAt });
+            entity.HasOne(x => x.JobExecution).WithOne()
+                .HasForeignKey<RouteOptimizationDecision>(x => x.JobExecutionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.DecidedByUser).WithMany()
+                .HasForeignKey(x => x.DecidedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<ChatSession>(entity =>
         {
             entity.ToTable("chat_sessions");
@@ -205,8 +220,12 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
         {
             entity.ToTable("ai_response_executions"); entity.HasKey(x => x.Id);
             entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Channel).HasMaxLength(16).IsRequired();
             entity.HasIndex(x => new { x.UserId, x.CreatedAt });
+            entity.HasIndex(x => x.CreatedAt);
             entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.QuestionMessage).WithMany().HasForeignKey(x => x.QuestionMessageId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.ResponseMessage).WithMany().HasForeignKey(x => x.ResponseMessageId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<AiProviderCall>(entity =>
         {
@@ -277,6 +296,13 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.CapacityKg).HasPrecision(12, 2);
             entity.Property(x => x.CapacityVolumeM3).HasPrecision(12, 3);
             entity.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<LogisticsFuelSettings>(entity =>
+        {
+            entity.ToTable("logistics_fuel_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DieselPricePerLiter).HasPrecision(10, 3).IsRequired();
         });
 
         modelBuilder.Entity<Route>(entity =>

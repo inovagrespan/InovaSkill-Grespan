@@ -164,6 +164,9 @@ classificados explicitamente como alheios à Grespan são redirecionados, manten
 o foco corporativo sem recusar conversa casual inofensiva.
 O botão `Nova conversa` mantém o registro anterior e reinicia o estado visual sem
 `sessionId`; assim, a próxima pergunta cria uma nova sessão persistida.
+Cada balão persistido de pergunta ou resposta apresenta sua data e horário em
+PT-BR. Mensagens recém-enviadas usam o instante observado pelo cliente durante a
+sessão; ao reabrir o histórico, a interface usa o `CreatedAt` persistido pela API.
 O mesmo componente possui uma variante de página completa em `/assistente`,
 disponível para todos os perfis pelo item `Chat IA` da navegação principal. Essa
 rota usa toda a área útil para histórico, fontes, sugestões e composição da
@@ -216,6 +219,16 @@ estava concluído até o fim do dia solicitado no fuso `America/Sao_Paulo`; ante
 do primeiro snapshot, a consulta retorna vazia. Versões `NeedsReview` não compõem esse histórico por não
 representarem estado publicado. A consulta também aceita criticidade e aplica o
 filtro antes da paginação, preservando totais coerentes.
+Na listagem original, as rotas são apresentadas em grupos ordenados de
+Segunda-feira a Sexta-feira. Um filtro de dia da semana é aplicado pela API antes
+da paginação; assim, ao selecionar um dia, o total e as páginas representam todas
+as rotas daquele dia. Na opção geral, os cabeçalhos separam os dias presentes na
+página atual.
+Nomes operacionais de bairros, distritos e erros conhecidos da planilha de rotas
+são resolvidos por `RouteMunicipalityAliasPolicy` antes do vínculo municipal. A
+política preserva o texto original exibido, mas usa o município canônico para
+coordenadas, matriz rodoviária e otimização; aliases desconhecidos continuam sem
+vínculo e impedem cálculos incompletos, em vez de descartar carga silenciosamente.
 Busca por rotas também é executada no banco, sem filtragem local no frontend, e
 compara o nome da rota ou o nome de qualquer cidade da rota. O termo recebido é
 compactado, convertido para caixa alta e tem os acentos removidos antes da
@@ -225,35 +238,146 @@ Cada rota apresenta a ocupação com uma barra e um indicador circular. A
 classificação visual usa faixas explícitas de eficiência logística: abaixo de
 60% é `Ocioso` (azul), de 60% até menos de 85% é `Médio` (amarelo), de 85% até
 95% é `Saudável` (verde), e acima de 95% é `Crítico` (vermelho).
-O cálculo, a persistência e o texto apresentado preservam a ocupação real acima
-de 100%; somente o preenchimento visual da barra e do círculo termina em 100%,
-permitindo exibir e ordenar sobrecargas como 140% sem distorcer o indicador.
-ausência de capacidade aparece como `Indisponível`, sem ser convertida em zero.
-Na tela principal de rotas, os cards não exibem ações individuais de simulação
-ou recomendação. O detalhe mantém o apoio à decisão calculado sobre o catálogo
-existente de tipos de veículo para os perfis autorizados, sem enviar comandos de
-criação ou atualização para a API.
+O cálculo e a persistência preservam a ocupação real acima de 100% para manter a
+sobrecarga auditável, a ordenação e a classificação crítica. Na apresentação das
+rotas, o percentual, a barra, o círculo e os atributos de acessibilidade ficam
+limitados visualmente ao intervalo de 0% a 100%; a carga real em quilogramas
+continua disponível. A ausência de capacidade aparece como `Indisponível`, sem
+ser convertida em zero.
 
-Ao abrir o detalhe de uma rota, `RouteDecisionSupport` classifica os veículos
-cadastrados capazes de transportar a carga, priorizando ocupação próxima de 90%
-e respeitando as faixas operacionais e o teto de 100%. A tela apresenta até três
-cenários, com capacidade, ocupação, justificativa e risco. Opcionalmente, o
-usuário pode enviar esses cenários calculados ao assistente existente para obter
-uma explicação comparativa. A IA é instruída a não inventar custos, distâncias
-ou tempos ausentes e responde em até 80 palavras, separadas em recomendação,
-motivo, risco e próximo passo; essa análise não altera rota, veículo nem
-persistência. O prompt usa a contagem de cidades e nomes truncados, e o frontend
-impõe o mesmo limite máximo de 800 caracteres configurado pela API.
-O apoio à decisão, seu cálculo e a análise por IA reutilizam exatamente a mesma
-permissão da simulação de veículo: `vendas`, `logistica`, `admin` e
-`admin_system`. Para os demais perfis, esses componentes não são renderizados e
-o catálogo de veículos não é consultado ao abrir o detalhe.
+A tela de Rotas separa a distribuição importada em `Original` da simulação
+`Otimização por IA`. A simulação é executada de forma assíncrona pelo job
+`DAILY_ROUTE_OPTIMIZATION`, registrado em `job_executions` e processado pelo
+Worker. `OsrmDailyMatrixService` fornece a matriz rodoviária do depósito e dos
+municípios; `OrToolsDailyRouteOptimizer` usa Google OR-Tools para redistribuir e
+sequenciar blocos municipais do mesmo dia. A versão de regras
+`daily-v7-persisted-fuel-price` não aplica faixa mínima ou alvo de
+ocupação. O solver respeita somente a capacidade física nominal, tenta primeiro
+remanejar a carga excedente para veículos próprios do mesmo dia e considera o
+custo incremental da distância; aluguel é uma alternativa com diária somada ao
+combustível. O custo de deslocamento usa distância, rendimento médio do tipo e
+o preço vigente do Diesel S10 persistido em `logistics_fuel_settings`. Assim, uma rota própria por cidade vizinha vence o
+aluguel quando seu desvio tiver menor custo total estimado. O resultado
+permanece em `ResultJson`, é consultado pela API e nunca altera o snapshot
+original. Para veículos alugados, o contrato inclui a faixa diária estimada:
+Accelo/VUC de R$ 400 a R$ 600, Toco de R$ 650 a R$ 900 e Truck de R$ 900 a
+R$ 1.300.
+Depois de concluída, a simulação pode ser aprovada ou rejeitada uma única vez por
+Vendas, Logística ou administradores. A decisão fica em
+`route_optimization_decisions`, vinculada individualmente à execução de
+`job_executions`, com usuário, horário e justificativa opcional. Aprovar registra
+o aceite operacional, mas não sobrescreve nem publica automaticamente as rotas
+importadas; a aba `Original` permanece a fonte auditável. O índice por status e
+data atende consultas administrativas futuras, enquanto a chave primária por
+execução impede decisões duplicadas.
+Como resultados antigos de jobs podem estar persistidos em `ResultJson` com
+propriedades PascalCase, o cliente normaliza recursivamente o resultado da
+otimização para camelCase ao ler a API. Isso mantém compatibilidade com execuções
+já concluídas e evita que a apresentação dependa da política de serialização usada
+na data do processamento.
+Cada card da simulação abre um modal de detalhe sem alterar a rota original. O
+frontend envia a sequência de municípios proposta para
+`POST /api/routes/optimized-road-path`; a API usa o snapshot informado para
+reaproveitar somente as coordenadas cadastrais `EXACT` já persistidas dos clientes
+ativos, ordena os clientes pela nova sequência municipal e pelo código externo,
+acrescenta o depósito na saída e no retorno e usa `IRouteGeometryClient` para
+traçar o novo percurso rodoviário sem nova geocodificação. O modal também explica, por parada, se a cidade
+foi mantida, remanejada de outra rota ou alocada em transporte alugado, além de
+preservar carga, entregas, tipo de veículo e ocupação da simulação.
+Abaixo do mapa otimizado, os mesmos vínculos `cliente → município` retornados no
+percurso formam uma lista expansível na ordem proposta. Ao abrir uma cidade, a
+tela apresenta código e nome dos clientes com posição exata que receberão a
+entrega; cidades sem cliente elegível permanecem visíveis com essa indicação.
+O consumo estimado não aparece no resumo nem nos cards da simulação: ele fica no
+modal aberto pelo clique em uma rota otimizada, junto ao caminhão utilizado, à
+quilometragem e ao tempo total do percurso. A
+duração total é arredondada para o minuto mais próximo e apresentada em horas e
+minutos, omitindo unidades zeradas (por exemplo, `8 h 49 min`, `45 min` ou `2 h`). A
+política usa intervalos explícitos por tipo: Mercedes Accelo de 5,5 a 7 km/L,
+Toco 4x2 de 3,8 a 4,5 km/L e Truck 6x2 de 3,2 a 4 km/L. Para uma distância em
+quilômetros, o menor consumo é `distância / maior rendimento` e o maior consumo
+é `distância / menor rendimento`. Tipos não cadastrados não recebem estimativa;
+o total sinaliza quantas rotas ficaram sem referência, evitando tratar ausência
+como consumo zero.
+A duração rodoviária continua disponível como informação da simulação, mas não
+é restrição nem objetivo do solver. Não há janela de saída ou retorno nem faixa
+de ocupação na regra; a escolha se concentra em custo, consumo e autonomia.
+Veículos alugados recebem o nome da rota original predominante seguido de
+`APOIO`. Entre tipos alugados que atendem o peso e o teto de ocupação, o custo do
+solver favorece a menor capacidade compatível, reduzindo sobra.
+Não existe ocupação mínima ou faixa saudável obrigatória para veículos próprios
+ou alugados. A única restrição de carga é não exceder 100% da capacidade física.
+Entre os tipos capazes de receber o peso remanejado, custo diário e consumo
+determinam a opção mais econômica. A autonomia usa reserva obrigatória de 10% e tanques padrão de
+200 L para Accelo/VUC, 300 L para Toco e 300 L para Truck. Rotas que excedem a
+autonomia útil do veículo são inviáveis. O resultado registra litros médios,
+percentual do tanque utilizado e autonomia restante.
+O contrato de matriz continua sendo `IOsrmTableClient`: quando há chave da
+OpenRouteService, `FallbackOsrmTableClient` tenta primeiro
+`OpenRouteServiceTableClient` pelo endpoint `/v2/matrix/driving-car` e repete a
+matriz completa com `OsrmTableClient` quando o provedor recusa ou não conclui a
+consulta. Sem chave, o OSRM é usado diretamente. A origem efetivamente utilizada
+fica registrada no resultado. Se ambos falharem, a execução registra os dois
+motivos técnicos; respostas da OpenRouteService preservam HTTP e mensagem segura,
+sem chave ou payload sensível. O ambiente local aponta `Osrm:BaseUrl` para
+`router.project-osrm.org`, sem adicionar outro container à infraestrutura de
+desenvolvimento; ambientes controlados podem substituir a URL por OSRM próprio.
+Quando o dia ultrapassa o limite de pontos do OpenRouteService, a matriz é
+consultada sequencialmente em blocos de origens e destinos e recomposta por
+índice global. Nenhuma cidade ou relação entre pares é descartada para contornar
+o limite do provedor.
+Quando um município aparece em mais de uma rota original no mesmo dia, suas
+cargas e entregas são consolidadas em um único bloco municipal antes do solver.
+Isso permite que a simulação reúna rotas ociosas ou redistribua rotas críticas
+sem duplicar a visita ao mesmo município; o primeiro vínculo original permanece
+como referência de auditoria, enquanto os totais agregados são preservados.
+Cidades com cargas pequenas não são rejeitadas por ocupação mínima. O solver
+pode mantê-las ou agrupá-las quando isso reduzir o custo. Um bloco municipal só
+precisa ser dividido quando ultrapassa a capacidade nominal de todos os tipos
+disponíveis.
+Quando a carga consolidada de um município ainda ultrapassa a maior capacidade
+efetiva, ela é dividida em blocos iguais, com as entregas distribuídas sem perda,
+e cada bloco reutiliza a coordenada rodoviária do município. O solver pode então
+alocar mais de um veículo próprio ou alugado para a mesma cidade, mantendo a
+soma de carga e entregas e a faixa operacional por veículo.
+O detalhe da rota original não apresenta apoio à decisão. No lugar, a seção
+`Dados da rota` reúne distância e duração do percurso rodoviário já carregado,
+tipo de caminhão, consumo e gasto estimado conforme a política de rendimento.
+O preço vigente do Óleo Diesel S10 é administrado na tela de Tipos de Veículo,
+persistido como configuração logística única em `logistics_fuel_settings` e
+lido tanto pelas rotas originais quanto pelas novas execuções de otimização.
+O acesso ocorre sempre pela chave primária fixa da configuração vigente, por isso
+nenhum índice secundário é necessário.
+`GET` e `PUT /api/vehicle-types/fuel-settings` consultam e alteram o valor;
+`GET /api/vehicle-types/fuel-price/research` mantém a pesquisa opcional da média
+de Marília/SP em fonte oficial da ANP por meio da OpenAI. A tela de rotas não
+edita preços e não recebe, calcula ou apresenta dados de pedágio.
 
 O subsistema anterior de roteirização foi removido para permitir uma nova
 implementação sem dependências legadas. Não existem atualmente solver, execução
 de otimização, sugestão global, endpoint ou ferramenta de chat de roteirização.
 A importação, consulta, histórico e indicadores básicos de rotas permanecem
 disponíveis e não iniciam processamento de otimização.
+
+O detalhe de uma rota pode consultar `GET /api/routes/{id}/road-path` para exibir
+o percurso atual sobre ruas e rodovias. A API seleciona somente clientes ativos
+da rota com coordenada cadastral `EXACT`, preserva a ordem das cidades importadas
+e usa o código externo como desempate estável dentro da cidade, pois a atribuição
+de clientes não possui sequência individual importada. O depósito logístico é a
+origem e o retorno. O contrato `IRouteGeometryClient` mantém o mapa independente
+do provedor. Quando `OPENROUTESERVICE_API_KEY` está configurada,
+`OpenRouteServiceRouteGeometryClient` chama
+`POST /v2/directions/driving-car/geojson`; sem a chave, `OsrmRouteClient` mantém
+o fallback para `/route/v1/driving` com `overview=full&geometries=geojson`.
+Trajetos com muitos pontos são divididos em blocos sobrepostos conforme o limite
+do provedor e recompostos sem duplicar a fronteira.
+A API publica essa geometria como `LineString`, mantendo os pares na ordem
+`longitude,latitude`; o frontend inverte apenas ao adaptar para o Leaflet. A tela
+desenha o percurso com traço azul descontínuo, sem ligar os pontos por linhas retas. Uma
+falha do provedor rodoviário afeta apenas o mapa e não impede a consulta dos demais detalhes.
+Essa leitura parte da rota por chave e reutiliza os índices existentes de
+atribuições, clientes e coordenadas; não foi criado índice adicional porque não
+há novo filtro ou ordenação persistida fora dos vínculos já indexados.
 
 A nova fundação rodoviária permanece separada de um solver. Existe um cadastro
 singleton de depósito logístico, usado como origem e retorno, com nome, endereço
@@ -278,6 +402,11 @@ rejeita timeout, erro HTTP, resposta vazia, dimensão divergente, valor negativo
 `null` ou trecho inalcançável. Não existe fallback geográfico nem persistência
 paralela de matrizes. A configuração `Osrm` define URL base, timeout, tamanho do
 bloco e paralelismo máximo.
+
+Em desenvolvimento e na implantação inicial, o grafo OSRM usa o extrato Sudeste
+da Geofabrik, cobrindo Espírito Santo, Minas Gerais, Rio de Janeiro e São Paulo.
+Os artefatos ficam fora do Git em `infra/osrm-sudeste`; pontos fora dessa região
+são rejeitados como inalcançáveis, sem fallback em linha reta.
 
 O depósito possui índice único sobre a chave singleton, suficiente para leitura
 e atualização do único registro. A montagem diária reutiliza os índices já
@@ -663,6 +792,21 @@ escopo, ciclos de ferramentas, resposta e pesquisa externa — são registradas 
 `ai_provider_calls`. O cliente da OpenAI captura `usage.input_tokens` e
 `usage.output_tokens`; tentativas sem `usage` permanecem auditáveis com consumo
 zero. A soma das chamadas forma o custo e o consumo da resposta visível.
+
+A execução também registra o instante de recebimento pela API, o término da
+resposta, a duração total em milissegundos, o canal (`web` ou `whatsapp`) e
+vínculos para as mensagens persistidas da pergunta e da resposta. Esses vínculos
+evitam duplicar o conteúdo usado na auditoria. Falhas encerram a execução e
+preservam a duração observada.
+
+O relatório administrativo calcula, conforme período e usuário filtrados,
+quantidade total, conclusões, falhas, duração mínima, máxima, média, mediana e
+percentil 95. A redução usa a duração média e duas referências explícitas do
+processo anterior: 10 minutos e 2 horas; o resultado é arredondado em duas casas
+e limitado entre 0% e 100%. Uma amostra auditável contém até as 10 consultas
+mais recentes do recorte e lê pergunta e resposta diretamente de
+`chat_messages`. A filtragem temporal usa o índice de `CreatedAt` das execuções;
+os vínculos de mensagens têm índices próprios para as junções da amostra.
 
 `GET /api/assistant/sessions/{sessionId}/usage` agrega entrada, saída e custos
 USD já persistidos em todas as execuções da sessão, depois de validar que a

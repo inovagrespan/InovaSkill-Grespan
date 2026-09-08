@@ -1,4 +1,5 @@
 using InovaSkill.Importer.Domain.Entities;
+using InovaSkill.Importer.Api.Assistant;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,43 @@ namespace InovaSkill.Importer.Api.Controllers;
 [Route("api/vehicle-types")]
 public sealed class VehicleTypesController(ImportDbContext dbContext) : ControllerBase
 {
+    [HttpGet("fuel-settings")]
+    public async Task<ActionResult> GetFuelSettings(CancellationToken cancellationToken)
+    {
+        var settings = await GetOrCreateFuelSettings(cancellationToken);
+        return Ok(new { settings.DieselPricePerLiter, settings.UpdatedAt });
+    }
+
+    [HttpPut("fuel-settings")]
+    public async Task<ActionResult> UpdateFuelSettings(
+        [FromBody] UpdateFuelSettingsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.DieselPricePerLiter <= 0)
+            return BadRequest(new { message = "O preço do diesel deve ser maior que zero." });
+
+        var settings = await GetOrCreateFuelSettings(cancellationToken);
+        settings.DieselPricePerLiter = decimal.Round(request.DieselPricePerLiter, 3, MidpointRounding.AwayFromZero);
+        settings.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { settings.DieselPricePerLiter, settings.UpdatedAt });
+    }
+
+    [HttpGet("fuel-price/research")]
+    public async Task<ActionResult<DieselPriceResearchResult>> ResearchFuelPrice(
+        [FromServices] DieselPriceResearchService researchService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await researchService.ResearchAsync(cancellationToken));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = exception.Message });
+        }
+    }
+
     [HttpGet]
     public async Task<ActionResult> List(CancellationToken cancellationToken)
     {
@@ -127,7 +165,20 @@ public sealed class VehicleTypesController(ImportDbContext dbContext) : Controll
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok();
     }
+
+    private async Task<LogisticsFuelSettings> GetOrCreateFuelSettings(CancellationToken cancellationToken)
+    {
+        var settings = await dbContext.LogisticsFuelSettings
+            .SingleOrDefaultAsync(x => x.Id == LogisticsFuelSettings.CurrentSettingsId, cancellationToken);
+        if (settings is not null) return settings;
+
+        settings = new LogisticsFuelSettings { UpdatedAt = DateTimeOffset.UtcNow };
+        dbContext.LogisticsFuelSettings.Add(settings);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return settings;
+    }
 }
 
 public sealed record CreateVehicleTypeRequest(string Name, decimal CapacityKg);
 public sealed record UpdateVehicleTypeRequest(string? Name, decimal? CapacityKg);
+public sealed record UpdateFuelSettingsRequest(decimal DieselPricePerLiter);

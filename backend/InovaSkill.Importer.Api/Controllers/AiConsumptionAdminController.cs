@@ -1,4 +1,5 @@
 using InovaSkill.Importer.Api.Assistant;
+using InovaSkill.Importer.Domain;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +17,7 @@ public sealed class AiConsumptionAdminController(ImportDbContext db, AiConsumpti
     private const int MaximumUserPageSize = 100;
     private const int MaximumConfigurationHistoryRows = 100;
     private const int MaximumAlertRows = 100;
+    private const int MaximumQuerySampleRows = 10;
 
     [HttpGet("report")]
     public async Task<ActionResult> Report([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] long? userId,
@@ -29,6 +31,8 @@ public sealed class AiConsumptionAdminController(ImportDbContext db, AiConsumpti
         if (end <= start) return BadRequest(new ProblemDetails { Detail = "O período informado é inválido." });
         var calls = db.AiProviderCalls.AsNoTracking().Where(x => x.CreatedAt >= start && x.CreatedAt < end);
         if (userId.HasValue) calls = calls.Where(x => x.ResponseExecution.UserId == userId.Value);
+        var executions = db.AiResponseExecutions.AsNoTracking().Where(x => x.CreatedAt >= start && x.CreatedAt < end);
+        if (userId.HasValue) executions = executions.Where(x => x.UserId == userId.Value);
         var total = await calls.GroupBy(_ => 1).Select(group => new
         {
             inputTokens = group.Sum(x => (long)x.InputTokens), outputTokens = group.Sum(x => (long)x.OutputTokens),
@@ -41,7 +45,27 @@ public sealed class AiConsumptionAdminController(ImportDbContext db, AiConsumpti
             .Skip((detailPage - 1) * detailPageSize).Take(detailPageSize)
             .Select(x => new { x.Id, x.ResponseExecutionId, userId = x.ResponseExecution.UserId, userName = x.ResponseExecution.User.Name, x.Model, x.Purpose, x.Status, x.InputTokens, x.OutputTokens, totalTokens = x.InputTokens + x.OutputTokens, estimatedCostUsd = x.InputCostUsd + x.OutputCostUsd, x.CreatedAt })
             .ToListAsync(cancellationToken);
-        return Ok(new { from = start, to = end, total = total ?? new { inputTokens = 0L, outputTokens = 0L, totalTokens = 0L, estimatedCostUsd = 0m, calls = 0, responses = 0 }, detailPage, detailPageSize, detailTotal, details });
+        var executionRows = await executions
+            .Select(x => new { x.Status, x.DurationMilliseconds })
+            .ToListAsync(cancellationToken);
+        var performance = AssistantPerformanceMetrics.Calculate(
+            executionRows.Count,
+            executionRows.Count(x => x.Status == AiConsumptionStatuses.Failed),
+            executionRows.Where(x => x.Status == AiConsumptionStatuses.Completed && x.DurationMilliseconds.HasValue)
+                .Select(x => x.DurationMilliseconds!.Value));
+        var querySample = await executions
+            .Where(x => x.QuestionMessageId != null)
+            .OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+            .Take(MaximumQuerySampleRows)
+            .Select(x => new
+            {
+                x.Id, x.UserId, userName = x.User.Name, x.Channel, question = x.QuestionMessage!.Content,
+                answer = x.ResponseMessage == null ? null : x.ResponseMessage.Content,
+                questionReceivedAt = x.CreatedAt, responseCompletedAt = x.CompletedAt,
+                x.DurationMilliseconds, x.Status
+            })
+            .ToListAsync(cancellationToken);
+        return Ok(new { from = start, to = end, total = total ?? new { inputTokens = 0L, outputTokens = 0L, totalTokens = 0L, estimatedCostUsd = 0m, calls = 0, responses = 0 }, performance, querySample, detailPage, detailPageSize, detailTotal, details });
     }
 
     [HttpGet("configuration")]

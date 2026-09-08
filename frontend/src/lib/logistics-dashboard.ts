@@ -329,7 +329,7 @@ export function buildContextualLogisticsRecommendation(
   if (cause === "low_occupancy") return `Consolidar os pedidos da rota ${context.route ?? context.subject} ou substituir o veículo por um de menor capacidade na próxima programação.`;
   if (cause === "loading_bottleneck") return `Pré-separar a carga de ${context.subject} e reposicionar a equipe para eliminar a espera observada antes da próxima janela de expedição.`;
   if (cause === "inventory_divergence") return `Executar inventário cíclico imediato de ${context.product ?? context.subject} e bloquear ajustes manuais até reconciliar o saldo físico e sistêmico.`;
-  return `Revisar a composição de custo da rota ${context.route ?? context.subject}, priorizando ocupação, pedágios e reentregas antes de renegociar a operação.`;
+  return `Revisar a composição de custo da rota ${context.route ?? context.subject}, priorizando ocupação, combustível e reentregas antes de renegociar a operação.`;
 }
 
 const DEMO_METRIC_HISTORY_VALUES: Record<LogisticsMetricHistoryKey, number[]> = {

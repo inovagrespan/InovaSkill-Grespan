@@ -1,4 +1,5 @@
 using InovaSkill.Importer.Application.RouteImports;
+using InovaSkill.Importer.Domain;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
@@ -41,7 +42,7 @@ public sealed class RoutesByCityProcessor(
 
         var vehicleTypes = await EnsureVehicleTypesAsync(parsed.Routes, cancellationToken);
         var routeMunicipalityNames = parsed.Routes.SelectMany(route => route.Entries)
-            .Select(entry => MunicipalityNameNormalizer.Normalize(entry.Name)).Distinct().ToArray();
+            .Select(entry => RouteMunicipalityAliasPolicy.Resolve(MunicipalityNameNormalizer.Normalize(entry.Name))).Distinct().ToArray();
         var municipalityCandidates = await dbContext.Municipalities
             .Where(item => routeMunicipalityNames.Contains(item.NormalizedName))
             .ToListAsync(cancellationToken);
@@ -92,7 +93,7 @@ public sealed class RoutesByCityProcessor(
                 Sequence = entry.Parsed.Sequence,
                 Name = entry.Parsed.Name,
                 MunicipalityId = unambiguousMunicipalities.TryGetValue(
-                    MunicipalityNameNormalizer.Normalize(entry.Parsed.Name), out var municipalityId)
+                    RouteMunicipalityAliasPolicy.Resolve(MunicipalityNameNormalizer.Normalize(entry.Parsed.Name)), out var municipalityId)
                     ? municipalityId
                     : null,
                 Deliveries = entry.Parsed.Deliveries,

@@ -4325,7 +4325,7 @@ export async function fetchImportedRoutes(
   page = 1,
   pageSize = 20,
   filters?: { weekday?: string; search?: string; date?: string; occupancyLevel?: string },
-): Promise<PagedResult<ImportedRouteItem>> {
+): Promise<PagedResult<ImportedRouteItem> & { importId: string | null }> {
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
@@ -4340,9 +4340,10 @@ export async function fetchImportedRoutes(
     page: number;
     pageSize: number;
     total: number;
+    importId: string | null;
     items: ImportedRouteItem[];
   };
-  return { page: raw.page, pageSize: raw.pageSize, total: raw.total, items: raw.items };
+  return { page: raw.page, pageSize: raw.pageSize, total: raw.total, importId: raw.importId, items: raw.items };
 }
 
 export async function fetchImportedRoutesByImport(
@@ -4377,6 +4378,159 @@ export async function fetchImportedRouteDetail(id: string): Promise<ImportedRout
   if (!response.ok)
     throw new Error(await parseApiError(response, "Falha ao carregar detalhes da rota."));
   return (await response.json()) as ImportedRouteDetail;
+}
+
+export type LogisticsFuelSettings = {
+  dieselPricePerLiter: number;
+  updatedAt: string;
+};
+
+export async function fetchLogisticsFuelSettings(): Promise<LogisticsFuelSettings> {
+  const response = await authFetch(`${API_URL}/api/vehicle-types/fuel-settings`);
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao carregar o preço do diesel."));
+  return (await response.json()) as LogisticsFuelSettings;
+}
+
+export async function updateLogisticsFuelSettings(
+  dieselPricePerLiter: number,
+): Promise<LogisticsFuelSettings> {
+  const response = await authFetch(`${API_URL}/api/vehicle-types/fuel-settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dieselPricePerLiter }),
+  });
+  if (!response.ok)
+    throw new Error(await parseApiError(response, "Falha ao atualizar o preço do diesel."));
+  return (await response.json()) as LogisticsFuelSettings;
+}
+
+export type RouteRoadPath = {
+  id: string;
+  name: string;
+  source: "OPENROUTESERVICE_DIRECTIONS_DRIVING_CAR" | "OSRM_ROUTE_DRIVING";
+  distanceMeters: number;
+  durationSeconds: number;
+  stops: Array<{
+    sequence: number;
+    id: string;
+    label: string;
+    latitude: number;
+    longitude: number;
+    isDepot: boolean;
+    municipalityId?: string | null;
+  }>;
+  geometry: {
+    type: "LineString";
+    coordinates: Array<[number, number]>;
+  };
+};
+
+export async function fetchRouteRoadPath(id: string): Promise<RouteRoadPath> {
+  const response = await authFetch(`${API_URL}/api/routes/${id}/road-path`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Não foi possível calcular o percurso rodoviário."));
+  return (await response.json()) as RouteRoadPath;
+}
+
+export type DieselPriceResearch = {
+  city: string;
+  state: string;
+  fuelType: string;
+  averagePricePerLiter: number;
+  stationsSurveyed: number | null;
+  periodStart: string;
+  periodEnd: string;
+  researchedAt: string;
+  sources: Array<{ title: string; url: string }>;
+};
+
+export async function fetchCurrentDieselPrice(): Promise<DieselPriceResearch> {
+  const response = await authFetch(`${API_URL}/api/vehicle-types/fuel-price/research`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Não foi possível consultar o preço atual do diesel."));
+  return (await response.json()) as DieselPriceResearch;
+}
+
+export async function fetchOptimizedRouteRoadPath(
+  importId: string,
+  name: string,
+  municipalityIds: string[],
+): Promise<RouteRoadPath> {
+  const response = await authFetch(`${API_URL}/api/routes/optimized-road-path`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ importId, name, municipalityIds }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Não foi possível calcular o percurso otimizado."));
+  return (await response.json()) as RouteRoadPath;
+}
+
+export type DailyOptimizationStop = {
+  municipalityId: string; municipalityName: string; loadKg: number; deliveries: number;
+  originalRouteId: string; originalSequence: number;
+};
+
+export type DailyOptimizationRoute = {
+  sequence: number; originalRouteId: string | null; name: string; vehicleType: string;
+  isRental: boolean; loadKg: number; capacityKg: number; occupancy: number;
+  distanceMeters: number; durationSeconds: number; stops: DailyOptimizationStop[];
+  estimatedFuelLiters?: number; tankCapacityLiters?: number; tankUsagePercent?: number; remainingAutonomyKm?: number;
+  rentalDailyCostMinimum?: number | null; rentalDailyCostMaximum?: number | null;
+};
+
+export type DailyOptimizationMetrics = {
+  distanceMeters: number; durationSeconds: number; vehiclesUsed: number;
+  rentalVehicles: number; maximumOccupancy: number;
+};
+
+export type DailyOptimizationResult = {
+  importId: string; weekday: string; status: "Optimized" | "NoImprovement" | "Infeasible" | "InsufficientData";
+  rulesVersion: string; matrixSource: string; message: string | null;
+  current: DailyOptimizationMetrics; proposed: DailyOptimizationMetrics; routes: DailyOptimizationRoute[];
+};
+
+export type DailyOptimizationExecution = {
+  jobExecutionId: string; status: string; progressPercent: number; progressMessage: string | null;
+  result: DailyOptimizationResult | null; errorMessage: string | null; createdAt: string; finishedAt: string | null;
+  decision: { status: "PENDING" | "APPROVED" | "REJECTED"; decidedAt?: string | null; justification?: string | null; decidedByUserId?: number | null; decidedByUserName?: string | null };
+};
+
+export function normalizeDailyOptimizationExecution(payload: unknown): DailyOptimizationExecution {
+  const normalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(normalize);
+    if (value === null || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+      key.length === 0 ? key : key[0].toLowerCase() + key.slice(1),
+      normalize(entry),
+    ]));
+  };
+
+  return normalize(payload) as DailyOptimizationExecution;
+}
+
+export async function startDailyRouteOptimization(importId: string, weekday: string): Promise<string> {
+  const response = await authFetch(`${API_URL}/api/routes/daily-optimization`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ importId, weekday }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Não foi possível iniciar a otimização."));
+  const body = await response.json() as { jobExecutionId: string };
+  return body.jobExecutionId;
+}
+
+export async function fetchDailyRouteOptimization(importId: string, weekday: string): Promise<DailyOptimizationExecution | null> {
+  const params = new URLSearchParams({ importId, weekday });
+  const response = await authFetch(`${API_URL}/api/routes/daily-optimization?${params}`);
+  if (response.status === 204) return null;
+  if (!response.ok) throw new Error(await parseApiError(response, "Não foi possível consultar a otimização."));
+  return normalizeDailyOptimizationExecution(await response.json());
+}
+
+export async function decideDailyRouteOptimization(jobExecutionId: string, approved: boolean, justification?: string): Promise<void> {
+  const response = await authFetch(`${API_URL}/api/routes/daily-optimization/${jobExecutionId}/decision`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ approved, justification: justification?.trim() || null }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Não foi possível registrar a decisão."));
 }
 
 export async function fetchAdminJobsSummary(): Promise<AdminJobSummary> {

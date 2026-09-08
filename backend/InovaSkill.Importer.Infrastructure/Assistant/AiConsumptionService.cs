@@ -22,7 +22,12 @@ public sealed class AiConsumptionService(
         return string.IsNullOrWhiteSpace(settings.Model) ? assistantOptions.Model : settings.Model;
     }
 
-    public async Task<AiUsageAdmission> BeginAsync(long userId, string role, CancellationToken cancellationToken)
+    public async Task<AiUsageAdmission> BeginAsync(
+        long userId,
+        string role,
+        CancellationToken cancellationToken,
+        string channel = ChatSessionChannels.Web,
+        DateTime? questionReceivedAt = null)
     {
         var settings = await GetSettingsAsync(cancellationToken);
         var userLimit = await db.AiUserLimits.AsNoTracking().SingleOrDefaultAsync(x => x.UserId == userId, cancellationToken);
@@ -36,7 +41,13 @@ public sealed class AiConsumptionService(
             return new AiUsageAdmission(false, consumed, limit);
         }
 
-        var execution = new AiResponseExecution { Id = Guid.NewGuid(), UserId = userId };
+        var execution = new AiResponseExecution
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Channel = channel,
+            CreatedAt = questionReceivedAt ?? DateTime.UtcNow
+        };
         db.AiResponseExecutions.Add(execution);
         await db.SaveChangesAsync(cancellationToken);
         currentExecutionId = execution.Id;
@@ -48,6 +59,20 @@ public sealed class AiConsumptionService(
         if (currentExecutionId is null) return;
         await db.AiResponseExecutions.Where(x => x.Id == currentExecutionId)
             .ExecuteUpdateAsync(x => x.SetProperty(p => p.ChatSessionId, sessionId), cancellationToken);
+    }
+
+    public async Task SetQuestionMessageAsync(Guid messageId, CancellationToken cancellationToken)
+    {
+        if (currentExecutionId is null) return;
+        await db.AiResponseExecutions.Where(x => x.Id == currentExecutionId)
+            .ExecuteUpdateAsync(x => x.SetProperty(p => p.QuestionMessageId, messageId), cancellationToken);
+    }
+
+    public async Task SetResponseMessageAsync(Guid messageId, CancellationToken cancellationToken)
+    {
+        if (currentExecutionId is null) return;
+        await db.AiResponseExecutions.Where(x => x.Id == currentExecutionId)
+            .ExecuteUpdateAsync(x => x.SetProperty(p => p.ResponseMessageId, messageId), cancellationToken);
     }
 
     public async Task RecordCallAsync(
@@ -79,9 +104,14 @@ public sealed class AiConsumptionService(
         if (currentExecutionId is null) return;
         var executionId = currentExecutionId.Value;
         currentExecutionId = null;
+        var completedAt = DateTime.UtcNow;
+        var createdAt = await db.AiResponseExecutions.Where(x => x.Id == executionId)
+            .Select(x => x.CreatedAt).SingleAsync(cancellationToken);
+        var durationMilliseconds = Math.Max(0L, (long)(completedAt - createdAt).TotalMilliseconds);
         await db.AiResponseExecutions.Where(x => x.Id == executionId).ExecuteUpdateAsync(
             x => x.SetProperty(p => p.Status, succeeded ? AiConsumptionStatuses.Completed : AiConsumptionStatuses.Failed)
-                .SetProperty(p => p.CompletedAt, DateTime.UtcNow), cancellationToken);
+                .SetProperty(p => p.CompletedAt, completedAt)
+                .SetProperty(p => p.DurationMilliseconds, durationMilliseconds), cancellationToken);
 
         var execution = await db.AiResponseExecutions.AsNoTracking().SingleAsync(x => x.Id == executionId, cancellationToken);
         await CreateAlertsAsync(execution.UserId, cancellationToken);

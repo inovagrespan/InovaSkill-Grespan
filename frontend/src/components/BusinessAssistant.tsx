@@ -27,6 +27,7 @@ type AssistantMessage = {
   text: string;
   sources?: AssistantSource[];
   mode?: string;
+  createdAt?: string;
 };
 
 type BusinessAssistantProps = {
@@ -52,6 +53,14 @@ const ASSISTANT_TRANSPARENCY_NOTICE =
 const ASSISTANT_TABLE_MIN_COLUMNS = 2;
 const ASSISTANT_TABLE_MAX_COLUMNS = 8;
 const ASSISTANT_TABLE_MAX_ROWS = 50;
+const formatMessageTime = (createdAt: string) => new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+}).format(new Date(createdAt));
 
 export function BusinessAssistant({ variant = "floating" }: BusinessAssistantProps) {
   const isPage = variant === "page";
@@ -103,6 +112,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
         id: message.id,
         author: message.role,
         text: message.content,
+        createdAt: message.createdAt,
       })));
       setSuggestions(DEFAULT_SUGGESTIONS);
     } catch (error) {
@@ -122,7 +132,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
     setQuestion("");
     setMessages((current) => [
       ...current,
-      { id: createClientMessageId(), author: "user", text: trimmed },
+      { id: createClientMessageId(), author: "user", text: trimmed, createdAt: new Date().toISOString() },
     ]);
     setLoading(true);
     try {
@@ -136,6 +146,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
           text: response.answer,
           sources: response.sources,
           mode: response.mode,
+          createdAt: new Date().toISOString(),
         },
       ]);
       setSuggestions(response.suggestions);
@@ -148,6 +159,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
           author: "assistant",
           text: (error as Error).message,
           mode: "Não foi possível responder",
+          createdAt: new Date().toISOString(),
         },
       ]);
     } finally {
@@ -303,6 +315,14 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
                   message.text
                 )}
               </div>
+              {message.createdAt && (
+                <time
+                  dateTime={message.createdAt}
+                  className={cn("block text-[10px] text-muted-foreground", message.author === "user" && "text-right")}
+                >
+                  {formatMessageTime(message.createdAt)}
+                </time>
+              )}
               {message.author === "assistant" && message.mode && (
                 <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <Sparkles className="size-3" />

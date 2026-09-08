@@ -21,7 +21,7 @@ public interface IChatHistoryStore
         CancellationToken cancellationToken) =>
         LoadOrCreateAsync(sessionId, userId, maximumMessages, cancellationToken);
 
-    Task AppendAsync(
+    Task<Guid> AppendAsync(
         Guid sessionId,
         string role,
         string content,
@@ -101,7 +101,7 @@ public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistorySt
         return new ChatSessionSnapshot(session.Id, messages);
     }
 
-    public async Task AppendAsync(
+    public async Task<Guid> AppendAsync(
         Guid sessionId,
         string role,
         string content,
@@ -113,9 +113,10 @@ public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistorySt
         }
 
         var now = DateTime.UtcNow;
+        var messageId = Guid.NewGuid();
         dbContext.ChatMessages.Add(new ChatMessage
         {
-            Id = Guid.NewGuid(),
+            Id = messageId,
             ChatSessionId = sessionId,
             Role = role,
             Content = content,
@@ -128,6 +129,7 @@ public sealed class ChatHistoryStore(ImportDbContext dbContext) : IChatHistorySt
                 setters => setters.SetProperty(session => session.UpdatedAt, now),
                 cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+        return messageId;
     }
 
     public async Task<IReadOnlyList<ChatSessionSummary>> ListAsync(

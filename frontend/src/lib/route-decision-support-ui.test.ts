@@ -7,15 +7,18 @@ function read(relativePath: string): string {
 }
 
 describe("route decision support UI", () => {
-  it("carrega e exibe o apoio à decisão ao abrir detalhes", () => {
+  it("substitui o apoio à decisão pelos dados operacionais e financeiros da rota", () => {
       const source = read("src/routes/rotas.tsx");
 
-      expect(source).toContain("RouteDecisionSupport");
-      expect(source).toContain("setDetailVehicleTypes(await fetchVehicleTypes())");
-      expect(source).toContain("decisionSupportError");
-      expect(source).toContain("route={selectedRoute}");
-      expect(source).toContain("canRoleUseRouteSimulation");
-      expect(source).toContain("{canSimulate && (");
+      expect(source).not.toContain("RouteDecisionSupport");
+      expect(source).not.toContain("setDetailVehicleTypes");
+      expect(source).toContain('aria-label="Dados da rota"');
+      expect(source).toContain("Quilômetros da rota");
+      expect(source).toContain("Tempo da rota");
+      expect(source).toContain("Consumo estimado");
+      expect(source).toContain("Gasto estimado com combustível");
+      expect(source).not.toMatch(/pedágio/i);
+      expect(source).toContain("estimateFuelCost");
   });
 
   it("mantém análise por IA opcional, explicável e sem alteração automática", () => {

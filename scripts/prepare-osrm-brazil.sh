@@ -2,11 +2,12 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OSRM_DATA_DIR="${OSRM_DATA_DIR:-$PROJECT_ROOT/infra/osrm-brazil}"
+OSRM_DATA_DIR="${OSRM_DATA_DIR:-$PROJECT_ROOT/infra/osrm-sudeste}"
 OSRM_IMAGE="${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v5.27.1}"
-OSRM_PBF_URL="${OSRM_PBF_URL:-https://download.geofabrik.de/south-america/brazil-latest.osm.pbf}"
-OSRM_PBF="$OSRM_DATA_DIR/brazil-latest.osm.pbf"
-OSRM_BASE="$OSRM_DATA_DIR/brazil-latest.osrm"
+OSRM_DATASET_NAME="${OSRM_DATASET_NAME:-sudeste-latest}"
+OSRM_PBF_URL="${OSRM_PBF_URL:-https://download.geofabrik.de/south-america/brazil/sudeste-latest.osm.pbf}"
+OSRM_PBF="$OSRM_DATA_DIR/$OSRM_DATASET_NAME.osm.pbf"
+OSRM_BASE="$OSRM_DATA_DIR/$OSRM_DATASET_NAME.osrm"
 
 mkdir -p "$OSRM_DATA_DIR"
 
@@ -14,7 +15,7 @@ if [[ ! -f "$OSRM_PBF" ]]; then
   curl --fail --location "$OSRM_PBF_URL" --output "$OSRM_PBF"
 fi
 
-sha256sum "$OSRM_PBF" > "$OSRM_DATA_DIR/brazil-latest.osm.pbf.sha256"
+sha256sum "$OSRM_PBF" > "$OSRM_PBF.sha256"
 
 if [[ ! -f "$OSRM_BASE.partition" ]]; then
   docker run --rm -t -v "$OSRM_DATA_DIR:/data" "$OSRM_IMAGE" \

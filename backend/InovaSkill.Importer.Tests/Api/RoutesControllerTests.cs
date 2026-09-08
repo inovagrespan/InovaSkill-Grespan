@@ -6,11 +6,56 @@ using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
 
 namespace InovaSkill.Importer.Tests.Api;
 
 public sealed class RoutesControllerTests
 {
+    [Theory]
+    [InlineData(true, RouteOptimizationDecisionStatuses.Approved)]
+    [InlineData(false, RouteOptimizationDecisionStatuses.Rejected)]
+    public async Task DecideDailyOptimization_RecordsAuditableDecisionWithoutChangingRoutes(bool approved, string expectedStatus)
+    {
+        await using var db = CreateDbContext();
+        var user = new AppUser { Id = 7, Name = "Logística", Email = "logistica@test.com", PasswordHash = "hash", Role = AppUserRoles.Logistica };
+        var job = new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.DailyRouteOptimization,
+            ParametersJson = "{}", ResultJson = "{}", Status = JobExecutionStatus.Completed,
+            RelatedEntityId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow
+        };
+        db.AddRange(user, job);
+        await db.SaveChangesAsync();
+        var controller = new RoutesController(db) { ControllerContext = AuthenticatedContext(user) };
+
+        var response = await controller.DecideDailyOptimization(job.Id, new DecideDailyOptimizationRequest(approved, "Análise operacional"), default);
+
+        Assert.IsType<OkObjectResult>(response);
+        var decision = await db.RouteOptimizationDecisions.SingleAsync();
+        Assert.Equal(expectedStatus, decision.Status);
+        Assert.Equal(user.Id, decision.DecidedByUserId);
+        Assert.Equal("Análise operacional", decision.Justification);
+        Assert.NotNull(decision.DecidedAt);
+    }
+
+    [Fact]
+    public async Task DecideDailyOptimization_RejectsSecondDecision()
+    {
+        await using var db = CreateDbContext();
+        var user = new AppUser { Id = 8, Name = "Admin", Email = "admin@test.com", PasswordHash = "hash", Role = AppUserRoles.Admin };
+        var job = new JobExecution { Id = Guid.NewGuid(), JobType = OperationalJobCodes.DailyRouteOptimization, ParametersJson = "{}", ResultJson = "{}", Status = JobExecutionStatus.Completed, RelatedEntityId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow };
+        db.AddRange(user, job, new RouteOptimizationDecision { JobExecutionId = job.Id, Status = RouteOptimizationDecisionStatuses.Approved, DecidedByUserId = user.Id, DecidedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+        var controller = new RoutesController(db) { ControllerContext = AuthenticatedContext(user) };
+
+        var response = await controller.DecideDailyOptimization(job.Id, new DecideDailyOptimizationRequest(false, null), default);
+
+        Assert.IsType<ConflictObjectResult>(response);
+        Assert.Equal(RouteOptimizationDecisionStatuses.Approved, (await db.RouteOptimizationDecisions.SingleAsync()).Status);
+    }
+
     [Fact]
     public async Task GetOccupancySummary_UsesCurrentSnapshotAndWeightedCapacityAverage()
     {
@@ -201,10 +246,111 @@ public sealed class RoutesControllerTests
             json.RootElement.GetProperty("items")[0].GetProperty("Name").GetString());
     }
 
+    [Fact]
+    public async Task GetRoadPath_UsesOnlyActiveCustomersWithExactCoordinatesAndReturnsOsrmGeometry()
+    {
+        await using var db = CreateDbContext();
+        var source = CreateSource();
+        var routeImport = CreateImport(source.Id, 1, RouteImportStatus.Completed, DateTime.UtcNow);
+        var vehicle = CreateVehicle();
+        var route = CreateRoute(routeImport.Id, vehicle.Id, "Marília", 0.8m);
+        var municipality = new Municipality { Id = Guid.NewGuid(), Name = "MARILIA", StateCode = "SP", CreatedAt = DateTime.UtcNow };
+        route.Entries = [new RouteEntry { Id = Guid.NewGuid(), RouteId = route.Id, Sequence = 1, Name = municipality.Name, MunicipalityId = municipality.Id, CreatedAt = DateTime.UtcNow }];
+        var customer = new Customer { Id = Guid.NewGuid(), DataSourceId = source.Id, ExternalCode = "10", IsActive = true, CreatedAt = DateTime.UtcNow };
+        customer.Snapshots = [new CustomerSnapshot { Id = Guid.NewGuid(), ImportId = routeImport.Id, CustomerId = customer.Id, LegalName = "Cliente Exato", MunicipalityId = municipality.Id, SourceRowNumber = 2, CreatedAt = DateTime.UtcNow }];
+        customer.RegistrationAddress = new CustomerRegistrationAddress
+        {
+            Id = Guid.NewGuid(), CustomerId = customer.Id, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            Coordinate = new CustomerAddressCoordinate
+            {
+                Id = Guid.NewGuid(), Status = CustomerAddressCoordinateStatuses.Resolved,
+                Precision = CustomerAddressCoordinatePrecisions.Exact, Latitude = -22.22m, Longitude = -49.94m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            }
+        };
+        var depot = new LogisticsDepot { Id = Guid.NewGuid(), Name = "Matriz Grespan", Address = "Marília", Latitude = -22.21m, Longitude = -49.95m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        var assignment = new RouteCustomerAssignment { Id = Guid.NewGuid(), RouteId = route.Id, CustomerId = customer.Id, MunicipalityId = municipality.Id, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        db.AddRange(source, routeImport, vehicle, municipality, route, customer, depot, assignment);
+        await db.SaveChangesAsync();
+        var osrm = new CapturingRouteClient();
+
+        var response = await new RoutesController(db, osrm).GetRoadPath(route.Id, default);
+        var json = SerializeOkResult(response);
+
+        Assert.Equal(3, osrm.Points!.Count);
+        Assert.Equal(depot.Id, osrm.Points[0].Id);
+        Assert.Equal(customer.Id, osrm.Points[1].Id);
+        Assert.Equal(depot.Id, osrm.Points[2].Id);
+        Assert.Equal("OSRM_ROUTE_DRIVING", json.RootElement.GetProperty("Source").GetString());
+        var geometry = json.RootElement.GetProperty("geometry");
+        Assert.Equal("LineString", geometry.GetProperty("type").GetString());
+        Assert.Equal(2, geometry.GetProperty("coordinates").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task GetOptimizedRoadPath_UsesSavedExactCustomerCoordinatesInProposedMunicipalityOrder()
+    {
+        await using var db = CreateDbContext();
+        var now = DateTime.UtcNow;
+        var source = CreateSource();
+        var routeImport = CreateImport(source.Id, 1, RouteImportStatus.Completed, now);
+        var vehicle = CreateVehicle();
+        var route = CreateRoute(routeImport.Id, vehicle.Id, "Original", 0.8m);
+        var first = new Municipality { Id = Guid.NewGuid(), Name = "Marília", NormalizedName = "MARILIA", StateCode = "SP", CreatedAt = now };
+        var second = new Municipality { Id = Guid.NewGuid(), Name = "Bauru", NormalizedName = "BAURU", StateCode = "SP", CreatedAt = now };
+        Customer ExactCustomer(string code, string name, Guid municipalityId, decimal latitude, decimal longitude)
+        {
+            var customer = new Customer { Id = Guid.NewGuid(), DataSourceId = source.Id, ExternalCode = code, IsActive = true, CreatedAt = now };
+            customer.Snapshots = [new CustomerSnapshot { Id = Guid.NewGuid(), ImportId = routeImport.Id, CustomerId = customer.Id,
+                LegalName = name, MunicipalityId = municipalityId, SourceRowNumber = 1, CreatedAt = now }];
+            customer.RegistrationAddress = new CustomerRegistrationAddress { Id = Guid.NewGuid(), CustomerId = customer.Id,
+                CreatedAt = now, UpdatedAt = now, Coordinate = new CustomerAddressCoordinate { Id = Guid.NewGuid(),
+                    Status = CustomerAddressCoordinateStatuses.Resolved, Precision = CustomerAddressCoordinatePrecisions.Exact,
+                    Latitude = latitude, Longitude = longitude, CreatedAt = now, UpdatedAt = now } };
+            return customer;
+        }
+        var mariliaCustomer = ExactCustomer("20", "Cliente Marília", first.Id, -22.21m, -49.95m);
+        var bauruCustomer = ExactCustomer("10", "Cliente Bauru", second.Id, -22.32m, -49.06m);
+        var depot = new LogisticsDepot { Id = Guid.NewGuid(), Name = "Matriz Grespan", Address = "Marília",
+            Latitude = -22.20m, Longitude = -49.90m, CreatedAt = now, UpdatedAt = now };
+        db.AddRange(source, routeImport, vehicle, route, first, second, depot, mariliaCustomer, bauruCustomer,
+            new RouteCustomerAssignment { Id = Guid.NewGuid(), RouteId = route.Id, CustomerId = mariliaCustomer.Id,
+                MunicipalityId = first.Id, CreatedAt = now, UpdatedAt = now },
+            new RouteCustomerAssignment { Id = Guid.NewGuid(), RouteId = route.Id, CustomerId = bauruCustomer.Id,
+                MunicipalityId = second.Id, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+        var client = new CapturingRouteClient();
+
+        var response = await new RoutesController(db, client).GetOptimizedRoadPath(
+            new OptimizedRoadPathRequest(routeImport.Id, "Nova rota", [second.Id, first.Id]), default);
+        var json = SerializeOkResult(response);
+
+        Assert.Equal(4, client.Points!.Count);
+        Assert.Equal([depot.Id, bauruCustomer.Id, mariliaCustomer.Id, depot.Id], client.Points.Select(point => point.Id));
+        Assert.Equal(-22.32m, client.Points[1].Latitude);
+        Assert.Contains("Cliente Bauru", client.Points[1].Label);
+        Assert.Equal("Nova rota", json.RootElement.GetProperty("name").GetString());
+        Assert.Equal(4, json.RootElement.GetProperty("stops").GetArrayLength());
+        Assert.Equal(second.Id, json.RootElement.GetProperty("stops")[1].GetProperty("municipalityId").GetGuid());
+        Assert.Equal(first.Id, json.RootElement.GetProperty("stops")[2].GetProperty("municipalityId").GetGuid());
+        Assert.Equal("LineString", json.RootElement.GetProperty("geometry").GetProperty("type").GetString());
+    }
+
     private static ImportDbContext CreateDbContext() =>
         new(new DbContextOptionsBuilder<ImportDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
+
+    private static ControllerContext AuthenticatedContext(AppUser user) => new()
+    {
+        HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Role, user.Role)
+            ], "test"))
+        }
+    };
 
     private static DataSource CreateSource() => new()
     {
@@ -269,5 +415,21 @@ public sealed class RoutesControllerTests
     {
         var ok = Assert.IsType<OkObjectResult>(response);
         return JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+    }
+
+    private sealed class CapturingRouteClient : IRouteGeometryClient
+    {
+        public IReadOnlyList<RouteGeometryPoint>? Points { get; private set; }
+
+        public Task<RouteGeometryResult> GetRouteAsync(IReadOnlyList<RouteGeometryPoint> points, CancellationToken cancellationToken)
+        {
+            Points = points;
+            IReadOnlyList<IReadOnlyList<decimal>> geometry =
+            [
+                [points[0].Longitude, points[0].Latitude],
+                [points[1].Longitude, points[1].Latitude]
+            ];
+            return Task.FromResult(new RouteGeometryResult("OSRM_ROUTE_DRIVING", points, geometry, 1000m, 120m));
+        }
     }
 }

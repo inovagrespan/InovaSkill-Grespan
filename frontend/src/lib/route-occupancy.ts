@@ -62,7 +62,7 @@ export function classifyOccupancy(value: number | null): OccupancyPresentation {
 
 export function formatOccupancy(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "Capacidade não configurada";
-  return Math.max(0, value).toLocaleString("pt-BR", {
+  return Math.min(1, Math.max(0, value)).toLocaleString("pt-BR", {
     style: "percent",
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,

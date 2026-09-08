@@ -11,8 +11,9 @@ describe("route occupancy formatting", () => {
     expect(formatOccupancy(0.6)).toBe("60%");
   });
 
-  it("preserves displayed occupancy above one hundred percent", () => {
-    expect(formatOccupancy(1.25)).toBe("125%");
+  it("limits displayed occupancy to the zero-to-one-hundred-percent interval", () => {
+    expect(formatOccupancy(1.25)).toBe("100%");
+    expect(formatOccupancy(-0.25)).toBe("0%");
   });
 
   it("rounds only the displayed percentage to one decimal place", () => {

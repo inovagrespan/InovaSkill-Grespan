@@ -23,6 +23,8 @@ describe("business assistant UI", () => {
     expect(component).toContain("consideram o período consultado");
     expect(component).toContain("suggestions.map");
     expect(component).toContain("messages.map");
+    expect(component).toContain("formatMessageTime(message.createdAt)");
+    expect(component).toContain("dateTime={message.createdAt}");
     expect(component).toContain("AssistantResponseText");
     expect(component).toContain("parseRouteLine");
     expect(component).toContain("parseEntityLine");

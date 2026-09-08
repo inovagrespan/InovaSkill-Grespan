@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, Loader2, Plus, Truck, XCircle } from "lucide-react";
+import { Fuel, Loader2, Plus, Truck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,9 @@ import {
   createVehicleType,
   updateVehicleType,
   deleteVehicleType,
+  fetchCurrentDieselPrice,
+  fetchLogisticsFuelSettings,
+  updateLogisticsFuelSettings,
   type VehicleTypeItem,
 } from "@/lib/importer-api";
 import { getCurrentUserRole } from "@/lib/auth";
@@ -42,6 +45,11 @@ function VeiculosTiposPage() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<VehicleTypeItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [dieselPrice, setDieselPrice] = useState("");
+  const [dieselUpdatedAt, setDieselUpdatedAt] = useState<string | null>(null);
+  const [fuelLoading, setFuelLoading] = useState(true);
+  const [fuelSaving, setFuelSaving] = useState(false);
+  const [fuelResearching, setFuelResearching] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -56,6 +64,54 @@ function VeiculosTiposPage() {
   }
 
   useEffect(() => { void load(); }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const settings = await fetchLogisticsFuelSettings();
+        setDieselPrice(String(settings.dieselPricePerLiter));
+        setDieselUpdatedAt(settings.updatedAt);
+      } catch (error) {
+        setMessage((error as Error).message);
+      } finally {
+        setFuelLoading(false);
+      }
+    })();
+  }, []);
+
+  async function saveDieselPrice() {
+    const price = Number(dieselPrice.replace(",", "."));
+    if (!Number.isFinite(price) || price <= 0) {
+      setMessage("O preço do diesel deve ser um número maior que zero.");
+      return;
+    }
+    setFuelSaving(true);
+    setMessage("");
+    try {
+      const settings = await updateLogisticsFuelSettings(price);
+      setDieselPrice(String(settings.dieselPricePerLiter));
+      setDieselUpdatedAt(settings.updatedAt);
+      setMessage("Preço do diesel atualizado. Os próximos cálculos usarão este valor.");
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setFuelSaving(false);
+    }
+  }
+
+  async function researchDieselPrice() {
+    setFuelResearching(true);
+    setMessage("");
+    try {
+      const research = await fetchCurrentDieselPrice();
+      setDieselPrice(String(research.averagePricePerLiter));
+      setMessage("Média de Marília carregada. Clique em Salvar preço para cadastrá-la.");
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setFuelResearching(false);
+    }
+  }
 
   function openCreate() {
     setEditing(null);
@@ -134,6 +190,38 @@ function VeiculosTiposPage() {
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       )}
+
+      <Card className="animate-soft-enter border-border bg-surface">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Fuel className="size-5" /> Preço atual do diesel</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Valor único usado nas estimativas de combustível das rotas originais e nas próximas otimizações.
+          </p>
+          {fuelLoading ? <SkeletonList rows={1} /> : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <label className="w-full space-y-1.5 text-sm sm:max-w-xs">
+                <span className="font-medium">Diesel S10 (R$/L)</span>
+                <input aria-label="Preço atual do diesel" type="text" inputMode="decimal" value={dieselPrice}
+                  disabled={!canManage} onChange={(event) => setDieselPrice(event.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" />
+              </label>
+              {canManage && <>
+                <Button type="button" variant="outline" onClick={() => void researchDieselPrice()} disabled={fuelResearching || fuelSaving}>
+                  {fuelResearching && <Loader2 className="mr-2 size-4 animate-spin" />}
+                  Buscar média de Marília
+                </Button>
+                <Button type="button" onClick={() => void saveDieselPrice()} disabled={fuelSaving || fuelResearching}>
+                  {fuelSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
+                  Salvar preço
+                </Button>
+              </>}
+            </div>
+          )}
+          {dieselUpdatedAt && <p className="text-xs text-muted-foreground">Última atualização: {new Date(dieselUpdatedAt).toLocaleString("pt-BR")}</p>}
+        </CardContent>
+      </Card>
 
       <Card className="animate-soft-enter border-border bg-surface">
         <CardHeader>
