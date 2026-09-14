@@ -17,7 +17,7 @@ export const ROUTE_PREFERRED_RETURN_HOUR = 18;
 export const ROUTE_LATEST_RETURN_HOUR = 19;
 
 const VEHICLE_FUEL_POLICIES: VehicleFuelPolicy[] = [
-  { matches: ["MERCEDES ACCELO", "ACCELO"], minimumEfficiencyKmPerLiter: 5.5, maximumEfficiencyKmPerLiter: 7 },
+  { matches: ["MERCEDES ACCELO", "ACCELO", "MERCEDES ACELO", "ACELO"], minimumEfficiencyKmPerLiter: 5.5, maximumEfficiencyKmPerLiter: 7 },
   { matches: ["TOCO 4X2", "TOCO"], minimumEfficiencyKmPerLiter: 3.8, maximumEfficiencyKmPerLiter: 4.5 },
   { matches: ["TRUCK 6X2", "TRUCK"], minimumEfficiencyKmPerLiter: 3.2, maximumEfficiencyKmPerLiter: 4 },
 ];

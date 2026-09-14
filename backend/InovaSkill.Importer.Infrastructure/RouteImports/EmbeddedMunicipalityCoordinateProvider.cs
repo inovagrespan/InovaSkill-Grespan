@@ -8,9 +8,16 @@ namespace InovaSkill.Importer.Infrastructure.RouteImports;
 public sealed record MunicipalityCoordinateLookup(
     string IbgeCode,
     string StateCode,
+    string Name,
     string NormalizedName,
     decimal Latitude,
     decimal Longitude);
+
+public sealed record MunicipalityCandidatePage(
+    IReadOnlyList<MunicipalityCoordinateLookup> Items,
+    int Page,
+    int PageSize,
+    int TotalCount);
 
 public interface IMunicipalityCoordinateProvider
 {
@@ -18,6 +25,13 @@ public interface IMunicipalityCoordinateProvider
     Task<MunicipalityCoordinateLookup?> ResolveAsync(
         Municipality municipality,
         CancellationToken cancellationToken);
+    Task<MunicipalityCoordinateLookup?> ResolveUniqueNameAsync(
+        string normalizedName,
+        CancellationToken cancellationToken);
+    Task<MunicipalityCoordinateLookup?> FindByIbgeCodeAsync(string ibgeCode, CancellationToken cancellationToken) =>
+        Task.FromResult<MunicipalityCoordinateLookup?>(null);
+    Task<MunicipalityCandidatePage> SearchAsync(string query, int page, int pageSize, CancellationToken cancellationToken) =>
+        Task.FromResult(new MunicipalityCandidatePage([], page, pageSize, 0));
 }
 
 public sealed class EmbeddedMunicipalityCoordinateProvider : IMunicipalityCoordinateProvider
@@ -58,6 +72,39 @@ public sealed class EmbeddedMunicipalityCoordinateProvider : IMunicipalityCoordi
         return Task.FromResult<MunicipalityCoordinateLookup?>(match);
     }
 
+    public Task<MunicipalityCoordinateLookup?> ResolveUniqueNameAsync(
+        string normalizedName,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var matches = LazyCoordinates.Value.Where(item => item.NormalizedName == normalizedName).Take(2).ToArray();
+        return Task.FromResult<MunicipalityCoordinateLookup?>(matches.Length == 1 ? matches[0] : null);
+    }
+
+    public Task<MunicipalityCoordinateLookup?> FindByIbgeCodeAsync(string ibgeCode, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<MunicipalityCoordinateLookup?>(
+            LazyCoordinates.Value.SingleOrDefault(item => item.IbgeCode == ibgeCode.Trim()));
+    }
+
+    public Task<MunicipalityCandidatePage> SearchAsync(
+        string query,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalized = MunicipalityNameNormalizer.Normalize(query);
+        var filtered = LazyCoordinates.Value
+            .Where(item => item.NormalizedName.Contains(normalized, StringComparison.Ordinal))
+            .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.StateCode, StringComparer.Ordinal)
+            .ToArray();
+        return Task.FromResult(new MunicipalityCandidatePage(
+            filtered.Skip((page - 1) * pageSize).Take(pageSize).ToArray(), page, pageSize, filtered.Length));
+    }
+
     private static IReadOnlyList<MunicipalityCoordinateLookup> LoadCoordinates()
     {
         var assembly = typeof(EmbeddedMunicipalityCoordinateProvider).Assembly;
@@ -78,6 +125,7 @@ public sealed class EmbeddedMunicipalityCoordinateProvider : IMunicipalityCoordi
             rows.Add(new MunicipalityCoordinateLookup(
                 columns[0].Trim(),
                 stateCode,
+                columns[1].Trim(),
                 MunicipalityNameNormalizer.Normalize(columns[1]),
                 decimal.Parse(columns[2], CultureInfo.InvariantCulture),
                 decimal.Parse(columns[3], CultureInfo.InvariantCulture)));

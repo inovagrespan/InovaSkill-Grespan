@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  Link,
   Outlet,
   createRootRouteWithContext,
   redirect,
@@ -10,8 +9,13 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "../components/AppSidebar";
 import { BusinessAssistant } from "../components/BusinessAssistant";
+import { NotFoundPage } from "../components/NotFoundPage";
 import { getCurrentUserRole, isAuthenticated, redirectToLogin } from "../lib/auth";
-import { canRoleAccessPath, getDefaultPathForRole } from "../lib/access-control";
+import {
+  canRoleAccessPath,
+  getDefaultPathForRole,
+  isApplicationPath,
+} from "../lib/access-control";
 import { cn } from "../lib/utils";
 
 const KPI_CARD_BASE_WIDTH_PX = 248;
@@ -22,28 +26,6 @@ const PUBLIC_ROUTES = new Set(["/", "/login"]);
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.has(pathname);
-}
-
-function NotFoundComponent() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-display font-bold text-primary">404</h1>
-        <h2 className="mt-4 text-xl font-semibold">Página não encontrada</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          O recurso solicitado não existe no AAI Seguri.
-        </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
-          >
-            Voltar ao início
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
@@ -80,12 +62,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     }
 
     const role = getCurrentUserRole();
-    if (!canRoleAccessPath(role, location.pathname)) {
+    if (isApplicationPath(location.pathname) && !canRoleAccessPath(role, location.pathname)) {
       throw redirect({ to: getDefaultPathForRole(role) });
     }
   },
   component: RootComponent,
-  notFoundComponent: NotFoundComponent,
+  notFoundComponent: NotFoundPage,
   errorComponent: ErrorComponent,
 });
 

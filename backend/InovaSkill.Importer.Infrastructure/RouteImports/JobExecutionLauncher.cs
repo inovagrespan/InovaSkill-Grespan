@@ -25,13 +25,20 @@ public sealed class JobExecutionLauncher(
         {
             _ = CustomerRegistrationAddressCustomerStatuses.Read(document.RootElement);
             if (definition.JobType == OperationalJobCodes.CustomerRegistrationAddressEnrichment)
+            {
                 _ = CustomerRegistrationAddressEnrichmentProcessor.ReadRefreshResolved(document.RootElement);
+                _ = CustomerRegistrationAddressEnrichmentProcessor.ReadRefreshMissingNumber(document.RootElement);
+                _ = CustomerRegistrationAddressEnrichmentProcessor.ReadRefreshIncomplete(document.RootElement);
+            }
             if (definition.JobType == OperationalJobCodes.CustomerAddressCoordinateEnrichment)
             {
                 _ = CustomerAddressCoordinateEnrichmentProcessor.ReadReprocessFailed(document.RootElement);
                 _ = CustomerAddressCoordinateEnrichmentProcessor.ReadMaximumRequests(document.RootElement);
+                _ = CustomerAddressCoordinateEnrichmentProcessor.ReadRefreshApproximate(document.RootElement);
             }
         }
+        if (definition.JobType == OperationalJobCodes.DailyRouteOptimization)
+            _ = DailyRouteOptimizationWeekdays.Read(document.RootElement);
         var relatedEntityId = definition.JobType switch
         {
             OperationalJobCodes.MunicipalityCoordinateEnrichment => ReadRequiredGuid(document.RootElement, "importId"),
@@ -41,8 +48,10 @@ public sealed class JobExecutionLauncher(
             OperationalJobCodes.CustomerAddressCoordinateEnrichment =>
                 ReadOptionalGuid(document.RootElement, "importId") ??
                 await ResolveCurrentCustomerImportIdAsync(cancellationToken),
+            OperationalJobCodes.DailyRouteOptimization =>
+                ReadOptionalGuid(document.RootElement, "importId") ??
+                await ResolveCurrentRouteImportIdAsync(cancellationToken),
             OperationalJobCodes.ProcessImport => ReadRequiredGuid(document.RootElement, "importId"),
-            OperationalJobCodes.DailyRouteOptimization => ReadRequiredGuid(document.RootElement, "importId"),
             OperationalJobCodes.WhatsAppMessageProcessing => ReadRequiredGuid(document.RootElement, "receiptId"),
             _ => throw new InvalidOperationException($"Job sem lançador: {definition.JobType}.")
         };
@@ -115,6 +124,15 @@ public sealed class JobExecutionLauncher(
             .SingleOrDefaultAsync(cancellationToken);
         return importId ?? throw new ArgumentException(
             "Não existe um snapshot atual de clientes para enriquecer.");
+    }
+
+    private async Task<Guid> ResolveCurrentRouteImportIdAsync(CancellationToken cancellationToken)
+    {
+        var importId = await db.DataSources.AsNoTracking()
+            .Where(source => source.Code == RouteImportCodes.DataSource)
+            .Select(source => source.CurrentImportId)
+            .SingleOrDefaultAsync(cancellationToken);
+        return importId ?? throw new ArgumentException("Não existe um snapshot atual de rotas para otimizar.");
     }
 
     private static JsonDocument ParseObject(string json)

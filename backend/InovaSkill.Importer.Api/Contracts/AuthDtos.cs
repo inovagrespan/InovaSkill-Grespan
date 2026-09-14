@@ -4,4 +4,6 @@ public sealed record LoginRequest(string UserOrEmail, string Password);
 
 public sealed record RegisterUserRequest(string Name, string Email, string Password, string ConfirmPassword);
 
+public sealed record CreateAdminUserRequest(string Name, string Email, string Role, string Password, string ConfirmPassword);
+
 public sealed record LoginResponse(string Token);

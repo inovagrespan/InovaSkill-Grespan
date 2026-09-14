@@ -1,6 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace InovaSkill.Importer.Api.Assistant;
 
-public sealed record AssistantQuestionRequest(Guid? SessionId, string? Message, string? Question);
+public sealed record AssistantQuestionRequest(
+    [property: JsonPropertyName("sessionId")] Guid? SessionId,
+    [property: JsonPropertyName("message")] string? Message,
+    [property: JsonPropertyName("question")] string? Question);
 
 public sealed record AssistantSource(string Label, string Value);
 

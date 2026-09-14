@@ -20,6 +20,7 @@ describe("sidebar navigation", () => {
       "Meu WhatsApp",
       "Simulador WhatsApp",
       "Rotas",
+      "Relatório de custos",
       "Tipos de Veículo",
       "Depósito",
       "Mapa",
@@ -47,6 +48,7 @@ describe("sidebar navigation", () => {
       "Meu WhatsApp",
       "Simulador WhatsApp",
       "Rotas",
+      "Relatório de custos",
       "Tipos de Veículo",
       "Depósito",
       "Mapa",
@@ -56,12 +58,15 @@ describe("sidebar navigation", () => {
       "Estoque",
       "Produção",
     ]);
-    expect(adminItems).toHaveLength(17);
+    expect(adminItems).toHaveLength(18);
     expect(adminItems).toContain("Importações");
     expect(adminItems).toContain("Processamento");
     expect(adminItems).toContain("Consumo de IA");
     expect(adminItems).toContain("Memórias da IA");
-    expect(adminSystemItems).toEqual([...adminItems, "WhatsApp corporativo"]);
+    expect(adminItems).not.toContain("Usuários");
+    expect(adminSystemItems).toHaveLength(adminItems.length + 2);
+    expect(adminSystemItems).toContain("Usuários");
+    expect(adminSystemItems).toContain("WhatsApp corporativo");
     expect(getVisibleSidebarItemsForRole("gestor")).toEqual([]);
   });
 
@@ -83,7 +88,7 @@ describe("sidebar navigation", () => {
     expect(source).not.toContain('to: "/vendas"');
     expect(source).not.toContain('label: "Vendas"');
     expect(source).not.toContain('to: "/logistica"');
-    expect(source).not.toContain('label: "Logística"');
+    expect(source).toContain('{ key: "logistics", label: "Logística"');
     expect(source).toContain('to: "/produtos"');
     expect(source).toContain('label: "Produtos"');
     expect(source).toContain('to: "/estoque"');
@@ -117,7 +122,7 @@ describe("sidebar navigation", () => {
     expect(source).not.toContain('label: "Relatórios"');
     expect(source).not.toContain('label: "Pendências"');
     expect(source).not.toContain('label: "Simulação"');
-    expect(source).not.toContain('label: "Logística"');
+    expect(source).toContain('{ key: "logistics", label: "Logística"');
     expect(source).not.toContain("item.children?.map");
   });
 

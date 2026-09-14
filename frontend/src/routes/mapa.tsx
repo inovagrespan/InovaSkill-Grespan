@@ -58,7 +58,7 @@ function MapaPage() {
             <Badge variant="outline">Clientes reais</Badge>
           </div>
           <h1 className="mt-1 text-3xl font-display font-semibold tracking-tight">Mapa de rotas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Visualize somente clientes com endereço geocodificado em localização exata.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Visualize clientes com localização exata ou aproximada por endereço, CEP ou cidade.</p>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Filtro de atividade">
           {(Object.entries(activityLabels) as [ActivityFilter, string][]).map(([value, label]) => (
@@ -73,7 +73,7 @@ function MapaPage() {
       {!error && withoutCoordinates > 0 && (
         <Alert>
           <AlertDescription>
-            {withoutCoordinates} de {totalCustomers} cliente(s) não possuem localização exata e não são exibidos no mapa.
+            {withoutCoordinates} de {totalCustomers} cliente(s) não possuem coordenada disponível e não são exibidos no mapa.
           </AlertDescription>
         </Alert>
       )}
@@ -81,7 +81,7 @@ function MapaPage() {
       {loading ? (
         <Skeleton className="h-[500px] min-h-[420px] w-full rounded-xl" />
       ) : (
-        <LogisticsRegionMap customers={customers} routes={mapRouteOverlays} />
+        <LogisticsRegionMap customers={customers} routes={mapRouteOverlays} unlocatedCount={withoutCoordinates} />
       )}
     </div>
   );
@@ -101,6 +101,8 @@ function toLogisticsMapCustomer(item: LogisticsMapCustomerItem): LogisticsMapCus
     route: item.route,
     priority: item.priority,
     locationPrecision: item.locationPrecision,
+    coordinateAccuracy: item.coordinateAccuracy,
+    coordinatePrecision: item.coordinatePrecision,
     address: item.address,
     lat: item.lat,
     lng: item.lng,

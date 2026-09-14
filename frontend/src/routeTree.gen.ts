@@ -33,10 +33,12 @@ import { Route as LogisticaIndexRouteImport } from './routes/logistica.index'
 import { Route as ImportacoesIndexRouteImport } from './routes/importacoes.index'
 import { Route as VeiculosTiposRouteImport } from './routes/veiculos.tipos'
 import { Route as LogisticaRotasRouteImport } from './routes/logistica.rotas'
+import { Route as LogisticaRelatoriosCustosRouteImport } from './routes/logistica.relatorios-custos'
 import { Route as LogisticaMapaRouteImport } from './routes/logistica.mapa'
 import { Route as ImportacoesFilesRouteImport } from './routes/importacoes.files'
 import { Route as ConfiguracoesDepositoRouteImport } from './routes/configuracoes.deposito'
 import { Route as AdministracaoWhatsappRouteImport } from './routes/administracao.whatsapp'
+import { Route as AdministracaoUsuariosRouteImport } from './routes/administracao.usuarios'
 import { Route as AdministracaoMemoriasRouteImport } from './routes/administracao.memorias'
 import { Route as AdministracaoConsumoIaRouteImport } from './routes/administracao.consumo-ia'
 
@@ -160,6 +162,12 @@ const LogisticaRotasRoute = LogisticaRotasRouteImport.update({
   path: '/rotas',
   getParentRoute: () => LogisticaRoute,
 } as any)
+const LogisticaRelatoriosCustosRoute =
+  LogisticaRelatoriosCustosRouteImport.update({
+    id: '/relatorios-custos',
+    path: '/relatorios-custos',
+    getParentRoute: () => LogisticaRoute,
+  } as any)
 const LogisticaMapaRoute = LogisticaMapaRouteImport.update({
   id: '/mapa',
   path: '/mapa',
@@ -178,6 +186,11 @@ const ConfiguracoesDepositoRoute = ConfiguracoesDepositoRouteImport.update({
 const AdministracaoWhatsappRoute = AdministracaoWhatsappRouteImport.update({
   id: '/administracao/whatsapp',
   path: '/administracao/whatsapp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdministracaoUsuariosRoute = AdministracaoUsuariosRouteImport.update({
+  id: '/administracao/usuarios',
+  path: '/administracao/usuarios',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdministracaoMemoriasRoute = AdministracaoMemoriasRouteImport.update({
@@ -214,10 +227,12 @@ export interface FileRoutesByFullPath {
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
+  '/administracao/usuarios': typeof AdministracaoUsuariosRoute
   '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
   '/configuracoes/deposito': typeof ConfiguracoesDepositoRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
+  '/logistica/relatorios-custos': typeof LogisticaRelatoriosCustosRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
   '/veiculos/tipos': typeof VeiculosTiposRoute
   '/importacoes/': typeof ImportacoesIndexRoute
@@ -244,10 +259,12 @@ export interface FileRoutesByTo {
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
+  '/administracao/usuarios': typeof AdministracaoUsuariosRoute
   '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
   '/configuracoes/deposito': typeof ConfiguracoesDepositoRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
+  '/logistica/relatorios-custos': typeof LogisticaRelatoriosCustosRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
   '/veiculos/tipos': typeof VeiculosTiposRoute
   '/importacoes': typeof ImportacoesIndexRoute
@@ -277,10 +294,12 @@ export interface FileRoutesById {
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
+  '/administracao/usuarios': typeof AdministracaoUsuariosRoute
   '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
   '/configuracoes/deposito': typeof ConfiguracoesDepositoRoute
   '/importacoes/files': typeof ImportacoesFilesRoute
   '/logistica/mapa': typeof LogisticaMapaRoute
+  '/logistica/relatorios-custos': typeof LogisticaRelatoriosCustosRoute
   '/logistica/rotas': typeof LogisticaRotasRoute
   '/veiculos/tipos': typeof VeiculosTiposRoute
   '/importacoes/': typeof ImportacoesIndexRoute
@@ -311,10 +330,12 @@ export interface FileRouteTypes {
     | '/vendas'
     | '/administracao/consumo-ia'
     | '/administracao/memorias'
+    | '/administracao/usuarios'
     | '/administracao/whatsapp'
     | '/configuracoes/deposito'
     | '/importacoes/files'
     | '/logistica/mapa'
+    | '/logistica/relatorios-custos'
     | '/logistica/rotas'
     | '/veiculos/tipos'
     | '/importacoes/'
@@ -341,10 +362,12 @@ export interface FileRouteTypes {
     | '/vendas'
     | '/administracao/consumo-ia'
     | '/administracao/memorias'
+    | '/administracao/usuarios'
     | '/administracao/whatsapp'
     | '/configuracoes/deposito'
     | '/importacoes/files'
     | '/logistica/mapa'
+    | '/logistica/relatorios-custos'
     | '/logistica/rotas'
     | '/veiculos/tipos'
     | '/importacoes'
@@ -373,10 +396,12 @@ export interface FileRouteTypes {
     | '/vendas'
     | '/administracao/consumo-ia'
     | '/administracao/memorias'
+    | '/administracao/usuarios'
     | '/administracao/whatsapp'
     | '/configuracoes/deposito'
     | '/importacoes/files'
     | '/logistica/mapa'
+    | '/logistica/relatorios-custos'
     | '/logistica/rotas'
     | '/veiculos/tipos'
     | '/importacoes/'
@@ -406,6 +431,7 @@ export interface RootRouteChildren {
   VendasRoute: typeof VendasRoute
   AdministracaoConsumoIaRoute: typeof AdministracaoConsumoIaRoute
   AdministracaoMemoriasRoute: typeof AdministracaoMemoriasRoute
+  AdministracaoUsuariosRoute: typeof AdministracaoUsuariosRoute
   AdministracaoWhatsappRoute: typeof AdministracaoWhatsappRoute
   ConfiguracoesDepositoRoute: typeof ConfiguracoesDepositoRoute
   VeiculosTiposRoute: typeof VeiculosTiposRoute
@@ -581,6 +607,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LogisticaRotasRouteImport
       parentRoute: typeof LogisticaRoute
     }
+    '/logistica/relatorios-custos': {
+      id: '/logistica/relatorios-custos'
+      path: '/relatorios-custos'
+      fullPath: '/logistica/relatorios-custos'
+      preLoaderRoute: typeof LogisticaRelatoriosCustosRouteImport
+      parentRoute: typeof LogisticaRoute
+    }
     '/logistica/mapa': {
       id: '/logistica/mapa'
       path: '/mapa'
@@ -607,6 +640,13 @@ declare module '@tanstack/react-router' {
       path: '/administracao/whatsapp'
       fullPath: '/administracao/whatsapp'
       preLoaderRoute: typeof AdministracaoWhatsappRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/administracao/usuarios': {
+      id: '/administracao/usuarios'
+      path: '/administracao/usuarios'
+      fullPath: '/administracao/usuarios'
+      preLoaderRoute: typeof AdministracaoUsuariosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/administracao/memorias': {
@@ -642,12 +682,14 @@ const ImportacoesRouteWithChildren = ImportacoesRoute._addFileChildren(
 
 interface LogisticaRouteChildren {
   LogisticaMapaRoute: typeof LogisticaMapaRoute
+  LogisticaRelatoriosCustosRoute: typeof LogisticaRelatoriosCustosRoute
   LogisticaRotasRoute: typeof LogisticaRotasRoute
   LogisticaIndexRoute: typeof LogisticaIndexRoute
 }
 
 const LogisticaRouteChildren: LogisticaRouteChildren = {
   LogisticaMapaRoute: LogisticaMapaRoute,
+  LogisticaRelatoriosCustosRoute: LogisticaRelatoriosCustosRoute,
   LogisticaRotasRoute: LogisticaRotasRoute,
   LogisticaIndexRoute: LogisticaIndexRoute,
 }
@@ -679,6 +721,7 @@ const rootRouteChildren: RootRouteChildren = {
   VendasRoute: VendasRoute,
   AdministracaoConsumoIaRoute: AdministracaoConsumoIaRoute,
   AdministracaoMemoriasRoute: AdministracaoMemoriasRoute,
+  AdministracaoUsuariosRoute: AdministracaoUsuariosRoute,
   AdministracaoWhatsappRoute: AdministracaoWhatsappRoute,
   ConfiguracoesDepositoRoute: ConfiguracoesDepositoRoute,
   VeiculosTiposRoute: VeiculosTiposRoute,

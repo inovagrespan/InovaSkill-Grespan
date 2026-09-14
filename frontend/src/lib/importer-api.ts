@@ -3807,6 +3807,7 @@ export type AdminJobItem = {
   progressMessage?: string | null;
   scheduleId?: string | null;
   retriedFromJobExecutionId?: string | null;
+  parentJobExecutionId?: string | null;
 };
 
 export type OperationalJobDefinition = {
@@ -3849,12 +3850,14 @@ export type LogisticsMapCustomerItem = {
   priority: "Baixa" | "Média" | "Alta";
   lastDelivery: string;
   nextDelivery: string;
-  locationPrecision: "ADDRESS_EXACT" | "ADDRESS_INTERPOLATED" | "MUNICIPALITY";
+  locationPrecision: "ADDRESS_EXACT" | "ADDRESS_INTERPOLATED" | "ADDRESS_APPROXIMATE" | "MUNICIPALITY";
+  coordinateAccuracy: "EXACT" | "APPROXIMATE";
+  coordinatePrecision: "EXACT" | "INTERPOLATED" | "STREET" | "POSTAL_CODE" | "MUNICIPALITY";
   address: string | null;
   lat: number;
   lng: number;
-  municipalityLat: number;
-  municipalityLng: number;
+  municipalityLat: number | null;
+  municipalityLng: number | null;
 };
 
 export type LogisticsMapCustomersResponse = {
@@ -3899,6 +3902,8 @@ export type CurrentCustomerItem = {
   municipalityName: string;
   registrationAddress: {
     status: "RESOLVED" | "INVALID_DOCUMENT" | "NOT_FOUND" | "FAILED";
+    source: "BRASIL_API_CNPJ" | "BRASIL_API_CNPJ_CEP" | string;
+    addressCompleteness: "COMPLETE" | "WITHOUT_NUMBER" | "POSTAL_ONLY";
     postalCode: string | null;
     stateCode: string | null;
     city: string | null;
@@ -4204,6 +4209,198 @@ export async function deleteVehicleType(id: string): Promise<void> {
 
 // ─── Logistics depot and OSRM ───────────────────────────────────────────
 
+export type RouteOptimizationSummary = {
+  id: string; routeImportId: string; weekday: string;
+  status: "Optimized" | "NoImprovement" | "Infeasible" | "InsufficientData";
+  reason: string | null; currentDistanceMeters: number; currentDurationSeconds: number;
+  proposedDistanceMeters: number; proposedDurationSeconds: number;
+  currentVehicleCount: number; proposedVehicleCount: number; additionalVehicleCount: number;
+  additionalCapacityKg: number; totalWeightKg: number; createdAt: string;
+  issueCount: number; inheritedFromResultId: string | null; isInherited: boolean;
+};
+
+export type RouteOptimizationDetail = RouteOptimizationSummary & {
+  vehicles: Array<{
+    id: string; sequence: number; isAdditional: boolean; isIdle: boolean;
+    vehicleTypeId: string; vehicleType: string; sourceRouteId: string | null; sourceRouteName: string | null;
+    capacityKg: number; loadKg: number; occupancy: number; distanceMeters: number; durationSeconds: number;
+    stops: Array<{ id: string; sequence: number; municipalityId: string; municipality: string; weightKg: number; distanceFromPreviousMeters: number; durationFromPreviousSeconds: number }>;
+  }>;
+};
+
+export type RouteOptimizationExecution = {
+  id: string;
+  status: "Queued" | "Processing" | "Retrying" | "Completed" | "Failed" | "Cancelled";
+  progressPercent: number;
+  progressMessage: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type RouteOptimizationsResponse = {
+  snapshotId: string | null;
+  isCurrentSnapshot: boolean;
+  latestExecution: RouteOptimizationExecution | null;
+  items: RouteOptimizationSummary[];
+};
+
+export async function fetchRouteOptimizations(
+  date: string,
+  weekday?: string,
+): Promise<RouteOptimizationsResponse> {
+  const params = new URLSearchParams({ date });
+  if (weekday) params.set("weekday", weekday);
+  const response = await authFetch(`${API_URL}/api/route-optimizations?${params.toString()}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar as simulações de rota."));
+  return await response.json();
+}
+
+export async function fetchRouteOptimizationDetail(id: string): Promise<RouteOptimizationDetail> {
+  const response = await authFetch(`${API_URL}/api/route-optimizations/${id}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar a simulação de rota."));
+  return await response.json();
+}
+
+export async function simulateRoutes(weekdays?: string[]): Promise<{ jobExecutionId: string; status: string }> {
+  const response = await authFetch(`${API_URL}/api/route-optimizations/simulate`, {
+    method: "POST",
+    ...(weekdays ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ weekdays }) } : {}),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao iniciar a simulação de rotas."));
+  return await response.json();
+}
+
+export type RouteOptimizationIssue = {
+  code: "MUNICIPALITY_NOT_LINKED" | "INVALID_STOP_WEIGHT" | "MUNICIPALITY_COORDINATE_MISSING" | "VEHICLE_CAPACITY_MISSING";
+  routeId: string | null;
+  routeEntryId: string | null;
+  municipalityId: string | null;
+  vehicleTypeId: string | null;
+  message: string;
+  currentValue: string | null;
+  canResolve: boolean;
+};
+
+export type RouteOptimizationRemediation = {
+  resultId: string;
+  snapshotId: string;
+  expectedSnapshotId: string;
+  weekday: string;
+  isCurrentSnapshot: boolean;
+  readOnly: boolean;
+  canResolve: boolean;
+  issueCount: number;
+  reason: string;
+  routes: Array<{
+    routeId: string;
+    routeName: string;
+    sourceSheetName: string | null;
+    sourceHeaderRowNumber: number | null;
+    vehicleTypeId: string;
+    vehicleType: string;
+    capacityKg: number | null;
+    issues: RouteOptimizationIssue[];
+    stops: Array<{
+      routeEntryId: string;
+      sequence: number;
+      sourceRowNumber: number | null;
+      name: string;
+      municipalityId: string | null;
+      municipality: string | null;
+      weightKg: number;
+      isExcludedFromOptimization: boolean;
+      issues: RouteOptimizationIssue[];
+    }>;
+  }>;
+};
+
+export type MunicipalityCandidate = {
+  ibgeCode: string;
+  name: string;
+  stateCode: string;
+  latitude: number;
+  longitude: number;
+  source: string;
+};
+
+export type RouteOptimizationResolution = {
+  action: "SET_WEIGHT" | "EXCLUDE_STOP" | "LINK_MUNICIPALITY" | "SET_VEHICLE_TYPE_CAPACITY" | "CONFIRM_OFFICIAL_COORDINATE" | "SET_MANUAL_COORDINATE";
+  routeId?: string;
+  routeEntryId?: string;
+  municipalityId?: string;
+  municipalityIbgeCode?: string;
+  vehicleTypeId?: string;
+  weightKg?: string;
+  capacityKg?: string;
+  latitude?: string;
+  longitude?: string;
+  confirmAliasReplacement?: boolean;
+};
+
+export type RouteOptimizationRemediationStatus = {
+  derivedImportId: string;
+  derivedFromImportId: string;
+  version: number;
+  status: string;
+  failureMessage: string | null;
+  isPublished: boolean;
+  affectedWeekdays: string[];
+  jobs: Array<{
+    id: string;
+    jobType: string;
+    status: string;
+    progressPercent: number;
+    progressMessage: string | null;
+    errorMessage: string | null;
+  }>;
+};
+
+export async function fetchRouteOptimizationRemediation(resultId: string): Promise<RouteOptimizationRemediation> {
+  const response = await authFetch(`${API_URL}/api/route-optimizations/${resultId}/remediation`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar as pendências."));
+  return await response.json();
+}
+
+export async function searchMunicipalityCandidates(query: string): Promise<MunicipalityCandidate[]> {
+  const params = new URLSearchParams({ query, page: "1", pageSize: "20" });
+  const response = await authFetch(`${API_URL}/api/route-optimizations/municipality-candidates?${params}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao pesquisar municípios."));
+  const result = (await response.json()) as { items: MunicipalityCandidate[] };
+  return result.items;
+}
+
+export async function createRouteOptimizationRemediation(
+  resultId: string,
+  expectedSnapshotId: string,
+  resolutions: RouteOptimizationResolution[],
+): Promise<{ derivedImportId: string; jobExecutionId: string; status: string }> {
+  const response = await authFetch(`${API_URL}/api/route-optimizations/${resultId}/remediations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedSnapshotId, resolutions }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao salvar as correções."));
+  return await response.json();
+}
+
+export async function fetchRouteOptimizationRemediationStatus(
+  derivedImportId: string,
+): Promise<RouteOptimizationRemediationStatus> {
+  const response = await authFetch(`${API_URL}/api/route-optimizations/remediations/${derivedImportId}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao acompanhar a correção."));
+  return await response.json();
+}
+
+export async function retryRouteOptimizationRemediation(
+  derivedImportId: string,
+): Promise<{ jobExecutionId: string; status: string }> {
+  const response = await authFetch(`${API_URL}/api/route-optimizations/remediations/${derivedImportId}/retry`, { method: "POST" });
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao repetir a correção."));
+  return await response.json();
+}
+
 export type LogisticsDepotItem = {
   id: string;
   name: string;
@@ -4250,6 +4447,7 @@ export type ImportedRouteItem = {
   id: string;
   name: string;
   weekday: string;
+  departureTime: string | null;
   vehicleTypeId: string;
   vehicleType: string;
   vehicleCapacityKg: number | null;
@@ -4273,9 +4471,11 @@ export type ImportedRouteDetail = ImportedRouteItem & {
   entries: {
     id: string;
     sequence: number;
+    sourceRowNumber: number | null;
     name: string;
     deliveries: number;
     averagePerDay: number;
+    isExcludedFromOptimization: boolean;
     note: string | null;
   }[];
 };

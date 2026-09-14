@@ -73,6 +73,120 @@ public sealed class CustomerRegistrationAddressEnrichmentProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_RefreshesOnlyResolvedAddressesWithoutNumberWhenRequested()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db);
+        var firstCustomerId = await db.CustomerSnapshots
+            .Where(item => item.ImportId == fixture.ImportId && item.DocumentNumber == "11111111000111")
+            .Select(item => item.CustomerId).SingleAsync();
+        db.CustomerRegistrationAddresses.AddRange(
+            new CustomerRegistrationAddress
+            {
+                Id = Guid.NewGuid(), CustomerId = firstCustomerId, DocumentNumber = "11111111000111",
+                Source = "BRASIL_API", Status = CustomerRegistrationAddressStatuses.Resolved,
+                Number = "50", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            },
+            new CustomerRegistrationAddress
+            {
+                Id = Guid.NewGuid(), CustomerId = fixture.ResolvedCustomerId,
+                DocumentNumber = "33333333000133", Source = "BRASIL_API",
+                Status = CustomerRegistrationAddressStatuses.Resolved,
+                Number = null, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+        var job = new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerRegistrationAddressEnrichment,
+            ContractVersion = 1, Queue = BackgroundJobQueues.Default, Trigger = JobExecutionTrigger.Manual,
+            ParametersJson = "{\"customerStatus\":\"ALL\",\"refreshMissingNumber\":true}",
+            Status = JobExecutionStatus.Processing, RelatedEntityId = fixture.ImportId,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.JobExecutions.Add(job);
+        await db.SaveChangesAsync();
+        var provider = new RecordingProvider();
+
+        await CreateProcessor(db, provider).ProcessAsync(fixture.ImportId, job.Id, default);
+
+        Assert.DoesNotContain("11111111000111", provider.Cnpjs);
+        Assert.Contains("33333333000133", provider.Cnpjs);
+        Assert.Equal("10", (await db.CustomerRegistrationAddresses.SingleAsync(
+            item => item.CustomerId == fixture.ResolvedCustomerId)).Number);
+        Assert.Contains("\"refreshMissingNumber\":true", job.ResultJson);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RefreshIncompleteSelectsOnlyAddressWithoutStreetAndReportsCompleteness()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db);
+        var firstCustomerId = await db.CustomerSnapshots
+            .Where(item => item.ImportId == fixture.ImportId && item.DocumentNumber == "11111111000111")
+            .Select(item => item.CustomerId).SingleAsync();
+        db.CustomerRegistrationAddresses.AddRange(
+            new CustomerRegistrationAddress
+            {
+                Id = Guid.NewGuid(), CustomerId = firstCustomerId, DocumentNumber = "11111111000111",
+                Source = "BRASIL_API_CNPJ", Status = CustomerRegistrationAddressStatuses.Resolved,
+                Street = "Rua Existente", Number = "50", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            },
+            new CustomerRegistrationAddress
+            {
+                Id = Guid.NewGuid(), CustomerId = fixture.ResolvedCustomerId, DocumentNumber = "33333333000133",
+                Source = "BRASIL_API_CNPJ", Status = CustomerRegistrationAddressStatuses.Resolved,
+                PostalCode = "17500-000", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+        var job = new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerRegistrationAddressEnrichment,
+            ContractVersion = 1, Queue = BackgroundJobQueues.Default, Trigger = JobExecutionTrigger.Manual,
+            ParametersJson = "{\"customerStatus\":\"ALL\",\"refreshIncomplete\":true}",
+            Status = JobExecutionStatus.Processing, RelatedEntityId = fixture.ImportId, CreatedAt = DateTime.UtcNow
+        };
+        db.JobExecutions.Add(job);
+        await db.SaveChangesAsync();
+        var provider = new RecordingProvider();
+
+        await CreateProcessor(db, provider).ProcessAsync(fixture.ImportId, job.Id, default);
+
+        Assert.DoesNotContain("11111111000111", provider.Cnpjs);
+        Assert.Contains("33333333000133", provider.Cnpjs);
+        Assert.Contains("\"refreshIncomplete\":true", job.ResultJson);
+        Assert.Contains("\"complete\":2", job.ResultJson);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RefreshIncompleteReplacesLegacyNonRegistrationAddressSource()
+    {
+        await using var db = CreateDb();
+        var fixture = await SeedAsync(db);
+        db.CustomerRegistrationAddresses.Add(new CustomerRegistrationAddress
+        {
+            Id = Guid.NewGuid(), CustomerId = fixture.ResolvedCustomerId, DocumentNumber = "33333333000133",
+            Source = "CUSTOMER_DELIVERY_SPREADSHEET", Status = CustomerRegistrationAddressStatuses.Resolved,
+            Street = "Rua de Entrega", Number = "99", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        });
+        var job = new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerRegistrationAddressEnrichment,
+            ContractVersion = 1, Queue = BackgroundJobQueues.Default, Trigger = JobExecutionTrigger.Manual,
+            ParametersJson = "{\"customerStatus\":\"ALL\",\"refreshIncomplete\":true}",
+            Status = JobExecutionStatus.Processing, RelatedEntityId = fixture.ImportId, CreatedAt = DateTime.UtcNow
+        };
+        db.JobExecutions.Add(job);
+        await db.SaveChangesAsync();
+        var provider = new RecordingProvider();
+
+        await CreateProcessor(db, provider).ProcessAsync(fixture.ImportId, job.Id, default);
+
+        Assert.Contains("33333333000133", provider.Cnpjs);
+        var refreshed = await db.CustomerRegistrationAddresses.SingleAsync(
+            item => item.CustomerId == fixture.ResolvedCustomerId);
+        Assert.Equal("BRASIL_API_CNPJ", refreshed.Source);
+        Assert.Equal("TESTE", refreshed.Street);
+    }
+
+    [Fact]
     public async Task ProcessAsync_IsIdempotentAfterSuccessfulEnrichment()
     {
         await using var db = CreateDb();
@@ -132,7 +246,8 @@ public sealed class CustomerRegistrationAddressEnrichmentProcessorTests
         db.JobExecutions.Add(job);
         await db.SaveChangesAsync();
         var processor = new CustomerRegistrationAddressEnrichmentProcessor(
-            db, new RecordingProvider(), Options.Create(new BrasilApiOptions { PersistenceBatchSize = 1 }));
+            db, new RecordingProvider(),
+            Options.Create(new BrasilApiOptions { PersistenceBatchSize = 1 }));
 
         await processor.ProcessAsync(fixture.ImportId, job.Id, CancellationToken.None);
 
@@ -239,7 +354,8 @@ public sealed class CustomerRegistrationAddressEnrichmentProcessorTests
 
     private static CustomerRegistrationAddressEnrichmentProcessor CreateProcessor(
         ImportDbContext db, ICustomerRegistrationAddressProvider provider) =>
-        new(db, provider, Options.Create(new BrasilApiOptions { PersistenceBatchSize = 25 }));
+        new(db, provider,
+            Options.Create(new BrasilApiOptions { PersistenceBatchSize = 25 }));
 
     private static ImportDbContext CreateDb() => new(new DbContextOptionsBuilder<ImportDbContext>()
         .UseInMemoryDatabase($"customer-addresses-{Guid.NewGuid()}").Options);

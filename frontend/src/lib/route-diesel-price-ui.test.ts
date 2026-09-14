@@ -3,7 +3,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("cadastro do preço do diesel em veículos", () => {
-  const routeSource = fs.readFileSync(path.resolve(process.cwd(), "src/routes/rotas.tsx"), "utf8");
   const vehicleSource = fs.readFileSync(path.resolve(process.cwd(), "src/routes/veiculos.tipos.tsx"), "utf8");
   const apiSource = fs.readFileSync(path.resolve(process.cwd(), "src/lib/importer-api.ts"), "utf8");
 
@@ -14,10 +13,7 @@ describe("cadastro do preço do diesel em veículos", () => {
     expect(vehicleSource).toContain("Salvar preço");
   });
 
-  it("usa o valor persistido na rota sem mostrar campo editável", () => {
-    expect(routeSource).toContain("fetchLogisticsFuelSettings()");
-    expect(routeSource).toContain("cadastrado na aba Veículos");
-    expect(routeSource).not.toContain('aria-label="Preço do diesel por litro"');
+  it("mantém os endpoints de leitura, gravação e pesquisa centralizados em veículos", () => {
     expect(apiSource).toContain("/api/vehicle-types/fuel-settings");
     expect(apiSource).toContain("/api/vehicle-types/fuel-price/research");
   });

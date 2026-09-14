@@ -26,7 +26,21 @@ public sealed class ImportProcessingService(
         var import = await dbContext.RouteImports
             .Include(x => x.DataSource)
             .SingleAsync(x => x.Id == importId, cancellationToken);
-        if (import.Status is RouteImportStatus.Completed or RouteImportStatus.Failed)
+        if (import.Status == RouteImportStatus.Completed)
+        {
+            if (import.DerivedFromImportId.HasValue &&
+                job.Status is JobExecutionStatus.Queued or JobExecutionStatus.Processing or JobExecutionStatus.Retrying)
+            {
+                job.Status = JobExecutionStatus.Completed;
+                job.ProgressPercent = 100;
+                job.ProgressMessage = "Arquivo processado";
+                job.ResultJson ??= JsonSerializer.Serialize(new { importId, completed = true });
+                job.FinishedAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            return;
+        }
+        if (import.Status == RouteImportStatus.Failed)
         {
             return;
         }
@@ -74,6 +88,12 @@ public sealed class ImportProcessingService(
             job.FinishedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
             var activated = await importLifecycle.TryActivateAsync(import.Id, cancellationToken);
+            if (!activated && import.DerivedFromImportId.HasValue)
+            {
+                activated = await dbContext.DataSources.AsNoTracking()
+                    .AnyAsync(source => source.Id == import.DataSourceId && source.CurrentImportId == import.Id,
+                        cancellationToken);
+            }
             if (activated && (
                 string.Equals(import.DataSource!.Code, RouteImportCodes.DataSource, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(import.DataSource.Code, CustomerImportCodes.DataSource, StringComparison.OrdinalIgnoreCase) ||
@@ -102,6 +122,34 @@ public sealed class ImportProcessingService(
                 }
             }
 
+            if (activated && import.DerivedFromImportId.HasValue &&
+                string.Equals(import.DataSource!.Code, RouteImportCodes.DataSource, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var affectedWeekdays = await dbContext.RouteImportAffectedWeekdays.AsNoTracking()
+                        .Where(item => item.ImportId == import.Id)
+                        .OrderBy(item => item.Weekday)
+                        .Select(item => item.Weekday)
+                        .ToArrayAsync(cancellationToken);
+                    await operationalJobQueue.TryQueueWithContextAsync(
+                        OperationalJobCodes.DailyRouteOptimization,
+                        import.Id,
+                        JsonSerializer.Serialize(new { weekdays = affectedWeekdays }),
+                        import.CreatedByUserId,
+                        jobExecutionId,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    // A versão já foi publicada. O job falho permanece na Central e pode ser repetido pela remediação.
+                }
+            }
+
         }
         catch (StructuralImportException exception)
         {
@@ -126,9 +174,15 @@ public sealed class ImportProcessingService(
                 job.Status = JobExecutionStatus.Failed;
                 job.ProgressMessage = "Falha";
                 job.FinishedAt = DateTime.UtcNow;
-                import.Status = RouteImportStatus.Failed;
-                import.FailureMessage = job.ErrorMessage;
-                import.FinishedAt = DateTime.UtcNow;
+                var derivedWasPublished = import.DerivedFromImportId.HasValue &&
+                    await dbContext.DataSources.AsNoTracking().AnyAsync(source =>
+                        source.Id == import.DataSourceId && source.CurrentImportId == import.Id, cancellationToken);
+                if (!derivedWasPublished)
+                {
+                    import.Status = RouteImportStatus.Failed;
+                    import.FailureMessage = job.ErrorMessage;
+                    import.FinishedAt = DateTime.UtcNow;
+                }
                 await dbContext.SaveChangesAsync(cancellationToken);
                 return;
             }

@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json;
+using System.Globalization;
 using InovaSkill.Importer.Application.RouteImports;
 using Microsoft.Extensions.Options;
 
@@ -45,12 +46,13 @@ public sealed class OpenRouteServiceTableClient(
         var localIndexByGlobal = globalIndexes.Select((global, local) => (global, local))
             .ToDictionary(item => item.global, item => item.local);
         using var message = new HttpRequestMessage(HttpMethod.Post, "v2/matrix/driving-car");
-        message.Headers.Authorization = new("Bearer", settings.ApiKey);
+        // ORS expects the API key itself in Authorization (not a Bearer token).
+        message.Headers.TryAddWithoutValidation("Authorization", settings.ApiKey);
         message.Content = JsonContent.Create(new MatrixRequest(
             globalIndexes.Select(index => new[] { points[index].Longitude, points[index].Latitude }).ToArray(),
             ["duration", "distance"],
-            sourceIndexes.Select(index => localIndexByGlobal[index]).ToArray(),
-            destinationIndexes.Select(index => localIndexByGlobal[index]).ToArray()));
+            sourceIndexes.Select(index => localIndexByGlobal[index].ToString(CultureInfo.InvariantCulture)).ToArray(),
+            destinationIndexes.Select(index => localIndexByGlobal[index].ToString(CultureInfo.InvariantCulture)).ToArray()));
         try
         {
             using var response = await httpClient.SendAsync(message, cancellationToken);
@@ -126,8 +128,8 @@ public sealed class OpenRouteServiceTableClient(
     private sealed record MatrixRequest(
         [property: JsonPropertyName("locations")] decimal[][] Locations,
         [property: JsonPropertyName("metrics")] string[] Metrics,
-        [property: JsonPropertyName("sources")] int[] Sources,
-        [property: JsonPropertyName("destinations")] int[] Destinations);
+        [property: JsonPropertyName("sources")] string[] Sources,
+        [property: JsonPropertyName("destinations")] string[] Destinations);
     private sealed record MatrixResponse(
         [property: JsonPropertyName("durations")] decimal?[][]? Durations,
         [property: JsonPropertyName("distances")] decimal?[][]? Distances);

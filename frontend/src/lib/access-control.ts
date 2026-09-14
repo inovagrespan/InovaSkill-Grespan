@@ -16,8 +16,10 @@ const COMMERCIAL_CONTEXT_ROLES: readonly ApplicationRole[] = ALL_ROLES;
 const ADMIN_ROLES: readonly ApplicationRole[] = ["admin", "admin_system"];
 const SYSTEM_ADMIN_ROLES: readonly ApplicationRole[] = ["admin_system"];
 const ROUTE_SIMULATION_ROLES: readonly ApplicationRole[] = ["vendas", "logistica", "admin", "admin_system"];
+const ROUTE_REMEDIATION_ROLES: readonly ApplicationRole[] = ["diretor", "vendas", "logistica", "admin", "admin_system"];
 
 const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
+  { path: "/administracao/usuarios", roles: SYSTEM_ADMIN_ROLES },
   { path: "/administracao/whatsapp", roles: SYSTEM_ADMIN_ROLES },
   { path: "/administracao/consumo-ia", roles: ADMIN_ROLES },
   { path: "/administracao/memorias", roles: ADMIN_ROLES },
@@ -29,6 +31,7 @@ const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
   { path: "/veiculos/tipos", roles: LOGISTICS_ROLES },
   { path: "/configuracoes/deposito", roles: LOGISTICS_ROLES },
   { path: "/logistica/rotas", roles: ROUTE_VIEW_ROLES },
+  { path: "/logistica/relatorios-custos", roles: LOGISTICS_ROLES },
   { path: "/logistica", roles: LOGISTICS_ROLES },
   { path: "/rotas", roles: ROUTE_VIEW_ROLES },
   { path: "/producao", roles: LOGISTICS_ROLES },
@@ -44,6 +47,12 @@ const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
   { path: "/dashboard", roles: ALL_ROLES },
 ];
 
+export function isApplicationPath(pathname: string): boolean {
+  return NAVIGATION_ACCESS.some(
+    ({ path }) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
+
 export function canRoleAccessPath(role: string | null, pathname: string): boolean {
   const normalizedRole = normalizeUserRole(role);
   const rule = NAVIGATION_ACCESS.find(
@@ -57,6 +66,11 @@ export function canRoleAccessPath(role: string | null, pathname: string): boolea
 export function canRoleUseRouteSimulation(role: string | null): boolean {
   const normalizedRole = normalizeUserRole(role);
   return ROUTE_SIMULATION_ROLES.includes(normalizedRole as ApplicationRole);
+}
+
+export function canRoleResolveRouteIssues(role: string | null): boolean {
+  const normalizedRole = normalizeUserRole(role);
+  return ROUTE_REMEDIATION_ROLES.includes(normalizedRole as ApplicationRole);
 }
 
 export function getDefaultPathForRole(role: string | null): string {

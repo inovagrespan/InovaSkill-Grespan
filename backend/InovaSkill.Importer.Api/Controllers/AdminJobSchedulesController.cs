@@ -102,6 +102,10 @@ public sealed class AdminJobSchedulesController(
             {
                 try { _ = CustomerRegistrationAddressEnrichmentProcessor.ReadRefreshResolved(request.Parameters); }
                 catch (ArgumentException exception) { return exception.Message; }
+                try { _ = CustomerRegistrationAddressEnrichmentProcessor.ReadRefreshMissingNumber(request.Parameters); }
+                catch (ArgumentException exception) { return exception.Message; }
+                try { _ = CustomerRegistrationAddressEnrichmentProcessor.ReadRefreshIncomplete(request.Parameters); }
+                catch (ArgumentException exception) { return exception.Message; }
             }
         }
         try { _ = CronExpression.Parse(request.CronExpression); }

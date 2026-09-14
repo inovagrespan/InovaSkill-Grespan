@@ -19,7 +19,7 @@ public sealed class AssistantController(
 
     [HttpPost("ask")]
     public async Task<ActionResult<AssistantAnswerResponse>> Ask(
-        AssistantQuestionRequest request,
+        [FromBody] AssistantQuestionRequest request,
         CancellationToken cancellationToken)
     {
         var questionReceivedAt = DateTime.UtcNow;
@@ -71,7 +71,7 @@ public sealed class AssistantController(
 
     [HttpPost("whatsapp-simulator")]
     public async Task<ActionResult<AssistantAnswerResponse>> SimulateWhatsApp(
-        AssistantQuestionRequest request,
+        [FromBody] AssistantQuestionRequest request,
         CancellationToken cancellationToken)
     {
         var questionReceivedAt = DateTime.UtcNow;

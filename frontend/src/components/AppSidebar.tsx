@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Factory,
   FileUp,
   FileText,
@@ -21,7 +22,9 @@ import {
   Sun,
   Truck,
   UserRound,
+  UserRoundPlus,
   Users,
+  WalletCards,
 } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -51,6 +54,7 @@ const items = [
   { to: "/meu-whatsapp", label: "Meu WhatsApp", icon: Smartphone },
   { to: "/simulador-whatsapp", label: "Simulador WhatsApp", icon: MessageCircle },
   { to: "/logistica/rotas", label: "Rotas", icon: Route },
+  { to: "/logistica/relatorios-custos", label: "Relatório de custos", icon: WalletCards },
   { to: "/veiculos/tipos", label: "Tipos de Veículo", icon: Truck },
   { to: "/configuracoes/deposito", label: "Depósito", icon: Map },
   { to: "/mapa", label: "Mapa", icon: Map },
@@ -61,9 +65,18 @@ const items = [
   { to: "/producao", label: "Produção", icon: Factory },
   { to: "/importacoes/files", label: "Importações", icon: FileUp },
   { to: "/processamentos", label: "Processamento", icon: Settings },
+  { to: "/administracao/usuarios", label: "Usuários", icon: UserRoundPlus },
   { to: "/administracao/consumo-ia", label: "Consumo de IA", icon: Gauge },
   { to: "/administracao/memorias", label: "Memórias da IA", icon: Brain },
   { to: "/administracao/whatsapp", label: "WhatsApp corporativo", icon: QrCode },
+] as const;
+
+const menuGroups = [
+  { key: "ai", label: "Inteligência Artificial", icon: Brain, paths: ["/assistente", "/administracao/consumo-ia", "/administracao/memorias"] },
+  { key: "whatsapp", label: "WhatsApp", icon: MessageCircle, paths: ["/meu-whatsapp", "/simulador-whatsapp", "/administracao/whatsapp"] },
+  { key: "logistics", label: "Logística", icon: Route, paths: ["/logistica/rotas", "/logistica/relatorios-custos", "/veiculos/tipos", "/configuracoes/deposito", "/mapa", "/producao"] },
+  { key: "registries", label: "Cadastros", icon: Users, paths: ["/clientes", "/notas-fiscais", "/produtos", "/estoque"] },
+  { key: "administration", label: "Administração", icon: Settings, paths: ["/importacoes/files", "/processamentos", "/administracao/usuarios"] },
 ] as const;
 
 export function getVisibleSidebarItemsForRole(role: string | null) {
@@ -94,6 +107,9 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
   const currentUser = getCurrentUser();
   const currentRole = getCurrentUserRole();
   const visibleItems = getVisibleSidebarItemsForRole(currentRole);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(
+    menuGroups.map((group) => [group.key, group.paths.some((path) => pathname === path || pathname.startsWith(`${path}/`))]),
+  ));
   const userName = currentUser?.name?.trim() || currentUser?.email?.trim() || "User";
   const userRoleLabel = formatUserRole(currentRole);
 
@@ -102,53 +118,66 @@ export function AppSidebar({ collapsed, onToggleCollapsed, theme, onToggleTheme 
   }
 
   function renderNav(showCollapsed: boolean, onNavigate?: () => void) {
+    function renderItem(item: (typeof visibleItems)[number], nested = false) {
+      const active = isItemActive(item.to);
+      const Icon = item.icon;
+      const link = (
+        <Link
+          to={item.to}
+          aria-label={item.label}
+          onClick={onNavigate}
+          className={cn(
+            "group flex items-center rounded-lg border px-3 py-2.5 text-sm transition-all duration-200",
+            "outline-none ring-primary/40 focus-visible:ring-2",
+            showCollapsed ? "justify-center" : nested ? "gap-3 pl-7" : "gap-3",
+            active
+              ? "border-primary/20 bg-primary/5 text-foreground"
+              : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
+          )}
+        >
+          <span className={cn("inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors", active ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground group-hover:text-foreground")}>
+            <Icon className="size-4" />
+          </span>
+          <span className={cn("whitespace-nowrap text-sm font-medium transition-all duration-200", showCollapsed ? "pointer-events-none w-0 -translate-x-1 opacity-0" : "w-auto translate-x-0 opacity-100")} aria-hidden={showCollapsed}>
+            {item.label}
+          </span>
+        </Link>
+      );
+
+      return <div key={item.to}>{showCollapsed ? <Tooltip><TooltipTrigger asChild>{link}</TooltipTrigger><TooltipContent side="right" className="text-xs">{item.label}</TooltipContent></Tooltip> : link}</div>;
+    }
+
     return (
       <nav className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-2 space-y-1">
         {visibleItems.map((item) => {
-          const active = isItemActive(item.to);
-          const Icon = item.icon;
-          const link = (
-            <Link
-              to={item.to}
-              aria-label={item.label}
-              onClick={onNavigate}
-              className={cn(
-                "group flex items-center rounded-lg border px-3 py-2.5 text-sm transition-all duration-200",
-                "outline-none ring-primary/40 focus-visible:ring-2",
-                showCollapsed ? "justify-center" : "gap-3",
-                active
-                  ? "border-primary/20 bg-primary/5 text-foreground"
-                  : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
-                  active ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground group-hover:text-foreground",
-                )}
-              >
-                <Icon className="size-4" />
-              </span>
-              <span
-                className={cn(
-                  "whitespace-nowrap text-sm font-medium transition-all duration-200",
-                  showCollapsed ? "pointer-events-none w-0 -translate-x-1 opacity-0" : "w-auto translate-x-0 opacity-100",
-                )}
-                aria-hidden={showCollapsed}
-              >
-                <span>{item.label}</span>
-              </span>
-            </Link>
-          );
+          const group = menuGroups.find((candidate) => candidate.paths.some((path) => path === item.to));
+          if (!group) return renderItem(item);
+
+          const visibleGroupItems = visibleItems.filter((candidate) => group.paths.some((path) => path === candidate.to));
+          if (item.to !== visibleGroupItems[0]?.to) return null;
+          if (visibleGroupItems.length === 1 || showCollapsed) return visibleGroupItems.map((groupItem) => renderItem(groupItem));
+
+          const groupIsActive = visibleGroupItems.some((groupItem) => isItemActive(groupItem.to));
+          const groupIsOpen = openGroups[group.key] ?? false;
+          const GroupIcon = group.icon;
 
           return (
-            <div key={item.to}>
-              {showCollapsed ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>{link}</TooltipTrigger>
-                  <TooltipContent side="right" className="text-xs">{item.label}</TooltipContent>
-                </Tooltip>
-              ) : link}
+            <div key={group.key} className="space-y-1">
+              <button
+                type="button"
+                onClick={() => setOpenGroups((current) => ({ ...current, [group.key]: !groupIsOpen }))}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-sm outline-none ring-primary/40 transition-colors focus-visible:ring-2",
+                  groupIsActive ? "border-primary/20 bg-primary/5 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
+                )}
+                aria-expanded={groupIsOpen}
+                aria-controls={`sidebar-${group.key}-items`}
+              >
+                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-muted/50"><GroupIcon className="size-4" /></span>
+                <span className="flex-1 text-left font-medium">{group.label}</span>
+                <ChevronDown className={cn("size-4 transition-transform", groupIsOpen && "rotate-180")} />
+              </button>
+              {groupIsOpen ? <div id={`sidebar-${group.key}-items`} className="space-y-1 border-l border-border/70 pl-2">{visibleGroupItems.map((groupItem) => renderItem(groupItem, true))}</div> : null}
             </div>
           );
         })}

@@ -62,6 +62,14 @@ Configuração padrão:
 o servidor deve aceitar pelo menos o total de coordenadas distintas enviado por
 bloco. `MaximumParallelRequests` limita pressão sobre o serviço.
 
+## Simulação diária
+
+O job agendável `DAILY_ROUTE_OPTIMIZATION` usa a matriz OSRM e o Google OR-Tools
+para processar separadamente todos os dias do snapshot publicado. O Worker lê
+`RouteOptimization:SolverTimeoutSeconds`, com padrão de 30 segundos para cada
+etapa do solver. Falha ou timeout não substitui o último resultado materializado
+do dia e segue a política de retry de `job_executions`.
+
 ## Diagnóstico
 
 Depois de cadastrar o depósito, `GET /api/osrm/health` consulta o endpoint

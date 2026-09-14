@@ -32,9 +32,12 @@ public sealed class RoutesSpreadsheetParserTests
         var route = Assert.Single(result.Routes);
         Assert.Equal("RIO PRETO", route.Name);
         Assert.Equal("MONDAY", route.Weekday);
+        Assert.Equal("SEGUNDA NOVA", route.SourceSheetName);
+        Assert.Equal(2, route.SourceHeaderRowNumber);
         Assert.Equal("Acelo", route.VehicleType);
         Assert.Equal(2, route.Entries.Count);
         Assert.Equal([1, 2], route.Entries.Select(x => x.Sequence));
+        Assert.Equal([3, 4], route.Entries.Select(x => x.SourceRowNumber));
         Assert.Equal(["REGENTE FEIJO", "REGENTE FEIJO"], route.Entries.Select(x => x.Name));
         Assert.Equal(6762.77m, route.Entries[0].AveragePerDay);
         Assert.Equal("Observação urgente", route.Entries[1].Note);

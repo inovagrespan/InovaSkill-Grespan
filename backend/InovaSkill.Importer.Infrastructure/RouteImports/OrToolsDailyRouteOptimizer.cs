@@ -5,7 +5,7 @@ namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
 public sealed class OrToolsDailyRouteOptimizer : IDailyRouteOptimizer
 {
-    public DailyRouteOptimizationResult Optimize(DailyRouteOptimizationProblem problem, string matrixSource)
+    public LegacyDailyRouteOptimizationResult Optimize(DailyRouteOptimizationProblem problem, string matrixSource)
     {
         Validate(problem);
         var rentalTypes = problem.RentalVehicleTypes
@@ -148,7 +148,7 @@ public sealed class OrToolsDailyRouteOptimizer : IDailyRouteOptimizer
             (proposed.RentalVehicles <= current.RentalVehicles &&
              (proposedFuel < currentFuel ||
               proposedFuel == currentFuel && proposed.DistanceMeters < current.DistanceMeters));
-        return new DailyRouteOptimizationResult(
+        return new LegacyDailyRouteOptimizationResult(
             problem.ImportId,
             problem.Weekday,
             improved ? DailyRouteOptimizationStatuses.Optimized : DailyRouteOptimizationStatuses.NoImprovement,
@@ -195,7 +195,7 @@ public sealed class OrToolsDailyRouteOptimizer : IDailyRouteOptimizer
         routes.Count(route => route.IsRental),
         routes.Count == 0 ? 0 : routes.Max(route => route.Occupancy));
 
-    private static DailyRouteOptimizationResult Empty(DailyRouteOptimizationProblem problem, string source, string status, string message) =>
+    private static LegacyDailyRouteOptimizationResult Empty(DailyRouteOptimizationProblem problem, string source, string status, string message) =>
         new(problem.ImportId, problem.Weekday, status, DailyRouteOptimizationPolicy.RulesVersion, source, message,
             new(0, 0, 0, 0, 0), new(0, 0, 0, 0, 0), []);
 

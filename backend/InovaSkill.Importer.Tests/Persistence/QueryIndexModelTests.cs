@@ -18,6 +18,7 @@ public sealed class QueryIndexModelTests
     [InlineData(typeof(InventorySnapshot), "ImportId", "AvailableQuantity")]
     [InlineData(typeof(DailyInventoryRecord), "ProductId", "Date")]
     [InlineData(typeof(AiProviderCall), "CreatedAt")]
+    [InlineData(typeof(JobExecution), "JobType", "RelatedEntityId", "CreatedAt")]
     public void Model_HasIndexesForCurrentFilterAndOrderingPatterns(
         Type entityType,
         params string[] expectedProperties)

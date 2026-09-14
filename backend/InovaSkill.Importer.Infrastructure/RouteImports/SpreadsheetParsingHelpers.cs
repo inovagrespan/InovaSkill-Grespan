@@ -14,7 +14,8 @@ internal static partial class SpreadsheetParsingHelpers
 
     public static string NormalizeHeader(string value) => MunicipalityNameNormalizer.Normalize(value)
         .Replace(".", string.Empty, StringComparison.Ordinal)
-        .Replace("*", string.Empty, StringComparison.Ordinal);
+        .Replace("*", string.Empty, StringComparison.Ordinal)
+        .Replace("\"", string.Empty, StringComparison.Ordinal);
 
     public static bool TryReadDecimal(IXLCell cell, out decimal value)
     {

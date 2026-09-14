@@ -51,6 +51,10 @@ execuções termina ambos como `FAILED`.
 - `vehicle_types`: Truck (10.300 kg), Toco (7.700 kg) e Acelo (3.300 kg).
 - `routes`: rota, dia, veículo e import de origem.
 - `route_entries`: sequência original, nome, entregas, Média/Dia e observação.
+- `route_import_corrections`: ação tipada e valores anterior/novo da correção.
+- `route_import_affected_weekdays`: dias recalculados na versão derivada.
+- `municipality_aliases`: nome normalizado da fonte vinculado ao município oficial.
+- `daily_route_optimization_issues`: causas bloqueantes por resultado, rota e parada.
 
 ## Interpretação e correções
 
@@ -64,6 +68,32 @@ Um campo inválido cria erro genérico por import, aba, linha e campo. Corrigir
 preenche `corrected_value`; o XLSX original permanece intocado. Quando todos os
 erros estão resolvidos, o reprocessamento cria outro `job_execution` e publica a
 mesma mensagem. O parser aplica a correção pela coordenada antes de converter.
+
+### Correção rápida de pendências da otimização
+
+`GET /api/route-optimizations/{resultId}/remediation` entrega todas as causas e
+valores atuais agrupados por rota/parada. `municipality-candidates` pesquisa o
+catálogo municipal oficial embutido com paginação; a busca reativa no frontend
+usa o debounce compartilhado de 300 ms. Diretor, Vendas, Logística, `admin` e
+`admin_system` podem usar
+`POST /api/route-optimizations/{resultId}/remediations` no snapshot atual.
+
+O POST exige `expectedSnapshotId` e ações discriminadas. Peso recebe três casas
+e arredondamento `AwayFromZero`; negativo sempre exige peso positivo. Peso zero
+pode receber `EXCLUDE_STOP`, que resolve também município ausente porque a parada
+não participa da simulação. Vínculos viram aliases futuros; remapeamento existente
+exige confirmação explícita. Coordenada pode vir da base oficial ou de
+latitude/longitude manual auditada. Capacidade atualiza o catálogo futuro e é
+congelada em cada rota da nova versão.
+
+A operação cria uma versão oficial filha sem sobrescrever o XLSX ou o pai.
+`PROCESS_IMPORT` clona o snapshot e aplica correções em transação. Resultados de
+dias intactos são copiados integralmente com referência de herança e os dias
+afetados são enviados em `weekdays[]` ao `DAILY_ROUTE_OPTIMIZATION`. Status e
+retry são expostos por `GET/POST /api/route-optimizations/remediations/{id}` como
+uma visão dos mesmos `job_executions`, sem fila ou monitoramento paralelo. Falha
+antes da publicação conserva o pai; falha do solver depois da publicação permite
+repetir somente os dias afetados.
 
 ## Snapshots, idempotência e concorrência
 
@@ -93,15 +123,19 @@ funcionais auditáveis, enquanto indisponibilidade HTTP interrompe a execução
 para aproveitar a política de retry do job.
 
 O job posterior `CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT` transforma endereços
-cadastrais resolvidos em coordenadas pelo Nominatim e persiste os resultados em
-`customer_address_coordinates`. A execução pública é sequencial, identificada
-e limitada globalmente a uma chamada por segundo, com cache pelo endereço
-normalizado. O mapa usa essa coordenada quando resolvida e recorre a
-`municipality_coordinates` nos demais casos.
+cadastrais resolvidos em coordenadas pelo provedor configurado e persiste os
+resultados em `customer_address_coordinates`. `Geoapify` é o padrão e
+`Nominatim` permanece selecionável; ambos implementam
+`ICustomerAddressCoordinateProvider`. A execução com Nominatim público é
+sequencial e limitada globalmente a uma chamada por segundo. O cache por
+endereço normalizado vale para qualquer provedor. O mapa usa essa coordenada
+quando resolvida e recorre a `municipality_coordinates` nos demais casos.
 O endereço cadastral persiste separadamente o tipo de logradouro retornado em
 `descricao_tipo_de_logradouro`. A consulta combina tipo, logradouro, número,
-bairro, cidade, UF e CEP formatado; somente resultados que confirmam o número,
-município e UF são aceitos como coordenada de endereço.
+bairro, cidade, UF e CEP formatado. Resultados que confirmam número, município e
+UF são classificados como exatos; fallbacks compatíveis por logradouro, CEP ou
+município são aceitos como coordenadas aproximadas e mantêm o nível de precisão
+auditável.
 
 `GET /api/routes` consulta somente o import atual. Para auditoria,
 `GET /api/route-imports/{importId}/routes` consulta um snapshot específico.
@@ -139,8 +173,40 @@ status fica `MissingCapacity` e a ocupação geral permanece nula.
 
 O frontend representa a taxa com barra e círculo percentual. Abaixo de 60% a
 rota é `Ocioso`; entre 60% e menos de 85%, `Médio`; entre 85% e 95%,
-`Saudável`; e acima de 95% até 100%, `Crítico`. O cálculo e a apresentação são
-limitados a 100%, inclusive quando a carga informada supera a capacidade.
+`Saudável`; e acima de 95%, `Crítico`. O cálculo e o texto preservam valores
+acima de 100%, inclusive quando a carga informada supera a capacidade. Somente
+o preenchimento visual da barra e do círculo é limitado a 100%.
+
+## Sugestões diárias
+
+A tela de Rotas compartilha os filtros de data e dia da semana entre `Rotas
+reais` e `Sugestões`. `GET /api/routes?date=&weekday=` filtra as rotas reais
+antes da paginação; `GET /api/route-optimizations?date=&weekday=` resolve o
+snapshot publicado aplicável à data e retorna apenas os resultados persistidos
+do `Weekday` selecionado. A resposta de otimizações informa se ele é o snapshot
+atual e inclui a última execução para polling. Snapshots históricos são
+consultáveis, mas apenas o atual pode ser recalculado. O índice existente
+`routes (ImportId, Weekday, Name)` sustenta a nova combinação de filtros, sem
+necessidade de migration adicional.
+
+O job `DAILY_ROUTE_OPTIMIZATION` aceita opcionalmente `weekdays[]`; payload sem
+esse campo recalcula todos os dias. Ele agrega `Média/Dia` por município, parcela
+somente cidades acima da maior capacidade cadastrada, consulta a matriz OSRM e
+executa CP-SAT + Routing Solver no Worker. A sugestão nunca altera `routes` ou
+`route_entries`. Somente resultados `Optimized` possuem veículos e paradas;
+demais estados preservam a distribuição real e explicam o motivo.
+O total proposto conta somente veículos com paradas. Veículos existentes que o
+solver libera permanecem na distribuição como `IsIdle`, para auditoria e
+visualização, mas não entram em `ProposedVehicleCount`. Da mesma forma, a
+quantidade e a capacidade adicionais contam apenas veículos adicionais em uso.
+A tela resume essa movimentação com veículos e capacidade liberados,
+introduzidos e seus saldos líquidos. Os dados são reconstruídos dos veículos
+persistidos na sugestão; não existe pareamento artificial de troca entre dois
+veículos, pois a redistribuição ocorre sobre o conjunto inteiro do dia.
+Os comparativos superiores destacam visualmente atual, proposto e impacto:
+distância e duração incluem variação percentual segura para base zero, veículos
+mostram o saldo absoluto e capacidade usa o termo `introduzida` para não sugerir
+um crescimento líquido quando houve substituição.
 
 ## Métricas dos jobs
 

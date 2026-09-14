@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Net.Http.Headers;
+using InovaSkill.Importer.Application.RouteImports;
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.RouteImports;
 using Microsoft.Extensions.Options;
@@ -30,6 +31,38 @@ public sealed class BrasilApiCustomerRegistrationAddressProviderTests
         Assert.Equal("SALA 2", result.Complement);
         Assert.Equal("CENTRO", result.Neighborhood);
         Assert.Equal("/api/cnpj/v1/07050702000200", handler.RequestUri!.AbsolutePath);
+        Assert.Equal("BRASIL_API_CNPJ", result.Source);
+    }
+
+    [Fact]
+    public async Task FindByCnpjAsync_ComplementsOnlyMissingFieldsFromCompatiblePostalCode()
+    {
+        var handler = new StubHandler(
+            (HttpStatusCode.OK, """{"cep":"17500-000","uf":"SP","municipio":"MARILIA","bairro":"CENTRO","numero":"100"}"""),
+            (HttpStatusCode.OK, """{"state":"SP","city":"Marília","street":"Rua Nove de Julho","neighborhood":"OUTRO"}"""));
+
+        var result = await CreateProvider(handler).FindByCnpjAsync("07050702000200", default);
+
+        Assert.Equal("Rua Nove de Julho", result.Street);
+        Assert.Equal("CENTRO", result.Neighborhood);
+        Assert.Equal("100", result.Number);
+        Assert.Equal("BRASIL_API_CNPJ_CEP", result.Source);
+        Assert.Equal(PostalCodeEnrichmentStatuses.Complemented, result.PostalCodeEnrichmentStatus);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task FindByCnpjAsync_DoesNotMergePostalCodeFromDifferentMunicipality()
+    {
+        var handler = new StubHandler(
+            (HttpStatusCode.OK, """{"cep":"17500-000","uf":"SP","municipio":"MARILIA"}"""),
+            (HttpStatusCode.OK, """{"state":"SP","city":"BAURU","street":"Rua Incorreta"}"""));
+
+        var result = await CreateProvider(handler).FindByCnpjAsync("07050702000200", default);
+
+        Assert.Null(result.Street);
+        Assert.Equal(PostalCodeEnrichmentStatuses.Incompatible, result.PostalCodeEnrichmentStatus);
+        Assert.Equal("BRASIL_API_CNPJ", result.Source);
     }
 
     [Theory]
@@ -62,7 +95,7 @@ public sealed class BrasilApiCustomerRegistrationAddressProviderTests
     {
         var handler = new StubHandler(
             (HttpStatusCode.TooManyRequests, "{}"),
-            (HttpStatusCode.OK, "{\"municipio\":\"MARILIA\",\"uf\":\"SP\"}"));
+            (HttpStatusCode.OK, "{\"municipio\":\"MARILIA\",\"uf\":\"SP\",\"logradouro\":\"RUA A\",\"bairro\":\"CENTRO\"}"));
 
         var result = await CreateProvider(handler, maximumRetries: 1)
             .FindByCnpjAsync("07050702000200", CancellationToken.None);

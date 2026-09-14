@@ -20,7 +20,8 @@ public sealed class OsrmDailyMatrixService(ImportDbContext db, IOsrmTableClient 
         var depot = await db.LogisticsDepots.AsNoTracking().SingleOrDefaultAsync(cancellationToken)
             ?? throw new OsrmTableException("O depósito logístico não foi configurado.");
         var entries = await db.RouteEntries.AsNoTracking()
-            .Where(entry => entry.Route!.ImportId == routeImportId && entry.Route.Weekday == normalizedWeekday)
+            .Where(entry => entry.Route!.ImportId == routeImportId && entry.Route.Weekday == normalizedWeekday &&
+                            !entry.IsExcludedFromOptimization)
             .Select(entry => new
             {
                 entry.MunicipalityId,

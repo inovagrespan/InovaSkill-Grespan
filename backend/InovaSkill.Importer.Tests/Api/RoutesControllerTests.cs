@@ -202,6 +202,40 @@ public sealed class RoutesControllerTests
         Assert.IsType<BadRequestObjectResult>(response);
     }
 
+    [Fact]
+    public async Task List_NormalizesWeekdayAndFiltersBeforePagination()
+    {
+        await using var db = CreateDbContext();
+        var source = CreateSource();
+        var routeImport = CreateImport(
+            source.Id, 1, RouteImportStatus.Completed,
+            new DateTime(2026, 7, 5, 12, 0, 0, DateTimeKind.Utc));
+        source.CurrentImportId = routeImport.Id;
+        var vehicle = CreateVehicle();
+        var tuesdayRoute = CreateRoute(routeImport.Id, vehicle.Id, "Rota de terça", 0.80m);
+        tuesdayRoute.Weekday = "TUESDAY";
+        db.AddRange(source, routeImport, vehicle, tuesdayRoute);
+        db.AddRange(
+            CreateRoute(routeImport.Id, vehicle.Id, "Rota de segunda A", 0.80m),
+            CreateRoute(routeImport.Id, vehicle.Id, "Rota de segunda B", 0.80m));
+        await db.SaveChangesAsync();
+
+        var response = await new RoutesController(db).List(
+            page: 1,
+            pageSize: 1,
+            weekday: " tuesday ",
+            cancellationToken: default);
+        var json = SerializeOkResult(response);
+
+        Assert.Equal(1, json.RootElement.GetProperty("total").GetInt32());
+        Assert.Equal(
+            "Rota de terça",
+            json.RootElement.GetProperty("items")[0].GetProperty("Name").GetString());
+        Assert.Equal(
+            "TUESDAY",
+            json.RootElement.GetProperty("items")[0].GetProperty("Weekday").GetString());
+    }
+
     [Theory]
     [InlineData("rota interior", "Rota Interior")]
     [InlineData("bady bassitt", "Rota Interior")]
@@ -285,6 +319,42 @@ public sealed class RoutesControllerTests
         var geometry = json.RootElement.GetProperty("geometry");
         Assert.Equal("LineString", geometry.GetProperty("type").GetString());
         Assert.Equal(2, geometry.GetProperty("coordinates").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task GetRoadPath_DoesNotQueryProviderWhenCustomerIsAtDepot()
+    {
+        await using var db = CreateDbContext();
+        var now = DateTime.UtcNow;
+        var source = CreateSource();
+        var routeImport = CreateImport(source.Id, 1, RouteImportStatus.Completed, now);
+        var vehicle = CreateVehicle();
+        var route = CreateRoute(routeImport.Id, vehicle.Id, "Rota Matriz", 0.8m);
+        var municipality = new Municipality { Id = Guid.NewGuid(), Name = "MARILIA", StateCode = "SP", CreatedAt = now };
+        route.Entries = [new RouteEntry { Id = Guid.NewGuid(), RouteId = route.Id, Sequence = 1, Name = municipality.Name, MunicipalityId = municipality.Id, CreatedAt = now }];
+        var customer = new Customer { Id = Guid.NewGuid(), DataSourceId = source.Id, ExternalCode = "MATRIZ", IsActive = true, CreatedAt = now };
+        customer.Snapshots = [new CustomerSnapshot { Id = Guid.NewGuid(), ImportId = routeImport.Id, CustomerId = customer.Id, LegalName = "Grespan Matriz", MunicipalityId = municipality.Id, SourceRowNumber = 2, CreatedAt = now }];
+        customer.RegistrationAddress = new CustomerRegistrationAddress
+        {
+            Id = Guid.NewGuid(), CustomerId = customer.Id, CreatedAt = now, UpdatedAt = now,
+            Coordinate = new CustomerAddressCoordinate
+            {
+                Id = Guid.NewGuid(), Status = CustomerAddressCoordinateStatuses.Resolved,
+                Precision = CustomerAddressCoordinatePrecisions.Exact, Latitude = -22.21m, Longitude = -49.95m,
+                CreatedAt = now, UpdatedAt = now
+            }
+        };
+        var depot = new LogisticsDepot { Id = Guid.NewGuid(), Name = "Matriz Grespan", Address = "Marília", Latitude = -22.21m, Longitude = -49.95m, CreatedAt = now, UpdatedAt = now };
+        var assignment = new RouteCustomerAssignment { Id = Guid.NewGuid(), RouteId = route.Id, CustomerId = customer.Id, MunicipalityId = municipality.Id, CreatedAt = now, UpdatedAt = now };
+        db.AddRange(source, routeImport, vehicle, municipality, route, customer, depot, assignment);
+        await db.SaveChangesAsync();
+        var provider = new CapturingRouteClient();
+
+        var response = await new RoutesController(db, provider).GetRoadPath(route.Id, default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(response);
+        Assert.Contains("apenas clientes localizados na Matriz", conflict.Value!.ToString());
+        Assert.Null(provider.Points);
     }
 
     [Fact]

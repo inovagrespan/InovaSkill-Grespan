@@ -14,6 +14,24 @@ public sealed class OperationalJobQueue(
     public async Task<Guid?> TryQueueAsync(
         string jobType,
         Guid relatedEntityId,
+        CancellationToken cancellationToken) => await TryQueueCoreAsync(
+            jobType, relatedEntityId, null, null, null, cancellationToken);
+
+    public Task<Guid?> TryQueueWithContextAsync(
+        string jobType,
+        Guid relatedEntityId,
+        string parametersJson,
+        long? requestedByUserId,
+        Guid? parentJobExecutionId,
+        CancellationToken cancellationToken) => TryQueueCoreAsync(
+            jobType, relatedEntityId, parametersJson, requestedByUserId, parentJobExecutionId, cancellationToken);
+
+    private async Task<Guid?> TryQueueCoreAsync(
+        string jobType,
+        Guid relatedEntityId,
+        string? parametersJson,
+        long? requestedByUserId,
+        Guid? parentJobExecutionId,
         CancellationToken cancellationToken)
     {
         var definition = OperationalJobCatalog.GetRequired(jobType);
@@ -39,20 +57,22 @@ public sealed class OperationalJobQueue(
             Trigger = jobType == OperationalJobCodes.WhatsAppMessageProcessing
                 ? JobExecutionTrigger.Webhook
                 : JobExecutionTrigger.System,
-            ParametersJson = jobType switch
+            ParametersJson = parametersJson ?? jobType switch
             {
                 OperationalJobCodes.MunicipalityCoordinateEnrichment =>
                     JsonSerializer.Serialize(new { importId = relatedEntityId, reprocessFailed = false }),
                 OperationalJobCodes.CustomerRegistrationAddressEnrichment =>
                     JsonSerializer.Serialize(new { importId = relatedEntityId, customerStatus = "ACTIVE", refreshResolved = false }),
                 OperationalJobCodes.CustomerAddressCoordinateEnrichment =>
-                    JsonSerializer.Serialize(new { importId = relatedEntityId, customerStatus = "ACTIVE", reprocessFailed = false }),
+                    JsonSerializer.Serialize(new { importId = relatedEntityId, customerStatus = "ACTIVE", reprocessFailed = false, refreshApproximate = false }),
                 OperationalJobCodes.WhatsAppMessageProcessing =>
                     JsonSerializer.Serialize(new { receiptId = relatedEntityId }),
                 _ => JsonSerializer.Serialize(new { relatedEntityId })
             },
             Status = JobExecutionStatus.Queued,
             RelatedEntityId = relatedEntityId,
+            RequestedByUserId = requestedByUserId,
+            ParentJobExecutionId = parentJobExecutionId,
             CreatedAt = DateTime.UtcNow
         };
         dbContext.JobExecutions.Add(job);

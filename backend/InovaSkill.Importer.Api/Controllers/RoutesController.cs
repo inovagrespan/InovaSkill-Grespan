@@ -253,9 +253,10 @@ public sealed class RoutesController(ImportDbContext dbContext, IRouteGeometryCl
                 item.Id,
                 item.Name,
                 item.Weekday,
+                departureTime = item.DepartureTime,
                 vehicleTypeId = item.VehicleTypeId,
                 vehicleType = item.VehicleType!.Name,
-                vehicleCapacityKg = item.VehicleType.CapacityKg,
+                vehicleCapacityKg = item.VehicleCapacityKgSnapshot > 0 ? item.VehicleCapacityKgSnapshot : (decimal?)null,
                 item.TotalWeightKg,
                 item.TotalVolumeM3,
                 item.TotalPallets,
@@ -272,9 +273,11 @@ public sealed class RoutesController(ImportDbContext dbContext, IRouteGeometryCl
                 {
                     entry.Id,
                     entry.Sequence,
+                    entry.SourceRowNumber,
                     entry.Name,
                     entry.Deliveries,
                     entry.AveragePerDay,
+                    entry.IsExcludedFromOptimization,
                     entry.Note
                 }).ToList()
             })
@@ -336,6 +339,14 @@ public sealed class RoutesController(ImportDbContext dbContext, IRouteGeometryCl
                 : int.MaxValue)
             .ThenBy(customer => customer.ExternalCode, StringComparer.Ordinal)
             .ToArray();
+        if (orderedCustomers.All(customer =>
+                customer.Latitude == depot.Latitude && customer.Longitude == depot.Longitude))
+        {
+            return Conflict(new
+            {
+                message = "Esta rota possui apenas clientes localizados na Matriz; não há percurso rodoviário para calcular."
+            });
+        }
         var points = new List<RouteGeometryPoint>(orderedCustomers.Length + 2)
         {
             new(depot.Id, depot.Name, depot.Latitude, depot.Longitude)
@@ -493,6 +504,7 @@ public sealed class RoutesController(ImportDbContext dbContext, IRouteGeometryCl
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, MaximumPageSize);
+        var normalizedWeekday = weekday?.Trim().ToUpperInvariant();
         var normalizedOccupancyLevel = occupancyLevel?.Trim().ToLowerInvariant();
 
         if (!string.IsNullOrEmpty(normalizedOccupancyLevel) &&
@@ -512,9 +524,9 @@ public sealed class RoutesController(ImportDbContext dbContext, IRouteGeometryCl
         var query = dbContext.Routes.AsNoTracking()
             .Where(route => route.ImportId == importId.Value);
 
-        if (!string.IsNullOrWhiteSpace(weekday))
+        if (!string.IsNullOrWhiteSpace(normalizedWeekday))
         {
-            query = query.Where(route => route.Weekday == weekday);
+            query = query.Where(route => route.Weekday == normalizedWeekday);
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -554,9 +566,10 @@ public sealed class RoutesController(ImportDbContext dbContext, IRouteGeometryCl
                 route.Id,
                 route.Name,
                 route.Weekday,
+                departureTime = route.DepartureTime,
                 vehicleTypeId = route.VehicleTypeId,
                 vehicleType = route.VehicleType!.Name,
-                vehicleCapacityKg = route.VehicleType.CapacityKg,
+                vehicleCapacityKg = route.VehicleCapacityKgSnapshot > 0 ? route.VehicleCapacityKgSnapshot : (decimal?)null,
                 route.TotalWeightKg,
                 route.TotalVolumeM3,
                 route.TotalPallets,

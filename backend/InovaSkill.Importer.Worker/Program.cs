@@ -1,6 +1,8 @@
 using InovaSkill.Importer.Infrastructure.BackgroundJobs;
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
+using InovaSkill.Importer.Infrastructure.Configuration;
 
+DotEnvLoader.Load();
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddImportInfrastructure(builder.Configuration);
 builder.Services.AddImportHangfire(builder.Configuration);

@@ -27,4 +27,6 @@ public sealed class JobExecution
     public JobSchedule? Schedule { get; set; }
     public Guid? RetriedFromJobExecutionId { get; set; }
     public JobExecution? RetriedFromJobExecution { get; set; }
+    public Guid? ParentJobExecutionId { get; set; }
+    public JobExecution? ParentJobExecution { get; set; }
 }

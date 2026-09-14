@@ -5,15 +5,22 @@ import { LocateFixed, TrafficCone, Users } from "lucide-react";
 import { Button } from "./button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
 import {
+  DEFAULT_LOGISTICS_MAP_PRECISION_FILTER,
   GRESPAN_HEADQUARTERS,
+  filterLogisticsMapCustomersByPrecision,
+  listLogisticsMapCities,
   type LogisticsMapRoute,
+  type LogisticsMapPrecisionFilter,
   type LogisticsTrafficPeriodDays,
   type LogisticsCustomerStatus,
   type LogisticsCustomerType,
   type LogisticsMapCustomer,
+  ALL_TOLL_PLAZAS,
+  automaticTollTariff,
+  type TollPlaza,
 } from "@/lib/logistics-map-data";
 
-type LogisticsRegionMapProps = { customers: LogisticsMapCustomer[]; routes: LogisticsMapRoute[]; periodDays?: LogisticsTrafficPeriodDays; compact?: boolean };
+type LogisticsRegionMapProps = { customers: LogisticsMapCustomer[]; routes: LogisticsMapRoute[]; periodDays?: LogisticsTrafficPeriodDays; compact?: boolean; unlocatedCount?: number };
 
 const REGIONAL_ZOOM = 9;
 const CUSTOMER_ZOOM = 11;
@@ -26,7 +33,11 @@ function escapeHtml(value: string): string {
 function customerPopup(customer: LogisticsMapCustomer): string {
   const activityLabel = customer.isActive ? "Ativo" : "Inativo";
   const isAddress = customer.locationPrecision !== "MUNICIPALITY";
-  const precision = customer.locationPrecision === "ADDRESS_INTERPOLATED" ? "número interpolado" : "número exato";
+  const precision = customer.coordinatePrecision === "EXACT" ? "número exato"
+    : customer.coordinatePrecision === "INTERPOLATED" ? "número interpolado"
+      : customer.coordinatePrecision === "STREET" ? "posição aproximada pelo logradouro"
+        : customer.coordinatePrecision === "POSTAL_CODE" ? "posição aproximada pelo CEP"
+          : `posição aproximada pela cidade (${escapeHtml(customer.city)})`;
   const location = isAddress && customer.address
     ? `<span><b>Endereço:</b> ${escapeHtml(customer.address)}</span><span><b>Precisão:</b> ${precision}</span>`
     : `<span><b>Endereço:</b> não geocodificado</span><span><b>Precisão:</b> posição aproximada pela cidade (${escapeHtml(customer.city)})</span>`;
@@ -39,10 +50,11 @@ function createHeadquartersIcon(): L.DivIcon {
 
 function createCustomerPinIcon(customer: LogisticsMapCustomer): L.DivIcon {
   const statusClass = customer.isActive ? "normal" : "critical";
-  const precisionClass = customer.locationPrecision === "ADDRESS_EXACT" ? "exact"
-    : customer.locationPrecision === "ADDRESS_INTERPOLATED" ? "interpolated" : "municipality";
-  const precisionLabel = customer.locationPrecision === "ADDRESS_EXACT" ? "E"
-    : customer.locationPrecision === "ADDRESS_INTERPOLATED" ? "I" : "~";
+  const precisionClass = customer.coordinatePrecision === "EXACT" ? "exact"
+    : customer.coordinatePrecision === "MUNICIPALITY" ? "municipality" : "interpolated";
+  const precisionLabel = customer.coordinatePrecision === "EXACT" ? "E"
+    : customer.coordinatePrecision === "INTERPOLATED" ? "I"
+      : customer.coordinatePrecision === "MUNICIPALITY" ? "C" : "~";
   return L.divIcon({
     className: "logistics-map-customer-icon",
     html: `<span class="logistics-map-pin logistics-map-pin--${statusClass} logistics-map-pin--${precisionClass}"><i></i><b>${precisionLabel}</b></span>`,
@@ -64,25 +76,41 @@ function createCongestionIcon(severity: string): L.DivIcon {
   });
 }
 
+function createTollIcon(): L.DivIcon {
+  return L.divIcon({ className: "logistics-map-toll-icon", html: "<span>R$</span>", iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -17] });
+}
+
+function formatTollTariff(value: number): string {
+  return value.toFixed(2).replace(".", ",");
+}
+
+function tollPopup(toll: TollPlaza): string {
+  const commercialTariffs = Object.entries(toll.commercialManualByAxle).map(([axles, manual]) => `${axles} eixos: R$ ${formatTollTariff(manual)} / R$ ${formatTollTariff(automaticTollTariff(toll, manual))}`).join(" · ");
+  const operator = toll.operator ?? "EIXO SP";
+  const discount = Math.round((toll.automaticDiscountRate ?? 0.05) * 100);
+  return `<div class="logistics-map-popup"><strong>Pedágio ${escapeHtml(operator)} · ${escapeHtml(toll.name)}</strong><span>${escapeHtml(toll.highway)} km ${toll.kilometer.toLocaleString("pt-BR")} · ${escapeHtml(toll.municipality)}</span><hr/><span><b>Comercial (manual / automático):</b> ${commercialTariffs}</span><span><b>Passeio:</b> R$ ${formatTollTariff(toll.passengerManual)} manual · R$ ${formatTollTariff(automaticTollTariff(toll, toll.passengerManual))} automático</span><span class="text-xs">Tarifa automática estimada com desconto de ${discount}%.</span></div>`;
+}
+
 function routePopup(route: LogisticsMapRoute): string {
   return `<div class="logistics-map-popup"><strong>${escapeHtml(route.name)}</strong><span>${escapeHtml(route.cities.join(" → "))}</span><hr/><span><b>Trajeto estimado</b></span><span>Baseado nas cidades atendidas e pontos de congestionamento monitorados.</span></div>`;
 }
 
-export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact = false }: LogisticsRegionMapProps) {
+export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact = false, unlocatedCount = 0 }: LogisticsRegionMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const customerLayerRef = useRef<L.LayerGroup | null>(null);
   const [status, setStatus] = useState(ALL_FILTER);
   const [city, setCity] = useState(ALL_FILTER);
   const [type, setType] = useState(ALL_FILTER);
+  const [precision, setPrecision] = useState<LogisticsMapPrecisionFilter>(DEFAULT_LOGISTICS_MAP_PRECISION_FILTER);
 
-  const cities = useMemo(() => [...new Set(customers.map((customer) => customer.city))].sort(), [customers]);
+  const cities = useMemo(() => listLogisticsMapCities(customers), [customers]);
   const types = useMemo(() => [...new Set(customers.map((customer) => customer.type))].sort(), [customers]);
   const hasRouteOverlays = routes.length > 0;
-  const filtered = useMemo(() => customers.filter((customer) =>
+  const filtered = useMemo(() => filterLogisticsMapCustomersByPrecision(customers, precision).filter((customer) =>
     (status === ALL_FILTER || customer.status === status)
     && (city === ALL_FILTER || customer.city === city)
-    && (type === ALL_FILTER || customer.type === type)), [customers, status, city, type]);
+    && (type === ALL_FILTER || customer.type === type)), [customers, status, city, type, precision]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -103,6 +131,13 @@ export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact
     const map = mapRef.current;
     if (!layer || !map) return;
     layer.clearLayers();
+
+    for (const toll of ALL_TOLL_PLAZAS) {
+      const marker = L.marker([toll.lat, toll.lng], { icon: createTollIcon(), zIndexOffset: 900 });
+      marker.bindTooltip(`Pedágio ${escapeHtml(toll.operator ?? "EIXO SP")} · ${escapeHtml(toll.name)}`, { direction: "top" });
+      marker.bindPopup(tollPopup(toll), { maxWidth: 340 });
+      layer.addLayer(marker);
+    }
 
     const visibleRoutes = routes.filter((route) => city === ALL_FILTER || route.cities.includes(city));
     for (const route of visibleRoutes) {
@@ -152,14 +187,15 @@ export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact
 
   return (
     <div className="space-y-4 rounded-xl border border-border/70 bg-surface/60 p-3 sm:p-4">
-      <div className={compact ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-3 xl:grid-cols-[180px_220px_220px_auto]"}>
+      <div className={compact ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[170px_200px_200px_200px_auto]"}>
         <Select value={status} onValueChange={setStatus}><SelectTrigger aria-label="Filtrar por status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_FILTER}>Todos os status</SelectItem><SelectItem value="Normal">Normal</SelectItem><SelectItem value="Atenção">Atenção</SelectItem><SelectItem value="Crítico">Crítico</SelectItem></SelectContent></Select>
         <Select value={city} onValueChange={setCity}><SelectTrigger aria-label="Filtrar por cidade"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_FILTER}>Todas as cidades</SelectItem>{cities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>
         <Select value={type} onValueChange={setType}><SelectTrigger aria-label="Filtrar por tipo"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_FILTER}>Todos os tipos</SelectItem>{types.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>
+        <Select value={precision} onValueChange={(value) => setPrecision(value as LogisticsMapPrecisionFilter)}><SelectTrigger aria-label="Filtrar por precisão"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={DEFAULT_LOGISTICS_MAP_PRECISION_FILTER}>Todas as precisões</SelectItem><SelectItem value="EXACT">Somente exatas</SelectItem><SelectItem value="APPROXIMATE">Somente aproximadas</SelectItem></SelectContent></Select>
         <div className={compact ? "flex flex-wrap gap-3 sm:col-span-2" : "flex flex-wrap gap-3 xl:justify-end"}><Button variant="outline" onClick={recenterHeadquarters}><LocateFixed className="mr-2 size-4" />Centralizar matriz</Button><Button variant="outline" onClick={showAllCustomers}><Users className="mr-2 size-4" />Mostrar clientes</Button></div>
       </div>
-      <div className="relative z-0 overflow-hidden rounded-xl border border-border shadow-sm"><div ref={containerRef} className={compact ? "h-[390px] min-h-[360px] w-full md:h-[430px]" : "h-[500px] min-h-[420px] w-full md:h-[560px]"} /><div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border bg-background/95 px-3 py-2 text-xs font-medium shadow-sm backdrop-blur">{filtered.length} clientes visíveis</div></div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Legenda:</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><i className="size-6 border-t-2 border-dashed border-primary" />Trajeto estimado</span>}<span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-emerald-600" />Cliente normal</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-red-600" />Cliente inativo</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-emerald-700 px-1 text-[10px] text-white">E</b>Endereço exato</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-slate-600 px-1 text-[10px] text-white">~</b>Aproximado pela cidade</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><TrafficCone className="size-3.5 text-red-600" />Congestionamento</span>}</div>
+      <div className="relative z-0 overflow-hidden rounded-xl border border-border shadow-sm"><div ref={containerRef} className={compact ? "h-[390px] min-h-[360px] w-full md:h-[430px]" : "h-[500px] min-h-[420px] w-full md:h-[560px]"} /><div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border bg-background/95 px-3 py-2 text-xs font-medium shadow-sm backdrop-blur">{filtered.length} clientes visíveis · {ALL_TOLL_PLAZAS.length} pedágios cadastrados</div></div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Legenda:</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><i className="size-6 border-t-2 border-dashed border-primary" />Trajeto estimado</span>}<span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-emerald-600" />Cliente normal</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-red-600" />Cliente inativo</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-emerald-700 px-1 text-[10px] text-white">E</b>Endereço exato</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-amber-700 px-1 text-[10px] text-white">I</b>Número interpolado</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-slate-600 px-1 text-[10px] text-white">~</b>Rua ou CEP</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-amber-700 px-1 text-[10px] text-white">C</b>Somente cidade</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-red-700 px-1 text-[10px] text-white">?</b>Sem coordenada{unlocatedCount > 0 ? ` (${unlocatedCount})` : ""}</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-sky-700 px-1 text-[10px] text-white">R$</b>Pedágio</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><TrafficCone className="size-3.5 text-red-600" />Congestionamento</span>}</div>
     </div>
   );
 }

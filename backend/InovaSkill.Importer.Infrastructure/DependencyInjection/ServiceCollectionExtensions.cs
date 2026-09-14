@@ -25,6 +25,8 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<ImportDbContext>(options => options.UseNpgsql(connectionString));
         services.AddHttpClient();
         services.Configure<BrasilApiOptions>(configuration.GetSection(BrasilApiOptions.SectionName));
+        services.Configure<GeocodingOptions>(configuration.GetSection(GeocodingOptions.SectionName));
+        services.Configure<GeoapifyOptions>(configuration.GetSection(GeoapifyOptions.SectionName));
         services.Configure<NominatimOptions>(configuration.GetSection(NominatimOptions.SectionName));
         services.Configure<GoogleGeocodingOptions>(options =>
         {
@@ -37,6 +39,7 @@ public static class ServiceCollectionExtensions
             configuration.GetSection(OpenRouteServiceOptions.SectionName).Bind(options);
             options.ApiKey = configuration["OPENROUTESERVICE_API_KEY"] ?? options.ApiKey;
         });
+        services.Configure<RouteOptimizationOptions>(configuration.GetSection(RouteOptimizationOptions.SectionName));
         var brasilApiOptions = configuration.GetSection(BrasilApiOptions.SectionName).Get<BrasilApiOptions>()
             ?? new BrasilApiOptions();
         services.AddHttpClient<ICustomerRegistrationAddressProvider, BrasilApiCustomerRegistrationAddressProvider>(client =>
@@ -62,10 +65,22 @@ public static class ServiceCollectionExtensions
             client.BaseAddress = new Uri(googleOptions.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, googleOptions.TimeoutSeconds));
         });
-        services.AddScoped<ICustomerAddressCoordinateProvider>(provider =>
-            string.IsNullOrWhiteSpace(googleOptions.ApiKey)
-                ? provider.GetRequiredService<NominatimAddressCoordinateProvider>()
-                : provider.GetRequiredService<GoogleAddressCoordinateProvider>());
+        var geoapifyOptions = configuration.GetSection(GeoapifyOptions.SectionName).Get<GeoapifyOptions>() ?? new GeoapifyOptions();
+        services.AddHttpClient<GeoapifyAddressCoordinateProvider>(client =>
+        {
+            client.BaseAddress = new Uri(geoapifyOptions.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, geoapifyOptions.TimeoutSeconds));
+        });
+        var geocodingOptions = configuration.GetSection(GeocodingOptions.SectionName).Get<GeocodingOptions>() ?? new GeocodingOptions();
+        services.AddScoped<ICustomerAddressCoordinateProvider>(provider => geocodingOptions.Provider switch
+        {
+            GeocodingProviders.Google when !string.IsNullOrWhiteSpace(googleOptions.ApiKey) =>
+                provider.GetRequiredService<GoogleAddressCoordinateProvider>(),
+            GeocodingProviders.Google => provider.GetRequiredService<NominatimAddressCoordinateProvider>(),
+            GeocodingProviders.Geoapify => provider.GetRequiredService<GeoapifyAddressCoordinateProvider>(),
+            GeocodingProviders.Nominatim => provider.GetRequiredService<NominatimAddressCoordinateProvider>(),
+            _ => throw new InvalidOperationException($"Provedor de geocodificação desconhecido: {geocodingOptions.Provider}.")
+        });
         var osrmOptions = configuration.GetSection(OsrmOptions.SectionName).Get<OsrmOptions>() ?? new OsrmOptions();
         services.AddHttpClient<OsrmTableClient>(client =>
         {
@@ -85,6 +100,7 @@ public static class ServiceCollectionExtensions
             client.BaseAddress = new Uri(openRouteServiceOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, openRouteServiceOptions.TimeoutSeconds));
         });
+        services.AddScoped<FallbackOsrmRouteGeometryClient>();
         services.AddHttpClient<OpenRouteServiceTableClient>(client =>
         {
             client.BaseAddress = new Uri(openRouteServiceOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
@@ -98,7 +114,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRouteGeometryClient>(provider =>
             string.IsNullOrWhiteSpace(openRouteServiceOptions.ApiKey)
                 ? provider.GetRequiredService<OsrmRouteClient>()
-                : provider.GetRequiredService<OpenRouteServiceRouteGeometryClient>());
+                : provider.GetRequiredService<FallbackOsrmRouteGeometryClient>());
         services.AddMemoryCache();
         services.AddSingleton<ICacheStore, MemoryCacheStore>();
         services.AddSingleton<IApplicationCache, ResilientApplicationCache>();
@@ -132,6 +148,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRouteCustomerAssignmentSynchronizer, RouteCustomerAssignmentSynchronizer>();
         services.AddScoped<IOsrmDailyMatrixService, OsrmDailyMatrixService>();
         services.AddScoped<IDailyRouteOptimizer, OrToolsDailyRouteOptimizer>();
+        services.AddSingleton<IDailyRouteOptimizationSolver, OrToolsDailyRouteOptimizationSolver>();
         services.AddScoped<IDataSourceProcessor, RoutesByCityProcessor>();
         services.AddScoped<IDataSourceProcessor, CustomersProcessor>();
         services.AddScoped<IDataSourceProcessor, CustomerRouteAssignmentsProcessor>();

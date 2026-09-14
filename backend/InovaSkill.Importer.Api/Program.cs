@@ -6,11 +6,13 @@ using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.BackgroundJobs;
 using InovaSkill.Importer.Infrastructure.DependencyInjection;
 using InovaSkill.Importer.Infrastructure.Persistence;
+using InovaSkill.Importer.Infrastructure.Configuration;
 using Hangfire;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
+DotEnvLoader.Load();
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();

@@ -14,7 +14,7 @@ describe("processing monitoring", () => {
       "utf8",
     );
 
-    expect(source).toContain("PROCESSING_REFRESH_INTERVAL_MS = 5_000");
+    expect(source).toContain("JOB_STATUS_POLL_INTERVAL_MS");
     expect(source).toContain("window.setInterval");
     expect(source).toContain("window.clearInterval");
     expect(source).toContain("loadData(pageRef.current)");
@@ -266,6 +266,9 @@ describe("processing monitoring", () => {
     expect(routeSource).toContain("Monitoramento");
     expect(routeSource).toContain("Serviços disponíveis");
     expect(routeSource).toContain("Serviços que podem ser executados");
+    expect(routeSource).toContain("definitions.filter");
+    expect(routeSource).toContain("definition.manualRunAllowed");
+    expect(routeSource).toContain("manuallyRunnableDefinitions.map");
     expect(routeSource).toContain("Parâmetros JSON");
     expect(routeSource).toContain("Agendamentos");
     expect(routeSource).toContain("Reenviar igual");
@@ -330,6 +333,7 @@ describe("processing monitoring", () => {
     expect(processamentos).toContain(
       'className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-x-hidden overflow-y-auto border-border bg-surface"',
     );
-    expect(processamentos.match(/className="break-all/g)).toHaveLength(3);
+    expect(processamentos.match(/className="break-all/g)).toHaveLength(4);
+    expect(processamentos).toContain("Execução relacionada");
   });
 });

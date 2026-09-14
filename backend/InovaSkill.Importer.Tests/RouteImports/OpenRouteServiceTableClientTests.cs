@@ -47,10 +47,12 @@ public sealed class OpenRouteServiceTableClientTests
         Assert.Equal("OPENROUTESERVICE_MATRIX_DRIVING_CAR", result.Source);
         Assert.Equal(120m, result.DurationsSeconds[0][1]);
         Assert.Equal(4_400m, result.DistancesMeters[1][0]);
-        Assert.Equal("Bearer test-key", handler.Authorization);
+        Assert.Equal("test-key", handler.Authorization);
         using var json = JsonDocument.Parse(handler.Body!);
         Assert.Equal(-49.95m, json.RootElement.GetProperty("locations")[0][0].GetDecimal());
         Assert.Equal(-22.21m, json.RootElement.GetProperty("locations")[0][1].GetDecimal());
+        Assert.Equal("0", json.RootElement.GetProperty("sources")[0].GetString());
+        Assert.Equal("0", json.RootElement.GetProperty("destinations")[0].GetString());
     }
 
     [Fact]

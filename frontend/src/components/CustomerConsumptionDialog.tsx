@@ -80,6 +80,12 @@ const addressStatusLabels = {
   FAILED: "Falha na consulta do endereço",
 } as const;
 
+const addressCompletenessLabels = {
+  COMPLETE: "Endereço completo",
+  WITHOUT_NUMBER: "Número não confirmado",
+  POSTAL_ONLY: "Somente CEP e município confirmados",
+} as const;
+
 async function fetchCurrentRouteOptions(): Promise<ImportedRouteItem[]> {
   const firstPage = await fetchImportedRoutes(1, ROUTE_OPTIONS_PAGE_SIZE);
   const totalPages = Math.ceil(firstPage.total / ROUTE_OPTIONS_PAGE_SIZE);
@@ -204,8 +210,11 @@ export function CustomerConsumptionDialog({
                         </p>
                       ) : (
                         <div className="text-sm font-semibold">
+                          <Badge className="mb-2" variant={data.customer.registrationAddress.addressCompleteness === "COMPLETE" ? "outline" : "secondary"}>
+                            {addressCompletenessLabels[data.customer.registrationAddress.addressCompleteness]}
+                          </Badge>
                           <p>{[data.customer.registrationAddress.street, data.customer.registrationAddress.number]
-                            .filter(Boolean).join(", ") || "Logradouro não informado"}</p>
+                            .filter(Boolean).join(", ") || "Logradouro não disponível para este CEP"}</p>
                           <p className="font-normal text-muted-foreground">
                             {[data.customer.registrationAddress.neighborhood, data.customer.registrationAddress.complement]
                               .filter(Boolean).join(" · ") || "Bairro e complemento não informados"}

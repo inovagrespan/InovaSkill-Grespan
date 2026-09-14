@@ -15,6 +15,7 @@ describe("estimativa de combustível das rotas", () => {
   });
 
   it("reconhece nomes operacionais com marca, caixa e pontuação diferentes", () => {
+    expect(estimateRouteFuelConsumption("Acelo", 55_000)?.maximumLiters).toBe(10);
     expect(estimateRouteFuelConsumption("MB ACCELO 1016", 55_000)?.maximumLiters).toBe(10);
     expect(estimateRouteFuelConsumption("Caminhão TOCO-4X2", 45_000)?.minimumLiters).toBe(10);
     expect(estimateRouteFuelConsumption("TRUCK", 40_000)?.minimumLiters).toBe(10);
