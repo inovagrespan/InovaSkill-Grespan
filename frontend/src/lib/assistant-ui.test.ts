@@ -22,7 +22,13 @@ describe("business assistant UI", () => {
     expect(component).toContain("ASSISTANT_TRANSPARENCY_NOTICE");
     expect(component).toContain("consideram o período consultado");
     expect(component).toContain("suggestions.map");
+    expect(component).toContain("Qual solução calculada para desafogar a rota Marília 1?");
+    expect(component).toContain("Qual o custo de combustível e pedágio das rotas de hoje?");
     expect(component).toContain("messages.map");
+    expect(component).toContain("h-[min(92dvh,900px)]");
+    expect(component).toContain("sm:w-[min(680px,calc(100vw-40px))]");
+    expect(component).toContain("max-w-[min(90%,960px)]");
+    expect(component).toContain('isPage ? "max-w-[min(90%,960px)]" : "max-w-[92%]"');
     expect(component).toContain("formatMessageTime(message.createdAt)");
     expect(component).toContain("dateTime={message.createdAt}");
     expect(component).toContain("AssistantResponseText");

@@ -39,6 +39,7 @@ public sealed class OpenAiChatModelClient(
             input = request.Messages.Select(ToOpenAiInputItem),
             tools = BuildTools(request),
             text = request.TextFormat is null ? null : new { format = request.TextFormat },
+            max_output_tokens = assistantOptions.MaximumOutputTokens,
             tool_choice = "auto"
         }, options: SerializerOptions);
 

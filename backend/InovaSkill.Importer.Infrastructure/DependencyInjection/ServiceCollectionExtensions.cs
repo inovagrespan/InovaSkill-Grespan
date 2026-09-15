@@ -115,6 +115,7 @@ public static class ServiceCollectionExtensions
             string.IsNullOrWhiteSpace(openRouteServiceOptions.ApiKey)
                 ? provider.GetRequiredService<OsrmRouteClient>()
                 : provider.GetRequiredService<FallbackOsrmRouteGeometryClient>());
+        services.AddSingleton<ITollCatalog, StaticTollCatalog>();
         services.AddMemoryCache();
         services.AddSingleton<ICacheStore, MemoryCacheStore>();
         services.AddSingleton<IApplicationCache, ResilientApplicationCache>();
@@ -161,6 +162,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOperationalJobProcessor, CustomerRegistrationAddressEnrichmentProcessor>();
         services.AddScoped<IOperationalJobProcessor, CustomerAddressCoordinateEnrichmentProcessor>();
         services.AddScoped<IOperationalJobProcessor, DailyRouteOptimizationProcessor>();
+        services.AddScoped<IOperationalJobProcessor, RouteCostConsolidationProcessor>();
         services.AddScoped<IWhatsAppGateway, LocalBaileysWhatsAppGateway>();
         services.AddScoped<IAudioTranscriptionService, OpenAiAudioTranscriptionService>();
         services.AddScoped<IWhatsAppMessageQueue, WhatsAppMessageQueue>();
@@ -177,6 +179,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChatTool, ListRoutesByOccupancyChatTool>();
         services.AddScoped<IChatTool, GetRouteCitiesChatTool>();
         services.AddScoped<IChatTool, GetRouteCustomersChatTool>();
+        services.AddScoped<IChatTool, GetRouteOperationalAnalysisChatTool>();
+        services.AddScoped<IChatTool, GetDailyRouteOptimizationChatTool>();
+        services.AddScoped<IChatTool, ListRouteCostsChatTool>();
         services.AddScoped<IChatTool, SearchCustomersChatTool>();
         services.AddScoped<IChatTool, GetCustomerConsumptionSummaryChatTool>();
         services.AddScoped<IChatTool, ListRecentFiscalDocumentsChatTool>();

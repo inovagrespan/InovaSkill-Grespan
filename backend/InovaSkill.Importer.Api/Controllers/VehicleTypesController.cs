@@ -1,6 +1,7 @@
 using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Api.Assistant;
 using InovaSkill.Importer.Infrastructure.Persistence;
+using InovaSkill.Importer.Application.RouteImports;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +9,9 @@ namespace InovaSkill.Importer.Api.Controllers;
 
 [ApiController]
 [Route("api/vehicle-types")]
-public sealed class VehicleTypesController(ImportDbContext dbContext) : ControllerBase
+public sealed class VehicleTypesController(
+    ImportDbContext dbContext,
+    IOperationalJobQueue? operationalJobQueue = null) : ControllerBase
 {
     [HttpGet("fuel-settings")]
     public async Task<ActionResult> GetFuelSettings(CancellationToken cancellationToken)
@@ -29,6 +32,7 @@ public sealed class VehicleTypesController(ImportDbContext dbContext) : Controll
         settings.DieselPricePerLiter = decimal.Round(request.DieselPricePerLiter, 3, MidpointRounding.AwayFromZero);
         settings.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+        await QueueCurrentRouteCostsAsync(cancellationToken);
         return Ok(new { settings.DieselPricePerLiter, settings.UpdatedAt });
     }
 
@@ -57,6 +61,9 @@ public sealed class VehicleTypesController(ImportDbContext dbContext) : Controll
                 x.Id,
                 x.Name,
                 x.CapacityKg,
+                x.AxleCount,
+                x.MinimumFuelEfficiencyKmPerLiter,
+                x.MaximumFuelEfficiencyKmPerLiter,
                 routeCount = x.Routes.Count
             })
             .ToListAsync(cancellationToken);
@@ -73,6 +80,9 @@ public sealed class VehicleTypesController(ImportDbContext dbContext) : Controll
                 x.Id,
                 x.Name,
                 x.CapacityKg,
+                x.AxleCount,
+                x.MinimumFuelEfficiencyKmPerLiter,
+                x.MaximumFuelEfficiencyKmPerLiter,
                 routeCount = x.Routes.Count
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -94,19 +104,34 @@ public sealed class VehicleTypesController(ImportDbContext dbContext) : Controll
             return Conflict(new { message = $"Já existe um tipo de veículo com o nome '{request.Name.Trim()}'." });
         }
 
+        var configurationError = ValidateVehicleCostConfiguration(
+            request.AxleCount,
+            request.MinimumFuelEfficiencyKmPerLiter,
+            request.MaximumFuelEfficiencyKmPerLiter,
+            requireComplete: true);
+        if (configurationError is not null)
+            return BadRequest(new { message = configurationError });
+
         var vehicleType = new VehicleType
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
-            CapacityKg = request.CapacityKg
+            CapacityKg = request.CapacityKg,
+            AxleCount = request.AxleCount,
+            MinimumFuelEfficiencyKmPerLiter = request.MinimumFuelEfficiencyKmPerLiter,
+            MaximumFuelEfficiencyKmPerLiter = request.MaximumFuelEfficiencyKmPerLiter
         };
         dbContext.VehicleTypes.Add(vehicleType);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await QueueCurrentRouteCostsAsync(cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = vehicleType.Id }, new
         {
             vehicleType.Id,
             vehicleType.Name,
             vehicleType.CapacityKg,
+            vehicleType.AxleCount,
+            vehicleType.MinimumFuelEfficiencyKmPerLiter,
+            vehicleType.MaximumFuelEfficiencyKmPerLiter,
             routeCount = 0
         });
     }
@@ -135,12 +160,38 @@ public sealed class VehicleTypesController(ImportDbContext dbContext) : Controll
             vehicleType.CapacityKg = request.CapacityKg.Value;
         }
 
+
+        var axleCount = request.AxleCount ?? vehicleType.AxleCount;
+        var minimumEfficiency = request.MinimumFuelEfficiencyKmPerLiter ??
+            vehicleType.MinimumFuelEfficiencyKmPerLiter;
+        var maximumEfficiency = request.MaximumFuelEfficiencyKmPerLiter ??
+            vehicleType.MaximumFuelEfficiencyKmPerLiter;
+        var updatesCostConfiguration = request.AxleCount.HasValue ||
+            request.MinimumFuelEfficiencyKmPerLiter.HasValue ||
+            request.MaximumFuelEfficiencyKmPerLiter.HasValue;
+        var configurationError = ValidateVehicleCostConfiguration(
+            axleCount,
+            minimumEfficiency,
+            maximumEfficiency,
+            requireComplete: updatesCostConfiguration);
+        if (configurationError is not null)
+            return BadRequest(new { message = configurationError });
+        if (request.AxleCount.HasValue) vehicleType.AxleCount = request.AxleCount;
+        if (request.MinimumFuelEfficiencyKmPerLiter.HasValue)
+            vehicleType.MinimumFuelEfficiencyKmPerLiter = request.MinimumFuelEfficiencyKmPerLiter;
+        if (request.MaximumFuelEfficiencyKmPerLiter.HasValue)
+            vehicleType.MaximumFuelEfficiencyKmPerLiter = request.MaximumFuelEfficiencyKmPerLiter;
+
         await dbContext.SaveChangesAsync(cancellationToken);
+        await QueueCurrentRouteCostsAsync(cancellationToken);
         return Ok(new
         {
             vehicleType.Id,
             vehicleType.Name,
             vehicleType.CapacityKg,
+            vehicleType.AxleCount,
+            vehicleType.MinimumFuelEfficiencyKmPerLiter,
+            vehicleType.MaximumFuelEfficiencyKmPerLiter,
             routeCount = await dbContext.Routes.CountAsync(x => x.VehicleTypeId == id, cancellationToken)
         });
     }
@@ -163,6 +214,7 @@ public sealed class VehicleTypesController(ImportDbContext dbContext) : Controll
 
         dbContext.VehicleTypes.Remove(vehicleType);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await QueueCurrentRouteCostsAsync(cancellationToken);
         return Ok();
     }
 
@@ -177,8 +229,67 @@ public sealed class VehicleTypesController(ImportDbContext dbContext) : Controll
         await dbContext.SaveChangesAsync(cancellationToken);
         return settings;
     }
+
+    private async Task QueueCurrentRouteCostsAsync(CancellationToken cancellationToken)
+    {
+        if (operationalJobQueue is null) return;
+        var currentImportId = await dbContext.DataSources.AsNoTracking()
+            .Where(source => source.Code == RouteImportCodes.DataSource)
+            .Select(source => source.CurrentImportId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (!currentImportId.HasValue) return;
+        try
+        {
+            await operationalJobQueue.TryQueueAsync(
+                OperationalJobCodes.RouteCostConsolidation,
+                currentImportId.Value,
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // A configuração já foi persistida; o job pode ser repetido pela Central de Processamentos.
+        }
+    }
+
+    private static string? ValidateVehicleCostConfiguration(
+        int? axleCount,
+        decimal? minimumEfficiency,
+        decimal? maximumEfficiency,
+        bool requireComplete)
+    {
+        if (!axleCount.HasValue && !minimumEfficiency.HasValue && !maximumEfficiency.HasValue && !requireComplete)
+            return null;
+        if (!axleCount.HasValue || !minimumEfficiency.HasValue || !maximumEfficiency.HasValue)
+            return "Informe eixos, consumo mínimo e consumo máximo do veículo.";
+        try
+        {
+            RouteCostPolicy.ValidateVehicleConfiguration(
+                axleCount.Value,
+                minimumEfficiency.Value,
+                maximumEfficiency.Value);
+            return null;
+        }
+        catch (ArgumentException exception)
+        {
+            return exception.Message;
+        }
+    }
 }
 
-public sealed record CreateVehicleTypeRequest(string Name, decimal CapacityKg);
-public sealed record UpdateVehicleTypeRequest(string? Name, decimal? CapacityKg);
+public sealed record CreateVehicleTypeRequest(
+    string Name,
+    decimal CapacityKg,
+    int? AxleCount,
+    decimal? MinimumFuelEfficiencyKmPerLiter,
+    decimal? MaximumFuelEfficiencyKmPerLiter);
+public sealed record UpdateVehicleTypeRequest(
+    string? Name,
+    decimal? CapacityKg,
+    int? AxleCount,
+    decimal? MinimumFuelEfficiencyKmPerLiter,
+    decimal? MaximumFuelEfficiencyKmPerLiter);
 public sealed record UpdateFuelSettingsRequest(decimal DieselPricePerLiter);

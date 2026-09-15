@@ -7,5 +7,8 @@ public sealed class VehicleType
     public decimal? CapacityKg { get; set; }
     public decimal? CapacityVolumeM3 { get; set; }
     public int? CapacityPallets { get; set; }
+    public int? AxleCount { get; set; }
+    public decimal? MinimumFuelEfficiencyKmPerLiter { get; set; }
+    public decimal? MaximumFuelEfficiencyKmPerLiter { get; set; }
     public ICollection<Route> Routes { get; set; } = [];
 }

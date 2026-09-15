@@ -268,6 +268,177 @@ public sealed class RouteChatToolsTests
         Assert.Equal(2, routeJson.GetProperty("potentialCustomerCount").GetInt32());
     }
 
+    [Fact]
+    public async Task GetDailyRouteOptimization_ReturnsOnlyPersistedCanonicalResult()
+    {
+        await using var db = CreateDbContext();
+        var route = await SeedRouteAsync(db, "Marília 1", 1.12m);
+        await SeedOptimizationAsync(db, route);
+        var tool = new GetDailyRouteOptimizationChatTool(
+            new RouteChatQueryService(db),
+            NullLogger<GetDailyRouteOptimizationChatTool>.Instance);
+
+        var result = await tool.ExecuteAsync("""{"weekday":"MONDAY"}""", Context(), default);
+        var payload = Serialize(result.Payload).RootElement;
+
+        Assert.True(result.Success);
+        Assert.True(payload.GetProperty("found").GetBoolean());
+        var optimization = payload.GetProperty("optimization");
+        Assert.Equal("Optimized", optimization.GetProperty("status").GetString());
+        Assert.Contains("não há correspondência 1:1", optimization.GetProperty("comparisonScope").GetString());
+        Assert.Equal(100m, optimization.GetProperty("current").GetProperty("distanceKm").GetDecimal());
+        Assert.Equal(80m, optimization.GetProperty("proposed").GetProperty("distanceKm").GetDecimal());
+        Assert.Equal("Marília", optimization.GetProperty("proposedVehicles")[0]
+            .GetProperty("stops")[0].GetProperty("municipality").GetString());
+    }
+
+    [Fact]
+    public async Task GetDailyRouteOptimization_WithoutSnapshot_ReturnsDataInsufficient()
+    {
+        await using var db = CreateDbContext();
+        await SeedRouteAsync(db, "Marília 1", 1.12m);
+        var tool = new GetDailyRouteOptimizationChatTool(
+            new RouteChatQueryService(db),
+            NullLogger<GetDailyRouteOptimizationChatTool>.Instance);
+
+        var result = await tool.ExecuteAsync("""{"weekday":"MONDAY"}""", Context(), default);
+        var payload = Serialize(result.Payload).RootElement;
+
+        Assert.False(payload.GetProperty("found").GetBoolean());
+        Assert.Contains("Dados insuficientes", payload.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task GetRouteOperationalAnalysis_StatesDailyScopeAndDoesNotClaimOneToOneReplacement()
+    {
+        await using var db = CreateDbContext();
+        var route = await SeedRouteAsync(db, "Marília 1", 1.12m);
+        await SeedOptimizationAsync(db, route);
+        var snapshot = await SeedRouteCostAsync(db, route, 225.45m);
+        db.RouteCostItems.Add(CreateRouteCostItem(snapshot.Id, route, 180m, RouteCostScenarios.Optimized));
+        await db.SaveChangesAsync();
+        var tool = new GetRouteOperationalAnalysisChatTool(
+            new RouteChatQueryService(db),
+            NullLogger<GetRouteOperationalAnalysisChatTool>.Instance);
+
+        var result = await tool.ExecuteAsync($$"""{"routeId":"{{route.Id}}"}""", Context(), default);
+        var analysis = Serialize(result.Payload).RootElement.GetProperty("analysis");
+
+        Assert.Equal("Marília 1", analysis.GetProperty("route").GetProperty("name").GetString());
+        Assert.Equal("Crítico", analysis.GetProperty("route").GetProperty("status").GetString());
+        Assert.Equal(225.45m, analysis.GetProperty("cost").GetProperty("maximumTotalCost").GetDecimal());
+        var dailyCosts = analysis.GetProperty("dailyCosts");
+        Assert.Equal(225.45m, dailyCosts.GetProperty("actual").GetProperty("maximumTotalCost").GetDecimal());
+        Assert.Equal(180m, dailyCosts.GetProperty("optimized").GetProperty("maximumTotalCost").GetDecimal());
+        Assert.Equal("OPTIMIZED_MUNICIPALITIES", dailyCosts.GetProperty("optimized").GetProperty("pathBasis").GetString());
+        Assert.Contains("global do dia", analysis.GetProperty("comparisonScope").GetString());
+        Assert.Equal("Optimized", analysis.GetProperty("dailyOptimization").GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task GetRouteOperationalAnalysis_DoesNotExposeHistoricalRoute()
+    {
+        await using var db = CreateDbContext();
+        var historicalRoute = await SeedRouteAsync(db, "Marília histórica", 1.12m);
+        var source = await db.DataSources.SingleAsync(item => item.Code == RouteImportCodes.DataSource);
+        var currentImport = new RouteImport
+        {
+            Id = Guid.NewGuid(), DataSourceId = source.Id, Version = 2, FileName = "rotas-2.xlsx",
+            FilePath = "rotas-2.xlsx", Status = RouteImportStatus.Completed,
+            CreatedAt = DateTime.UtcNow, FinishedAt = DateTime.UtcNow
+        };
+        source.CurrentImportId = currentImport.Id;
+        db.RouteImports.Add(currentImport);
+        await db.SaveChangesAsync();
+        var tool = new GetRouteOperationalAnalysisChatTool(
+            new RouteChatQueryService(db),
+            NullLogger<GetRouteOperationalAnalysisChatTool>.Instance);
+
+        var result = await tool.ExecuteAsync(
+            $$"""{"routeId":"{{historicalRoute.Id}}"}""",
+            Context(),
+            default);
+        var payload = Serialize(result.Payload).RootElement;
+
+        Assert.False(payload.GetProperty("found").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ListRouteCosts_ReturnsOfficialSnapshotAndSortsByMaximumTotalCost()
+    {
+        await using var db = CreateDbContext();
+        var lowerCostRoute = await SeedRouteAsync(db, "Rota Econômica", 0.80m);
+        var higherCostRoute = await SeedRouteAsync(db, "Rota Cara", 0.90m);
+        var snapshot = await SeedRouteCostAsync(db, lowerCostRoute, 220m);
+        db.RouteCostItems.Add(CreateRouteCostItem(snapshot.Id, higherCostRoute, 350m));
+        db.RouteCostItems.Add(CreateRouteCostItem(
+            snapshot.Id,
+            higherCostRoute,
+            999m,
+            RouteCostScenarios.Optimized));
+        await db.SaveChangesAsync();
+        var tool = new ListRouteCostsChatTool(
+            new RouteChatQueryService(db),
+            Options.Create(new AssistantOptions()),
+            NullLogger<ListRouteCostsChatTool>.Instance);
+
+        var result = await tool.ExecuteAsync(
+            """{"weekday":"MONDAY","scenario":"actual","sortBy":"totalCost","sortDirection":"desc","limit":10}""",
+            Context(),
+            default);
+        var payload = Serialize(result.Payload).RootElement;
+
+        Assert.Equal("Available", payload.GetProperty("status").GetString());
+        Assert.Equal(570m, payload.GetProperty("summary").GetProperty("maximumTotalCost").GetDecimal());
+        Assert.Equal(6.15m, payload.GetProperty("routes")[0].GetProperty("dieselPricePerLiter").GetDecimal());
+        Assert.Equal("Rota Cara", payload.GetProperty("routes")[0].GetProperty("routeName").GetString());
+        Assert.Equal("EXACT_CUSTOMERS", payload.GetProperty("routes")[0].GetProperty("pathBasis").GetString());
+        Assert.Equal(350m, payload.GetProperty("routes")[0].GetProperty("maximumTotalCost").GetDecimal());
+    }
+
+    [Fact]
+    public async Task ListRouteCosts_WhenRefreshIsPending_DoesNotExposeStaleSnapshot()
+    {
+        await using var db = CreateDbContext();
+        var route = await SeedRouteAsync(db, "Marília 1", 1.12m);
+        var snapshot = await SeedRouteCostAsync(db, route, 225.45m);
+        db.JobExecutions.Add(new JobExecution
+        {
+            Id = Guid.NewGuid(),
+            JobType = OperationalJobCodes.RouteCostConsolidation,
+            Queue = "default",
+            ParametersJson = "{}",
+            RelatedEntityId = route.ImportId,
+            Status = JobExecutionStatus.Queued,
+            CreatedAt = snapshot.CalculatedAt.AddMinutes(1)
+        });
+        await db.SaveChangesAsync();
+        var tool = new ListRouteCostsChatTool(
+            new RouteChatQueryService(db),
+            Options.Create(new AssistantOptions()),
+            NullLogger<ListRouteCostsChatTool>.Instance);
+
+        var result = await tool.ExecuteAsync(
+            """{"weekday":"MONDAY","scenario":"actual","sortBy":"totalCost","sortDirection":"desc","limit":10}""",
+            Context(),
+            default);
+        var payload = Serialize(result.Payload).RootElement;
+
+        Assert.Equal("Unavailable", payload.GetProperty("status").GetString());
+        Assert.Contains("desatualizados", payload.GetProperty("message").GetString());
+        Assert.Empty(payload.GetProperty("routes").EnumerateArray());
+    }
+
+    [Fact]
+    public void LogisticsPrompt_RequiresPersistedOptimizationAndReadOnlyChat()
+    {
+        Assert.Contains("estritamente somente leitura", AssistantPrompts.LogisticsSystemPrompt);
+        Assert.Contains("último cenário válido", AssistantPrompts.LogisticsSystemPrompt);
+        Assert.Contains("Nunca apresente um veículo proposto como substituto 1:1", AssistantPrompts.LogisticsSystemPrompt);
+        Assert.Contains("get_route_operational_analysis", AssistantPrompts.LogisticsSystemPrompt);
+        Assert.Contains("list_route_costs", AssistantPrompts.LogisticsSystemPrompt);
+    }
+
     private static ImportDbContext CreateDbContext() =>
         new(new DbContextOptionsBuilder<ImportDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -371,6 +542,109 @@ public sealed class RouteChatToolsTests
         await db.SaveChangesAsync();
         return route;
     }
+
+    private static async Task SeedOptimizationAsync(ImportDbContext db, Route route)
+    {
+        var municipality = route.Entries.Single().Municipality!;
+        var vehicleType = await db.VehicleTypes.SingleAsync(item => item.Id == route.VehicleTypeId);
+        db.DailyRouteOptimizationResults.Add(new DailyRouteOptimizationResult
+        {
+            Id = Guid.NewGuid(),
+            RouteImportId = route.ImportId,
+            JobExecutionId = Guid.NewGuid(),
+            Weekday = route.Weekday,
+            Status = DailyRouteOptimizationStatuses.Optimized,
+            CurrentDistanceMeters = 100_000m,
+            CurrentDurationSeconds = 7_200m,
+            ProposedDistanceMeters = 80_000m,
+            ProposedDurationSeconds = 5_400m,
+            CurrentVehicleCount = 2,
+            ProposedVehicleCount = 1,
+            TotalWeightKg = 900m,
+            CreatedAt = new DateTime(2026, 9, 14, 22, 0, 0, DateTimeKind.Utc),
+            Vehicles =
+            [
+                new DailyRouteOptimizationVehicle
+                {
+                    Id = Guid.NewGuid(),
+                    VehicleTypeId = vehicleType.Id,
+                    SourceRouteId = route.Id,
+                    Sequence = 1,
+                    CapacityKg = 1_000m,
+                    LoadKg = 900m,
+                    Occupancy = 0.9m,
+                    DistanceMeters = 80_000m,
+                    DurationSeconds = 5_400m,
+                    Stops =
+                    [
+                        new DailyRouteOptimizationStop
+                        {
+                            Id = Guid.NewGuid(),
+                            MunicipalityId = municipality.Id,
+                            Sequence = 1,
+                            WeightKg = 900m
+                        }
+                    ]
+                }
+            ]
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<RouteCostSnapshot> SeedRouteCostAsync(
+        ImportDbContext db,
+        Route route,
+        decimal maximumTotalCost)
+    {
+        var snapshot = await db.RouteCostSnapshots.SingleOrDefaultAsync(item => item.RouteImportId == route.ImportId);
+        if (snapshot is null)
+        {
+            snapshot = new RouteCostSnapshot
+            {
+                Id = Guid.NewGuid(),
+                RouteImportId = route.ImportId,
+                JobExecutionId = Guid.NewGuid(),
+                InputFingerprint = "test-fingerprint",
+                DieselPricePerLiter = 6.15m,
+                TollCatalogVersion = "test-v1",
+                CalculatedAt = new DateTime(2026, 9, 15, 12, 0, 0, DateTimeKind.Utc)
+            };
+            db.RouteCostSnapshots.Add(snapshot);
+        }
+        db.RouteCostItems.Add(CreateRouteCostItem(snapshot.Id, route, maximumTotalCost));
+        await db.SaveChangesAsync();
+        return snapshot;
+    }
+
+    private static RouteCostItem CreateRouteCostItem(
+        Guid snapshotId,
+        Route route,
+        decimal maximumTotalCost,
+        string scenario = RouteCostScenarios.Actual) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            SnapshotId = snapshotId,
+            Scenario = scenario,
+            Weekday = route.Weekday,
+            RouteId = route.Id,
+            VehicleTypeId = route.VehicleTypeId,
+            Label = route.Name,
+            PathBasis = scenario == RouteCostScenarios.Actual
+                ? RouteCostPathBases.ExactCustomers
+                : RouteCostPathBases.OptimizedMunicipalities,
+            IsAvailable = true,
+            DistanceMeters = 100_000m,
+            DurationSeconds = 7_200m,
+            MinimumFuelLiters = 16m,
+            MaximumFuelLiters = 20m,
+            MinimumFuelCost = 98.40m,
+            MaximumFuelCost = 123m,
+            TollCost = maximumTotalCost - 123m,
+            TollPassages = 2,
+            MinimumTotalCost = maximumTotalCost - 24.60m,
+            MaximumTotalCost = maximumTotalCost
+        };
 
     private static ChatExecutionContext Context() => new(1, "logistica");
 

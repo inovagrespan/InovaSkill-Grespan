@@ -21,6 +21,7 @@ import {
   type VehicleTypeItem,
 } from "@/lib/importer-api";
 import { getCurrentUserRole } from "@/lib/auth";
+import { validateVehicleTypeForm } from "@/lib/vehicle-type-form";
 
 export const Route = createFileRoute("/veiculos/tipos")({ component: VeiculosTiposPage });
 
@@ -42,6 +43,9 @@ function VeiculosTiposPage() {
   const [showForm, setShowForm] = useState(false);
   const [formName, setFormName] = useState("");
   const [formCapacity, setFormCapacity] = useState("");
+  const [formAxleCount, setFormAxleCount] = useState("");
+  const [formMinimumEfficiency, setFormMinimumEfficiency] = useState("");
+  const [formMaximumEfficiency, setFormMaximumEfficiency] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<VehicleTypeItem | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -117,6 +121,9 @@ function VeiculosTiposPage() {
     setEditing(null);
     setFormName("");
     setFormCapacity("");
+    setFormAxleCount("");
+    setFormMinimumEfficiency("");
+    setFormMaximumEfficiency("");
     setShowForm(true);
   }
 
@@ -124,26 +131,31 @@ function VeiculosTiposPage() {
     setEditing(item);
     setFormName(item.name);
     setFormCapacity(item.capacityKg === null ? "" : String(item.capacityKg));
+    setFormAxleCount(item.axleCount === null ? "" : String(item.axleCount));
+    setFormMinimumEfficiency(item.minimumFuelEfficiencyKmPerLiter === null ? "" : String(item.minimumFuelEfficiencyKmPerLiter));
+    setFormMaximumEfficiency(item.maximumFuelEfficiencyKmPerLiter === null ? "" : String(item.maximumFuelEfficiencyKmPerLiter));
     setShowForm(true);
   }
 
   async function handleSave() {
-    if (!formName.trim()) {
-      setMessage("O nome do tipo de veículo é obrigatório.");
-      return;
-    }
-    const capacity = parseFloat(formCapacity.replace(",", "."));
-    if (Number.isNaN(capacity) || capacity < 0) {
-      setMessage("Capacidade deve ser um número maior ou igual a zero.");
+    const validation = validateVehicleTypeForm({
+      name: formName,
+      capacityKg: formCapacity,
+      axleCount: formAxleCount,
+      minimumFuelEfficiencyKmPerLiter: formMinimumEfficiency,
+      maximumFuelEfficiencyKmPerLiter: formMaximumEfficiency,
+    }, editing === null);
+    if (!validation.success) {
+      setMessage(validation.message);
       return;
     }
     setSaving(true);
     setMessage("");
     try {
       if (editing) {
-        await updateVehicleType(editing.id, formName.trim(), capacity);
+        await updateVehicleType(editing.id, validation.input);
       } else {
-        await createVehicleType(formName.trim(), capacity);
+        await createVehicleType(validation.input);
       }
       setShowForm(false);
       await load();
@@ -171,6 +183,13 @@ function VeiculosTiposPage() {
 
   function formatKg(value: number | null): string {
     return value === null ? "Não configurada" : `${value.toLocaleString("pt-BR")} kg`;
+  }
+
+  function formatFuelEfficiency(item: VehicleTypeItem): string {
+    const minimum = item.minimumFuelEfficiencyKmPerLiter;
+    const maximum = item.maximumFuelEfficiencyKmPerLiter;
+    if (minimum === null || maximum === null) return "Consumo não configurado";
+    return `${minimum.toLocaleString("pt-BR")} a ${maximum.toLocaleString("pt-BR")} km/L`;
   }
 
   return (
@@ -254,6 +273,9 @@ function VeiculosTiposPage() {
                         Capacidade: {formatKg(t.capacityKg)}
                         {t.routeCount > 0 && ` · ${t.routeCount} rota(s)`}
                       </p>
+                      <p className="text-xs text-muted-foreground">
+                        Eixos: {t.axleCount ?? "não configurado"} · {formatFuelEfficiency(t)}
+                      </p>
                     </div>
                   </div>
                   {canManage && (
@@ -284,8 +306,8 @@ function VeiculosTiposPage() {
             <DialogTitle>{editing ? "Editar tipo de veículo" : "Novo tipo de veículo"}</DialogTitle>
             <DialogDescription>
               {editing
-                ? "Altere o nome e a capacidade do tipo de veículo."
-                : "Cadastre um novo tipo de veículo com nome e capacidade."}
+                ? "Altere os dados operacionais e de consumo do tipo de veículo."
+                : "Cadastre o veículo com capacidade, eixos e faixa de consumo."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -298,6 +320,35 @@ function VeiculosTiposPage() {
                 placeholder="Ex: Truck, Toco, Carreta"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Quantidade de eixos</label>
+              <input
+                aria-label="Quantidade de eixos"
+                type="number"
+                min={2}
+                max={9}
+                step={1}
+                value={formAxleCount}
+                onChange={(e) => setFormAxleCount(e.target.value)}
+                placeholder="Ex: 3"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              />
+              <p className="text-xs text-muted-foreground">Necessária para calcular as tarifas de pedágio.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="space-y-2 text-sm font-medium">
+                Consumo mínimo (km/L)
+                <input aria-label="Consumo mínimo em quilômetros por litro" type="text" inputMode="decimal"
+                  value={formMinimumEfficiency} onChange={(e) => setFormMinimumEfficiency(e.target.value)} placeholder="Ex: 3,2"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" />
+              </label>
+              <label className="space-y-2 text-sm font-medium">
+                Consumo máximo (km/L)
+                <input aria-label="Consumo máximo em quilômetros por litro" type="text" inputMode="decimal"
+                  value={formMaximumEfficiency} onChange={(e) => setFormMaximumEfficiency(e.target.value)} placeholder="Ex: 4,0"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" />
+              </label>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Capacidade (kg)</label>

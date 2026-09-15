@@ -14,21 +14,21 @@ import { RouteSnapshotDateSelect } from "@/components/RouteSnapshotDateSelect";
 import { RouteOccupancyIndicator } from "@/components/RouteOccupancyIndicator";
 import { RouteOptimizationSimulation } from "@/components/RouteOptimizationSimulation";
 import { RouteRoadMap } from "@/components/RouteRoadMap";
-import { RouteTollKpi } from "@/components/RouteTollKpi";
+import { ConsolidatedRouteTollKpi } from "@/components/ConsolidatedRouteTollKpi";
 import {
   fetchImportedRoutes,
   fetchImportedRouteDetail,
-  fetchLogisticsFuelSettings,
+  fetchRouteCost,
   fetchRouteRoadPath,
   type ImportedRouteItem,
   type ImportedRouteDetail,
+  type RouteCostDetail,
   type RouteRoadPath,
 } from "@/lib/importer-api";
 import { getCurrentUserRole } from "@/lib/auth";
 import { canRoleResolveRouteIssues, canRoleUseRouteSimulation } from "@/lib/access-control";
 import { formatCapacityKg, formatRouteLoadKg, type OccupancyLevel } from "@/lib/route-occupancy";
-import { estimateFuelCost, estimateRouteFuelConsumption, formatFuelConsumptionRange, formatRouteDuration } from "@/lib/route-fuel-consumption";
-import { estimateRouteTollCost } from "@/lib/route-toll-cost";
+import { formatRouteDuration } from "@/lib/route-fuel-consumption";
 import { getCurrentLocalDate } from "@/lib/route-snapshot-history";
 import { TEXT_SEARCH_DEBOUNCE_MS, useDebouncedValue } from "@/lib/use-debounced-value";
 
@@ -46,6 +46,12 @@ const weekdayLabels: Record<string, string> = {
 
 const ALL_OCCUPANCY_LEVELS = "all";
 const ALL_WEEKDAYS = "all";
+
+function formatCurrencyRange(minimum: number | null, maximum: number | null): string {
+  if (minimum === null || maximum === null) return "Indisponível";
+  const format = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return minimum === maximum ? format(minimum) : `${format(minimum)} a ${format(maximum)}`;
+}
 
 function RotasPage() {
   const currentRole = getCurrentUserRole();
@@ -70,8 +76,8 @@ function RotasPage() {
   const [roadPath, setRoadPath] = useState<RouteRoadPath | null>(null);
   const [roadPathLoading, setRoadPathLoading] = useState(false);
   const [roadPathError, setRoadPathError] = useState<string | null>(null);
-  const [dieselPricePerLiter, setDieselPricePerLiter] = useState<number | null>(null);
-  const [fuelPriceError, setFuelPriceError] = useState<string | null>(null);
+  const [routeCost, setRouteCost] = useState<RouteCostDetail | null>(null);
+  const [routeCostError, setRouteCostError] = useState<string | null>(null);
 
   async function load(p: number = page) {
     setLoading(true);
@@ -103,16 +109,16 @@ function RotasPage() {
     setDetailsLoading(true);
     setRoadPath(null);
     setRoadPathError(null);
-    setDieselPricePerLiter(null);
-    setFuelPriceError(null);
+    setRouteCost(null);
+    setRouteCostError(null);
     setRoadPathLoading(true);
     void fetchRouteRoadPath(route.id)
       .then(setRoadPath)
       .catch((error: Error) => setRoadPathError(error.message))
       .finally(() => setRoadPathLoading(false));
-    void fetchLogisticsFuelSettings()
-      .then((settings) => setDieselPricePerLiter(settings.dieselPricePerLiter))
-      .catch((error: Error) => setFuelPriceError(error.message));
+    void fetchRouteCost(route.id)
+      .then(setRouteCost)
+      .catch((error: Error) => setRouteCostError(error.message));
     try {
       const detail = await fetchImportedRouteDetail(route.id);
       setSelectedRoute(detail);
@@ -319,69 +325,19 @@ function RotasPage() {
                     {roadPathError}
                   </p>
                 )}
-                {!roadPathLoading && roadPath && (
-                  <>
-                    <RouteRoadMap route={roadPath} />
-                    {(() => {
-                      const fuel = estimateRouteFuelConsumption(selectedRoute.vehicleType, roadPath.distanceMeters);
-                      const cost = estimateFuelCost(fuel, dieselPricePerLiter);
-                      const toll = estimateRouteTollCost(roadPath.geometry.coordinates);
-                      const totalCost = cost
-                        ? { minimum: cost.minimumFuelCost + toll.totalAutomaticCost, maximum: cost.maximumFuelCost + toll.totalAutomaticCost }
-                        : null;
-                      return (
-                        <div className="grid grid-cols-1 gap-3 text-sm lg:grid-cols-3">
-                          <div className="route-kpi-grid grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2 lg:h-full lg:grid-rows-2">
-                          <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm transition-colors hover:border-primary/30">
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Quilometragem</p>
-                              <span className="h-px flex-1 bg-primary/20" aria-hidden="true" />
-                            </div>
-                            <p className="mt-2 text-xl font-display font-semibold tracking-tight text-foreground">{(roadPath.distanceMeters / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km</p>
-                          </div>
-                          <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm transition-colors hover:border-primary/30">
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Tempo para concluir</p>
-                              <span className="h-px flex-1 bg-primary/20" aria-hidden="true" />
-                            </div>
-                            <p className="mt-2 text-xl font-display font-semibold tracking-tight text-foreground">{formatRouteDuration(roadPath.durationSeconds)}</p>
-                          </div>
-                          <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm transition-colors hover:border-primary/30">
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Gasto estimado com combustível</p>
-                              <span className="h-px flex-1 bg-primary/20" aria-hidden="true" />
-                            </div>
-                            <p className="mt-2 text-lg font-display font-semibold leading-tight tracking-tight text-foreground">
-                              {cost
-                                ? `${cost.minimumFuelCost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} a ${cost.maximumFuelCost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`
-                                : "Indisponível"}
-                            </p>
-                            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                              {fuel ? `${formatFuelConsumptionRange(fuel)} · ${selectedRoute.vehicleType}` : "Consumo não cadastrado para este veículo."}
-                            </p>
-                            {dieselPricePerLiter !== null && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Diesel de referência: {dieselPricePerLiter.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/L</p>}
-                          </div>
-                            <RouteTollKpi estimate={toll} />
-                          </div>
-                          <div className="route-kpi-card border-primary/30 bg-primary/5 p-4 shadow-sm lg:h-auto lg:self-start lg:aspect-square">
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Gastos totais</p>
-                              <span className="h-px flex-1 bg-primary/25" aria-hidden="true" />
-                            </div>
-                            <p className="mt-2 min-w-0 break-words text-base font-display font-semibold leading-tight tracking-tight text-foreground">
-                              {totalCost
-                                ? `${totalCost.minimum.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} a ${totalCost.maximum.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`
-                                : "Indisponível"}
-                            </p>
-                            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Combustível + pedágio</p>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    {fuelPriceError && <p className="text-xs text-destructive">{fuelPriceError}</p>}
-                  </>
-                )}
+                {!roadPathLoading && roadPath && <RouteRoadMap route={roadPath} />}
               </div>
+
+              <div className="grid grid-cols-1 gap-3 text-sm lg:grid-cols-3">
+                <div className="route-kpi-grid grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2 lg:h-full lg:grid-rows-2">
+                  <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-primary">Quilometragem</p><p className="mt-2 text-xl font-display font-semibold">{routeCost?.item.distanceMeters === null || routeCost?.item.distanceMeters === undefined ? "Indisponível" : `${(routeCost.item.distanceMeters / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km`}</p></div>
+                  <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-primary">Tempo para concluir</p><p className="mt-2 text-xl font-display font-semibold">{routeCost?.item.durationSeconds === null || routeCost?.item.durationSeconds === undefined ? "Indisponível" : formatRouteDuration(routeCost.item.durationSeconds)}</p></div>
+                  <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-primary">Gasto estimado com combustível</p><p className="mt-2 text-lg font-display font-semibold">{formatCurrencyRange(routeCost?.item.minimumFuelCost ?? null, routeCost?.item.maximumFuelCost ?? null)}</p><p className="mt-2 text-xs text-muted-foreground">{routeCost?.item.isAvailable ? `${routeCost.item.minimumFuelLiters?.toLocaleString("pt-BR")} a ${routeCost.item.maximumFuelLiters?.toLocaleString("pt-BR")} L · ${selectedRoute.vehicleType}` : routeCost?.item.unavailableReason ?? "Consolidação de custo indisponível."}</p>{routeCost?.dieselPricePerLiter != null && <p className="mt-1 text-xs text-muted-foreground">Diesel de referência: {routeCost.dieselPricePerLiter.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/L</p>}</div>
+                  <ConsolidatedRouteTollKpi cost={routeCost?.item ?? null} />
+                </div>
+                <div className="route-kpi-card border-primary/30 bg-primary/5 p-4 shadow-sm lg:h-auto lg:self-start lg:aspect-square"><p className="text-xs font-semibold uppercase tracking-wider text-primary">Gastos totais</p><p className="mt-2 min-w-0 break-words text-base font-display font-semibold">{formatCurrencyRange(routeCost?.item.minimumTotalCost ?? null, routeCost?.item.maximumTotalCost ?? null)}</p><p className="mt-2 text-xs text-muted-foreground">Combustível + pedágio</p></div>
+              </div>
+              {routeCostError && <p className="text-xs text-destructive">{routeCostError}</p>}
 
               <div className="rounded-lg border border-border">
                 <div className="border-b border-border px-3 py-2">

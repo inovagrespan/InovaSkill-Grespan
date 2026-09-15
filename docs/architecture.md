@@ -154,12 +154,20 @@ permite retomar até 1.000 mensagens de cada sessão. O posicionamento à direit
 evita competir visualmente com a navegação principal da aplicação. Em telas
 menores, a coluna abre como painel sobreposto. O seletor compacto permanece
 apenas na variante flutuante, que também permite carregar blocos anteriores. A
+variante flutuante usa até 680 px de largura e 92% da altura visível, limitada a
+900 px, enquanto as mensagens do assistente podem ocupar 92% dessa largura. A
+página completa permite mensagens de até 960 px, mantendo tabelas e análises de
+rotas extensas legíveis sem ocultar conteúdo em truncamento visual.
+
 consulta usa paginação por deslocamento sobre o índice existente de usuário e
 data de atualização; nenhum índice adicional é necessário para esse padrão de
 acesso. Esses limites protegem a API contra respostas ilimitadas e
 não alteram o contexto enviado ao modelo, que continua restrito às mensagens
 recentes configuradas em `Assistant:MaximumHistoryMessages`. Oferece
 perguntas sugeridas e envia perguntas autenticadas para `POST /api/assistant/ask`.
+O cliente da Responses API envia `Assistant:MaximumOutputTokens`, atualmente
+8.192, como `max_output_tokens`; o limite inclui texto visível e tokens de
+raciocínio e evita que uma configuração implícita reduza análises consolidadas.
 As respostas não completam lacunas, declaram quando os dados são insuficientes,
 identificam o período ou snapshot consultado e apresentam resultados e análises
 diretamente, sem rótulos sobre a origem dos dados. Perguntas com mais de uma
@@ -295,9 +303,9 @@ municipais, a interface não apresenta contagem de entregas inventada.
 Ao clicar em uma rota real, o detalhe consulta `GET /api/routes/{id}/road-path` e
 exibe o percurso rodoviário no mapa, incluindo origem, paradas, retorno ao depósito,
 distância e duração, com estados próprios de carregamento e erro. O detalhe não
-exibe mais o apoio à decisão; apresenta quilometragem, tempo para concluir e custo
-estimado de combustível, calculado pela faixa de consumo do veículo e pelo preço
-de diesel configurado em `GET /api/vehicle-types/fuel-settings`.
+exibe mais o apoio à decisão local; apresenta quilometragem, tempo para concluir e
+o último custo consolidado retornado por `GET /api/routes/{id}/cost`.
+Combustível, pedágio e total não são recalculados pelo frontend.
 As rotas também persistem o horário de saída (`DepartureTime`) como horário local
 opcional, importado do arquivo operacional de horários e exposto nas listagens e
 no detalhe. O vínculo usa dia da semana e nome normalizado; nomes compostos são
@@ -386,6 +394,29 @@ snapshot/data em `GET /api/route-optimizations` e detalhe em
 consulta jobs ativos a cada cinco segundos e recarrega os resultados ao chegar
 a um estado terminal. Execução concorrente retorna HTTP 409 com mensagem de
 domínio.
+
+Após a publicação das rotas e cada conclusão do otimizador, o job
+`ROUTE_COST_CONSOLIDATION` materializa os custos atual e otimizado. Alterações no
+diesel, no veículo e no enriquecimento de coordenadas também solicitam o job. Se
+uma solicitação chegar durante uma execução ativa, `job_executions` recebe a
+marca de reexecução e o Worker agenda outra passagem ao concluir; o fingerprint
+dos insumos evita trabalho quando nada mudou. Falha técnica não remove o último
+snapshot válido.
+
+O cenário `ACTUAL` usa depósito e clientes com coordenadas cadastrais exatas. O
+cenário `OPTIMIZED` usa a sequência municipal já persistida pelo solver canônico
+em `daily_route_optimization_results`; não consulta o fluxo legado de
+`ResultJson`. As bases são comparáveis somente no nível agregado do dia e não
+estabelecem correspondência 1:1 entre rota real e veículo sugerido. Ausência de
+coordenada exata, diesel, eixos, consumo ou resultado do solver produz item
+indisponível com motivo explícito, sem estimativa inventada.
+
+Os resultados são persistidos em `route_cost_snapshots`, `route_cost_items` e
+`route_cost_toll_passages`. A substituição ocorre atomicamente após as
+integrações rodoviárias. Litros usam três casas e valores monetários duas, com
+`total = combustível + pedágio` a partir das parcelas já arredondadas. As
+leituras são expostas por `GET /api/route-costs?date=&weekday=` e
+`GET /api/routes/{id}/cost`.
 
 `IOsrmTableClient` consulta `/table/v1/driving` com `duration,distance`, preserva
 custos direcionais e divide matrizes grandes em blocos configuráveis de
@@ -1555,24 +1586,25 @@ ambíguos preservam `RouteEntry.Name` e ficam sem associação, sem inventar UF.
 
 ### Praças de pedágio no mapa regional
 
-O mapa regional exibe um catálogo estático das 21 praças da EIXO SP e das
+O backend mantém o catálogo oficial da aplicação com as 21 praças da EIXO SP e das
 praças complementares identificadas nas geometrias das rotas atuais (ViaRondon,
 Rodovias do Tietê, Triunfo Transbrasiliana, CART, Entrevias e Arteris
 ViaPaulista). Cada registro mantém concessionária, rodovia, km, município,
 coordenada de referência e tarifa manual para passeio e veículos comerciais de
-2 a 9 eixos. A tarifa automática é derivada no frontend com o desconto básico
-de 5% adotado para a estimativa, sem criar uma fonte ou fila paralela. Os
+2 a 9 eixos. A tarifa automática aplica no backend o desconto básico versionado
+de 5%. `GET /api/logistics/toll-plazas` é a fonte do mapa e informa versão e
+vigência somente quando conhecida; datas desconhecidas permanecem nulas. Os
 marcadores ficam visíveis independentemente do filtro de clientes; o popup
 identifica a concessionária e a praça e mostra os valores manual/automático.
 
-No detalhe das rotas atuais, a geometria rodoviária é comparada com todo o
-catálogo para contar passagens (ida e retorno sem duplicar segmentos). O
-veículo comercial usa, por padrão, a tarifa automática de 2 eixos; a categoria
-pode ser alterada pela quantidade de eixos informada ao cálculo. O cálculo
+Na consolidação, a geometria rodoviária é comparada com todo o catálogo para
+contar passagens, inclusive repetições depois de uma saída da área da praça. O
+veículo comercial usa a tarifa automática correspondente aos eixos configurados
+no tipo de veículo; tipos sem configuração completa ficam indisponíveis. O cálculo
 mantém o número de passagens e o valor de pedágio separados. Os três KPIs do
 detalhe são combustível (faixa de consumo multiplicada pelo preço cadastrado
 do diesel), pedágio e gasto total, que soma as duas parcelas. As tarifas são
-dados de referência versionados no código e devem ser revisadas quando as
+dados de referência versionados no backend e devem ser revisadas quando as
 concessionárias publicarem novo reajuste.
 
 No detalhe das rotas atuais, o KPI de pedágio permanece compacto e acionável:
@@ -1590,12 +1622,25 @@ geram consulta externa e ficam marcadas como percurso indisponível.
 ### Relatório de custos da logística
 
 A rota `/logistica/relatorios-custos` pertence ao grupo de navegação de Logística
-e consolida estimativas de combustível e pedágio das rotas do snapshot selecionado.
+e consulta a consolidação oficial de combustível e pedágio do snapshot selecionado.
 O frontend permite alternar a periodicidade diária/semanal e o agrupamento por rota
-ou tipo de veículo. O custo por rota usa a geometria rodoviária disponível, a
-política de consumo do veículo e o preço de diesel vigente; o pedágio reutiliza o
-catálogo e a política descritos acima. Rotas sem geometria ou preço ficam marcadas
-como indisponíveis, sem inventar valores.
+ou tipo de veículo e os cenários real/otimizado. Todos os totais vêm de
+`GET /api/route-costs`; o relatório exibe data do cálculo, diesel, versão
+tarifária, base do percurso e indisponibilidades. O custo atual usa clientes
+exatos e o otimizado usa blocos municipais, diferença mantida visível.
+
+`vehicle_types` armazena eixos e as eficiências mínima/máxima em km/L. Eixos
+aceitos ficam entre 2 e 9, consumos são positivos e o mínimo não supera o
+máximo. O backfill configura Accelo e Toco com dois eixos e Truck com três,
+preservando as faixas anteriores; nomes desconhecidos ficam pendentes.
+
+O assistente registra três ferramentas somente leitura sobre o snapshot atual:
+`get_route_operational_analysis`, `get_daily_route_optimization` e
+`list_route_costs`. Elas combinam criticidade e custo real com o último cenário
+válido do solver. Web e WhatsApp compartilham o mesmo prompt: consultar dados
+persistidos, explicar a comparação diária e as bases diferentes, nunca prometer
+substituição 1:1 nem iniciar recálculo, e responder `Dados insuficientes` quando
+o custo ou a otimização estiver ausente ou desatualizado.
 
 ### Estratégia de índices
 
@@ -1614,6 +1659,11 @@ Os índices acompanham os padrões reais de leitura:
   `Status`; a consulta do mapa chega nelas por relacionamento 1:1 a partir dos
   municípios presentes no snapshot atual, e o índice de status apoia auditoria
   e reprocessamento de pendências;
+- custos têm unicidade do snapshot por import/fingerprint, busca por
+  `SnapshotId + Scenario + Weekday`, unicidade da rota real e do veículo
+  otimizado no respectivo cenário, além de acesso pelo resultado de otimização;
+  passagens são únicas por item e praça. Rankings operam sobre o conjunto já
+  restrito ao snapshot atual, portanto não recebem índices paralelos por total;
 - razão social, nome fantasia e documento possuem índices GIN trigram porque a
   API oferece busca por trecho, que não é atendida eficientemente por B-tree;
 - municípios mantêm a unicidade e resolução por `StateCode + NormalizedName`.

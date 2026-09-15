@@ -36,14 +36,14 @@ describe("mapa rodoviário no detalhe da rota", () => {
 
   it("exibe os KPIs de pedágio, combustível e gasto total no detalhe", () => {
     const routePage = readSource("src/routes/rotas.tsx");
-    const tollKpi = readSource("src/components/RouteTollKpi.tsx");
 
-    expect(routePage).toContain("estimateRouteTollCost");
-    expect(routePage).toContain("<RouteTollKpi estimate={toll} />");
+    expect(routePage).toContain("fetchRouteCost(route.id)");
+    expect(routePage).not.toContain("estimateRouteTollCost");
+    expect(routePage).toContain("ConsolidatedRouteTollKpi");
+    const tollKpi = readSource("src/components/ConsolidatedRouteTollKpi.tsx");
     expect(tollKpi).toContain("Gasto estimado com pedágio");
-    expect(tollKpi).toContain("Pedágios da rota");
+    expect(tollKpi).toContain("Praças e tarifas automáticas usadas na consolidação oficial");
     expect(routePage).toContain("font-semibold uppercase tracking-wider text-primary");
-    expect(tollKpi).toContain("font-semibold uppercase tracking-wider text-primary");
     expect(routePage).toContain("lg:grid-cols-3");
     expect(routePage).toContain("sm:grid-cols-2 lg:col-span-2");
     expect(routePage).toContain("route-kpi-grid");

@@ -11,7 +11,7 @@ describe("route decision support UI", () => {
       const source = read("src/routes/rotas.tsx");
 
       expect(source).not.toContain("RouteDecisionSupport");
-      expect(source).toContain("estimateRouteFuelConsumption");
+      expect(source).toContain("fetchRouteCost(route.id)");
       expect(source).toContain("Gasto estimado com combustível");
   });
 

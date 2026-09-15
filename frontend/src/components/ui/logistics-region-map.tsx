@@ -15,10 +15,8 @@ import {
   type LogisticsCustomerStatus,
   type LogisticsCustomerType,
   type LogisticsMapCustomer,
-  ALL_TOLL_PLAZAS,
-  automaticTollTariff,
-  type TollPlaza,
 } from "@/lib/logistics-map-data";
+import { fetchTollPlazas, type TollPlaza } from "@/lib/importer-api";
 
 type LogisticsRegionMapProps = { customers: LogisticsMapCustomer[]; routes: LogisticsMapRoute[]; periodDays?: LogisticsTrafficPeriodDays; compact?: boolean; unlocatedCount?: number };
 
@@ -85,10 +83,12 @@ function formatTollTariff(value: number): string {
 }
 
 function tollPopup(toll: TollPlaza): string {
-  const commercialTariffs = Object.entries(toll.commercialManualByAxle).map(([axles, manual]) => `${axles} eixos: R$ ${formatTollTariff(manual)} / R$ ${formatTollTariff(automaticTollTariff(toll, manual))}`).join(" · ");
-  const operator = toll.operator ?? "EIXO SP";
-  const discount = Math.round((toll.automaticDiscountRate ?? 0.05) * 100);
-  return `<div class="logistics-map-popup"><strong>Pedágio ${escapeHtml(operator)} · ${escapeHtml(toll.name)}</strong><span>${escapeHtml(toll.highway)} km ${toll.kilometer.toLocaleString("pt-BR")} · ${escapeHtml(toll.municipality)}</span><hr/><span><b>Comercial (manual / automático):</b> ${commercialTariffs}</span><span><b>Passeio:</b> R$ ${formatTollTariff(toll.passengerManual)} manual · R$ ${formatTollTariff(automaticTollTariff(toll, toll.passengerManual))} automático</span><span class="text-xs">Tarifa automática estimada com desconto de ${discount}%.</span></div>`;
+  const commercialTariffs = Object.entries(toll.commercialManualTariffsByAxle).map(([axles, manual]) => {
+    const automatic = manual * (1 - toll.automaticDiscountRate);
+    return `${axles} eixos: R$ ${formatTollTariff(manual)} / R$ ${formatTollTariff(automatic)}`;
+  }).join(" · ");
+  const discount = Math.round(toll.automaticDiscountRate * 100);
+  return `<div class="logistics-map-popup"><strong>Pedágio ${escapeHtml(toll.operatorName)} · ${escapeHtml(toll.name)}</strong><span>${escapeHtml(toll.highway)} km ${toll.kilometer.toLocaleString("pt-BR")} · ${escapeHtml(toll.municipality)}</span><hr/><span><b>Comercial (manual / automático):</b> ${commercialTariffs}</span><span class="text-xs">Tarifa automática estimada com desconto de ${discount}%.</span></div>`;
 }
 
 function routePopup(route: LogisticsMapRoute): string {
@@ -103,6 +103,11 @@ export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact
   const [city, setCity] = useState(ALL_FILTER);
   const [type, setType] = useState(ALL_FILTER);
   const [precision, setPrecision] = useState<LogisticsMapPrecisionFilter>(DEFAULT_LOGISTICS_MAP_PRECISION_FILTER);
+  const [tollPlazas, setTollPlazas] = useState<TollPlaza[]>([]);
+
+  useEffect(() => {
+    void fetchTollPlazas().then((catalog) => setTollPlazas(catalog.items)).catch(() => setTollPlazas([]));
+  }, []);
 
   const cities = useMemo(() => listLogisticsMapCities(customers), [customers]);
   const types = useMemo(() => [...new Set(customers.map((customer) => customer.type))].sort(), [customers]);
@@ -132,9 +137,9 @@ export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact
     if (!layer || !map) return;
     layer.clearLayers();
 
-    for (const toll of ALL_TOLL_PLAZAS) {
-      const marker = L.marker([toll.lat, toll.lng], { icon: createTollIcon(), zIndexOffset: 900 });
-      marker.bindTooltip(`Pedágio ${escapeHtml(toll.operator ?? "EIXO SP")} · ${escapeHtml(toll.name)}`, { direction: "top" });
+    for (const toll of tollPlazas) {
+      const marker = L.marker([toll.latitude, toll.longitude], { icon: createTollIcon(), zIndexOffset: 900 });
+      marker.bindTooltip(`Pedágio ${escapeHtml(toll.operatorName)} · ${escapeHtml(toll.name)}`, { direction: "top" });
       marker.bindPopup(tollPopup(toll), { maxWidth: 340 });
       layer.addLayer(marker);
     }
@@ -173,7 +178,7 @@ export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact
       marker.bindTooltip(`<b>${escapeHtml(customer.name)}</b><br/>${escapeHtml(locationTooltip)}`, { direction: "top", offset: [0, -7] });
       layer.addLayer(marker);
     }
-  }, [city, filtered, periodDays, routes, filtered.length]);
+  }, [city, filtered, periodDays, routes, filtered.length, tollPlazas]);
 
   function recenterHeadquarters() {
     mapRef.current?.setView([GRESPAN_HEADQUARTERS.lat, GRESPAN_HEADQUARTERS.lng], REGIONAL_ZOOM);
@@ -194,7 +199,7 @@ export function LogisticsRegionMap({ customers, routes, periodDays = 30, compact
         <Select value={precision} onValueChange={(value) => setPrecision(value as LogisticsMapPrecisionFilter)}><SelectTrigger aria-label="Filtrar por precisão"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={DEFAULT_LOGISTICS_MAP_PRECISION_FILTER}>Todas as precisões</SelectItem><SelectItem value="EXACT">Somente exatas</SelectItem><SelectItem value="APPROXIMATE">Somente aproximadas</SelectItem></SelectContent></Select>
         <div className={compact ? "flex flex-wrap gap-3 sm:col-span-2" : "flex flex-wrap gap-3 xl:justify-end"}><Button variant="outline" onClick={recenterHeadquarters}><LocateFixed className="mr-2 size-4" />Centralizar matriz</Button><Button variant="outline" onClick={showAllCustomers}><Users className="mr-2 size-4" />Mostrar clientes</Button></div>
       </div>
-      <div className="relative z-0 overflow-hidden rounded-xl border border-border shadow-sm"><div ref={containerRef} className={compact ? "h-[390px] min-h-[360px] w-full md:h-[430px]" : "h-[500px] min-h-[420px] w-full md:h-[560px]"} /><div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border bg-background/95 px-3 py-2 text-xs font-medium shadow-sm backdrop-blur">{filtered.length} clientes visíveis · {ALL_TOLL_PLAZAS.length} pedágios cadastrados</div></div>
+      <div className="relative z-0 overflow-hidden rounded-xl border border-border shadow-sm"><div ref={containerRef} className={compact ? "h-[390px] min-h-[360px] w-full md:h-[430px]" : "h-[500px] min-h-[420px] w-full md:h-[560px]"} /><div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-md border bg-background/95 px-3 py-2 text-xs font-medium shadow-sm backdrop-blur">{filtered.length} clientes visíveis · {tollPlazas.length} pedágios cadastrados</div></div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Legenda:</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><i className="size-6 border-t-2 border-dashed border-primary" />Trajeto estimado</span>}<span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-emerald-600" />Cliente normal</span><span className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full bg-red-600" />Cliente inativo</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-emerald-700 px-1 text-[10px] text-white">E</b>Endereço exato</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-amber-700 px-1 text-[10px] text-white">I</b>Número interpolado</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-slate-600 px-1 text-[10px] text-white">~</b>Rua ou CEP</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-amber-700 px-1 text-[10px] text-white">C</b>Somente cidade</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-red-700 px-1 text-[10px] text-white">?</b>Sem coordenada{unlocatedCount > 0 ? ` (${unlocatedCount})` : ""}</span><span className="inline-flex items-center gap-1.5"><b className="rounded bg-sky-700 px-1 text-[10px] text-white">R$</b>Pedágio</span>{hasRouteOverlays && <span className="inline-flex items-center gap-1.5"><TrafficCone className="size-3.5 text-red-600" />Congestionamento</span>}</div>
     </div>
   );

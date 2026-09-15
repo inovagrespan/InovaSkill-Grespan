@@ -472,3 +472,215 @@ public sealed class GetRouteCustomersChatTool(
         }
     }
 }
+
+public sealed class GetRouteOperationalAnalysisChatTool(
+    IRouteChatQueryService routeQueries,
+    ILogger<GetRouteOperationalAnalysisChatTool> logger) : IChatTool
+{
+    public string Name => "get_route_operational_analysis";
+    public string Description =>
+        "Consulta uma rota, sua criticidade e custo consolidado, junto do último cenário otimizado válido do mesmo dia. A otimização é global e não representa substituição 1:1 da rota.";
+
+    public object GetParameterSchema() => new
+    {
+        type = "object",
+        additionalProperties = false,
+        properties = new
+        {
+            routeId = new { type = "string", format = "uuid", description = "Identificador da rota localizado por search_routes." }
+        },
+        required = new[] { "routeId" }
+    };
+
+    public async Task<ChatToolResult> ExecuteAsync(
+        string argumentsJson,
+        ChatExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            var routeIdValue = SearchRoutesChatTool.ReadString(document.RootElement, "routeId");
+            if (!Guid.TryParse(routeIdValue, out var routeId))
+                return ChatToolResult.Fail("Identificador de rota inválido.");
+
+            var analysis = await routeQueries.GetRouteOperationalAnalysisAsync(routeId, cancellationToken);
+            object payload = analysis is null
+                ? new { found = false, message = "Rota não encontrada." }
+                : new { found = true, analysis };
+            var recordCount = analysis is null ? 0 : 1;
+            LogSuccess(logger, Name, context, recordCount, startedAt);
+            return ChatToolResult.Ok(payload, recordCount);
+        }
+        catch (JsonException)
+        {
+            return ChatToolResult.Fail("Argumentos inválidos para análise operacional da rota.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Falha ao executar ferramenta {ToolName}.", Name);
+            return ChatToolResult.Fail("Não foi possível analisar a rota agora.");
+        }
+    }
+
+    internal static void LogSuccess(
+        ILogger logger,
+        string toolName,
+        ChatExecutionContext context,
+        int recordCount,
+        long startedAt) =>
+        logger.LogInformation(
+            "Chat tool {ToolName} executada para usuário {UserId} em {ElapsedMs} ms com {RecordCount} registros.",
+            toolName,
+            context.UserId,
+            Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
+            recordCount);
+}
+
+public sealed class GetDailyRouteOptimizationChatTool(
+    IRouteChatQueryService routeQueries,
+    ILogger<GetDailyRouteOptimizationChatTool> logger) : IChatTool
+{
+    private static readonly HashSet<string> SupportedWeekdays =
+    ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+
+    public string Name => "get_daily_route_optimization";
+    public string Description =>
+        "Consulta o último resultado persistido do otimizador para um dia, com comparação agregada, veículos propostos e sequência de municípios. Não calcula nem inicia nova otimização.";
+
+    public object GetParameterSchema() => new
+    {
+        type = "object",
+        additionalProperties = false,
+        properties = new
+        {
+            weekday = new
+            {
+                type = "string",
+                @enum = SupportedWeekdays.OrderBy(value => value).ToArray(),
+                description = "Dia da semana em inglês e maiúsculas, por exemplo MONDAY."
+            }
+        },
+        required = new[] { "weekday" }
+    };
+
+    public async Task<ChatToolResult> ExecuteAsync(
+        string argumentsJson,
+        ChatExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            var weekday = SearchRoutesChatTool.ReadString(document.RootElement, "weekday").ToUpperInvariant();
+            if (!SupportedWeekdays.Contains(weekday))
+                return ChatToolResult.Fail("Dia da semana inválido.");
+
+            var optimization = await routeQueries.GetDailyRouteOptimizationAsync(weekday, cancellationToken);
+            object payload = optimization is null
+                ? new { found = false, message = "Dados insuficientes: não há resultado de otimização para o dia informado." }
+                : new { found = true, optimization };
+            var recordCount = optimization is null ? 0 : 1;
+            GetRouteOperationalAnalysisChatTool.LogSuccess(logger, Name, context, recordCount, startedAt);
+            return ChatToolResult.Ok(payload, recordCount);
+        }
+        catch (JsonException)
+        {
+            return ChatToolResult.Fail("Argumentos inválidos para consulta da otimização diária.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Falha ao executar ferramenta {ToolName}.", Name);
+            return ChatToolResult.Fail("Não foi possível consultar a otimização diária agora.");
+        }
+    }
+}
+
+public sealed class ListRouteCostsChatTool(
+    IRouteChatQueryService routeQueries,
+    IOptions<AssistantOptions> options,
+    ILogger<ListRouteCostsChatTool> logger) : IChatTool
+{
+    private const int DefaultLimit = 10;
+    private static readonly HashSet<string> SupportedSortFields =
+    ["fuelCost", "tollCost", "totalCost"];
+    private static readonly HashSet<string> SupportedScenarios =
+    ["actual", "optimized"];
+    private static readonly HashSet<string> SupportedWeekdays =
+    ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+    private readonly AssistantOptions assistantOptions = options.Value;
+
+    public string Name => "list_route_costs";
+    public string Description =>
+        "Lista custos oficiais consolidados de rotas, com combustível, pedágio e total. Retorna indisponibilidade explícita quando o snapshot não puder sustentar o cálculo.";
+
+    public object GetParameterSchema() => new
+    {
+        type = "object",
+        additionalProperties = false,
+        properties = new
+        {
+            weekday = new { type = new[] { "string", "null" }, description = "Dia da semana em inglês e maiúsculas, ou null." },
+            scenario = new { type = "string", @enum = SupportedScenarios.OrderBy(value => value).ToArray(), description = "Use actual para rotas atuais e optimized para o cenário sugerido." },
+            sortBy = new { type = "string", @enum = SupportedSortFields.OrderBy(value => value).ToArray() },
+            sortDirection = new { type = "string", @enum = new[] { "asc", "desc" } },
+            limit = new { type = "integer", minimum = 1, maximum = assistantOptions.MaximumGeneralSearchResults }
+        },
+        required = new[] { "weekday", "scenario", "sortBy", "sortDirection", "limit" }
+    };
+
+    public async Task<ChatToolResult> ExecuteAsync(
+        string argumentsJson,
+        ChatExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            var weekday = ReadNullableString(document.RootElement, "weekday")?.ToUpperInvariant();
+            if (weekday is not null && !SupportedWeekdays.Contains(weekday))
+                return ChatToolResult.Fail("Dia da semana inválido.");
+            var scenario = SearchRoutesChatTool.ReadString(document.RootElement, "scenario").ToLowerInvariant();
+            if (string.IsNullOrEmpty(scenario)) scenario = "actual";
+            var sortBy = SearchRoutesChatTool.ReadString(document.RootElement, "sortBy");
+            var sortDirection = SearchRoutesChatTool.ReadString(document.RootElement, "sortDirection").ToLowerInvariant();
+            if (!SupportedScenarios.Contains(scenario))
+                return ChatToolResult.Fail("Cenário de custos inválido.");
+            if (!SupportedSortFields.Contains(sortBy) ||
+                sortDirection is not ("asc" or "desc"))
+                return ChatToolResult.Fail("Ordenação de custos inválida.");
+
+            var costs = await routeQueries.ListRouteCostsAsync(
+                new RouteChatCostQuery(
+                    weekday,
+                    scenario.ToUpperInvariant(),
+                    sortBy,
+                    sortDirection,
+                    SearchRoutesChatTool.ReadLimit(
+                        document.RootElement,
+                        DefaultLimit,
+                        assistantOptions.MaximumGeneralSearchResults)),
+                cancellationToken);
+            GetRouteOperationalAnalysisChatTool.LogSuccess(logger, Name, context, costs.Routes.Count, startedAt);
+            return ChatToolResult.Ok(costs, costs.Routes.Count);
+        }
+        catch (JsonException)
+        {
+            return ChatToolResult.Fail("Argumentos inválidos para listagem de custos de rotas.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Falha ao executar ferramenta {ToolName}.", Name);
+            return ChatToolResult.Fail("Não foi possível listar os custos de rotas agora.");
+        }
+    }
+
+    private static string? ReadNullableString(JsonElement root, string propertyName) =>
+        root.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()?.Trim()
+            : null;
+
+}

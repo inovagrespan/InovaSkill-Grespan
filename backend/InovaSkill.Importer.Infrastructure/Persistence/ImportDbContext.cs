@@ -17,6 +17,9 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<RouteOptimizationDecision> RouteOptimizationDecisions => Set<RouteOptimizationDecision>();
     public DbSet<VehicleType> VehicleTypes => Set<VehicleType>();
     public DbSet<LogisticsFuelSettings> LogisticsFuelSettings => Set<LogisticsFuelSettings>();
+    public DbSet<RouteCostSnapshot> RouteCostSnapshots => Set<RouteCostSnapshot>();
+    public DbSet<RouteCostItem> RouteCostItems => Set<RouteCostItem>();
+    public DbSet<RouteCostTollPassage> RouteCostTollPassages => Set<RouteCostTollPassage>();
     public DbSet<Route> Routes => Set<Route>();
     public DbSet<RouteEntry> RouteEntries => Set<RouteEntry>();
     public DbSet<Municipality> Municipalities => Set<Municipality>();
@@ -360,7 +363,14 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.Name).HasMaxLength(64).IsRequired();
             entity.Property(x => x.CapacityKg).HasPrecision(12, 2);
             entity.Property(x => x.CapacityVolumeM3).HasPrecision(12, 3);
+            entity.Property(x => x.MinimumFuelEfficiencyKmPerLiter).HasPrecision(8, 3);
+            entity.Property(x => x.MaximumFuelEfficiencyKmPerLiter).HasPrecision(8, 3);
             entity.HasIndex(x => x.Name).IsUnique();
+            entity.ToTable("vehicle_types", table =>
+            {
+                table.HasCheckConstraint("CK_vehicle_types_axle_count", "(\"AxleCount\" IS NULL AND \"MinimumFuelEfficiencyKmPerLiter\" IS NULL AND \"MaximumFuelEfficiencyKmPerLiter\" IS NULL) OR (\"AxleCount\" IS NOT NULL AND \"AxleCount\" BETWEEN 2 AND 9 AND \"MinimumFuelEfficiencyKmPerLiter\" IS NOT NULL AND \"MaximumFuelEfficiencyKmPerLiter\" IS NOT NULL)");
+                table.HasCheckConstraint("CK_vehicle_types_fuel_efficiency", "(\"AxleCount\" IS NULL AND \"MinimumFuelEfficiencyKmPerLiter\" IS NULL AND \"MaximumFuelEfficiencyKmPerLiter\" IS NULL) OR (\"AxleCount\" IS NOT NULL AND \"MinimumFuelEfficiencyKmPerLiter\" IS NOT NULL AND \"MaximumFuelEfficiencyKmPerLiter\" IS NOT NULL AND \"MinimumFuelEfficiencyKmPerLiter\" > 0 AND \"MaximumFuelEfficiencyKmPerLiter\" >= \"MinimumFuelEfficiencyKmPerLiter\")");
+            });
         });
 
         modelBuilder.Entity<LogisticsFuelSettings>(entity =>
@@ -368,6 +378,64 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.ToTable("logistics_fuel_settings");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.DieselPricePerLiter).HasPrecision(10, 3).IsRequired();
+        });
+
+        modelBuilder.Entity<RouteCostSnapshot>(entity =>
+        {
+            entity.ToTable("route_cost_snapshots");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.InputFingerprint).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.DieselPricePerLiter).HasPrecision(10, 3);
+            entity.Property(x => x.TollCatalogVersion).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => x.RouteImportId).IsUnique();
+            entity.HasIndex(x => new { x.RouteImportId, x.InputFingerprint });
+            entity.HasOne(x => x.RouteImport).WithMany().HasForeignKey(x => x.RouteImportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.JobExecution).WithMany().HasForeignKey(x => x.JobExecutionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RouteCostItem>(entity =>
+        {
+            entity.ToTable("route_cost_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Scenario).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Weekday).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Label).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.PathBasis).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.UnavailableReason).HasMaxLength(1024);
+            entity.Property(x => x.DistanceMeters).HasPrecision(18, 3);
+            entity.Property(x => x.DurationSeconds).HasPrecision(18, 3);
+            entity.Property(x => x.MinimumFuelLiters).HasPrecision(18, 3);
+            entity.Property(x => x.MaximumFuelLiters).HasPrecision(18, 3);
+            entity.Property(x => x.MinimumFuelCost).HasPrecision(18, 2);
+            entity.Property(x => x.MaximumFuelCost).HasPrecision(18, 2);
+            entity.Property(x => x.TollCost).HasPrecision(18, 2);
+            entity.Property(x => x.MinimumTotalCost).HasPrecision(18, 2);
+            entity.Property(x => x.MaximumTotalCost).HasPrecision(18, 2);
+            entity.HasIndex(x => new { x.SnapshotId, x.Scenario, x.Weekday });
+            entity.HasIndex(x => new { x.SnapshotId, x.RouteId }).IsUnique().HasFilter("\"RouteId\" IS NOT NULL");
+            entity.HasIndex(x => new { x.SnapshotId, x.OptimizationVehicleId }).IsUnique().HasFilter("\"OptimizationVehicleId\" IS NOT NULL");
+            entity.HasIndex(x => x.OptimizationResultId);
+            entity.HasOne(x => x.Snapshot).WithMany(x => x.Items).HasForeignKey(x => x.SnapshotId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Route).WithMany().HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.OptimizationResult).WithMany().HasForeignKey(x => x.OptimizationResultId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.OptimizationVehicle).WithMany().HasForeignKey(x => x.OptimizationVehicleId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.VehicleType).WithMany().HasForeignKey(x => x.VehicleTypeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RouteCostTollPassage>(entity =>
+        {
+            entity.ToTable("route_cost_toll_passages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TollPlazaCode).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.TollPlazaName).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.OperatorName).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Highway).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Kilometer).HasPrecision(8, 2);
+            entity.Property(x => x.AutomaticUnitTariff).HasPrecision(18, 2);
+            entity.Property(x => x.TotalCost).HasPrecision(18, 2);
+            entity.HasIndex(x => new { x.RouteCostItemId, x.TollPlazaCode }).IsUnique();
+            entity.HasOne(x => x.RouteCostItem).WithMany(x => x.TollPassageItems)
+                .HasForeignKey(x => x.RouteCostItemId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Route>(entity =>

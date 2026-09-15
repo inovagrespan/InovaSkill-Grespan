@@ -36,9 +36,9 @@ type BusinessAssistantProps = {
 
 const DEFAULT_SUGGESTIONS = [
   "Quais rotas estão críticas?",
+  "Qual solução calculada para desafogar a rota Marília 1?",
+  "Qual o custo de combustível e pedágio das rotas de hoje?",
   "Quais são as 3 rotas mais ociosas?",
-  "Procure a rota Marília.",
-  "Quais rotas estão acima de 140%?",
 ];
 
 const WELCOME_MESSAGE: AssistantMessage = {
@@ -192,7 +192,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
         "flex flex-col overflow-hidden bg-surface",
         isPage
           ? "h-full min-h-0 w-full"
-          : "absolute inset-x-0 bottom-0 h-[min(88dvh,760px)] border border-border/80 shadow-2xl sm:bottom-5 sm:left-auto sm:right-5 sm:w-[min(440px,calc(100vw-40px))] sm:rounded-3xl",
+          : "absolute inset-x-0 bottom-0 h-[min(92dvh,900px)] border border-border/80 shadow-2xl sm:bottom-5 sm:left-auto sm:right-5 sm:w-[min(680px,calc(100vw-40px))] sm:rounded-3xl",
       )}
       aria-label="Assistente inteligente"
     >
@@ -302,7 +302,7 @@ export function BusinessAssistant({ variant = "floating" }: BusinessAssistantPro
             )}>
               {message.author === "assistant" ? <Bot className="size-4" /> : <UserRound className="size-4" />}
             </span>
-            <div className={cn(isPage ? "max-w-[min(78%,760px)]" : "max-w-[82%]", "space-y-2", message.author === "user" && "items-end")}>
+            <div className={cn(isPage ? "max-w-[min(90%,960px)]" : "max-w-[92%]", "space-y-2", message.author === "user" && "items-end")}>
               <div className={cn(
                 "rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm",
                 message.author === "assistant"

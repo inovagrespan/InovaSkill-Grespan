@@ -48,13 +48,18 @@ execuções termina ambos como `FAILED`.
 - `imports`: arquivo bruto preservado, versão, estado e contadores.
 - `import_errors`: coordenada da célula, valor original e eventual correção.
 - `job_executions`: histórico imutável de cada execução.
-- `vehicle_types`: Truck (10.300 kg), Toco (7.700 kg) e Acelo (3.300 kg).
+- `vehicle_types`: capacidade, 2 a 9 eixos e faixa positiva de consumo em km/L;
+  Truck (10.300 kg/3 eixos), Toco (7.700 kg/2 eixos) e Acelo (3.300 kg/2 eixos)
+  recebem backfill preservando suas faixas atuais.
 - `routes`: rota, dia, veículo e import de origem.
 - `route_entries`: sequência original, nome, entregas, Média/Dia e observação.
 - `route_import_corrections`: ação tipada e valores anterior/novo da correção.
 - `route_import_affected_weekdays`: dias recalculados na versão derivada.
 - `municipality_aliases`: nome normalizado da fonte vinculado ao município oficial.
 - `daily_route_optimization_issues`: causas bloqueantes por resultado, rota e parada.
+- `route_cost_snapshots`: versão consolidada por snapshot de rotas e fingerprint.
+- `route_cost_items`: custo por rota real ou veículo do cenário otimizado.
+- `route_cost_toll_passages`: praças, passagens e tarifa aplicada por item.
 
 ## Interpretação e correções
 
@@ -137,6 +142,13 @@ UF são classificados como exatos; fallbacks compatíveis por logradouro, CEP ou
 município são aceitos como coordenadas aproximadas e mantêm o nível de precisão
 auditável.
 
+Publicar um snapshot de rotas, concluir `DAILY_ROUTE_OPTIMIZATION` ou enriquecer
+coordenadas solicita `ROUTE_COST_CONSOLIDATION`; alterações de diesel e tipo de
+veículo fazem o mesmo. O job reutiliza `job_executions` e a Central de
+Processamentos. Solicitação concorrente marca uma reexecução posterior, e o
+fingerprint evita substituir o snapshot quando os insumos são idênticos. Uma
+falha técnica preserva integralmente o último resultado válido.
+
 `GET /api/routes` consulta somente o import atual. Para auditoria,
 `GET /api/route-imports/{importId}/routes` consulta um snapshot específico.
 No frontend, o usuário escolhe snapshots históricos somente pela data. Se
@@ -207,6 +219,26 @@ Os comparativos superiores destacam visualmente atual, proposto e impacto:
 distância e duração incluem variação percentual segura para base zero, veículos
 mostram o saldo absoluto e capacidade usa o termo `introduzida` para não sugerir
 um crescimento líquido quando houve substituição.
+
+## Consolidação de custos
+
+O cenário atual percorre depósito e clientes que possuam coordenadas cadastrais
+exatas; o otimizado percorre depósito e a sequência municipal persistida pelo
+solver. Município dividido pode aparecer em mais de um veículo, mas nenhuma
+rota sugerida é tratada como substituta 1:1 de uma rota real. O fluxo legado por
+`ResultJson` não participa da leitura ou do cálculo.
+
+O Worker persiste distância, duração, combustível mínimo/máximo, pedágios,
+passagens e custo total. Litros usam três casas; dinheiro usa duas e o total é a
+soma exata das parcelas arredondadas. Falta de diesel, coordenada exata, eixos,
+consumo ou otimização gera indisponibilidade com motivo, nunca zero inventado.
+O catálogo versionado de pedágios pertence ao backend e é exposto por
+`GET /api/logistics/toll-plazas`; vigência desconhecida é nula.
+
+`GET /api/route-costs?date=&weekday=` alimenta o relatório diário/semanal e
+separa `actual` de `optimized`; `GET /api/routes/{id}/cost` alimenta o detalhe.
+O chat web e o WhatsApp consultam o mesmo snapshot atual por ferramentas somente
+leitura e recomendam exclusivamente o último cenário persistido do solver.
 
 ## Métricas dos jobs
 

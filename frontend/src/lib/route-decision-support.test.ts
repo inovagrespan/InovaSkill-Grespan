@@ -17,11 +17,11 @@ const route: ImportedRouteDetail = {
 };
 
 const vehicles: VehicleTypeItem[] = [
-  { id: "small", name: "VUC", capacityKg: 7_000, routeCount: 2 },
-  { id: "toco", name: "Toco", capacityKg: 8_500, routeCount: 5 },
-  { id: "truck", name: "Truck", capacityKg: 10_000, routeCount: 8 },
-  { id: "large", name: "Carreta", capacityKg: 15_000, routeCount: 3 },
-  { id: "invalid", name: "Sem capacidade", capacityKg: null, routeCount: 0 },
+  { id: "small", name: "VUC", capacityKg: 7_000, axleCount: 2, minimumFuelEfficiencyKmPerLiter: 4, maximumFuelEfficiencyKmPerLiter: 5, routeCount: 2 },
+  { id: "toco", name: "Toco", capacityKg: 8_500, axleCount: 2, minimumFuelEfficiencyKmPerLiter: 3, maximumFuelEfficiencyKmPerLiter: 4, routeCount: 5 },
+  { id: "truck", name: "Truck", capacityKg: 10_000, axleCount: 3, minimumFuelEfficiencyKmPerLiter: 2.5, maximumFuelEfficiencyKmPerLiter: 3.5, routeCount: 8 },
+  { id: "large", name: "Carreta", capacityKg: 15_000, axleCount: 6, minimumFuelEfficiencyKmPerLiter: 2, maximumFuelEfficiencyKmPerLiter: 3, routeCount: 3 },
+  { id: "invalid", name: "Sem capacidade", capacityKg: null, axleCount: null, minimumFuelEfficiencyKmPerLiter: null, maximumFuelEfficiencyKmPerLiter: null, routeCount: 0 },
 ];
 
 describe("route decision support", () => {

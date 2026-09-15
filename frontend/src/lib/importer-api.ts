@@ -4162,7 +4162,18 @@ export type VehicleTypeItem = {
   id: string;
   name: string;
   capacityKg: number | null;
+  axleCount: number | null;
+  minimumFuelEfficiencyKmPerLiter: number | null;
+  maximumFuelEfficiencyKmPerLiter: number | null;
   routeCount: number;
+};
+
+export type VehicleTypeInput = {
+  name: string;
+  capacityKg: number;
+  axleCount: number | null;
+  minimumFuelEfficiencyKmPerLiter: number | null;
+  maximumFuelEfficiencyKmPerLiter: number | null;
 };
 
 export async function fetchVehicleTypes(): Promise<VehicleTypeItem[]> {
@@ -4172,14 +4183,11 @@ export async function fetchVehicleTypes(): Promise<VehicleTypeItem[]> {
   return (await response.json()) as VehicleTypeItem[];
 }
 
-export async function createVehicleType(
-  name: string,
-  capacityKg: number,
-): Promise<VehicleTypeItem> {
+export async function createVehicleType(input: VehicleTypeInput): Promise<VehicleTypeItem> {
   const response = await authFetch(`${API_URL}/api/vehicle-types`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, capacityKg }),
+    body: JSON.stringify(input),
   });
   if (!response.ok)
     throw new Error(await parseApiError(response, "Falha ao criar tipo de veículo."));
@@ -4188,13 +4196,12 @@ export async function createVehicleType(
 
 export async function updateVehicleType(
   id: string,
-  name: string,
-  capacityKg: number,
+  input: VehicleTypeInput,
 ): Promise<VehicleTypeItem> {
   const response = await authFetch(`${API_URL}/api/vehicle-types/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, capacityKg }),
+    body: JSON.stringify(input),
   });
   if (!response.ok)
     throw new Error(await parseApiError(response, "Falha ao atualizar tipo de veículo."));
@@ -4630,6 +4637,136 @@ export async function fetchRouteRoadPath(id: string): Promise<RouteRoadPath> {
   const response = await authFetch(`${API_URL}/api/routes/${id}/road-path`);
   if (!response.ok) throw new Error(await parseApiError(response, "Não foi possível calcular o percurso rodoviário."));
   return (await response.json()) as RouteRoadPath;
+}
+
+export type RouteCostTollPassage = {
+  tollPlazaCode: string;
+  tollPlazaName: string;
+  operatorName: string;
+  highway: string;
+  kilometer: number;
+  axleCount: number;
+  passages: number;
+  automaticUnitTariff: number;
+  totalCost: number;
+};
+
+export type RouteCostItem = {
+  id: string;
+  routeId: string | null;
+  optimizationResultId: string | null;
+  optimizationVehicleId: string | null;
+  vehicleTypeId: string | null;
+  vehicleType: string | null;
+  label: string;
+  weekday: string;
+  pathBasis: string;
+  isAvailable: boolean;
+  unavailableReason: string | null;
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+  minimumFuelLiters: number | null;
+  maximumFuelLiters: number | null;
+  minimumFuelCost: number | null;
+  maximumFuelCost: number | null;
+  tollCost: number;
+  tollPassages: number;
+  minimumTotalCost: number | null;
+  maximumTotalCost: number | null;
+  tolls: RouteCostTollPassage[];
+};
+
+export type RouteCostTotals = {
+  itemCount: number;
+  availableItemCount: number;
+  unavailableItemCount: number;
+  distanceMeters: number;
+  durationSeconds: number;
+  minimumFuelLiters: number | null;
+  maximumFuelLiters: number | null;
+  minimumFuelCost: number | null;
+  maximumFuelCost: number | null;
+  tollCost: number;
+  tollPassages: number;
+  minimumTotalCost: number | null;
+  maximumTotalCost: number | null;
+};
+
+export type RouteCostScenario = {
+  pathBasis: string | null;
+  optimizationResultId?: string | null;
+  status?: string | null;
+  reason?: string | null;
+  items: RouteCostItem[];
+  totals: RouteCostTotals;
+};
+
+export type DailyRouteCosts = {
+  snapshotId: string | null;
+  routeImportId: string | null;
+  calculatedAt: string | null;
+  dieselPricePerLiter: number | null;
+  tollCatalogVersion: string | null;
+  tollEffectiveFrom: string | null;
+  actual: RouteCostScenario;
+  optimized: RouteCostScenario | null;
+  optimizationResults: Array<{
+    id: string;
+    weekday: string;
+    status: string;
+    reason: string | null;
+    createdAt: string;
+    hasConsolidatedCosts: boolean;
+  }>;
+};
+
+export type RouteCostDetail = {
+  snapshotId: string;
+  routeImportId: string;
+  calculatedAt: string;
+  dieselPricePerLiter: number | null;
+  tollCatalogVersion: string;
+  tollEffectiveFrom: string | null;
+  item: RouteCostItem;
+};
+
+export async function fetchDailyRouteCosts(filters: { date: string; weekday?: string }): Promise<DailyRouteCosts> {
+  const params = new URLSearchParams({ date: filters.date });
+  if (filters.weekday) params.set("weekday", filters.weekday);
+  const response = await authFetch(`${API_URL}/api/route-costs?${params}`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar os custos consolidados das rotas."));
+  return (await response.json()) as DailyRouteCosts;
+}
+
+export async function fetchRouteCost(id: string): Promise<RouteCostDetail> {
+  const response = await authFetch(`${API_URL}/api/routes/${id}/cost`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar o custo consolidado da rota."));
+  return (await response.json()) as RouteCostDetail;
+}
+
+export type TollPlaza = {
+  code: string;
+  name: string;
+  operatorName: string;
+  highway: string;
+  kilometer: number;
+  municipality: string;
+  latitude: number;
+  longitude: number;
+  automaticDiscountRate: number;
+  commercialManualTariffsByAxle: Record<string, number>;
+};
+
+export type TollPlazaCatalog = {
+  version: string;
+  effectiveFrom: string | null;
+  items: TollPlaza[];
+};
+
+export async function fetchTollPlazas(): Promise<TollPlazaCatalog> {
+  const response = await authFetch(`${API_URL}/api/logistics/toll-plazas`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Falha ao carregar o catálogo de pedágios."));
+  return (await response.json()) as TollPlazaCatalog;
 }
 
 export type DieselPriceResearch = {

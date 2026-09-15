@@ -28,6 +28,18 @@ public interface IRouteChatQueryService
         Guid routeId,
         int limit,
         CancellationToken cancellationToken);
+
+    Task<RouteChatOperationalAnalysisDto?> GetRouteOperationalAnalysisAsync(
+        Guid routeId,
+        CancellationToken cancellationToken);
+
+    Task<RouteChatDailyOptimizationDto?> GetDailyRouteOptimizationAsync(
+        string weekday,
+        CancellationToken cancellationToken);
+
+    Task<RouteChatCostListDto> ListRouteCostsAsync(
+        RouteChatCostQuery query,
+        CancellationToken cancellationToken);
 }
 
 public interface IBusinessChatQueryService
@@ -166,6 +178,113 @@ public sealed record RouteChatCustomerDto(
     string MunicipalityName,
     string State,
     string CustomerType);
+
+public sealed record RouteChatOperationalAnalysisDto(
+    RouteChatDetailsDto Route,
+    RouteChatCostDto? Cost,
+    RouteChatDailyCostComparisonDto? DailyCosts,
+    RouteChatDailyOptimizationDto? DailyOptimization,
+    string ComparisonScope,
+    string? DataAvailabilityMessage);
+
+public sealed record RouteChatDailyCostComparisonDto(
+    DateTime CalculatedAt,
+    decimal? DieselPricePerLiter,
+    string TollCatalogVersion,
+    RouteChatScenarioCostSummaryDto? Actual,
+    RouteChatScenarioCostSummaryDto? Optimized);
+
+public sealed record RouteChatScenarioCostSummaryDto(
+    string Scenario,
+    string PathBasis,
+    int AvailableItemCount,
+    int UnavailableItemCount,
+    decimal? DistanceKm,
+    decimal? MinimumFuelCost,
+    decimal? MaximumFuelCost,
+    decimal? TollCost,
+    decimal? MinimumTotalCost,
+    decimal? MaximumTotalCost);
+
+public sealed record RouteChatDailyOptimizationDto(
+    Guid ResultId,
+    string Weekday,
+    string Status,
+    string? Reason,
+    DateTime CalculatedAt,
+    string ComparisonScope,
+    RouteChatOptimizationMetricsDto Current,
+    RouteChatOptimizationMetricsDto Proposed,
+    IReadOnlyList<RouteChatOptimizationVehicleDto> ProposedVehicles,
+    IReadOnlyList<RouteChatOptimizationIssueDto> Issues);
+
+public sealed record RouteChatOptimizationMetricsDto(
+    decimal DistanceKm,
+    decimal DurationMinutes,
+    int VehicleCount,
+    decimal TotalWeightKg);
+
+public sealed record RouteChatOptimizationVehicleDto(
+    int Sequence,
+    Guid? SourceRouteId,
+    string? SourceRouteName,
+    string VehicleType,
+    bool IsAdditional,
+    bool IsIdle,
+    decimal CapacityKg,
+    decimal LoadKg,
+    decimal OccupancyPercentage,
+    decimal DistanceKm,
+    decimal DurationMinutes,
+    IReadOnlyList<RouteChatOptimizationStopDto> Stops);
+
+public sealed record RouteChatOptimizationStopDto(
+    int Sequence,
+    string Municipality,
+    string State,
+    decimal WeightKg);
+
+public sealed record RouteChatOptimizationIssueDto(
+    string Code,
+    string Message,
+    bool CanResolve);
+
+public sealed record RouteChatCostQuery(
+    string? Weekday,
+    string Scenario,
+    string SortBy,
+    string SortDirection,
+    int Limit);
+
+public sealed record RouteChatCostListDto(
+    DateOnly? ReferenceDate,
+    string? Weekday,
+    string Status,
+    string? Message,
+    RouteChatScenarioCostSummaryDto? Summary,
+    IReadOnlyList<RouteChatCostDto> Routes);
+
+public sealed record RouteChatCostDto(
+    Guid? RouteId,
+    string RouteName,
+    string Scenario,
+    string PathBasis,
+    string Status,
+    string? UnavailabilityReason,
+    decimal? DistanceKm,
+    decimal? DurationMinutes,
+    decimal? MinimumFuelLiters,
+    decimal? MaximumFuelLiters,
+    decimal? MinimumFuelCost,
+    decimal? MaximumFuelCost,
+    decimal? TollCost,
+    int TollPassages,
+    decimal? MinimumTotalCost,
+    decimal? MaximumTotalCost,
+    decimal? DieselPricePerLiter,
+    string TollCatalogVersion,
+    DateOnly? TollEffectiveFrom,
+    DateTime CalculatedAt);
 
 public sealed record BusinessChatCustomerDto(
     Guid Id,

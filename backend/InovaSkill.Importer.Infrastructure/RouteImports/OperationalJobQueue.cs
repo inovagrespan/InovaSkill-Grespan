@@ -45,7 +45,20 @@ public sealed class OperationalJobQueue(
                  job.Status == JobExecutionStatus.Processing ||
                  job.Status == JobExecutionStatus.Retrying),
                 cancellationToken);
-            if (alreadyRunning) return null;
+            if (alreadyRunning)
+            {
+                if (jobType == OperationalJobCodes.RouteCostConsolidation)
+                {
+                    var running = await dbContext.JobExecutions
+                        .Where(job => job.JobType == jobType && job.RelatedEntityId == relatedEntityId &&
+                            (job.Status == JobExecutionStatus.Queued || job.Status == JobExecutionStatus.Processing ||
+                             job.Status == JobExecutionStatus.Retrying))
+                        .OrderByDescending(job => job.CreatedAt).FirstAsync(cancellationToken);
+                    running.ParametersJson = JsonSerializer.Serialize(new { relatedEntityId, rerunRequested = true });
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
+                return null;
+            }
         }
 
         var job = new JobExecution

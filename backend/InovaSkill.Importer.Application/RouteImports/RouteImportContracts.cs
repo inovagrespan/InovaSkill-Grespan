@@ -90,6 +90,7 @@ public static class OperationalJobCodes
     public const string CustomerRegistrationAddressEnrichment = "CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT";
     public const string CustomerAddressCoordinateEnrichment = "CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT";
     public const string DailyRouteOptimization = "DAILY_ROUTE_OPTIMIZATION";
+    public const string RouteCostConsolidation = "ROUTE_COST_CONSOLIDATION";
     public const string WhatsAppMessageProcessing = WhatsAppJobCodes.MessageProcessing;
     public const int WorkerExecutionTimeoutMinutes = 30;
 }
@@ -198,8 +199,19 @@ public static class OperationalJobCatalog
         ContractVersion: 1,
         ExampleParametersJson: "{}");
 
+    public static readonly OperationalJobDefinition RouteCostConsolidation = new(
+        OperationalJobCodes.RouteCostConsolidation,
+        "Consolidar custos de rotas",
+        "Calcula combustível e pedágios das rotas atuais e do último cenário diário otimizado.",
+        ManualRunAllowed: true,
+        ScheduleAllowed: true,
+        AllowConcurrentRuns: false,
+        BackgroundJobQueues.Default,
+        ContractVersion: 1,
+        ExampleParametersJson: "{}");
+
     private static readonly IReadOnlyDictionary<string, OperationalJobDefinition> Definitions =
-        new[] { ProcessImport, MunicipalityCoordinateEnrichment, CustomerRegistrationAddressEnrichment, CustomerAddressCoordinateEnrichment, DailyRouteOptimization, WhatsAppMessageProcessing }
+        new[] { ProcessImport, MunicipalityCoordinateEnrichment, CustomerRegistrationAddressEnrichment, CustomerAddressCoordinateEnrichment, DailyRouteOptimization, RouteCostConsolidation, WhatsAppMessageProcessing }
             .ToDictionary(definition => definition.JobType, StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlyCollection<OperationalJobDefinition> All { get; } = Definitions.Values.ToArray();

@@ -8,7 +8,8 @@ namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
 public sealed class OperationalJobProcessingService(
     ImportDbContext dbContext,
-    IEnumerable<IOperationalJobProcessor> processors) : IOperationalJobProcessingService
+    IEnumerable<IOperationalJobProcessor> processors,
+    IOperationalJobQueue operationalJobQueue) : IOperationalJobProcessingService
 {
     private const int MaximumAttempts = 4;
 
@@ -69,6 +70,7 @@ public sealed class OperationalJobProcessingService(
             job.ResultJson ??= JsonSerializer.Serialize(new { relatedEntityId = job.RelatedEntityId, completed = true });
             job.FinishedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
+            await QueueDependentCostConsolidation(job, cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -89,5 +91,29 @@ public sealed class OperationalJobProcessingService(
             await dbContext.SaveChangesAsync(cancellationToken);
             throw;
         }
+    }
+
+    private async Task QueueDependentCostConsolidation(
+        InovaSkill.Importer.Domain.Entities.JobExecution completedJob,
+        CancellationToken cancellationToken)
+    {
+        Guid? routeImportId = completedJob.JobType switch
+        {
+            OperationalJobCodes.DailyRouteOptimization => completedJob.RelatedEntityId,
+            OperationalJobCodes.RouteCostConsolidation when RerunWasRequested(completedJob.ParametersJson) => completedJob.RelatedEntityId,
+            OperationalJobCodes.CustomerAddressCoordinateEnrichment or OperationalJobCodes.MunicipalityCoordinateEnrichment =>
+                await dbContext.DataSources.AsNoTracking().Where(source => source.Code == RouteImportCodes.DataSource)
+                    .Select(source => source.CurrentImportId).SingleOrDefaultAsync(cancellationToken),
+            _ => null
+        };
+        if (routeImportId.HasValue)
+            await operationalJobQueue.TryQueueAsync(OperationalJobCodes.RouteCostConsolidation,
+                routeImportId.Value, cancellationToken);
+    }
+
+    private static bool RerunWasRequested(string parametersJson)
+    {
+        using var document = JsonDocument.Parse(parametersJson);
+        return document.RootElement.TryGetProperty("rerunRequested", out var value) && value.ValueKind == JsonValueKind.True;
     }
 }

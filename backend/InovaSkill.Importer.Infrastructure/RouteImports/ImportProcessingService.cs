@@ -150,6 +150,26 @@ public sealed class ImportProcessingService(
                 }
             }
 
+            if (activated && string.Equals(import.DataSource!.Code, RouteImportCodes.DataSource,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    await operationalJobQueue.TryQueueAsync(
+                        OperationalJobCodes.RouteCostConsolidation,
+                        import.Id,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    // A consolidação pode ser reenfileirada pela Central de Processamentos.
+                }
+            }
+
         }
         catch (StructuralImportException exception)
         {

@@ -493,6 +493,7 @@ public sealed class RoutesByCityProcessor(
             var knownCapacity = parsedCapacity > 0
                 ? parsedCapacity
                 : LogisticsVehicleCapacityPolicy.FindWeightCapacityKg(name);
+            var knownCostConfiguration = RouteCostPolicy.FindKnownVehicleConfiguration(name);
 
             if (existingVehicleType is null)
             {
@@ -500,7 +501,10 @@ public sealed class RoutesByCityProcessor(
                 {
                     Id = Guid.NewGuid(),
                     Name = name,
-                    CapacityKg = knownCapacity
+                    CapacityKg = knownCapacity,
+                    AxleCount = knownCostConfiguration?.AxleCount,
+                    MinimumFuelEfficiencyKmPerLiter = knownCostConfiguration?.MinimumFuelEfficiencyKmPerLiter,
+                    MaximumFuelEfficiencyKmPerLiter = knownCostConfiguration?.MaximumFuelEfficiencyKmPerLiter
                 };
                 existing.Add(vehicleType);
                 dbContext.VehicleTypes.Add(vehicleType);
@@ -508,6 +512,16 @@ public sealed class RoutesByCityProcessor(
             else if (existingVehicleType.CapacityKg is null && knownCapacity.HasValue)
             {
                 existingVehicleType.CapacityKg = knownCapacity;
+            }
+            if (existingVehicleType is not null &&
+                existingVehicleType.AxleCount is null &&
+                existingVehicleType.MinimumFuelEfficiencyKmPerLiter is null &&
+                existingVehicleType.MaximumFuelEfficiencyKmPerLiter is null &&
+                knownCostConfiguration is not null)
+            {
+                existingVehicleType.AxleCount = knownCostConfiguration.AxleCount;
+                existingVehicleType.MinimumFuelEfficiencyKmPerLiter = knownCostConfiguration.MinimumFuelEfficiencyKmPerLiter;
+                existingVehicleType.MaximumFuelEfficiencyKmPerLiter = knownCostConfiguration.MaximumFuelEfficiencyKmPerLiter;
             }
         }
 

@@ -1,4 +1,5 @@
 using InovaSkill.Importer.Application.RouteImports;
+using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Domain.Enums;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,10 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
 {
     private const int OccupancyPercentScale = 100;
     private const int OccupancyPercentDecimalPlaces = 1;
+    private const decimal MetersPerKilometer = 1000m;
+    private const decimal SecondsPerMinute = 60m;
+    private const int DistanceDecimalPlaces = 1;
+    private const int DurationDecimalPlaces = 1;
     private const string InferredByMunicipalityRelationshipType = "InferredByMunicipality";
     private const string InferredByMunicipalityRelationshipDescription =
         "Enquanto não existir vínculo manual cliente-rota, o relacionamento é inferido pelo município do cliente e pelas cidades reconhecidas da rota.";
@@ -339,6 +344,192 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             customers);
     }
 
+    public async Task<RouteChatOperationalAnalysisDto?> GetRouteOperationalAnalysisAsync(
+        Guid routeId,
+        CancellationToken cancellationToken)
+    {
+        var route = await GetRouteDetailsAsync(routeId, cancellationToken);
+        if (route is null) return null;
+
+        var importId = await GetCurrentRouteImportIdAsync(cancellationToken);
+        if (!importId.HasValue || !await dbContext.Routes.AsNoTracking().AnyAsync(
+                item => item.Id == routeId && item.ImportId == importId.Value,
+                cancellationToken))
+            return null;
+        var snapshot = await dbContext.RouteCostSnapshots.AsNoTracking()
+            .Where(item => item.RouteImportId == importId.Value)
+            .OrderByDescending(item => item.CalculatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        var costItem = snapshot is null
+            ? null
+            : await dbContext.RouteCostItems.AsNoTracking()
+                .SingleOrDefaultAsync(
+                    item => item.SnapshotId == snapshot.Id &&
+                            item.Scenario == RouteCostScenarios.Actual &&
+                            item.RouteId == routeId,
+                    cancellationToken);
+        IReadOnlyList<RouteCostItem> dailyCostItems = snapshot is null
+            ? []
+            : await dbContext.RouteCostItems.AsNoTracking()
+                .Where(item => item.SnapshotId == snapshot.Id && item.Weekday == route.Weekday)
+                .ToListAsync(cancellationToken);
+        var dailyCosts = snapshot is null
+            ? null
+            : new RouteChatDailyCostComparisonDto(
+                snapshot.CalculatedAt,
+                snapshot.DieselPricePerLiter,
+                snapshot.TollCatalogVersion,
+                SummarizeCosts(dailyCostItems, RouteCostScenarios.Actual),
+                SummarizeCosts(dailyCostItems, RouteCostScenarios.Optimized));
+        var optimization = await GetDailyRouteOptimizationAsync(route.Weekday, cancellationToken);
+        var costsAreStale = snapshot is not null && importId.HasValue &&
+            (await HasPendingCostRefreshAsync(importId.Value, snapshot.CalculatedAt, cancellationToken) ||
+             optimization?.CalculatedAt > snapshot.CalculatedAt);
+        var hasValidOptimization = optimization?.Status is
+            DailyRouteOptimizationStatuses.Optimized or DailyRouteOptimizationStatuses.NoImprovement;
+        var optimizedCostsAvailable = dailyCosts?.Optimized?.AvailableItemCount > 0;
+        return new RouteChatOperationalAnalysisDto(
+            route,
+            costItem is null ? null : ToCostDto(costItem, snapshot!),
+            dailyCosts,
+            optimization,
+            "Comparação global do dia; os veículos propostos não substituem uma rota atual em relação 1:1.",
+            costsAreStale
+                ? "Dados insuficientes: os custos estão desatualizados e aguardam nova consolidação."
+                : costItem is null || !costItem.IsAvailable
+                ? $"Dados insuficientes: {costItem?.UnavailableReason ?? "custo consolidado da rota não está disponível no snapshot atual."}"
+                : !hasValidOptimization
+                    ? "Dados insuficientes: não há cenário válido persistido pelo otimizador para o dia da rota."
+                    : optimization?.Status == DailyRouteOptimizationStatuses.Optimized && !optimizedCostsAvailable
+                        ? "Dados insuficientes: o cenário otimizado ainda não possui custos consolidados."
+                    : null);
+    }
+
+    public async Task<RouteChatDailyOptimizationDto?> GetDailyRouteOptimizationAsync(
+        string weekday,
+        CancellationToken cancellationToken)
+    {
+        var importId = await GetCurrentRouteImportIdAsync(cancellationToken);
+        if (!importId.HasValue) return null;
+
+        var normalizedWeekday = weekday.Trim().ToUpperInvariant();
+        var result = await dbContext.DailyRouteOptimizationResults.AsNoTracking()
+            .Include(item => item.Vehicles)
+                .ThenInclude(vehicle => vehicle.VehicleType)
+            .Include(item => item.Vehicles)
+                .ThenInclude(vehicle => vehicle.SourceRoute)
+            .Include(item => item.Vehicles)
+                .ThenInclude(vehicle => vehicle.Stops)
+                    .ThenInclude(stop => stop.Municipality)
+            .Include(item => item.Issues)
+            .SingleOrDefaultAsync(
+                item => item.RouteImportId == importId.Value && item.Weekday == normalizedWeekday,
+                cancellationToken);
+        if (result is null) return null;
+
+        var proposedVehicles = result.Vehicles
+            .OrderBy(vehicle => vehicle.Sequence)
+            .Select(vehicle => new RouteChatOptimizationVehicleDto(
+                vehicle.Sequence,
+                vehicle.SourceRouteId,
+                vehicle.SourceRoute?.Name,
+                vehicle.VehicleType?.Name ?? "Não informado",
+                vehicle.IsAdditional,
+                vehicle.IsIdle,
+                vehicle.CapacityKg,
+                vehicle.LoadKg,
+                ToOccupancyPercentage(vehicle.Occupancy) ?? 0m,
+                ToKilometers(vehicle.DistanceMeters),
+                ToMinutes(vehicle.DurationSeconds),
+                vehicle.Stops
+                    .OrderBy(stop => stop.Sequence)
+                    .Select(stop => new RouteChatOptimizationStopDto(
+                        stop.Sequence,
+                        stop.Municipality?.Name ?? "Não informado",
+                        stop.Municipality?.StateCode ?? string.Empty,
+                        stop.WeightKg))
+                    .ToList()))
+            .ToList();
+
+        return new RouteChatDailyOptimizationDto(
+            result.Id,
+            result.Weekday,
+            result.Status,
+            result.Reason,
+            result.CreatedAt,
+            "O resultado otimiza o conjunto de rotas do dia; não há correspondência 1:1 entre rota atual e veículo proposto.",
+            new RouteChatOptimizationMetricsDto(
+                ToKilometers(result.CurrentDistanceMeters),
+                ToMinutes(result.CurrentDurationSeconds),
+                result.CurrentVehicleCount,
+                result.TotalWeightKg),
+            new RouteChatOptimizationMetricsDto(
+                ToKilometers(result.ProposedDistanceMeters),
+                ToMinutes(result.ProposedDurationSeconds),
+                result.ProposedVehicleCount,
+                result.TotalWeightKg),
+            proposedVehicles,
+            result.Issues
+                .OrderBy(issue => issue.Code)
+                .ThenBy(issue => issue.Message)
+                .Select(issue => new RouteChatOptimizationIssueDto(issue.Code, issue.Message, issue.CanResolve))
+                .ToList());
+    }
+
+    public async Task<RouteChatCostListDto> ListRouteCostsAsync(
+        RouteChatCostQuery query,
+        CancellationToken cancellationToken)
+    {
+        var importId = await GetCurrentRouteImportIdAsync(cancellationToken);
+        if (!importId.HasValue)
+            return UnavailableCosts(query, "Dados insuficientes: não há importação de rotas publicada.");
+
+        var snapshot = await dbContext.RouteCostSnapshots.AsNoTracking()
+            .Where(item => item.RouteImportId == importId.Value)
+            .OrderByDescending(item => item.CalculatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (snapshot is null)
+            return UnavailableCosts(query, "Dados insuficientes: não há snapshot consolidado de custos.");
+        if (await HasPendingCostRefreshAsync(importId.Value, snapshot.CalculatedAt, cancellationToken))
+            return UnavailableCosts(query, "Dados insuficientes: os custos estão desatualizados e aguardam nova consolidação.");
+
+        var weekday = query.Weekday?.Trim().ToUpperInvariant();
+        var itemsQuery = dbContext.RouteCostItems.AsNoTracking()
+            .Where(item => item.SnapshotId == snapshot.Id && item.Scenario == query.Scenario);
+        if (!string.IsNullOrWhiteSpace(weekday))
+            itemsQuery = itemsQuery.Where(item => item.Weekday == weekday);
+
+        var allItems = await itemsQuery.ToListAsync(cancellationToken);
+
+        itemsQuery = (query.SortBy, query.SortDirection) switch
+        {
+            ("fuelCost", "asc") => itemsQuery.OrderByDescending(item => item.IsAvailable)
+                .ThenBy(item => item.MaximumFuelCost).ThenBy(item => item.Label),
+            ("fuelCost", _) => itemsQuery.OrderByDescending(item => item.IsAvailable)
+                .ThenByDescending(item => item.MaximumFuelCost).ThenBy(item => item.Label),
+            ("tollCost", "asc") => itemsQuery.OrderByDescending(item => item.IsAvailable)
+                .ThenBy(item => item.TollCost).ThenBy(item => item.Label),
+            ("tollCost", _) => itemsQuery.OrderByDescending(item => item.IsAvailable)
+                .ThenByDescending(item => item.TollCost).ThenBy(item => item.Label),
+            ("totalCost", "asc") => itemsQuery.OrderByDescending(item => item.IsAvailable)
+                .ThenBy(item => item.MaximumTotalCost).ThenBy(item => item.Label),
+            _ => itemsQuery.OrderByDescending(item => item.IsAvailable)
+                .ThenByDescending(item => item.MaximumTotalCost).ThenBy(item => item.Label)
+        };
+
+        var items = await itemsQuery.Take(query.Limit).ToListAsync(cancellationToken);
+        var hasAvailableItem = items.Any(item => item.IsAvailable);
+        return new RouteChatCostListDto(
+            DateOnly.FromDateTime(snapshot.CalculatedAt),
+            weekday,
+            hasAvailableItem ? "Available" : "Unavailable",
+            hasAvailableItem
+                ? null
+                : "Dados insuficientes: nenhuma rota possui custo disponível para o período informado.",
+            SummarizeCosts(allItems, query.Scenario),
+            items.Select(item => ToCostDto(item, snapshot)).ToList());
+    }
+
     private async Task<Guid?> GetCurrentRouteImportIdAsync(CancellationToken cancellationToken) =>
         await dbContext.DataSources.AsNoTracking()
             .Where(source => source.Code == RouteImportCodes.DataSource)
@@ -351,6 +542,19 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             .Select(source => source.CurrentImportId)
             .SingleOrDefaultAsync(cancellationToken);
 
+    private Task<bool> HasPendingCostRefreshAsync(
+        Guid routeImportId,
+        DateTime calculatedAt,
+        CancellationToken cancellationToken) =>
+        dbContext.JobExecutions.AsNoTracking().AnyAsync(job =>
+            job.JobType == OperationalJobCodes.RouteCostConsolidation &&
+            job.RelatedEntityId == routeImportId &&
+            job.CreatedAt > calculatedAt &&
+            (job.Status == JobExecutionStatus.Queued ||
+             job.Status == JobExecutionStatus.Processing ||
+             job.Status == JobExecutionStatus.Retrying),
+            cancellationToken);
+
     private static decimal? ToOccupancyPercentage(decimal? occupancy) =>
         occupancy.HasValue
             ? Math.Round(
@@ -358,5 +562,60 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
                 OccupancyPercentDecimalPlaces,
                 MidpointRounding.AwayFromZero)
             : null;
+
+    private static decimal ToKilometers(decimal meters) =>
+        Math.Round(meters / MetersPerKilometer, DistanceDecimalPlaces, MidpointRounding.AwayFromZero);
+
+    private static decimal ToMinutes(decimal seconds) =>
+        Math.Round(seconds / SecondsPerMinute, DurationDecimalPlaces, MidpointRounding.AwayFromZero);
+
+    private static RouteChatCostListDto UnavailableCosts(RouteChatCostQuery query, string message) =>
+        new(null, query.Weekday, "Unavailable", message, null, []);
+
+    private static RouteChatCostDto ToCostDto(RouteCostItem item, RouteCostSnapshot snapshot) =>
+        new(
+            item.RouteId,
+            item.Label,
+            item.Scenario,
+            item.PathBasis,
+            item.IsAvailable ? "Available" : "Unavailable",
+            item.UnavailableReason,
+            item.DistanceMeters.HasValue ? ToKilometers(item.DistanceMeters.Value) : null,
+            item.DurationSeconds.HasValue ? ToMinutes(item.DurationSeconds.Value) : null,
+            item.MinimumFuelLiters,
+            item.MaximumFuelLiters,
+            item.MinimumFuelCost,
+            item.MaximumFuelCost,
+            item.TollCost,
+            item.TollPassages,
+            item.MinimumTotalCost,
+            item.MaximumTotalCost,
+            snapshot.DieselPricePerLiter,
+            snapshot.TollCatalogVersion,
+            snapshot.TollEffectiveFrom,
+            snapshot.CalculatedAt);
+
+    private static RouteChatScenarioCostSummaryDto? SummarizeCosts(
+        IReadOnlyCollection<RouteCostItem> items,
+        string scenario)
+    {
+        var scenarioItems = items.Where(item => item.Scenario == scenario).ToArray();
+        if (scenarioItems.Length == 0) return null;
+
+        var available = scenarioItems.Where(item => item.IsAvailable).ToArray();
+        var hasAvailable = available.Length > 0;
+        var pathBases = scenarioItems.Select(item => item.PathBasis).Distinct(StringComparer.Ordinal).ToArray();
+        return new RouteChatScenarioCostSummaryDto(
+            scenario,
+            pathBases.Length == 1 ? pathBases[0] : "MIXED",
+            available.Length,
+            scenarioItems.Length - available.Length,
+            hasAvailable ? ToKilometers(available.Sum(item => item.DistanceMeters ?? 0m)) : null,
+            hasAvailable ? available.Sum(item => item.MinimumFuelCost ?? 0m) : null,
+            hasAvailable ? available.Sum(item => item.MaximumFuelCost ?? 0m) : null,
+            hasAvailable ? available.Sum(item => item.TollCost) : null,
+            hasAvailable ? available.Sum(item => item.MinimumTotalCost ?? 0m) : null,
+            hasAvailable ? available.Sum(item => item.MaximumTotalCost ?? 0m) : null);
+    }
 
 }
