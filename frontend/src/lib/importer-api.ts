@@ -4224,6 +4224,7 @@ export type RouteOptimizationSummary = {
   currentVehicleCount: number; proposedVehicleCount: number; additionalVehicleCount: number;
   additionalCapacityKg: number; totalWeightKg: number; createdAt: string;
   issueCount: number; inheritedFromResultId: string | null; isInherited: boolean;
+  isStale: boolean;
 };
 
 export type RouteOptimizationDetail = RouteOptimizationSummary & {
@@ -4231,9 +4232,24 @@ export type RouteOptimizationDetail = RouteOptimizationSummary & {
     id: string; sequence: number; isAdditional: boolean; isIdle: boolean;
     vehicleTypeId: string; vehicleType: string; sourceRouteId: string | null; sourceRouteName: string | null;
     capacityKg: number; loadKg: number; occupancy: number; distanceMeters: number; durationSeconds: number;
-    stops: Array<{ id: string; sequence: number; municipalityId: string; municipality: string; weightKg: number; distanceFromPreviousMeters: number; durationFromPreviousSeconds: number }>;
+    municipalityCount: number; deliveryCount: number;
+    stops: Array<{
+      id: string; sequence: number; municipalityId: string; municipality: string; customerId?: string | null;
+      customerCode?: string | null; customerName?: string | null;
+      customerAddress?: { streetType?: string | null; street?: string | null; number?: string | null; neighborhood?: string | null; city?: string | null; stateCode?: string | null } | null;
+      weightKg: number; distanceFromPreviousMeters: number; durationFromPreviousSeconds: number;
+    }>;
   }>;
 };
+
+export async function fetchOptimizedVehicleRoadPath(
+  resultId: string,
+  vehicleId: string,
+): Promise<RouteRoadPath> {
+  const response = await authFetch(`${API_URL}/api/route-optimizations/${resultId}/vehicles/${vehicleId}/road-path`);
+  if (!response.ok) throw new Error(await parseApiError(response, "Não foi possível calcular o mapa da rota otimizada."));
+  return (await response.json()) as RouteRoadPath;
+}
 
 export type RouteOptimizationExecution = {
   id: string;
@@ -4484,6 +4500,20 @@ export type ImportedRouteDetail = ImportedRouteItem & {
     averagePerDay: number;
     isExcludedFromOptimization: boolean;
     note: string | null;
+  }[];
+  customers: {
+    id: string;
+    code: string;
+    name: string;
+    municipality: string | null;
+    address: {
+      streetType?: string | null;
+      street?: string | null;
+      number?: string | null;
+      neighborhood?: string | null;
+      city?: string | null;
+      stateCode?: string | null;
+    } | null;
   }[];
 };
 
@@ -4802,7 +4832,7 @@ export async function fetchOptimizedRouteRoadPath(
 }
 
 export type DailyOptimizationStop = {
-  municipalityId: string; municipalityName: string; loadKg: number; deliveries: number;
+  municipalityId: string; municipalityName: string; customerId?: string | null; customerCode?: string | null; loadKg: number; deliveries: number;
   originalRouteId: string; originalSequence: number;
 };
 

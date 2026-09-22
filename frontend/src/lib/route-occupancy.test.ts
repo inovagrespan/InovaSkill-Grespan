@@ -11,9 +11,13 @@ describe("route occupancy formatting", () => {
     expect(formatOccupancy(0.6)).toBe("60%");
   });
 
-  it("limits displayed occupancy to the zero-to-one-hundred-percent interval", () => {
-    expect(formatOccupancy(1.25)).toBe("100%");
-    expect(formatOccupancy(-0.25)).toBe("0%");
+  it("preserves overcapacity in the displayed value instead of hiding it", () => {
+    expect(formatOccupancy(1.25)).toBe("125%");
+    expect(formatOccupancy(-0.25)).toBe("-25%");
+  });
+
+  it("keeps near-capacity optimized routes visibly below one hundred percent", () => {
+    expect(formatOccupancy(0.999980291)).toBe("99,9%");
   });
 
   it("rounds only the displayed percentage to one decimal place", () => {

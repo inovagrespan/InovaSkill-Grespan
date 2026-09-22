@@ -119,7 +119,7 @@ public sealed class RouteCostsController(ImportDbContext db) : ControllerBase
         var hasAvailable = available.Length > 0;
         return new
         {
-            pathBasis = items.Select(item => item.PathBasis).Distinct().SingleOrDefault(),
+            pathBasis = ResolvePathBasis(items),
             items = items.Select(ToItem).ToArray(),
             totals = new
             {
@@ -137,6 +137,21 @@ public sealed class RouteCostsController(ImportDbContext db) : ControllerBase
                 minimumTotalCost = hasAvailable ? available.Sum(item => item.MinimumTotalCost ?? 0) : (decimal?)null,
                 maximumTotalCost = hasAvailable ? available.Sum(item => item.MaximumTotalCost ?? 0) : (decimal?)null
             }
+        };
+    }
+
+    private static string? ResolvePathBasis(IReadOnlyCollection<RouteCostItem> items)
+    {
+        var bases = items
+            .Select(item => item.PathBasis)
+            .Where(pathBasis => !string.IsNullOrWhiteSpace(pathBasis))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return bases.Length switch
+        {
+            0 => null,
+            1 => bases[0],
+            _ => RouteCostPathBases.Mixed
         };
     }
 

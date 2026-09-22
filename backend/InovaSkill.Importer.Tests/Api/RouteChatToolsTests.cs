@@ -238,7 +238,7 @@ public sealed class RouteChatToolsTests
         Assert.Equal("InferredByMunicipality", routeJson.GetProperty("relationshipType").GetString());
         var customers = routeJson.GetProperty("customers");
         Assert.Equal(2, customers.GetArrayLength());
-        Assert.Equal(2, await db.RouteCustomerAssignments.CountAsync());
+        Assert.Equal(3, await db.RouteCustomerAssignments.CountAsync());
         Assert.Equal("0001", customers[0].GetProperty("code").GetString());
         Assert.Equal("Padaria Marília", customers[0].GetProperty("tradeName").GetString());
         Assert.All(customers.EnumerateArray(), customer =>

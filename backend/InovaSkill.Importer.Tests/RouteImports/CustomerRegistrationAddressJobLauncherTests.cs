@@ -10,7 +10,7 @@ namespace InovaSkill.Importer.Tests.RouteImports;
 public sealed class CustomerRegistrationAddressJobLauncherTests
 {
     [Fact]
-    public async Task LaunchAsync_UsesCurrentCustomerSnapshotWhenImportIdIsOmitted()
+    public async Task LaunchAsync_UsesCurrentCustomerSnapshotAndIgnoresCancellingExecution()
     {
         await using var db = new ImportDbContext(new DbContextOptionsBuilder<ImportDbContext>()
             .UseInMemoryDatabase($"customer-address-launcher-{Guid.NewGuid()}").Options);
@@ -30,7 +30,13 @@ public sealed class CustomerRegistrationAddressJobLauncherTests
             FileName = "clientes.xlsx", FilePath = "clientes.xlsx",
             Status = RouteImportStatus.Completed, CreatedAt = now
         };
-        db.AddRange(source, import);
+        db.AddRange(source, import, new JobExecution
+        {
+            Id = Guid.NewGuid(), JobType = OperationalJobCodes.CustomerRegistrationAddressEnrichment,
+            Status = JobExecutionStatus.Processing, RelatedEntityId = importId, Queue = "default",
+            Trigger = JobExecutionTrigger.Manual, ParametersJson = "{}", CreatedAt = now,
+            CancellationRequestedAt = now
+        });
         await db.SaveChangesAsync();
         var dispatcher = new RecordingDispatcher();
         var launcher = new JobExecutionLauncher(db, dispatcher);
@@ -45,6 +51,7 @@ public sealed class CustomerRegistrationAddressJobLauncherTests
         var job = await db.JobExecutions.SingleAsync(item => item.Id == result.JobExecutionId);
         Assert.Equal(importId, job.RelatedEntityId);
         Assert.Equal(job.Id, dispatcher.OperationalJobId);
+        Assert.Equal(2, await db.JobExecutions.CountAsync());
     }
 
     [Fact]

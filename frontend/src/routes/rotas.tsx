@@ -53,6 +53,15 @@ function formatCurrencyRange(minimum: number | null, maximum: number | null): st
   return minimum === maximum ? format(minimum) : `${format(minimum)} a ${format(maximum)}`;
 }
 
+function formatCustomerAddress(address: ImportedRouteDetail["customers"][number]["address"]): string {
+  if (!address) return "Endereço não informado";
+  const street = [address.streetType, address.street].filter(Boolean).join(" ");
+  const locality = [address.neighborhood, address.city, address.stateCode].filter(Boolean).join(" · ");
+  return [street && [street, address.number].filter(Boolean).join(", "), locality]
+    .filter(Boolean)
+    .join(" — ") || "Endereço não informado";
+}
+
 function RotasPage() {
   const currentRole = getCurrentUserRole();
   const canSimulate = canRoleUseRouteSimulation(currentRole);
@@ -276,7 +285,7 @@ function RotasPage() {
       )}
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-3xl border-border bg-surface max-h-[90vh] overflow-y-auto">
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[96vw] max-w-6xl overflow-x-hidden overflow-y-auto border-border bg-surface">
           <DialogHeader>
             <DialogTitle>Detalhes da Rota</DialogTitle>
             <DialogDescription>
@@ -287,8 +296,8 @@ function RotasPage() {
           {detailsLoading && <SkeletonModalContent />}
 
           {!detailsLoading && selectedRoute && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+            <div className="min-w-0 space-y-4">
+              <div className="grid min-w-0 grid-cols-1 gap-3 text-sm md:grid-cols-3">
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">Nome</p>
                   <p className="font-medium">{selectedRoute.name}</p>
@@ -312,7 +321,7 @@ function RotasPage() {
                 />
               </div>
 
-              <div className="space-y-3 rounded-lg border border-border p-3">
+              <div className="min-w-0 space-y-3 rounded-lg border border-border p-3">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mapa da rota</p>
                   <p className="mt-1 text-sm text-muted-foreground">
@@ -328,8 +337,8 @@ function RotasPage() {
                 {!roadPathLoading && roadPath && <RouteRoadMap route={roadPath} />}
               </div>
 
-              <div className="grid grid-cols-1 gap-3 text-sm lg:grid-cols-3">
-                <div className="route-kpi-grid grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2 lg:h-full lg:grid-rows-2">
+              <div className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-3">
+                <div className="route-kpi-grid grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2 lg:h-full lg:grid-rows-2">
                   <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-primary">Quilometragem</p><p className="mt-2 text-xl font-display font-semibold">{routeCost?.item.distanceMeters === null || routeCost?.item.distanceMeters === undefined ? "Indisponível" : `${(routeCost.item.distanceMeters / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km`}</p></div>
                   <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-primary">Tempo para concluir</p><p className="mt-2 text-xl font-display font-semibold">{routeCost?.item.durationSeconds === null || routeCost?.item.durationSeconds === undefined ? "Indisponível" : formatRouteDuration(routeCost.item.durationSeconds)}</p></div>
                   <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-primary">Gasto estimado com combustível</p><p className="mt-2 text-lg font-display font-semibold">{formatCurrencyRange(routeCost?.item.minimumFuelCost ?? null, routeCost?.item.maximumFuelCost ?? null)}</p><p className="mt-2 text-xs text-muted-foreground">{routeCost?.item.isAvailable ? `${routeCost.item.minimumFuelLiters?.toLocaleString("pt-BR")} a ${routeCost.item.maximumFuelLiters?.toLocaleString("pt-BR")} L · ${selectedRoute.vehicleType}` : routeCost?.item.unavailableReason ?? "Consolidação de custo indisponível."}</p>{routeCost?.dieselPricePerLiter != null && <p className="mt-1 text-xs text-muted-foreground">Diesel de referência: {routeCost.dieselPricePerLiter.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/L</p>}</div>
@@ -342,30 +351,55 @@ function RotasPage() {
               <div className="rounded-lg border border-border">
                 <div className="border-b border-border px-3 py-2">
                   <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Cidades ({selectedRoute.entries.length})
+                    {selectedRoute.customers.length > 0
+                      ? `Clientes da rota (${selectedRoute.customers.length})`
+                      : `Cidades (${selectedRoute.entries.length})`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {selectedRoute.customers.length > 0
+                      ? "Sequência dos clientes vinculados às cidades desta rota."
+                      : "Não há clientes vinculados para detalhar; exibindo as cidades importadas."}
                   </p>
                 </div>
                 <div className="divide-y divide-border">
-                  {selectedRoute.entries.map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between px-3 py-2.5 text-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
-                          {entry.sequence}
-                        </span>
-                        <div>
-                          <p className="font-medium">{entry.name}</p>
-                          {entry.isExcludedFromOptimization && <Badge variant="outline" className="mt-1">Fora da simulação</Badge>}
-                          {entry.note && (
-                            <p className="text-xs text-muted-foreground">{entry.note}</p>
-                          )}
+                  {selectedRoute.customers.length > 0
+                    ? selectedRoute.customers.map((customer, index) => (
+                        <div key={customer.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
+                              {index + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-medium">{customer.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                Cliente {customer.code} · {customer.municipality ?? "Município não informado"}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {formatCustomerAddress(customer.address)}
+                              </p>
+                            </div>
+                          </div>
+                          <MapPin className="size-4 shrink-0 text-muted-foreground" />
                         </div>
-                      </div>
-                      <div className="text-right text-xs text-muted-foreground">
-                        <p>{entry.deliveries} entrega(s)</p>
-                        <p>{formatRouteLoadKg(entry.averagePerDay)}</p>
-                      </div>
-                    </div>
-                  ))}
+                      ))
+                    : selectedRoute.entries.map((entry) => (
+                        <div key={entry.id} className="flex items-center justify-between px-3 py-2.5 text-sm">
+                          <div className="flex items-center gap-3">
+                            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
+                              {entry.sequence}
+                            </span>
+                            <div>
+                              <p className="font-medium">{entry.name}</p>
+                              {entry.isExcludedFromOptimization && <Badge variant="outline" className="mt-1">Fora da simulação</Badge>}
+                              {entry.note && <p className="text-xs text-muted-foreground">{entry.note}</p>}
+                            </div>
+                          </div>
+                          <div className="text-right text-xs text-muted-foreground">
+                            <p>{entry.deliveries} entrega(s)</p>
+                            <p>{formatRouteLoadKg(entry.averagePerDay)}</p>
+                          </div>
+                        </div>
+                      ))}
                 </div>
               </div>
 

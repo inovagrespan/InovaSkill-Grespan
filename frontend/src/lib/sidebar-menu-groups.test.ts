@@ -9,7 +9,7 @@ describe("grupos condensados da sidebar", () => {
     ["WhatsApp", ["/meu-whatsapp", "/simulador-whatsapp", "/administracao/whatsapp"]],
     ["Logística", ["/logistica/rotas", "/logistica/relatorios-custos", "/veiculos/tipos", "/configuracoes/deposito", "/mapa", "/producao"]],
     ["Cadastros", ["/clientes", "/notas-fiscais", "/produtos", "/estoque"]],
-    ["Administração", ["/importacoes/files", "/processamentos", "/administracao/usuarios"]],
+    ["Administração", ["/importacoes/files", "/processamentos", "/administracao/usuarios", "/administracao/localizacoes-simuladas"]],
   ])("reúne os atalhos de %s", (label, paths) => {
     expect(source).toContain(`label: "${label}"`);
     for (const itemPath of paths) expect(source).toContain(`"${itemPath}"`);

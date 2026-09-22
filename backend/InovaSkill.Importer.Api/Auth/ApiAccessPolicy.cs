@@ -73,6 +73,11 @@ public static class ApiAccessPolicy
             return normalizedRole == AppUserRoles.AdminSystem;
         }
 
+        if (path.StartsWith("/api/admin/customer-coordinate-simulations", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedRole == AppUserRoles.AdminSystem;
+        }
+
         if (path.StartsWith("/api/admin/users", StringComparison.OrdinalIgnoreCase))
         {
             return normalizedRole == AppUserRoles.AdminSystem;

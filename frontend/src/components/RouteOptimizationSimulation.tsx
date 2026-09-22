@@ -25,16 +25,23 @@ import {
 import { SkeletonList } from "@/components/ui/skeleton";
 import { RouteOccupancyIndicator } from "@/components/RouteOccupancyIndicator";
 import { RouteOptimizationRemediationDialog } from "@/components/RouteOptimizationRemediationDialog";
+import { RouteRoadMap } from "@/components/RouteRoadMap";
+import { ConsolidatedRouteTollKpi } from "@/components/ConsolidatedRouteTollKpi";
 import {
+  fetchDailyRouteCosts,
   fetchRouteOptimizationDetail,
+  fetchOptimizedVehicleRoadPath,
   fetchRouteOptimizations,
   simulateRoutes,
+  type RouteCostItem,
   type RouteOptimizationDetail,
   type RouteOptimizationsResponse,
   type RouteOptimizationSummary,
+  type RouteRoadPath,
 } from "@/lib/importer-api";
 import { isJobExecutionActive, JOB_STATUS_POLL_INTERVAL_MS } from "@/lib/job-runtime";
 import { formatCapacityKg, formatOccupancy, formatRouteLoadKg } from "@/lib/route-occupancy";
+import { formatRouteDuration } from "@/lib/route-fuel-consumption";
 import {
   dailyFleetMovement,
   dailyRouteComparison,
@@ -67,8 +74,23 @@ type SelectedSuggestion = {
 
 const formatDistance = (value: number) =>
   `${(value / 1_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km`;
-const formatDuration = (value: number) =>
-  `${(value / 3_600).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} h`;
+const formatSegmentDistance = (value: number) => {
+  if (value < 1_000) return `${Math.round(value).toLocaleString("pt-BR")} m`;
+  return formatDistance(value);
+};
+const formatDuration = (value: number) => formatRouteDuration(value);
+const formatCurrencyRange = (minimum: number | null, maximum: number | null): string => {
+  if (minimum === null || maximum === null) return "Indisponível";
+  const format = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return minimum === maximum ? format(minimum) : `${format(minimum)} a ${format(maximum)}`;
+};
+
+function formatCustomerAddress(address: SuggestedVehicle["stops"][number]["customerAddress"]): string {
+  if (!address) return "Endereço não informado";
+  const street = [address.streetType, address.street].filter(Boolean).join(" ");
+  const locality = [address.neighborhood, address.city, address.stateCode].filter(Boolean).join(" · ");
+  return [street && [street, address.number].filter(Boolean).join(", "), locality].filter(Boolean).join(" — ") || "Endereço não informado";
+}
 
 export function RouteOptimizationSimulation({
   date,
@@ -83,23 +105,48 @@ export function RouteOptimizationSimulation({
 }) {
   const [response, setResponse] = useState<RouteOptimizationsResponse | null>(null);
   const [details, setDetails] = useState<Record<string, RouteOptimizationDetail>>({});
+  const [dailyCosts, setDailyCosts] = useState<Awaited<ReturnType<typeof fetchDailyRouteCosts>> | null>(null);
+  const [costError, setCostError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SelectedSuggestion | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [remediation, setRemediation] = useState<RouteOptimizationSummary | null>(null);
+  const [selectedRoadPath, setSelectedRoadPath] = useState<RouteRoadPath | null>(null);
+  const [selectedRoadPathLoading, setSelectedRoadPathLoading] = useState(false);
+  const [selectedRoadPathError, setSelectedRoadPathError] = useState<string | null>(null);
 
   const load = useCallback(
     async (showLoading: boolean) => {
       if (showLoading) setLoading(true);
       setError(null);
+      setCostError(null);
       try {
-        const data = await fetchRouteOptimizations(date, weekday);
+        const [optimizationResult, costResult] = await Promise.allSettled([
+          fetchRouteOptimizations(date, weekday),
+          fetchDailyRouteCosts({ date, weekday }),
+        ]);
+        if (optimizationResult.status === "rejected") throw optimizationResult.reason;
+        const data = optimizationResult.value;
         setResponse(data);
+        if (costResult.status === "fulfilled") {
+          setDailyCosts(costResult.value);
+        } else {
+          setDailyCosts(null);
+          setCostError((costResult.reason as Error).message);
+        }
+        const validSuggestionIds = new Set(
+          data.items
+            .filter((item) => item.status === "Optimized" && !item.isStale)
+            .map((item) => item.id),
+        );
+        setSelected((current) =>
+          current && validSuggestionIds.has(current.summary.id) ? current : null,
+        );
         const settledDetails = await Promise.allSettled(
           data.items
-            .filter((item) => item.status === "Optimized")
+            .filter((item) => item.status === "Optimized" && !item.isStale)
             .map((item) => fetchRouteOptimizationDetail(item.id)),
         );
         const loadedDetails: Record<string, RouteOptimizationDetail> = {};
@@ -124,10 +171,24 @@ export function RouteOptimizationSimulation({
   useEffect(() => {
     setResponse(null);
     setDetails({});
+    setDailyCosts(null);
+    setCostError(null);
     setSelected(null);
+    setSelectedRoadPath(null);
     setMessage(null);
     void load(true);
   }, [load]);
+
+  useEffect(() => {
+    if (!selected) return;
+    setSelectedRoadPath(null);
+    setSelectedRoadPathError(null);
+    setSelectedRoadPathLoading(true);
+    void fetchOptimizedVehicleRoadPath(selected.summary.id, selected.vehicle.id)
+      .then(setSelectedRoadPath)
+      .catch((reason: Error) => setSelectedRoadPathError(reason.message))
+      .finally(() => setSelectedRoadPathLoading(false));
+  }, [selected]);
 
   const executionIsActive = isJobExecutionActive(response?.latestExecution?.status);
   useEffect(() => {
@@ -235,6 +296,7 @@ export function RouteOptimizationSimulation({
                 <CardTitle>{weekdayLabels[summary.weekday] ?? summary.weekday}</CardTitle>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{statusLabels[summary.status] ?? summary.status}</Badge>
+                  {summary.isStale && <Badge variant="destructive">Coordenadas atualizadas</Badge>}
                   {summary.isInherited && <Badge variant="outline">Mantido da versão anterior</Badge>}
                   <span className="text-xs text-muted-foreground">
                     {new Date(summary.createdAt).toLocaleString("pt-BR")}
@@ -310,7 +372,16 @@ export function RouteOptimizationSimulation({
               )}
             </CardHeader>
             <CardContent className="space-y-3">
-              {summary.reason && (
+              {summary.isStale && (
+                <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="size-4 shrink-0" />
+                  <span>
+                    Esta sugestão foi calculada antes da atualização das coordenadas e não é mais válida.
+                    Recalcule as rotas para obter distância, tempo, ordem e custos atuais.
+                  </span>
+                </div>
+              )}
+              {summary.reason && !summary.isStale && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
                   <p className="flex min-w-0 gap-2"><AlertTriangle className="size-4 shrink-0" /><span>{summary.reason}</span></p>
                   {summary.status === "InsufficientData" && (
@@ -321,7 +392,7 @@ export function RouteOptimizationSimulation({
                   )}
                 </div>
               )}
-              {summary.status === "Optimized" && !detail && <SkeletonList rows={2} />}
+              {summary.status === "Optimized" && !summary.isStale && !detail && <SkeletonList rows={2} />}
               {detail?.vehicles.map((vehicle) => {
                 const name = suggestedRouteName(vehicle, detail.vehicles);
                 return (
@@ -346,7 +417,7 @@ export function RouteOptimizationSimulation({
                         <Truck className="size-3" />
                         {vehicle.vehicleType}
                       </span>
-                      <span>{vehicle.stops.length} cidade(s)</span>
+                      <span>{vehicle.deliveryCount} cliente(s) · {vehicle.municipalityCount} cidade(s)</span>
                       <span>
                         {formatRouteLoadKg(vehicle.loadKg)} / {formatCapacityKg(vehicle.capacityKg)}
                       </span>
@@ -366,12 +437,24 @@ export function RouteOptimizationSimulation({
           if (!open) setSelected(null);
         }}
       >
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto border-border bg-surface">
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[96vw] max-w-6xl overflow-x-hidden overflow-y-auto border-border bg-surface">
           <DialogHeader>
             <DialogTitle>{selected?.name ?? "Detalhes da sugestão"}</DialogTitle>
-            <DialogDescription>Sequência municipal e métricas da rota sugerida.</DialogDescription>
+            <DialogDescription>Sequência dos clientes, percurso e custos consolidados da rota sugerida.</DialogDescription>
           </DialogHeader>
-          {selected && <SuggestionDetail selected={selected} />}
+          {selected && (
+            <SuggestionDetail
+              selected={selected}
+              cost={dailyCosts?.optimized?.items.find(
+                (item) => item.optimizationVehicleId === selected.vehicle.id,
+              ) ?? null}
+              dieselPricePerLiter={dailyCosts?.dieselPricePerLiter ?? null}
+              costError={costError}
+              roadPath={selectedRoadPath}
+              roadPathLoading={selectedRoadPathLoading}
+              roadPathError={selectedRoadPathError}
+            />
+          )}
         </DialogContent>
       </Dialog>
       <RouteOptimizationRemediationDialog
@@ -384,7 +467,23 @@ export function RouteOptimizationSimulation({
   );
 }
 
-function SuggestionDetail({ selected }: { selected: SelectedSuggestion }) {
+function SuggestionDetail({
+  selected,
+  cost,
+  dieselPricePerLiter,
+  costError,
+  roadPath,
+  roadPathLoading,
+  roadPathError,
+}: {
+  selected: SelectedSuggestion;
+  cost: RouteCostItem | null;
+  dieselPricePerLiter: number | null;
+  costError: string | null;
+  roadPath: RouteRoadPath | null;
+  roadPathLoading: boolean;
+  roadPathError: string | null;
+}) {
   const { summary, vehicle } = selected;
   return (
     <div className="space-y-4">
@@ -400,13 +499,68 @@ function SuggestionDetail({ selected }: { selected: SelectedSuggestion }) {
           value={`${formatRouteLoadKg(vehicle.loadKg)} / ${formatCapacityKg(vehicle.capacityKg)}`}
         />
         <Metric label="Ocupação" value={formatOccupancy(vehicle.occupancy)} />
-        <Metric label="Distância" value={formatDistance(vehicle.distanceMeters)} />
-        <Metric label="Duração" value={formatDuration(vehicle.durationSeconds)} />
-        <Metric label="Cidades" value={`${vehicle.stops.length}`} />
+        <Metric label="Clientes" value={`${vehicle.deliveryCount}`} />
+        <Metric label="Cidades" value={`${vehicle.municipalityCount}`} />
+      </div>
+      <div className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-3">
+        <div className="route-kpi-grid grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2 lg:h-full lg:grid-rows-2">
+          <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">Quilometragem</p>
+            <p className="mt-2 text-xl font-display font-semibold">
+              {cost?.distanceMeters == null ? formatDistance(vehicle.distanceMeters) : formatDistance(cost.distanceMeters)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Percurso rodoviário consolidado</p>
+          </div>
+          <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">Tempo para concluir</p>
+            <p className="mt-2 text-xl font-display font-semibold">
+              {cost?.durationSeconds == null ? formatDuration(vehicle.durationSeconds) : formatDuration(cost.durationSeconds)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Tempo rodoviário consolidado</p>
+          </div>
+          <div className="route-kpi-card rounded-xl border border-border/80 bg-background/30 p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">Gasto estimado com combustível</p>
+            <p className="mt-2 text-lg font-display font-semibold">
+              {formatCurrencyRange(cost?.minimumFuelCost ?? null, cost?.maximumFuelCost ?? null)}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {cost?.isAvailable
+                ? `${cost.minimumFuelLiters?.toLocaleString("pt-BR")} a ${cost.maximumFuelLiters?.toLocaleString("pt-BR")} L · ${vehicle.vehicleType}`
+                : cost?.unavailableReason ?? costError ?? "Consolidação de custo indisponível."}
+            </p>
+            {dieselPricePerLiter != null && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Diesel de referência: {dieselPricePerLiter.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/L
+              </p>
+            )}
+          </div>
+          <ConsolidatedRouteTollKpi cost={cost} />
+        </div>
+        <div className="route-kpi-card border-primary/30 bg-primary/5 p-4 shadow-sm lg:h-auto lg:self-start lg:aspect-square">
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Gastos totais</p>
+          <p className="mt-2 min-w-0 break-words text-base font-display font-semibold">
+            {formatCurrencyRange(cost?.minimumTotalCost ?? null, cost?.maximumTotalCost ?? null)}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">Combustível + pedágio</p>
+        </div>
+      </div>
+      <div className="space-y-2 rounded-lg border border-border p-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mapa da rota otimizada</p>
+          <p className="mt-1 text-sm text-muted-foreground">Percurso rodoviário do veículo, com origem, clientes e retorno ao depósito.</p>
+        </div>
+        {roadPathLoading && <div className="h-[340px] animate-pulse rounded-lg bg-muted" aria-label="Carregando mapa da rota otimizada" />}
+        {!roadPathLoading && roadPathError && <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{roadPathError}</p>}
+        {!roadPathLoading && roadPath && <RouteRoadMap route={roadPath} />}
       </div>
       <div className="rounded-lg border border-border">
-        <div className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Sequência das cidades
+        <div className="border-b border-border px-3 py-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Sequência dos clientes
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Distância e tempo mostrados em cada linha representam somente o trecho desde a parada anterior. Na primeira entrega, a referência é a Matriz; o total da rota aparece nos indicadores acima. Um trecho de 0 m / 0 min indica que os pontos foram considerados na mesma localização.
+          </p>
         </div>
         {vehicle.stops.length === 0 ? (
           <p className="p-3 text-sm text-muted-foreground">
@@ -424,16 +578,25 @@ function SuggestionDetail({ selected }: { selected: SelectedSuggestion }) {
                     {index + 1}
                   </span>
                   <div>
-                    <p className="font-medium">{stop.municipality}</p>
+                    <p className="font-medium">{stop.customerName ?? `Cliente ${stop.customerCode ?? "não identificado"}`}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Cliente {stop.customerCode ?? "não identificado"} · {stop.municipality}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatCustomerAddress(stop.customerAddress)}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {formatRouteLoadKg(stop.weightKg)}
                     </p>
                   </div>
                 </div>
-                <div className="text-right text-xs text-muted-foreground">
+                <div className="min-w-[104px] text-right text-xs text-muted-foreground">
+                  <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    Trecho anterior
+                  </p>
                   <p className="flex items-center justify-end gap-1">
                     <RouteIcon className="size-3" />
-                    {formatDistance(stop.distanceFromPreviousMeters)}
+                    {formatSegmentDistance(stop.distanceFromPreviousMeters)}
                   </p>
                   <p>{formatDuration(stop.durationFromPreviousSeconds)}</p>
                 </div>

@@ -15,23 +15,17 @@ public sealed class DailyRouteOptimizationReadinessEvaluatorTests
 
         var issues = DailyRouteOptimizationReadinessEvaluator.Evaluate([route]);
 
-        Assert.Equal(5, issues.Count);
+        Assert.Equal(2, issues.Count);
         Assert.Contains(issues, issue => issue.Code == DailyRouteOptimizationIssueCodes.VehicleCapacityMissing);
-        Assert.Contains(issues, issue => issue.Code == DailyRouteOptimizationIssueCodes.MunicipalityNotLinked &&
-                                         issue.RouteEntryId == zeroWithoutMunicipality.Id);
-        Assert.Contains(issues, issue => issue.Code == DailyRouteOptimizationIssueCodes.InvalidStopWeight &&
-                                         issue.RouteEntryId == zeroWithoutMunicipality.Id);
-        Assert.Contains(issues, issue => issue.Code == DailyRouteOptimizationIssueCodes.MunicipalityCoordinateMissing &&
-                                         issue.RouteEntryId == negativeWithMissingCoordinate.Id);
         Assert.Contains(issues, issue => issue.Code == DailyRouteOptimizationIssueCodes.InvalidStopWeight &&
                                          issue.RouteEntryId == negativeWithMissingCoordinate.Id &&
                                          issue.Message.Contains("negativo", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal("1 município sem vínculo, 2 pesos inválidos, 1 coordenada ausente, 1 capacidade ausente.",
+        Assert.Equal("1 peso inválido, 1 capacidade ausente.",
             DailyRouteOptimizationReadinessEvaluator.Summarize(issues));
     }
 
     [Fact]
-    public void Evaluate_ZeroExcludedStopDoesNotBlockButNegativeExcludedStopStillDoes()
+    public void Evaluate_ExcludedStopsDoNotBlockAndZeroDemandIsIgnored()
     {
         var route = Route(10_000);
         var zero = Entry("ZERO", 0);
@@ -47,8 +41,7 @@ public sealed class DailyRouteOptimizationReadinessEvaluatorTests
         var issues = DailyRouteOptimizationReadinessEvaluator.Evaluate([route]);
 
         Assert.DoesNotContain(issues, issue => issue.RouteEntryId == route.Entries.First().Id);
-        Assert.Contains(issues, issue => issue.RouteEntryId == route.Entries.Last().Id &&
-                                         issue.Code == DailyRouteOptimizationIssueCodes.InvalidStopWeight);
+        Assert.DoesNotContain(issues, issue => issue.RouteEntryId == route.Entries.Last().Id);
     }
 
     private static Route Route(decimal? capacity)

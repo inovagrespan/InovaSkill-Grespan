@@ -95,7 +95,7 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
                 item.CreatedAt,
                 CityCount = item.Entries.Count,
                 DeliveryCount = item.Entries.Sum(entry => entry.Deliveries),
-                PotentialCustomerCount = item.CustomerAssignments.Count
+                PotentialCustomerCount = item.CustomerAssignments.Count(assignment => assignment.Customer!.IsActive)
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -318,6 +318,7 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
                 assignment => assignment.CustomerId,
                 snapshot => snapshot.CustomerId,
                 (assignment, snapshot) => new { assignment, snapshot })
+            .Where(item => item.snapshot.Customer!.IsActive)
             .OrderBy(item => item.snapshot.Municipality!.Name)
             .ThenBy(item => item.snapshot.Customer!.ExternalCode)
             .ThenBy(item => item.snapshot.Customer!.BranchCode)
@@ -421,6 +422,9 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
             .Include(item => item.Vehicles)
                 .ThenInclude(vehicle => vehicle.Stops)
                     .ThenInclude(stop => stop.Municipality)
+            .Include(item => item.Vehicles)
+                .ThenInclude(vehicle => vehicle.Stops)
+                    .ThenInclude(stop => stop.Customer)
             .Include(item => item.Issues)
             .SingleOrDefaultAsync(
                 item => item.RouteImportId == importId.Value && item.Weekday == normalizedWeekday,
@@ -445,7 +449,9 @@ public sealed class RouteChatQueryService(ImportDbContext dbContext) : IRouteCha
                     .OrderBy(stop => stop.Sequence)
                     .Select(stop => new RouteChatOptimizationStopDto(
                         stop.Sequence,
-                        stop.Municipality?.Name ?? "Não informado",
+                        stop.Customer is null
+                            ? stop.Municipality?.Name ?? "Não informado"
+                            : $"{stop.Customer.ExternalCode} — {stop.Municipality?.Name ?? "município não informado"}",
                         stop.Municipality?.StateCode ?? string.Empty,
                         stop.WeightKg))
                     .ToList()))

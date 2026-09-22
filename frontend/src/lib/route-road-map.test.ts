@@ -55,4 +55,25 @@ describe("mapa rodoviário no detalhe da rota", () => {
     expect(routePage).toContain("Gastos totais");
     expect(routePage).toContain("Combustível + pedágio");
   });
+
+  it("exibe os clientes vinculados no detalhe da rota original", () => {
+    const api = readSource("src/lib/importer-api.ts");
+    const routePage = readSource("src/routes/rotas.tsx");
+
+    expect(api).toContain("customers:");
+    expect(api).toContain("customerName?: string | null");
+    expect(routePage).toContain("Clientes da rota");
+    expect(routePage).toContain("formatCustomerAddress(customer.address)");
+    expect(routePage).toContain("customer.name");
+  });
+
+  it("mantém o detalhe largo e impede overflow horizontal dos cards", () => {
+    const routePage = readSource("src/routes/rotas.tsx");
+    const styles = readSource("src/styles.css");
+
+    expect(routePage).toContain("w-[96vw] max-w-6xl overflow-x-hidden");
+    expect(routePage).toContain("grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-3");
+    expect(styles).toContain(".route-kpi-card.aspect-square");
+    expect(styles).toContain("aspect-ratio: auto");
+  });
 });

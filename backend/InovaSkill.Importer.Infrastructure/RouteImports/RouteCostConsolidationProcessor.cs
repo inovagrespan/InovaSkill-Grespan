@@ -42,6 +42,9 @@ public sealed class RouteCostConsolidationProcessor(
             .Include(result => result.Vehicles).ThenInclude(vehicle => vehicle.VehicleType)
             .Include(result => result.Vehicles).ThenInclude(vehicle => vehicle.Stops)
                 .ThenInclude(stop => stop.Municipality).ThenInclude(municipality => municipality!.Coordinate)
+            .Include(result => result.Vehicles).ThenInclude(vehicle => vehicle.Stops)
+                .ThenInclude(stop => stop.Customer).ThenInclude(customer => customer!.RegistrationAddress)
+                .ThenInclude(address => address!.Coordinate)
             .OrderBy(result => result.Weekday).ToListAsync(cancellationToken);
 
         var fingerprint = BuildFingerprint(routes, optimizationResults, dieselPrice, depot, tollCatalog.Current.Version);
@@ -131,21 +134,34 @@ public sealed class RouteCostConsolidationProcessor(
     private async Task<RouteCostItem> BuildOptimizedItem(Guid snapshotId, DailyRouteOptimizationResult result,
         DailyRouteOptimizationVehicle vehicle, LogisticsDepot depot, decimal? dieselPrice, CancellationToken cancellationToken)
     {
+        var stops = vehicle.Stops.OrderBy(stop => stop.Sequence).ToArray();
+        var pathBasis = stops.All(stop => stop.CustomerId.HasValue)
+            ? RouteCostPathBases.OptimizedCustomers
+            : RouteCostPathBases.OptimizedMunicipalities;
         var item = NewItem(snapshotId, RouteCostScenarios.Optimized, result.Weekday,
-            $"Veículo otimizado {vehicle.Sequence + 1}", RouteCostPathBases.OptimizedMunicipalities, vehicle.VehicleTypeId);
+            $"Veículo otimizado {vehicle.Sequence + 1}", pathBasis, vehicle.VehicleTypeId);
         item.OptimizationResultId = result.Id;
         item.OptimizationVehicleId = vehicle.Id;
         if (dieselPrice is null or <= 0) return Unavailable(item, "O preço do diesel não está configurado.");
         var configurationError = ValidateConfiguration(vehicle.VehicleType);
         if (configurationError is not null) return Unavailable(item, configurationError);
-        var stops = vehicle.Stops.OrderBy(stop => stop.Sequence).ToArray();
         if (stops.Length == 0) return Unavailable(item, "O veículo otimizado não possui paradas.");
-        if (stops.Any(stop => stop.Municipality?.Coordinate?.Latitude is null || stop.Municipality.Coordinate.Longitude is null))
-            return Unavailable(item, "Há municípios sem coordenadas no percurso otimizado.");
+        if (stops.Any(stop => stop.CustomerId.HasValue
+                ? !HasExactCoordinate(stop.Customer)
+                : stop.Municipality?.Coordinate?.Latitude is null || stop.Municipality.Coordinate.Longitude is null))
+            return Unavailable(item, "Há paradas sem coordenadas válidas no percurso otimizado.");
         var points = new List<RouteGeometryPoint> { DepotPoint(depot) };
-        points.AddRange(stops.Select(stop => new RouteGeometryPoint(stop.MunicipalityId,
-            stop.Municipality!.Name, stop.Municipality.Coordinate!.Latitude!.Value,
-            stop.Municipality.Coordinate.Longitude!.Value)));
+        points.AddRange(stops.Select(stop =>
+        {
+            if (stop.CustomerId.HasValue)
+            {
+                var coordinate = stop.Customer!.RegistrationAddress!.Coordinate!;
+                return new RouteGeometryPoint(stop.CustomerId.Value, stop.Customer.ExternalCode,
+                    coordinate.Latitude!.Value, coordinate.Longitude!.Value);
+            }
+            return new RouteGeometryPoint(stop.MunicipalityId, stop.Municipality!.Name,
+                stop.Municipality.Coordinate!.Latitude!.Value, stop.Municipality.Coordinate.Longitude!.Value);
+        }));
         points.Add(DepotPoint(depot));
         return await Calculate(item, points, vehicle.VehicleType!, dieselPrice.Value, cancellationToken);
     }
@@ -218,13 +234,7 @@ public sealed class RouteCostConsolidationProcessor(
     }
 
     private static bool HasExactCoordinate(Customer? customer) =>
-        customer?.RegistrationAddress?.Coordinate is
-        {
-            Status: CustomerAddressCoordinateStatuses.Resolved,
-            Precision: CustomerAddressCoordinatePrecisions.Exact,
-            Latitude: not null,
-            Longitude: not null
-        };
+        CustomerAddressCoordinateQuality.IsExact(customer?.RegistrationAddress?.Coordinate);
 
     private static RouteGeometryPoint DepotPoint(LogisticsDepot depot) =>
         new(depot.Id, depot.Name, depot.Latitude, depot.Longitude);
@@ -257,7 +267,9 @@ public sealed class RouteCostConsolidationProcessor(
             var vehicles = result.Vehicles.OrderBy(vehicle => vehicle.Sequence).Select(vehicle =>
             {
                 var stops = string.Join(';', vehicle.Stops.OrderBy(stop => stop.Sequence).Select(stop =>
-                    $"{stop.Sequence}:{stop.MunicipalityId}:{stop.Municipality?.Coordinate?.Latitude}:{stop.Municipality?.Coordinate?.Longitude}"));
+                    $"{stop.Sequence}:{stop.MunicipalityId}:{stop.CustomerId}:" +
+                    $"{stop.Customer?.RegistrationAddress?.Coordinate?.Latitude ?? stop.Municipality?.Coordinate?.Latitude}:" +
+                    $"{stop.Customer?.RegistrationAddress?.Coordinate?.Longitude ?? stop.Municipality?.Coordinate?.Longitude}"));
                 return $"{vehicle.Id}:{vehicle.Sequence}:{vehicle.VehicleTypeId}:{vehicle.VehicleType?.AxleCount}:{vehicle.VehicleType?.MinimumFuelEfficiencyKmPerLiter}:{vehicle.VehicleType?.MaximumFuelEfficiencyKmPerLiter}:{vehicle.IsIdle}:{stops}";
             });
             return string.Join('|', result.Id, result.Weekday, result.Status, string.Join(',', vehicles));

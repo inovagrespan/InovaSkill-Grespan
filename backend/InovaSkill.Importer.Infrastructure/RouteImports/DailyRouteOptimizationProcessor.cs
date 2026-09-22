@@ -9,14 +9,14 @@ namespace InovaSkill.Importer.Infrastructure.RouteImports;
 public sealed class DailyRouteOptimizationProcessor(
     ImportDbContext db,
     IOsrmDailyMatrixService matrixService,
-    IDailyRouteOptimizationSolver solver) : IProgressReportingOperationalJobProcessor
+    IDailyRouteOptimizationSolver solver,
+    IRouteCustomerAssignmentSynchronizer assignmentSynchronizer) : IProgressReportingOperationalJobProcessor
 {
     public DailyRouteOptimizationProcessor(
         ImportDbContext db,
         IOsrmDailyMatrixService matrixService,
-        IDailyRouteOptimizationSolver solver,
-        IMunicipalityCoordinateProvider municipalityProvider)
-        : this(db, matrixService, solver)
+        IDailyRouteOptimizationSolver solver)
+        : this(db, matrixService, solver, new RouteCustomerAssignmentSynchronizer(db))
     {
     }
 
@@ -27,6 +27,7 @@ public sealed class DailyRouteOptimizationProcessor(
 
     public async Task ProcessAsync(Guid routeImportId, Guid jobExecutionId, CancellationToken cancellationToken)
     {
+        await assignmentSynchronizer.SyncInferredAssignmentsAsync(cancellationToken);
         var availableWeekdays = await db.Routes.AsNoTracking()
             .Where(route => route.ImportId == routeImportId)
             .Select(route => route.Weekday).Distinct().OrderBy(day => day).ToListAsync(cancellationToken);
@@ -51,12 +52,21 @@ public sealed class DailyRouteOptimizationProcessor(
             .Where(route => route.ImportId == importId && route.Weekday == weekday)
             .Include(route => route.VehicleType)
             .Include(route => route.Entries).ThenInclude(entry => entry.Municipality).ThenInclude(item => item!.Coordinate)
+            .Include(route => route.CustomerAssignments).ThenInclude(assignment => assignment.Customer)
+                .ThenInclude(customer => customer!.RegistrationAddress).ThenInclude(address => address!.Coordinate)
             .OrderBy(route => route.Name).ToListAsync(cancellationToken);
+        var assignedMunicipalities = routes.SelectMany(route => route.CustomerAssignments)
+            .Where(assignment => assignment.MunicipalityId.HasValue)
+            .Select(assignment => assignment.MunicipalityId!.Value)
+            .ToHashSet();
         var includedEntries = routes.SelectMany(route => route.Entries)
-            .Where(entry => !entry.IsExcludedFromOptimization).ToArray();
+            .Where(entry => !entry.IsExcludedFromOptimization && entry.AveragePerDay > 0 &&
+                entry.MunicipalityId.HasValue && assignedMunicipalities.Contains(entry.MunicipalityId.Value))
+            .ToArray();
         var totalWeight = includedEntries.Sum(entry => entry.AveragePerDay);
-        var issues = DailyRouteOptimizationReadinessEvaluator.Evaluate(routes);
-        if (issues.Count > 0)
+        var issues = DailyRouteOptimizationReadinessEvaluator.Evaluate(routes)
+            .Concat(EvaluateCustomerLocations(routes)).ToArray();
+        if (issues.Length > 0)
         {
             var resultId = Guid.NewGuid();
             await ReplaceResult(new DailyRouteOptimizationResult
@@ -77,11 +87,10 @@ public sealed class DailyRouteOptimizationProcessor(
             return;
         }
 
-        var aggregatedBlocks = includedEntries
+        var municipalityLoads = includedEntries
             .GroupBy(entry => entry.MunicipalityId!.Value)
-            .Select(group => new RouteOptimizationBlock(
-                group.Key, group.First().Municipality!.Name, ToGrams(group.Sum(entry => entry.AveragePerDay))))
-            .OrderBy(block => block.Name).ThenBy(block => block.MunicipalityId).ToArray();
+            .ToDictionary(group => group.Key, group => ToGrams(group.Sum(entry => entry.AveragePerDay)));
+        var customerBlocks = BuildCustomerBlocks(routes, municipalityLoads);
         var vehicleTypes = await db.VehicleTypes.AsNoTracking().Where(type => type.CapacityKg > 0)
             .OrderBy(type => type.CapacityKg).ThenBy(type => type.Name).ToListAsync(cancellationToken);
         if (vehicleTypes.Count == 0)
@@ -96,7 +105,7 @@ public sealed class DailyRouteOptimizationProcessor(
             return;
         }
         var maximumCapacityGrams = ToGrams(vehicleTypes.Max(type => type.CapacityKg!.Value));
-        var blocks = SplitOversizedMunicipalBlocks(aggregatedBlocks, maximumCapacityGrams);
+        var blocks = SplitOversizedCustomerBlocks(customerBlocks, maximumCapacityGrams);
 
         var matrix = await matrixService.GetForDayAsync(importId, weekday, cancellationToken);
         var existing = routes.Select(route => new RouteOptimizationVehicleInput(
@@ -107,7 +116,7 @@ public sealed class DailyRouteOptimizationProcessor(
         var problem = new RouteOptimizationProblem(weekday, blocks, existing, additional, matrix);
         var solution = solver.Solve(problem);
         DailyRouteOptimizationSolutionValidator.Validate(problem, solution);
-        var current = CurrentMetrics(routes, matrix);
+        var current = CurrentMetrics(routes, matrix, solution.ServiceDurationSeconds);
         var currentIsFeasible = routes.All(route =>
             route.TotalWeightKg - route.Entries.Where(entry => entry.IsExcludedFromOptimization)
                 .Sum(entry => entry.AveragePerDay) <=
@@ -149,26 +158,39 @@ public sealed class DailyRouteOptimizationProcessor(
             Stops = vehicle.Stops.Select((stop, stopSequence) => new DailyRouteOptimizationStop
             {
                 Id = Guid.NewGuid(), Sequence = stopSequence, MunicipalityId = blocks[stop.BlockIndex].MunicipalityId,
+                CustomerId = blocks[stop.BlockIndex].CustomerId,
                 WeightKg = FromGrams(blocks[stop.BlockIndex].WeightGrams),
                 DistanceFromPreviousMeters = stop.DistanceFromPreviousMeters,
                 DurationFromPreviousSeconds = stop.DurationFromPreviousSeconds
             }).ToArray()
         }).ToArray();
 
-    private static (decimal Distance, decimal Duration) CurrentMetrics(IReadOnlyList<Route> routes, OsrmTableResult matrix)
+    private static (decimal Distance, decimal Duration) CurrentMetrics(
+        IReadOnlyList<Route> routes,
+        OsrmTableResult matrix,
+        long serviceDurationSeconds)
     {
         var point = matrix.Points.Select((value, index) => (value, index)).ToDictionary(item => item.value.Id, item => item.index);
         decimal distance = 0, duration = 0;
         foreach (var route in routes)
         {
-            var order = route.Entries.Where(entry => !entry.IsExcludedFromOptimization)
-                .OrderBy(entry => entry.Sequence).Select(entry => entry.MunicipalityId!.Value).Distinct().ToArray();
+            var includedMunicipalities = route.Entries.Where(entry =>
+                    !entry.IsExcludedFromOptimization && entry.AveragePerDay > 0)
+                .GroupBy(entry => entry.MunicipalityId!.Value)
+                .ToDictionary(group => group.Key, group => group.Min(entry => entry.Sequence));
+            var order = route.CustomerAssignments
+                .Where(assignment => assignment.MunicipalityId.HasValue &&
+                    includedMunicipalities.ContainsKey(assignment.MunicipalityId.Value))
+                .OrderBy(assignment => includedMunicipalities[assignment.MunicipalityId!.Value])
+                .ThenBy(assignment => assignment.Customer!.ExternalCode, StringComparer.Ordinal)
+                .Select(assignment => assignment.CustomerId).Distinct().ToArray();
             var previous = 0;
-            foreach (var municipalityId in order)
+            foreach (var customerId in order)
             {
-                var next = point[municipalityId]; distance += matrix.DistancesMeters[previous][next]; duration += matrix.DurationsSeconds[previous][next]; previous = next;
+                var next = point[customerId]; distance += matrix.DistancesMeters[previous][next]; duration += matrix.DurationsSeconds[previous][next]; previous = next;
             }
-            distance += matrix.DistancesMeters[previous][0]; duration += matrix.DurationsSeconds[previous][0];
+            distance += matrix.DistancesMeters[previous][0];
+            duration += matrix.DurationsSeconds[previous][0] + order.Length * serviceDurationSeconds;
         }
         return (distance, duration);
     }
@@ -215,7 +237,7 @@ public sealed class DailyRouteOptimizationProcessor(
         kilograms * DailyRouteOptimizationPolicy.WeightScale, 0, MidpointRounding.AwayFromZero)));
     private static decimal FromGrams(long grams) => (decimal)grams / DailyRouteOptimizationPolicy.WeightScale;
 
-    private static IReadOnlyList<RouteOptimizationBlock> SplitOversizedMunicipalBlocks(
+    private static IReadOnlyList<RouteOptimizationBlock> SplitOversizedCustomerBlocks(
         IReadOnlyList<RouteOptimizationBlock> blocks,
         long maximumCapacityGrams) => blocks.SelectMany(block =>
     {
@@ -227,4 +249,65 @@ public sealed class DailyRouteOptimizationProcessor(
                 WeightGrams = index < fullLoads ? maximumCapacityGrams : remainder
             });
     }).ToArray();
+
+    private static IReadOnlyList<RouteOptimizationBlock> BuildCustomerBlocks(
+        IReadOnlyList<Route> routes,
+        IReadOnlyDictionary<Guid, long> municipalityLoads)
+    {
+        var assignments = routes.SelectMany(route => route.CustomerAssignments)
+            .Where(assignment => assignment.MunicipalityId.HasValue &&
+                municipalityLoads.ContainsKey(assignment.MunicipalityId.Value))
+            .GroupBy(assignment => new { assignment.MunicipalityId, assignment.CustomerId })
+            .Select(group => group.First())
+            .GroupBy(assignment => assignment.MunicipalityId!.Value)
+            .ToDictionary(group => group.Key, group => group
+                .OrderBy(assignment => assignment.Customer!.ExternalCode, StringComparer.Ordinal)
+                .ThenBy(assignment => assignment.CustomerId).ToArray());
+        var blocks = new List<RouteOptimizationBlock>();
+        foreach (var (municipalityId, totalWeight) in municipalityLoads.OrderBy(item => item.Key))
+        {
+            var customers = assignments[municipalityId];
+            var baseWeight = totalWeight / customers.Length;
+            var remainder = totalWeight % customers.Length;
+            for (var index = 0; index < customers.Length; index++)
+            {
+                var assignment = customers[index];
+                blocks.Add(new RouteOptimizationBlock(
+                    assignment.CustomerId,
+                    municipalityId,
+                    assignment.CustomerId,
+                    assignment.Customer!.ExternalCode,
+                    baseWeight + (index < remainder ? 1 : 0)));
+            }
+        }
+        return blocks;
+    }
+
+    private static IReadOnlyList<DailyRouteOptimizationReadinessIssue> EvaluateCustomerLocations(
+        IReadOnlyList<Route> routes)
+    {
+        var issues = new List<DailyRouteOptimizationReadinessIssue>();
+        foreach (var route in routes)
+        {
+            var includedEntries = route.Entries.Where(entry => !entry.IsExcludedFromOptimization &&
+                entry.AveragePerDay > 0 && entry.MunicipalityId.HasValue).ToArray();
+
+            var includedMunicipalities = includedEntries.Select(entry => entry.MunicipalityId!.Value).ToHashSet();
+            foreach (var assignment in route.CustomerAssignments
+                         .Where(assignment => assignment.MunicipalityId.HasValue &&
+                             includedMunicipalities.Contains(assignment.MunicipalityId.Value))
+                         .GroupBy(assignment => assignment.CustomerId).Select(group => group.First()))
+            {
+                var coordinate = assignment.Customer?.RegistrationAddress?.Coordinate;
+                if (CustomerAddressCoordinateQuality.IsExact(coordinate))
+                    continue;
+                issues.Add(new(
+                    DailyRouteOptimizationIssueCodes.CustomerCoordinateMissing,
+                    route.Id, null, assignment.MunicipalityId, null,
+                    $"O cliente {assignment.Customer?.ExternalCode ?? assignment.CustomerId.ToString()} não possui coordenada exata.",
+                    assignment.Customer?.ExternalCode, true));
+            }
+        }
+        return issues;
+    }
 }

@@ -8,6 +8,8 @@ public static class DailyRouteOptimizationIssueCodes
     public const string MunicipalityNotLinked = "MUNICIPALITY_NOT_LINKED";
     public const string InvalidStopWeight = "INVALID_STOP_WEIGHT";
     public const string MunicipalityCoordinateMissing = "MUNICIPALITY_COORDINATE_MISSING";
+    public const string CustomerCoordinateMissing = "CUSTOMER_COORDINATE_MISSING";
+    public const string CustomerAssignmentMissing = "CUSTOMER_ASSIGNMENT_MISSING";
     public const string VehicleCapacityMissing = "VEHICLE_CAPACITY_MISSING";
 }
 
@@ -41,7 +43,7 @@ public static class DailyRouteOptimizationReadinessEvaluator
                     true));
 
             foreach (var entry in route.Entries
-                         .Where(item => !item.IsExcludedFromOptimization || item.AveragePerDay != 0)
+                         .Where(item => !item.IsExcludedFromOptimization && item.AveragePerDay != 0)
                          .OrderBy(item => item.Sequence))
             {
                 if (entry.MunicipalityId is null)
@@ -54,30 +56,14 @@ public static class DailyRouteOptimizationReadinessEvaluator
                         $"A parada {entry.Name} não está vinculada a um município oficial.",
                         entry.Name,
                         true));
-                else if (entry.Municipality?.Coordinate is null ||
-                         entry.Municipality.Coordinate.Status != MunicipalityCoordinateStatuses.Resolved ||
-                         entry.Municipality.Coordinate.Latitude is null ||
-                         entry.Municipality.Coordinate.Longitude is null)
-                    issues.Add(new(
-                        DailyRouteOptimizationIssueCodes.MunicipalityCoordinateMissing,
-                        route.Id,
-                        entry.Id,
-                        entry.MunicipalityId,
-                        null,
-                        $"O município da parada {entry.Name} não possui coordenada resolvida.",
-                        entry.Municipality?.Name ?? entry.Name,
-                        true));
-
-                if (entry.AveragePerDay <= 0)
+                if (entry.AveragePerDay < 0)
                     issues.Add(new(
                         DailyRouteOptimizationIssueCodes.InvalidStopWeight,
                         route.Id,
                         entry.Id,
                         entry.MunicipalityId,
                         null,
-                        entry.AveragePerDay < 0
-                            ? $"A parada {entry.Name} possui peso negativo e exige um peso positivo."
-                            : $"A parada {entry.Name} possui peso zero; informe um peso positivo ou exclua-a da simulação.",
+                        $"A parada {entry.Name} possui peso negativo e exige um peso positivo.",
                         entry.AveragePerDay.ToString("0.###", CultureInfo.InvariantCulture),
                         true));
             }
@@ -93,6 +79,10 @@ public static class DailyRouteOptimizationReadinessEvaluator
         Add(DailyRouteOptimizationIssueCodes.MunicipalityNotLinked, "município sem vínculo", "municípios sem vínculo");
         Add(DailyRouteOptimizationIssueCodes.InvalidStopWeight, "peso inválido", "pesos inválidos");
         Add(DailyRouteOptimizationIssueCodes.MunicipalityCoordinateMissing, "coordenada ausente", "coordenadas ausentes");
+        Add(DailyRouteOptimizationIssueCodes.CustomerCoordinateMissing,
+            "cliente sem coordenada exata", "clientes sem coordenada exata");
+        Add(DailyRouteOptimizationIssueCodes.CustomerAssignmentMissing,
+            "parada sem cliente vinculado", "paradas sem cliente vinculado");
         Add(DailyRouteOptimizationIssueCodes.VehicleCapacityMissing, "capacidade ausente", "capacidades ausentes");
         return parts.Count == 0 ? "Dados insuficientes para otimizar." : string.Join(", ", parts) + ".";
 

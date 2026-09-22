@@ -89,6 +89,7 @@ public static class OperationalJobCodes
     public const string MunicipalityCoordinateEnrichment = "MUNICIPALITY_COORDINATE_ENRICHMENT";
     public const string CustomerRegistrationAddressEnrichment = "CUSTOMER_REGISTRATION_ADDRESS_ENRICHMENT";
     public const string CustomerAddressCoordinateEnrichment = "CUSTOMER_ADDRESS_COORDINATE_ENRICHMENT";
+    public const string CustomerCoordinateSimulation = "CUSTOMER_COORDINATE_SIMULATION";
     public const string DailyRouteOptimization = "DAILY_ROUTE_OPTIMIZATION";
     public const string RouteCostConsolidation = "ROUTE_COST_CONSOLIDATION";
     public const string WhatsAppMessageProcessing = WhatsAppJobCodes.MessageProcessing;
@@ -166,6 +167,17 @@ public static class OperationalJobCatalog
         ContractVersion: 1,
         ExampleParametersJson: "{\"customerStatus\":\"ACTIVE\",\"reprocessFailed\":false,\"refreshApproximate\":false,\"maximumRequests\":150}");
 
+    public static readonly OperationalJobDefinition CustomerCoordinateSimulation = new(
+        OperationalJobCodes.CustomerCoordinateSimulation,
+        "Preencher coordenadas simuladas de clientes",
+        "Busca endereços prediais próximos para clientes sem coordenada exata e mantém auditoria reversível.",
+        ManualRunAllowed: false,
+        ScheduleAllowed: false,
+        AllowConcurrentRuns: false,
+        BackgroundJobQueues.Default,
+        ContractVersion: 1,
+        ExampleParametersJson: "{\"action\":\"APPLY\",\"recalculateDependents\":true}");
+
     public static readonly OperationalJobDefinition WhatsAppMessageProcessing = new(
         OperationalJobCodes.WhatsAppMessageProcessing,
         "Processar mensagem do WhatsApp",
@@ -196,7 +208,7 @@ public static class OperationalJobCatalog
         ScheduleAllowed: true,
         AllowConcurrentRuns: false,
         BackgroundJobQueues.Default,
-        ContractVersion: 1,
+        ContractVersion: DailyRouteOptimizationPolicy.ContractVersion,
         ExampleParametersJson: "{}");
 
     public static readonly OperationalJobDefinition RouteCostConsolidation = new(
@@ -211,7 +223,7 @@ public static class OperationalJobCatalog
         ExampleParametersJson: "{}");
 
     private static readonly IReadOnlyDictionary<string, OperationalJobDefinition> Definitions =
-        new[] { ProcessImport, MunicipalityCoordinateEnrichment, CustomerRegistrationAddressEnrichment, CustomerAddressCoordinateEnrichment, DailyRouteOptimization, RouteCostConsolidation, WhatsAppMessageProcessing }
+        new[] { ProcessImport, MunicipalityCoordinateEnrichment, CustomerRegistrationAddressEnrichment, CustomerAddressCoordinateEnrichment, CustomerCoordinateSimulation, DailyRouteOptimization, RouteCostConsolidation, WhatsAppMessageProcessing }
             .ToDictionary(definition => definition.JobType, StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlyCollection<OperationalJobDefinition> All { get; } = Definitions.Values.ToArray();

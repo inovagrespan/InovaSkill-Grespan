@@ -14,10 +14,22 @@ public static class DailyRouteOptimizationPolicy
 {
     public const int WeightScale = 1000;
     public const int SolverTimeoutSeconds = 30;
+    public const int ExactFleetSelectionMaximumBlocks = 200;
     public const int OccupancyScale = 100;
-    public const int ContractVersion = 1;
+    public const int ContractVersion = 2;
     public const int MonetaryCostScale = 100;
     public const int SolverTimeLimitSeconds = 5;
+    public const int MaximumRouteRepairAttempts = 3;
+    // A jornada ideal é de até 8h, mas uma rota pode utilizar até 10h quando
+    // isso evita uma frota artificialmente fragmentada. O limite de 10h é rígido.
+    public const int PreferredRouteDurationHours = 8;
+    public const int MaximumRouteDurationHours = 10;
+    public const int DefaultServiceTimePerStopMinutes = 15;
+    public const long SecondsPerMinute = 60;
+    public const long SecondsPerHour = 60 * SecondsPerMinute;
+    public const long PreferredRouteDurationSeconds = PreferredRouteDurationHours * SecondsPerHour;
+    public const long MaximumRouteDurationSeconds = MaximumRouteDurationHours * SecondsPerHour;
+    public const long PreferredDurationPenaltyPerSecond = 1000;
     public const decimal FuelTankReserveRate = 0.10m;
     public const decimal AcceloAverageEfficiencyKmPerLiter = 6.25m;
     public const decimal TocoAverageEfficiencyKmPerLiter = 4.15m;
@@ -31,7 +43,7 @@ public static class DailyRouteOptimizationPolicy
     public const decimal TocoRentalDailyMaximum = 900m;
     public const decimal TruckRentalDailyMinimum = 900m;
     public const decimal TruckRentalDailyMaximum = 1_300m;
-    public const string RulesVersion = "daily-v7-persisted-fuel-price";
+    public const string RulesVersion = "daily-v8-exact-customer-locations";
 }
 
 public static class DailyRouteOptimizationWeekdays
@@ -57,7 +69,18 @@ public static class DailyRouteOptimizationWeekdays
     }
 }
 
-public sealed record RouteOptimizationBlock(Guid MunicipalityId, string Name, long WeightGrams);
+public sealed record RouteOptimizationBlock(
+    Guid LocationId,
+    Guid MunicipalityId,
+    Guid CustomerId,
+    string Name,
+    long WeightGrams)
+{
+    public RouteOptimizationBlock(Guid municipalityId, string name, long weightGrams)
+        : this(municipalityId, municipalityId, municipalityId, name, weightGrams)
+    {
+    }
+}
 public sealed record RouteOptimizationVehicleInput(
     Guid? SourceRouteId, Guid VehicleTypeId, string VehicleTypeName, long CapacityGrams, bool IsAdditional);
 public sealed record RouteOptimizationProblem(
@@ -78,7 +101,9 @@ public sealed record RouteOptimizationSolution(
     string? Reason,
     IReadOnlyList<RouteOptimizationVehicleSolution> Vehicles,
     long TotalDistanceMeters,
-    long TotalDurationSeconds);
+    long TotalDurationSeconds,
+    long ServiceDurationSeconds = 0,
+    long MaximumRouteDurationSeconds = long.MaxValue);
 
 public interface IDailyRouteOptimizationSolver
 {
@@ -143,9 +168,9 @@ public static class DailyRouteOptimizationSolutionValidator
         }
 
         var visitedBlocks = new int[problem.Blocks.Count];
-        var matrixPointByMunicipality = problem.Matrix.Points
+        var matrixPointByLocation = problem.Matrix.Points
             .Select((point, index) => (point, index))
-            .Where(item => item.point.Type == OsrmMatrixPointTypes.Municipality)
+            .Where(item => item.point.Type != OsrmMatrixPointTypes.Depot)
             .ToDictionary(item => item.point.Id, item => item.index);
         long totalLoad = 0;
         long totalDistance = 0;
@@ -157,6 +182,8 @@ public static class DailyRouteOptimizationSolutionValidator
                 throw new InvalidOperationException("A solução excede a capacidade de um veículo.");
             if (vehicle.DistanceMeters < 0 || vehicle.DurationSeconds < 0)
                 throw new InvalidOperationException("A solução contém distância ou duração negativa.");
+            if (vehicle.DurationSeconds > solution.MaximumRouteDurationSeconds)
+                throw new InvalidOperationException("A solução excede o limite de duração da rota.");
 
             long calculatedLoad = 0;
             long calculatedDistance = 0;
@@ -170,7 +197,7 @@ public static class DailyRouteOptimizationSolutionValidator
                     throw new InvalidOperationException("A solução contém trecho negativo.");
                 visitedBlocks[stop.BlockIndex]++;
                 calculatedLoad = checked(calculatedLoad + problem.Blocks[stop.BlockIndex].WeightGrams);
-                var nextMatrixPoint = matrixPointByMunicipality[problem.Blocks[stop.BlockIndex].MunicipalityId];
+                var nextMatrixPoint = matrixPointByLocation[problem.Blocks[stop.BlockIndex].LocationId];
                 var expectedLegDistance = Round(problem.Matrix.DistancesMeters[previousMatrixPoint][nextMatrixPoint]);
                 var expectedLegDuration = Round(problem.Matrix.DurationsSeconds[previousMatrixPoint][nextMatrixPoint]);
                 if (stop.DistanceFromPreviousMeters != expectedLegDistance ||
@@ -184,6 +211,7 @@ public static class DailyRouteOptimizationSolutionValidator
             calculatedDuration = checked(calculatedDuration + Round(problem.Matrix.DurationsSeconds[previousMatrixPoint][0]));
             if (calculatedLoad != vehicle.LoadGrams)
                 throw new InvalidOperationException("A carga do veículo diverge da soma de suas paradas.");
+            calculatedDuration = checked(calculatedDuration + vehicle.Stops.Count * solution.ServiceDurationSeconds);
             if (calculatedDistance != vehicle.DistanceMeters || calculatedDuration != vehicle.DurationSeconds)
                 throw new InvalidOperationException("As métricas do veículo divergem da sequência de paradas.");
             totalLoad = checked(totalLoad + vehicle.LoadGrams);
@@ -192,7 +220,7 @@ public static class DailyRouteOptimizationSolutionValidator
         }
 
         if (visitedBlocks.Any(count => count != 1))
-            throw new InvalidOperationException("Cada bloco municipal deve aparecer exatamente uma vez na solução.");
+            throw new InvalidOperationException("Cada parada de cliente deve aparecer exatamente uma vez na solução.");
         if (totalLoad != problem.Blocks.Sum(block => block.WeightGrams))
             throw new InvalidOperationException("A carga total não foi preservada pela solução.");
         if (totalDistance != solution.TotalDistanceMeters || totalDuration != solution.TotalDurationSeconds)

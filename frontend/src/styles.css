@@ -334,6 +334,14 @@
   min-width: 0;
   min-height: 8rem;
   height: 100%;
+  padding: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+/* O card de total acompanha o conteúdo; manter aspecto quadrado criava
+   largura mínima e scrollbar horizontal dentro do modal em telas menores. */
+.route-kpi-card.aspect-square {
+  aspect-ratio: auto;
 }
 
 .finance-chart-card {

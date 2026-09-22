@@ -39,6 +39,13 @@ public sealed class JobExecutionLauncher(
         }
         if (definition.JobType == OperationalJobCodes.DailyRouteOptimization)
             _ = DailyRouteOptimizationWeekdays.Read(document.RootElement);
+        if (definition.JobType == OperationalJobCodes.CustomerCoordinateSimulation)
+        {
+            var action = CustomerCoordinateSimulationProcessor.ReadAction(document.RootElement);
+            _ = CustomerCoordinateSimulationProcessor.ReadRecalculateDependents(document.RootElement);
+            if (action == CustomerCoordinateSimulationProcessor.RevertAction)
+                _ = CustomerCoordinateSimulationProcessor.ReadSourceJobExecutionId(document.RootElement);
+        }
         var relatedEntityId = definition.JobType switch
         {
             OperationalJobCodes.MunicipalityCoordinateEnrichment => ReadRequiredGuid(document.RootElement, "importId"),
@@ -46,6 +53,9 @@ public sealed class JobExecutionLauncher(
                 ReadOptionalGuid(document.RootElement, "importId") ??
                 await ResolveCurrentCustomerImportIdAsync(cancellationToken),
             OperationalJobCodes.CustomerAddressCoordinateEnrichment =>
+                ReadOptionalGuid(document.RootElement, "importId") ??
+                await ResolveCurrentCustomerImportIdAsync(cancellationToken),
+            OperationalJobCodes.CustomerCoordinateSimulation =>
                 ReadOptionalGuid(document.RootElement, "importId") ??
                 await ResolveCurrentCustomerImportIdAsync(cancellationToken),
             OperationalJobCodes.DailyRouteOptimization =>
@@ -61,6 +71,7 @@ public sealed class JobExecutionLauncher(
         await ValidateReferenceAsync(definition.JobType, relatedEntityId, cancellationToken);
         if (!definition.AllowConcurrentRuns && await db.JobExecutions.AnyAsync(job =>
             job.JobType == definition.JobType &&
+            job.CancellationRequestedAt == null &&
             (job.Status == JobExecutionStatus.Queued || job.Status == JobExecutionStatus.Processing ||
              job.Status == JobExecutionStatus.Retrying), cancellationToken))
             throw new ArgumentException("Já existe uma execução deste serviço na fila ou em processamento.");
@@ -112,6 +123,8 @@ public sealed class JobExecutionLauncher(
                 OperationalJobCodes.RouteCostConsolidation or
                 OperationalJobCodes.CustomerRegistrationAddressEnrichment or
                 OperationalJobCodes.CustomerAddressCoordinateEnrichment =>
+                await db.RouteImports.AnyAsync(item => item.Id == id, cancellationToken),
+            OperationalJobCodes.CustomerCoordinateSimulation =>
                 await db.RouteImports.AnyAsync(item => item.Id == id, cancellationToken),
             OperationalJobCodes.WhatsAppMessageProcessing =>
                 await db.WhatsAppMessageReceipts.AnyAsync(item => item.Id == id, cancellationToken),

@@ -7,7 +7,7 @@ namespace InovaSkill.Importer.Tests.RouteImports;
 public sealed class OrToolsDailyRouteOptimizationSolverTests
 {
     private readonly OrToolsDailyRouteOptimizationSolver solver = new(
-        Options.Create(new RouteOptimizationOptions { SolverTimeoutSeconds = 1 }));
+        Options.Create(new RouteOptimizationOptions { SolverTimeoutSeconds = 1, ServiceTimePerStopMinutes = 0 }));
 
     [Fact]
     public void AddsAceloInsteadOfTocoForTwelveTonnesWhenBlocksFit()
@@ -49,6 +49,19 @@ public sealed class OrToolsDailyRouteOptimizationSolverTests
     }
 
     [Fact]
+    public void RemovesUnusedExistingVehiclesFromSuggestedFleet()
+    {
+        var problem = Problem([3_000_000],
+            [Vehicle("Acelo", 3_300_000), Vehicle("Truck", 10_300_000)], []);
+
+        var result = solver.Solve(problem);
+
+        var vehicle = Assert.Single(result.Vehicles);
+        Assert.Equal(3_000_000, vehicle.LoadGrams);
+        Assert.DoesNotContain(result.Vehicles, item => item.LoadGrams == 0);
+    }
+
+    [Fact]
     public void ReturnsInfeasibleWhenNoFleetCanCarryAnIndivisibleBlock()
     {
         var problem = Problem([11_000_000], [Vehicle("Truck", 10_300_000)],
@@ -68,7 +81,8 @@ public sealed class OrToolsDailyRouteOptimizationSolverTests
         var municipalityId = problem.Blocks[0].MunicipalityId;
         problem = problem with
         {
-            Blocks = [problem.Blocks[0], problem.Blocks[1] with { MunicipalityId = municipalityId }],
+            Blocks = [problem.Blocks[0], problem.Blocks[1] with
+                { LocationId = problem.Blocks[0].LocationId, MunicipalityId = municipalityId }],
             Matrix = problem.Matrix with
             {
                 Points = [problem.Matrix.Points[0], problem.Matrix.Points[1]],
@@ -116,6 +130,76 @@ public sealed class OrToolsDailyRouteOptimizationSolverTests
         Assert.Equal(25, result.Vehicles.SelectMany(vehicle => vehicle.Stops).Count());
         Assert.Equal(25_000_000, result.Vehicles.Sum(vehicle => vehicle.LoadGrams));
         Assert.All(result.Vehicles, vehicle => Assert.InRange(vehicle.LoadGrams, 0, vehicle.Vehicle.CapacityGrams));
+    }
+
+    [Fact]
+    public void SplitsFleetWhenStopServiceWouldExceedEightHourWorkday()
+    {
+        var constrainedSolver = new OrToolsDailyRouteOptimizationSolver(Options.Create(
+            new RouteOptimizationOptions
+            {
+                SolverTimeoutSeconds = 1,
+                MaximumRouteDurationHours = 8,
+                ServiceTimePerStopMinutes = 60
+            }));
+        var problem = Problem(Enumerable.Repeat(1_000_000L, 10).ToArray(),
+            [Vehicle("Truck", 10_300_000)], [Vehicle("Truck", 10_300_000, true)]);
+
+        var result = constrainedSolver.Solve(problem);
+
+        Assert.Equal(DailyRouteOptimizationStatuses.Optimized, result.Status);
+        Assert.True(result.Vehicles.Count >= 2);
+        Assert.All(result.Vehicles, vehicle =>
+            Assert.InRange(vehicle.DurationSeconds, 0, DailyRouteOptimizationPolicy.MaximumRouteDurationSeconds));
+        Assert.Equal(3_600, result.ServiceDurationSeconds);
+        Assert.Equal(result.Vehicles.Sum(vehicle => vehicle.DurationSeconds), result.TotalDurationSeconds);
+    }
+
+    [Fact]
+    public void AllowsPreferredEightHourRouteToUseTheHardTenHourLimit()
+    {
+        var constrainedSolver = new OrToolsDailyRouteOptimizationSolver(Options.Create(
+            new RouteOptimizationOptions
+            {
+                SolverTimeoutSeconds = 1,
+                MaximumRouteDurationHours = DailyRouteOptimizationPolicy.MaximumRouteDurationHours,
+                ServiceTimePerStopMinutes = 60
+            }));
+        var problem = Problem(Enumerable.Repeat(1_000_000L, 9).ToArray(),
+            [Vehicle("Truck", 10_300_000)], []);
+
+        var result = constrainedSolver.Solve(problem);
+
+        Assert.Equal(DailyRouteOptimizationStatuses.Optimized, result.Status);
+        var route = Assert.Single(result.Vehicles);
+        Assert.True(route.DurationSeconds > DailyRouteOptimizationPolicy.PreferredRouteDurationSeconds);
+        Assert.InRange(route.DurationSeconds, DailyRouteOptimizationPolicy.PreferredRouteDurationSeconds + 1,
+            DailyRouteOptimizationPolicy.MaximumRouteDurationSeconds);
+        Assert.Equal(DailyRouteOptimizationPolicy.MaximumRouteDurationSeconds, result.MaximumRouteDurationSeconds);
+    }
+
+    [Fact]
+    public void RejectsHardLimitAboveTenHours()
+    {
+        Assert.Throws<InvalidOperationException>(() => new OrToolsDailyRouteOptimizationSolver(Options.Create(
+            new RouteOptimizationOptions { MaximumRouteDurationHours = 11 })));
+    }
+
+    [Fact]
+    public void BuildsScalableFeasibleSeedForCustomerLevelProblem()
+    {
+        var weights = Enumerable.Repeat(10_000L,
+            DailyRouteOptimizationPolicy.ExactFleetSelectionMaximumBlocks + 1).ToArray();
+        var problem = Problem(weights, [Vehicle("Truck", 10_300_000)],
+            [Vehicle("Acelo", 3_300_000, true)]);
+
+        var result = solver.Solve(problem);
+
+        Assert.Equal(DailyRouteOptimizationStatuses.Optimized, result.Status);
+        Assert.Equal(weights.Length, result.Vehicles.SelectMany(vehicle => vehicle.Stops).Count());
+        Assert.Equal(weights.Sum(), result.Vehicles.Sum(vehicle => vehicle.LoadGrams));
+        Assert.All(result.Vehicles, vehicle =>
+            Assert.InRange(vehicle.DurationSeconds, 0, DailyRouteOptimizationPolicy.MaximumRouteDurationSeconds));
     }
 
     private static RouteOptimizationProblem Problem(long[] weights,

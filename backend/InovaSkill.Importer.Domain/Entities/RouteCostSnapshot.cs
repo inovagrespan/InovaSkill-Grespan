@@ -10,6 +10,8 @@ public static class RouteCostPathBases
 {
     public const string ExactCustomers = "EXACT_CUSTOMERS";
     public const string OptimizedMunicipalities = "OPTIMIZED_MUNICIPALITIES";
+    public const string OptimizedCustomers = "OPTIMIZED_CUSTOMERS";
+    public const string Mixed = "MIXED";
 }
 
 public sealed class RouteCostSnapshot

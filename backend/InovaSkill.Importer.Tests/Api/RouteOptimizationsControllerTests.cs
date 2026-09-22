@@ -74,6 +74,38 @@ public sealed class RouteOptimizationsControllerTests
     }
 
     [Fact]
+    public async Task ListAndDetail_MarkResultStaleWhenCoordinatesChangedAfterOptimization()
+    {
+        await using var db = Context();
+        var calculatedAt = DateTime.UtcNow;
+        var coordinateUpdatedAt = calculatedAt.AddMinutes(1);
+        var source = new DataSource { Id = Guid.NewGuid(), Code = RouteImportCodes.DataSource, ProcessorKey = "routes", Name = "Rotas", Type = "EXCEL", ImportMode = DataSourceImportMode.Snapshot, Active = true, CreatedAt = calculatedAt, UpdatedAt = calculatedAt };
+        var import = new RouteImport { Id = Guid.NewGuid(), DataSourceId = source.Id, Version = 1, FileName = "routes.xlsx", FilePath = "routes.xlsx", Status = RouteImportStatus.Completed, CreatedAt = calculatedAt };
+        source.CurrentImportId = import.Id;
+        var job = new JobExecution { Id = Guid.NewGuid(), JobType = OperationalJobCodes.DailyRouteOptimization, RelatedEntityId = import.Id, Status = JobExecutionStatus.Completed, CreatedAt = calculatedAt };
+        var municipality = new Municipality { Id = Guid.NewGuid(), Name = "Marília", NormalizedName = "MARILIA", StateCode = "SP", CreatedAt = calculatedAt };
+        var route = new InovaSkill.Importer.Domain.Entities.Route { Id = Guid.NewGuid(), ImportId = import.Id, Name = "ROTA", Weekday = "MONDAY", CreatedAt = calculatedAt };
+        var customer = new Customer { Id = Guid.NewGuid(), DataSourceId = source.Id, BranchCode = "1", ExternalCode = "C001", IsActive = true, CreatedAt = calculatedAt };
+        var address = new CustomerRegistrationAddress { Id = Guid.NewGuid(), CustomerId = customer.Id, DocumentNumber = "1", City = "Marília", StateCode = "SP", Status = CustomerRegistrationAddressStatuses.Resolved, CreatedAt = calculatedAt, UpdatedAt = coordinateUpdatedAt };
+        var coordinate = new CustomerAddressCoordinate { Id = Guid.NewGuid(), CustomerRegistrationAddressId = address.Id, NormalizedAddress = "RUA TESTE, 1", Source = "TEST", Status = CustomerAddressCoordinateStatuses.Resolved, Precision = CustomerAddressCoordinatePrecisions.Exact, Latitude = -22.2m, Longitude = -49.9m, CreatedAt = calculatedAt, UpdatedAt = coordinateUpdatedAt };
+        customer.RegistrationAddress = address;
+        address.Coordinate = coordinate;
+        var result = new DailyRouteOptimizationResult { Id = Guid.NewGuid(), RouteImportId = import.Id, JobExecutionId = job.Id, Weekday = "MONDAY", Status = DailyRouteOptimizationStatuses.Optimized, CreatedAt = calculatedAt };
+        db.AddRange(source, import, job, municipality, route, customer, address, coordinate, result,
+            new RouteCustomerAssignment { Id = Guid.NewGuid(), RouteId = route.Id, Route = route, CustomerId = customer.Id, Customer = customer, MunicipalityId = municipality.Id, Source = RouteCustomerAssignmentSource.InferredByMunicipality, CreatedAt = calculatedAt, UpdatedAt = calculatedAt });
+        await db.SaveChangesAsync();
+        var controller = Controller(db, new FakeLauncher());
+
+        var listJson = Json(await controller.List(null, null, default));
+        var stale = listJson.RootElement.GetProperty("items")[0];
+        Assert.True(stale.GetProperty("isStale").GetBoolean());
+
+        var conflict = Assert.IsType<ConflictObjectResult>(await controller.Get(result.Id, default));
+        using var conflictJson = JsonDocument.Parse(JsonSerializer.Serialize(conflict.Value));
+        Assert.Contains("última atualização de coordenadas", conflictJson.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
     public async Task ListWithoutPublishedSnapshot_ReturnsEmptyResult()
     {
         await using var db = Context();
@@ -97,7 +129,7 @@ public sealed class RouteOptimizationsControllerTests
         source.CurrentImportId = import.Id;
         var vehicle = new VehicleType { Id = Guid.NewGuid(), Name = "Truck", CapacityKg = 10_000 };
         var route = new InovaSkill.Importer.Domain.Entities.Route { Id = Guid.NewGuid(), ImportId = import.Id, Name = "ROTA", Weekday = "MONDAY", VehicleTypeId = vehicle.Id, VehicleCapacityKgSnapshot = 10_000, CreatedAt = now };
-        route.Entries.Add(new RouteEntry { Id = Guid.NewGuid(), RouteId = route.Id, Name = "SEM VÍNCULO", AveragePerDay = 0, CreatedAt = now });
+        route.Entries.Add(new RouteEntry { Id = Guid.NewGuid(), RouteId = route.Id, Name = "SEM VÍNCULO", AveragePerDay = -1, CreatedAt = now });
         var job = new JobExecution { Id = Guid.NewGuid(), JobType = OperationalJobCodes.DailyRouteOptimization, Queue = "default", ParametersJson = "{}", RelatedEntityId = import.Id, Status = JobExecutionStatus.Completed, CreatedAt = now };
         var result = new DailyRouteOptimizationResult { Id = Guid.NewGuid(), RouteImportId = import.Id, JobExecutionId = job.Id, Weekday = "MONDAY", Status = DailyRouteOptimizationStatuses.InsufficientData, Reason = "legado", CreatedAt = now };
         db.AddRange(source, import, vehicle, route, job, result);
@@ -174,7 +206,7 @@ public sealed class RouteOptimizationsControllerTests
         var user = new AppUser { Id = 10, Name = "logistica", Email = "logistica@test", Role = AppUserRoles.Logistica, PasswordHash = "hash", CreatedAt = now };
         var vehicle = new VehicleType { Id = Guid.NewGuid(), Name = "Truck", CapacityKg = 10_000 };
         var route = new InovaSkill.Importer.Domain.Entities.Route { Id = Guid.NewGuid(), ImportId = import.Id, Name = "ROTA", Weekday = "MONDAY", VehicleTypeId = vehicle.Id, VehicleCapacityKgSnapshot = 10_000, CreatedAt = now };
-        var entry = new RouteEntry { Id = Guid.NewGuid(), RouteId = route.Id, Name = "MARILIA SEM ACENTO", AveragePerDay = 0, CreatedAt = now };
+        var entry = new RouteEntry { Id = Guid.NewGuid(), RouteId = route.Id, Name = "MARILIA SEM ACENTO", AveragePerDay = -1, CreatedAt = now };
         route.Entries.Add(entry);
         var job = new JobExecution { Id = Guid.NewGuid(), JobType = OperationalJobCodes.DailyRouteOptimization, Queue = "default", ParametersJson = "{}", RelatedEntityId = import.Id, Status = JobExecutionStatus.Completed, CreatedAt = now };
         var result = new DailyRouteOptimizationResult { Id = Guid.NewGuid(), RouteImportId = import.Id, JobExecutionId = job.Id, Weekday = "MONDAY", Status = DailyRouteOptimizationStatuses.InsufficientData, CreatedAt = now };
@@ -208,7 +240,7 @@ public sealed class RouteOptimizationsControllerTests
         Assert.Equal(import.FilePath, derived.FilePath);
         Assert.Equal(1_234.567m, await db.RouteImportCorrections.Where(item => item.DerivedImportId == derived.Id &&
             item.Kind == RouteImportCorrectionKinds.SetWeight).Select(item => item.CorrectedWeightKg).SingleAsync());
-        Assert.Equal(0, entry.AveragePerDay);
+        Assert.Equal(-1, entry.AveragePerDay);
         Assert.Equal(derived.Id, dispatcher.ImportId);
     }
 

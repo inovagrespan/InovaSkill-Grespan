@@ -61,6 +61,28 @@ public sealed class RouteCostsControllerTests
     }
 
     [Fact]
+    public async Task List_WithMixedPathBases_ReturnsMixedInsteadOfFailing()
+    {
+        await using var db = Context();
+        var seed = await SeedAsync(db);
+        var snapshot = await db.RouteCostSnapshots.SingleAsync(item => item.Id == seed.CostSnapshotId);
+        db.RouteCostItems.Add(new RouteCostItem
+        {
+            Id = Guid.NewGuid(), SnapshotId = snapshot.Id, Scenario = RouteCostScenarios.Optimized,
+            Weekday = "MONDAY", Label = "Sugestão 2", PathBasis = RouteCostPathBases.OptimizedCustomers,
+            IsAvailable = true, DistanceMeters = 10_000, DurationSeconds = 900,
+            MinimumFuelCost = 20, MaximumFuelCost = 25, TollCost = 0,
+            MinimumTotalCost = 20, MaximumTotalCost = 25
+        });
+        await db.SaveChangesAsync();
+
+        var response = await new RouteCostsController(db).List(null, "MONDAY", default);
+        var json = Json(Assert.IsType<OkObjectResult>(response).Value);
+
+        Assert.Equal(RouteCostPathBases.Mixed, json.GetProperty("optimized").GetProperty("pathBasis").GetString());
+    }
+
+    [Fact]
     public void TollPlazas_ReturnsVersionedCatalogWithoutInventingEffectiveDate()
     {
         var controller = new TollPlazasController(new FakeTollCatalog());

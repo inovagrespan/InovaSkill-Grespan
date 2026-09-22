@@ -72,6 +72,8 @@ public sealed class DailyRouteOptimizationStop
     public DailyRouteOptimizationVehicle? Vehicle { get; set; }
     public Guid MunicipalityId { get; set; }
     public Municipality? Municipality { get; set; }
+    public Guid? CustomerId { get; set; }
+    public Customer? Customer { get; set; }
     public int Sequence { get; set; }
     public decimal WeightKg { get; set; }
     public decimal DistanceFromPreviousMeters { get; set; }

@@ -10,6 +10,8 @@ using InovaSkill.Importer.Api.Assistant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+using System.Net.Sockets;
 
 namespace InovaSkill.Importer.Infrastructure.DependencyInjection;
 
@@ -26,7 +28,11 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient();
         services.Configure<BrasilApiOptions>(configuration.GetSection(BrasilApiOptions.SectionName));
         services.Configure<GeocodingOptions>(configuration.GetSection(GeocodingOptions.SectionName));
-        services.Configure<GeoapifyOptions>(configuration.GetSection(GeoapifyOptions.SectionName));
+        services.Configure<GeoapifyOptions>(options =>
+        {
+            configuration.GetSection(GeoapifyOptions.SectionName).Bind(options);
+            options.ApiKey = configuration["GEOAPIFY_API_KEY"] ?? options.ApiKey;
+        });
         services.Configure<NominatimOptions>(configuration.GetSection(NominatimOptions.SectionName));
         services.Configure<GoogleGeocodingOptions>(options =>
         {
@@ -65,13 +71,34 @@ public static class ServiceCollectionExtensions
             client.BaseAddress = new Uri(googleOptions.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, googleOptions.TimeoutSeconds));
         });
+        services.AddHttpClient<GoogleNearbyRooftopCoordinateProvider>(client =>
+        {
+            client.BaseAddress = new Uri(googleOptions.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, googleOptions.TimeoutSeconds));
+        });
         var geoapifyOptions = configuration.GetSection(GeoapifyOptions.SectionName).Get<GeoapifyOptions>() ?? new GeoapifyOptions();
+        geoapifyOptions.ApiKey = configuration["GEOAPIFY_API_KEY"] ?? geoapifyOptions.ApiKey;
+        services.AddSingleton<IGeoapifyRequestGate, GeoapifyRequestGate>();
         services.AddHttpClient<GeoapifyAddressCoordinateProvider>(client =>
         {
             client.BaseAddress = new Uri(geoapifyOptions.BaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, geoapifyOptions.TimeoutSeconds));
         });
+        services.AddHttpClient<GeoapifyNearbyBuildingCoordinateProvider>(client =>
+        {
+            client.BaseAddress = new Uri(geoapifyOptions.BaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, geoapifyOptions.TimeoutSeconds));
+        }).ConfigurePrimaryHttpMessageHandler(CreateIpv4Handler);
         var geocodingOptions = configuration.GetSection(GeocodingOptions.SectionName).Get<GeocodingOptions>() ?? new GeocodingOptions();
+        services.AddScoped<INearbyBuildingCoordinateProvider>(provider => geocodingOptions.Provider switch
+        {
+            GeocodingProviders.Google => provider.GetRequiredService<GoogleNearbyRooftopCoordinateProvider>(),
+            GeocodingProviders.Geoapify => provider.GetRequiredService<GeoapifyNearbyBuildingCoordinateProvider>(),
+            GeocodingProviders.Nominatim => throw new InvalidOperationException(
+                "O Nominatim público não permite a sondagem sistemática usada na simulação de coordenadas."),
+            _ => throw new InvalidOperationException(
+                $"Provedor de geocodificação desconhecido: {geocodingOptions.Provider}.")
+        });
         services.AddScoped<ICustomerAddressCoordinateProvider>(provider => geocodingOptions.Provider switch
         {
             GeocodingProviders.Google when !string.IsNullOrWhiteSpace(googleOptions.ApiKey) =>
@@ -86,11 +113,13 @@ public static class ServiceCollectionExtensions
         {
             client.BaseAddress = new Uri(osrmOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, osrmOptions.TimeoutSeconds));
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(osrmOptions.UserAgent);
         });
         services.AddHttpClient<OsrmRouteClient>(client =>
         {
             client.BaseAddress = new Uri(osrmOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, osrmOptions.TimeoutSeconds));
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(osrmOptions.UserAgent);
         });
         var openRouteServiceOptions = configuration.GetSection(OpenRouteServiceOptions.SectionName)
             .Get<OpenRouteServiceOptions>() ?? new OpenRouteServiceOptions();
@@ -161,6 +190,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOperationalJobProcessor, MunicipalityCoordinateEnrichmentProcessor>();
         services.AddScoped<IOperationalJobProcessor, CustomerRegistrationAddressEnrichmentProcessor>();
         services.AddScoped<IOperationalJobProcessor, CustomerAddressCoordinateEnrichmentProcessor>();
+        services.AddScoped<IOperationalJobProcessor, CustomerCoordinateSimulationProcessor>();
         services.AddScoped<IOperationalJobProcessor, DailyRouteOptimizationProcessor>();
         services.AddScoped<IOperationalJobProcessor, RouteCostConsolidationProcessor>();
         services.AddScoped<IWhatsAppGateway, LocalBaileysWhatsAppGateway>();
@@ -196,4 +226,26 @@ public static class ServiceCollectionExtensions
         services.AddScoped<BusinessAssistantService>();
         return services;
     }
+
+    private static HttpMessageHandler CreateIpv4Handler() => new SocketsHttpHandler
+    {
+        ConnectCallback = async (context, cancellationToken) =>
+        {
+            var addresses = await Dns.GetHostAddressesAsync(
+                context.DnsEndPoint.Host, AddressFamily.InterNetwork, cancellationToken);
+            if (addresses.Length == 0)
+                throw new SocketException((int)SocketError.HostNotFound);
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(addresses[0], context.DnsEndPoint.Port), cancellationToken);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+    };
 }

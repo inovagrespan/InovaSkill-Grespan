@@ -322,6 +322,42 @@ public sealed class RoutesControllerTests
     }
 
     [Fact]
+    public async Task Get_ReturnsRouteCustomersInMunicipalityOrderWithAddress()
+    {
+        await using var db = CreateDbContext();
+        var now = DateTime.UtcNow;
+        var source = CreateSource();
+        var routeImport = CreateImport(source.Id, 1, RouteImportStatus.Completed, now);
+        var vehicle = CreateVehicle();
+        var firstMunicipality = new Municipality { Id = Guid.NewGuid(), Name = "MARILIA", StateCode = "SP", CreatedAt = now };
+        var secondMunicipality = new Municipality { Id = Guid.NewGuid(), Name = "BAURU", StateCode = "SP", CreatedAt = now };
+        var route = CreateRoute(routeImport.Id, vehicle.Id, "Rota clientes", 0.8m);
+        route.Entries =
+        [
+            new RouteEntry { Id = Guid.NewGuid(), RouteId = route.Id, Sequence = 1, Name = firstMunicipality.Name, MunicipalityId = firstMunicipality.Id, CreatedAt = now },
+            new RouteEntry { Id = Guid.NewGuid(), RouteId = route.Id, Sequence = 2, Name = secondMunicipality.Name, MunicipalityId = secondMunicipality.Id, CreatedAt = now }
+        ];
+        var firstCustomer = CreateRouteCustomer(source, routeImport, firstMunicipality, "002", "Cliente Primeiro", now);
+        var secondCustomer = CreateRouteCustomer(source, routeImport, secondMunicipality, "001", "Cliente Segundo", now);
+        db.AddRange(source, routeImport, vehicle, firstMunicipality, secondMunicipality, route, firstCustomer, secondCustomer);
+        db.AddRange(
+            new RouteCustomerAssignment { Id = Guid.NewGuid(), RouteId = route.Id, CustomerId = firstCustomer.Id, MunicipalityId = firstMunicipality.Id, CreatedAt = now, UpdatedAt = now },
+            new RouteCustomerAssignment { Id = Guid.NewGuid(), RouteId = route.Id, CustomerId = secondCustomer.Id, MunicipalityId = secondMunicipality.Id, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var response = await new RoutesController(db).Get(route.Id, default);
+        var json = SerializeOkResult(response);
+        var customers = json.RootElement.GetProperty("customers");
+
+        Assert.Equal(2, customers.GetArrayLength());
+        Assert.Equal("002", customers[0].GetProperty("code").GetString());
+        Assert.Equal("Cliente Primeiro", customers[0].GetProperty("name").GetString());
+        Assert.Equal("MARILIA", customers[0].GetProperty("municipality").GetString());
+        Assert.Equal("Rua A", customers[0].GetProperty("address").GetProperty("street").GetString());
+        Assert.Equal("001", customers[1].GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task GetRoadPath_DoesNotQueryProviderWhenCustomerIsAtDepot()
     {
         await using var db = CreateDbContext();
@@ -460,6 +496,37 @@ public sealed class RoutesControllerTests
         Name = name,
         CapacityKg = capacityKg
     };
+
+    private static Customer CreateRouteCustomer(
+        DataSource source,
+        RouteImport routeImport,
+        Municipality municipality,
+        string code,
+        string name,
+        DateTime now)
+    {
+        var customer = new Customer
+        {
+            Id = Guid.NewGuid(), DataSourceId = source.Id, ExternalCode = code,
+            IsActive = true, CreatedAt = now
+        };
+        customer.Snapshots =
+        [
+            new CustomerSnapshot
+            {
+                Id = Guid.NewGuid(), ImportId = routeImport.Id, CustomerId = customer.Id,
+                LegalName = name, MunicipalityId = municipality.Id, SourceRowNumber = 2,
+                CreatedAt = now
+            }
+        ];
+        customer.RegistrationAddress = new CustomerRegistrationAddress
+        {
+            Id = Guid.NewGuid(), CustomerId = customer.Id, StreetType = "Rua", Street = "Rua A",
+            Number = code, City = municipality.Name, StateCode = municipality.StateCode,
+            CreatedAt = now, UpdatedAt = now
+        };
+        return customer;
+    }
 
     private static Route CreateRoute(
         Guid importId,

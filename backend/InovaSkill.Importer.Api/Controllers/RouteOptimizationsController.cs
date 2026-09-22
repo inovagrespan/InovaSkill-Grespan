@@ -19,7 +19,8 @@ public sealed class RouteOptimizationsController(
     IBackgroundJobDispatcher backgroundJobDispatcher,
     IMunicipalityCoordinateProvider municipalityProvider,
     IImportFileStorage importFileStorage,
-    RoutesSpreadsheetParser spreadsheetParser) : ControllerBase
+    RoutesSpreadsheetParser spreadsheetParser,
+    IRouteGeometryClient? routeGeometryClient = null) : ControllerBase
 {
     private const int DefaultCandidatePageSize = 20;
     private const int MaximumCandidatePageSize = 50;
@@ -98,6 +99,27 @@ public sealed class RouteOptimizationsController(
             isInherited = result.InheritedFromResultId != null,
             result.CreatedAt
         }).ToListAsync(cancellationToken);
+        var lastCoordinateUpdates = await db.RouteCustomerAssignments.AsNoTracking()
+            .Where(assignment => assignment.Route!.ImportId == importId &&
+                assignment.Customer!.RegistrationAddress!.Coordinate != null)
+            .GroupBy(assignment => assignment.Route!.Weekday)
+            .Select(group => new
+            {
+                Weekday = group.Key,
+                LastUpdatedAt = group.Max(assignment => assignment.Customer!.RegistrationAddress!.Coordinate!.UpdatedAt)
+            })
+            .ToDictionaryAsync(item => item.Weekday, item => item.LastUpdatedAt, cancellationToken);
+        var staleItems = items.Select(item => new
+        {
+            item.Id, item.RouteImportId, item.Weekday, item.Status, item.Reason,
+            item.CurrentDistanceMeters, item.CurrentDurationSeconds,
+            item.ProposedDistanceMeters, item.ProposedDurationSeconds,
+            item.CurrentVehicleCount, item.proposedVehicleCount, item.additionalVehicleCount,
+            item.additionalCapacityKg, item.TotalWeightKg, item.issueCount,
+            item.InheritedFromResultId, item.isInherited, item.CreatedAt,
+            isStale = lastCoordinateUpdates.TryGetValue(item.Weekday, out var updatedAt) &&
+                updatedAt > item.CreatedAt
+        }).ToArray();
         var latestJob = await db.JobExecutions.AsNoTracking()
             .Where(job => job.JobType == OperationalJobCodes.DailyRouteOptimization && job.RelatedEntityId == importId)
             .OrderByDescending(job => job.CreatedAt)
@@ -118,12 +140,23 @@ public sealed class RouteOptimizationsController(
             latestJob.StartedAt,
             latestJob.FinishedAt
         };
-        return Ok(new { snapshotId = importId, isCurrentSnapshot = currentImportId == importId, latestExecution, items });
+        return Ok(new { snapshotId = importId, isCurrentSnapshot = currentImportId == importId, latestExecution, items = staleItems });
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
+        var resultMetadata = await db.DailyRouteOptimizationResults.AsNoTracking()
+            .Where(item => item.Id == id)
+            .Select(item => new { item.RouteImportId, item.Weekday, item.CreatedAt })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (resultMetadata is null) return NotFound();
+        if (await HasCoordinateUpdatesAfterAsync(resultMetadata.RouteImportId, resultMetadata.Weekday,
+                resultMetadata.CreatedAt, cancellationToken))
+            return Conflict(new
+            {
+                message = "Esta sugestão foi calculada antes da última atualização de coordenadas. Execute uma nova otimização."
+            });
         var result = await db.DailyRouteOptimizationResults.AsNoTracking()
             .Where(item => item.Id == id)
             .Select(item => new
@@ -153,15 +186,123 @@ public sealed class RouteOptimizationsController(
                     vehicle.SourceRouteId, sourceRouteName = vehicle.SourceRoute != null ? vehicle.SourceRoute.Name : null,
                     vehicle.CapacityKg, vehicle.LoadKg, vehicle.Occupancy,
                     vehicle.DistanceMeters, vehicle.DurationSeconds,
+                    municipalityCount = vehicle.Stops.Select(stop => stop.MunicipalityId).Distinct().Count(),
+                    deliveryCount = vehicle.Stops.Count,
                     stops = vehicle.Stops.OrderBy(stop => stop.Sequence).Select(stop => new
                     {
-                        stop.Id, stop.Sequence, stop.MunicipalityId,
+                        stop.Id, stop.Sequence, stop.MunicipalityId, stop.CustomerId,
+                        customerCode = stop.Customer != null ? stop.Customer.ExternalCode : null,
+                        customerName = stop.Customer != null
+                            ? stop.Customer.Snapshots.OrderByDescending(snapshot => snapshot.CreatedAt)
+                                .Select(snapshot => string.IsNullOrWhiteSpace(snapshot.TradeName)
+                                    ? snapshot.LegalName
+                                    : snapshot.TradeName)
+                                .FirstOrDefault()
+                            : null,
+                        customerAddress = stop.Customer != null && stop.Customer.RegistrationAddress != null
+                            ? new
+                            {
+                                stop.Customer.RegistrationAddress.StreetType,
+                                street = stop.Customer.RegistrationAddress.Street,
+                                number = stop.Customer.RegistrationAddress.Number,
+                                neighborhood = stop.Customer.RegistrationAddress.Neighborhood,
+                                city = stop.Customer.RegistrationAddress.City,
+                                stateCode = stop.Customer.RegistrationAddress.StateCode
+                            }
+                            : null,
                         municipality = stop.Municipality!.Name, stop.WeightKg,
                         stop.DistanceFromPreviousMeters, stop.DurationFromPreviousSeconds
                     }).ToList()
                 }).ToList()
             }).SingleOrDefaultAsync(cancellationToken);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    private Task<bool> HasCoordinateUpdatesAfterAsync(Guid importId, string weekday, DateTime createdAt,
+        CancellationToken cancellationToken) => db.RouteCustomerAssignments.AsNoTracking()
+        .AnyAsync(assignment => assignment.Route!.ImportId == importId &&
+            assignment.Route.Weekday == weekday &&
+            assignment.Customer!.RegistrationAddress!.Coordinate != null &&
+            assignment.Customer.RegistrationAddress.Coordinate.UpdatedAt > createdAt,
+            cancellationToken);
+
+    [HttpGet("{resultId:guid}/vehicles/{vehicleId:guid}/road-path")]
+    public async Task<ActionResult> GetVehicleRoadPath(Guid resultId, Guid vehicleId, CancellationToken cancellationToken)
+    {
+        var vehicle = await db.DailyRouteOptimizationVehicles.AsNoTracking()
+            .Where(item => item.Id == vehicleId && item.ResultId == resultId)
+            .Select(item => new
+            {
+                item.Id,
+                item.Sequence,
+                item.Result!.Weekday,
+                vehicleType = item.VehicleType!.Name,
+                Stops = item.Stops.OrderBy(stop => stop.Sequence).Select(stop => new
+                {
+                    stop.Sequence,
+                    stop.CustomerId,
+                    customerCode = stop.Customer != null ? stop.Customer.ExternalCode : null,
+                    customerName = stop.Customer != null
+                        ? stop.Customer.Snapshots.OrderByDescending(snapshot => snapshot.CreatedAt)
+                            .Select(snapshot => string.IsNullOrEmpty(snapshot.TradeName) ? snapshot.LegalName : snapshot.TradeName)
+                            .FirstOrDefault()
+                        : null,
+                    coordinate = stop.Customer != null && stop.Customer.RegistrationAddress != null
+                        ? stop.Customer.RegistrationAddress.Coordinate
+                        : null,
+                    stop.MunicipalityId,
+                    municipality = stop.Municipality!.Name
+                }).ToList()
+            }).SingleOrDefaultAsync(cancellationToken);
+        if (vehicle is null) return NotFound();
+
+        var depot = await db.LogisticsDepots.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+        if (depot is null) return Conflict(new { message = "Configure a Matriz Grespan antes de visualizar o trajeto." });
+        var stops = vehicle.Stops
+            .Where(stop => stop.coordinate != null && stop.coordinate.Latitude != null && stop.coordinate.Longitude != null)
+            .ToArray();
+        if (stops.Length == 0) return Conflict(new { message = "Este veículo não possui clientes com coordenadas exatas." });
+
+        var points = new List<RouteGeometryPoint>(stops.Length + 2)
+        {
+            new(depot.Id, depot.Name, depot.Latitude, depot.Longitude)
+        };
+        points.AddRange(stops.Select(stop => new RouteGeometryPoint(
+            stop.CustomerId ?? stop.MunicipalityId,
+            $"{stop.customerCode ?? "Cliente"} · {stop.customerName ?? stop.municipality}",
+            stop.coordinate!.Latitude!.Value,
+            stop.coordinate.Longitude!.Value)));
+        points.Add(new RouteGeometryPoint(depot.Id, depot.Name, depot.Latitude, depot.Longitude));
+
+        try
+        {
+            if (routeGeometryClient is null)
+                return Conflict(new { message = "O provedor de geometria de rotas não foi configurado." });
+            var route = await routeGeometryClient.GetRouteAsync(points, cancellationToken);
+            return Ok(new
+            {
+                id = vehicle.Id,
+                name = $"{vehicle.Weekday} · {vehicle.vehicleType} {vehicle.Sequence + 1}",
+                route.Source,
+                route.DistanceMeters,
+                route.DurationSeconds,
+                stops = route.Stops.Select((point, index) => new
+                {
+                    sequence = index,
+                    point.Id,
+                    point.Label,
+                    point.Latitude,
+                    point.Longitude,
+                    isDepot = index == 0 || index == route.Stops.Count - 1,
+                    municipalityId = stops.FirstOrDefault(stop => stop.CustomerId == point.Id)?.MunicipalityId
+                }),
+                geometry = new { type = "LineString", coordinates = route.Geometry }
+            });
+        }
+        catch (RouteGeometryException exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = exception.Message });
+        }
     }
 
     [HttpGet("{resultId:guid}/remediation")]

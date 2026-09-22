@@ -10,7 +10,7 @@ public static class GeocodingProviders
 public sealed class GeocodingOptions
 {
     public const string SectionName = "Geocoding";
-    public string Provider { get; set; } = GeocodingProviders.Google;
+    public string Provider { get; set; } = GeocodingProviders.Geoapify;
 }
 
 public sealed class GeoapifyOptions
@@ -21,4 +21,9 @@ public sealed class GeoapifyOptions
     public int TimeoutSeconds { get; set; } = 30;
     public int TransportMaximumRetries { get; set; } = 3;
     public int TransportRetryDelayMilliseconds { get; set; } = 500;
+    public int MinimumRequestIntervalMilliseconds { get; set; } = 250;
+    public int RateLimitMaximumRetries { get; set; } = 4;
+    public int RateLimitFallbackDelaySeconds { get; set; } = 5;
+    public int RateLimitMaximumDelaySeconds { get; set; } = 60;
+    public decimal MaximumSimulationDistanceMeters { get; set; } = 25_000m;
 }

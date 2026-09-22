@@ -11,7 +11,6 @@ public sealed class OperationalJobProcessingServiceCostTriggerTests
 {
     [Theory]
     [InlineData(OperationalJobCodes.DailyRouteOptimization)]
-    [InlineData(OperationalJobCodes.CustomerAddressCoordinateEnrichment)]
     [InlineData(OperationalJobCodes.MunicipalityCoordinateEnrichment)]
     public async Task CompletedDependency_QueuesRouteCostConsolidation(string jobType)
     {
@@ -32,6 +31,25 @@ public sealed class OperationalJobProcessingServiceCostTriggerTests
         Assert.Equal(routeImportId, queue.RelatedEntityId);
     }
 
+    [Theory]
+    [InlineData(OperationalJobCodes.CustomerAddressCoordinateEnrichment)]
+    [InlineData(OperationalJobCodes.CustomerCoordinateSimulation)]
+    public async Task CompletedCustomerCoordinateDependency_QueuesOptimizationBeforeCosts(string jobType)
+    {
+        await using var db = CreateDb();
+        var routeImportId = Guid.NewGuid();
+        await AddCurrentRouteImport(db, routeImportId);
+        var job = AddJob(db, jobType, Guid.NewGuid(), "{}");
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+
+        await new OperationalJobProcessingService(db, [new NoOpProcessor(jobType)], queue)
+            .ProcessAsync(job.Id, default);
+
+        Assert.Equal(OperationalJobCodes.DailyRouteOptimization, queue.JobType);
+        Assert.Equal(routeImportId, queue.RelatedEntityId);
+    }
+
     [Fact]
     public async Task CompletedCostJob_WithRerunRequested_QueuesFollowUp()
     {
@@ -48,6 +66,25 @@ public sealed class OperationalJobProcessingServiceCostTriggerTests
 
         Assert.Equal(OperationalJobCodes.RouteCostConsolidation, queue.JobType);
         Assert.Equal(routeImportId, queue.RelatedEntityId);
+    }
+
+    [Fact]
+    public async Task CompletedCoordinateSimulation_WithoutDependentRecalculation_DoesNotQueueCostJob()
+    {
+        await using var db = CreateDb();
+        var routeImportId = Guid.NewGuid();
+        await AddCurrentRouteImport(db, routeImportId);
+        var job = AddJob(db, OperationalJobCodes.CustomerCoordinateSimulation, Guid.NewGuid(),
+            "{\"action\":\"APPLY\",\"recalculateDependents\":false}");
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+
+        await new OperationalJobProcessingService(db,
+            [new NoOpProcessor(OperationalJobCodes.CustomerCoordinateSimulation)], queue)
+            .ProcessAsync(job.Id, default);
+
+        Assert.Null(queue.JobType);
+        Assert.Null(queue.RelatedEntityId);
     }
 
     private static JobExecution AddJob(ImportDbContext db, string jobType, Guid relatedEntityId,

@@ -25,6 +25,8 @@ public sealed class ApiAccessPolicyTests
     [InlineData(AppUserRoles.AdminSystem, "/api/admin/jobs", "GET", true)]
     [InlineData(AppUserRoles.AdminSystem, "/api/admin/users", "POST", true)]
     [InlineData(AppUserRoles.Admin, "/api/admin/users", "POST", false)]
+    [InlineData(AppUserRoles.AdminSystem, "/api/admin/customer-coordinate-simulations/run", "POST", true)]
+    [InlineData(AppUserRoles.Admin, "/api/admin/customer-coordinate-simulations/run", "POST", false)]
     [InlineData(AppUserRoles.Diretor, "/api/admin/users", "POST", false)]
     [InlineData(AppUserRoles.Admin, "/api/admin/knowledge-memories", "GET", true)]
     [InlineData(AppUserRoles.AdminSystem, "/api/admin/knowledge-memories/00000000-0000-0000-0000-000000000001", "DELETE", true)]

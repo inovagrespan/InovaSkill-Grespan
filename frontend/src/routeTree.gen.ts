@@ -40,6 +40,7 @@ import { Route as ConfiguracoesDepositoRouteImport } from './routes/configuracoe
 import { Route as AdministracaoWhatsappRouteImport } from './routes/administracao.whatsapp'
 import { Route as AdministracaoUsuariosRouteImport } from './routes/administracao.usuarios'
 import { Route as AdministracaoMemoriasRouteImport } from './routes/administracao.memorias'
+import { Route as AdministracaoLocalizacoesSimuladasRouteImport } from './routes/administracao.localizacoes-simuladas'
 import { Route as AdministracaoConsumoIaRouteImport } from './routes/administracao.consumo-ia'
 
 const VendasRoute = VendasRouteImport.update({
@@ -198,6 +199,12 @@ const AdministracaoMemoriasRoute = AdministracaoMemoriasRouteImport.update({
   path: '/administracao/memorias',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdministracaoLocalizacoesSimuladasRoute =
+  AdministracaoLocalizacoesSimuladasRouteImport.update({
+    id: '/administracao/localizacoes-simuladas',
+    path: '/administracao/localizacoes-simuladas',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdministracaoConsumoIaRoute = AdministracaoConsumoIaRouteImport.update({
   id: '/administracao/consumo-ia',
   path: '/administracao/consumo-ia',
@@ -226,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/simulador-whatsapp': typeof SimuladorWhatsappRoute
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
+  '/administracao/localizacoes-simuladas': typeof AdministracaoLocalizacoesSimuladasRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
   '/administracao/usuarios': typeof AdministracaoUsuariosRoute
   '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
@@ -258,6 +266,7 @@ export interface FileRoutesByTo {
   '/simulador-whatsapp': typeof SimuladorWhatsappRoute
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
+  '/administracao/localizacoes-simuladas': typeof AdministracaoLocalizacoesSimuladasRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
   '/administracao/usuarios': typeof AdministracaoUsuariosRoute
   '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
@@ -293,6 +302,7 @@ export interface FileRoutesById {
   '/simulador-whatsapp': typeof SimuladorWhatsappRoute
   '/vendas': typeof VendasRoute
   '/administracao/consumo-ia': typeof AdministracaoConsumoIaRoute
+  '/administracao/localizacoes-simuladas': typeof AdministracaoLocalizacoesSimuladasRoute
   '/administracao/memorias': typeof AdministracaoMemoriasRoute
   '/administracao/usuarios': typeof AdministracaoUsuariosRoute
   '/administracao/whatsapp': typeof AdministracaoWhatsappRoute
@@ -329,6 +339,7 @@ export interface FileRouteTypes {
     | '/simulador-whatsapp'
     | '/vendas'
     | '/administracao/consumo-ia'
+    | '/administracao/localizacoes-simuladas'
     | '/administracao/memorias'
     | '/administracao/usuarios'
     | '/administracao/whatsapp'
@@ -361,6 +372,7 @@ export interface FileRouteTypes {
     | '/simulador-whatsapp'
     | '/vendas'
     | '/administracao/consumo-ia'
+    | '/administracao/localizacoes-simuladas'
     | '/administracao/memorias'
     | '/administracao/usuarios'
     | '/administracao/whatsapp'
@@ -395,6 +407,7 @@ export interface FileRouteTypes {
     | '/simulador-whatsapp'
     | '/vendas'
     | '/administracao/consumo-ia'
+    | '/administracao/localizacoes-simuladas'
     | '/administracao/memorias'
     | '/administracao/usuarios'
     | '/administracao/whatsapp'
@@ -430,6 +443,7 @@ export interface RootRouteChildren {
   SimuladorWhatsappRoute: typeof SimuladorWhatsappRoute
   VendasRoute: typeof VendasRoute
   AdministracaoConsumoIaRoute: typeof AdministracaoConsumoIaRoute
+  AdministracaoLocalizacoesSimuladasRoute: typeof AdministracaoLocalizacoesSimuladasRoute
   AdministracaoMemoriasRoute: typeof AdministracaoMemoriasRoute
   AdministracaoUsuariosRoute: typeof AdministracaoUsuariosRoute
   AdministracaoWhatsappRoute: typeof AdministracaoWhatsappRoute
@@ -656,6 +670,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdministracaoMemoriasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/administracao/localizacoes-simuladas': {
+      id: '/administracao/localizacoes-simuladas'
+      path: '/administracao/localizacoes-simuladas'
+      fullPath: '/administracao/localizacoes-simuladas'
+      preLoaderRoute: typeof AdministracaoLocalizacoesSimuladasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/administracao/consumo-ia': {
       id: '/administracao/consumo-ia'
       path: '/administracao/consumo-ia'
@@ -720,6 +741,8 @@ const rootRouteChildren: RootRouteChildren = {
   SimuladorWhatsappRoute: SimuladorWhatsappRoute,
   VendasRoute: VendasRoute,
   AdministracaoConsumoIaRoute: AdministracaoConsumoIaRoute,
+  AdministracaoLocalizacoesSimuladasRoute:
+    AdministracaoLocalizacoesSimuladasRoute,
   AdministracaoMemoriasRoute: AdministracaoMemoriasRoute,
   AdministracaoUsuariosRoute: AdministracaoUsuariosRoute,
   AdministracaoWhatsappRoute: AdministracaoWhatsappRoute,

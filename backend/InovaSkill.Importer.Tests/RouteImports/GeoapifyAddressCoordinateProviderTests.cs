@@ -44,6 +44,26 @@ public sealed class GeoapifyAddressCoordinateProviderTests
     }
 
     [Fact]
+    public async Task FindAsync_SkipsMunicipalityCentroidWhenStreetIsRequested()
+    {
+        var handler = new Handler(HttpStatusCode.OK, """
+            {"results":[
+              {"place_id":"city","lat":-22.2137,"lon":-49.9532,
+               "formatted":"Marília, SP","city":"Marília","state_code":"SP"},
+              {"place_id":"street","lat":-22.1547,"lon":-49.9492,
+               "formatted":"Rua Sebastião Pereira, Marília, SP","street":"Rua Sebastião Pereira",
+               "city":"Marília","state_code":"SP"}]}
+            """);
+
+        var result = await Provider(handler).FindAsync(
+            new("RUA", "Sebastião Fernandes de Oliveira", null, "Vereador Ivan Negão", "Marília", "SP", null), default);
+
+        Assert.Equal("RESOLVED", result.Status);
+        Assert.Equal(-22.1547m, result.Latitude);
+        Assert.Equal("street", result.PlaceId);
+    }
+
+    [Fact]
     public async Task FindAsync_RequiresConfiguredApiKeyBeforeCallingProvider()
     {
         var handler = new Handler(HttpStatusCode.OK, "{\"results\":[]}");

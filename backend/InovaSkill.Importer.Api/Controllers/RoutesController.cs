@@ -279,7 +279,39 @@ public sealed class RoutesController(ImportDbContext dbContext, IRouteGeometryCl
                     entry.AveragePerDay,
                     entry.IsExcludedFromOptimization,
                     entry.Note
-                }).ToList()
+                }).ToList(),
+                customers = item.CustomerAssignments
+                    .Where(assignment => assignment.Customer != null)
+                    .OrderBy(assignment => item.Entries
+                        .Where(entry => entry.MunicipalityId == assignment.MunicipalityId)
+                        .Select(entry => entry.Sequence)
+                        .FirstOrDefault())
+                    .ThenBy(assignment => assignment.Customer!.ExternalCode)
+                    .Select(assignment => new
+                    {
+                        id = assignment.CustomerId,
+                        code = assignment.Customer!.ExternalCode,
+                        name = assignment.Customer.Snapshots
+                            .OrderByDescending(snapshot => snapshot.CreatedAt)
+                            .Select(snapshot => string.IsNullOrWhiteSpace(snapshot.TradeName)
+                                ? snapshot.LegalName
+                                : snapshot.TradeName)
+                            .FirstOrDefault() ?? assignment.Customer.ExternalCode,
+                        municipality = assignment.Municipality != null
+                            ? assignment.Municipality.Name
+                            : null,
+                        address = assignment.Customer.RegistrationAddress == null
+                            ? null
+                            : new
+                            {
+                                assignment.Customer.RegistrationAddress.StreetType,
+                                street = assignment.Customer.RegistrationAddress.Street,
+                                number = assignment.Customer.RegistrationAddress.Number,
+                                neighborhood = assignment.Customer.RegistrationAddress.Neighborhood,
+                                city = assignment.Customer.RegistrationAddress.City,
+                                stateCode = assignment.Customer.RegistrationAddress.StateCode
+                            }
+                    }).ToList()
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -315,6 +347,7 @@ public sealed class RoutesController(ImportDbContext dbContext, IRouteGeometryCl
             .Where(assignment => assignment.RouteId == id && assignment.Customer!.IsActive &&
                 assignment.Customer.RegistrationAddress!.Coordinate!.Status == CustomerAddressCoordinateStatuses.Resolved &&
                 assignment.Customer.RegistrationAddress.Coordinate.Precision == CustomerAddressCoordinatePrecisions.Exact &&
+                !CustomerAddressCoordinateQuality.ApproximateSources.Contains(assignment.Customer.RegistrationAddress.Coordinate.Source) &&
                 assignment.Customer.RegistrationAddress.Coordinate.Latitude != null &&
                 assignment.Customer.RegistrationAddress.Coordinate.Longitude != null)
             .Select(assignment => new
@@ -425,6 +458,7 @@ public sealed class RoutesController(ImportDbContext dbContext, IRouteGeometryCl
                 assignment.Customer!.IsActive &&
                 assignment.Customer.RegistrationAddress!.Coordinate!.Status == CustomerAddressCoordinateStatuses.Resolved &&
                 assignment.Customer.RegistrationAddress.Coordinate.Precision == CustomerAddressCoordinatePrecisions.Exact &&
+                !CustomerAddressCoordinateQuality.ApproximateSources.Contains(assignment.Customer.RegistrationAddress.Coordinate.Source) &&
                 assignment.Customer.RegistrationAddress.Coordinate.Latitude != null &&
                 assignment.Customer.RegistrationAddress.Coordinate.Longitude != null)
             .Select(assignment => new

@@ -31,6 +31,8 @@ function vehicle(overrides: Partial<SuggestedVehicle> = {}): SuggestedVehicle {
     occupancy: 8_000 / 10_300,
     distanceMeters: 1_000,
     durationSeconds: 600,
+    municipalityCount: 1,
+    deliveryCount: 0,
     stops: [],
     ...overrides,
   };
@@ -51,7 +53,7 @@ describe("sugestões otimizadas de rotas", () => {
 
   it("expõe cards, detalhe, histórico somente leitura, falha e polling compartilhado", () => {
     expect(component).toContain("suggestedRouteName");
-    expect(component).toContain("Sequência das cidades");
+    expect(component).toContain("Sequência dos clientes");
     expect(component).toContain("Snapshot histórico");
     expect(component).toContain('latestExecution?.status === "Failed"');
     expect(component).toContain("rota real mantida");
@@ -61,7 +63,14 @@ describe("sugestões otimizadas de rotas", () => {
     expect(component).toContain("Movimentação da frota");
     expect(component).toContain("JOB_STATUS_POLL_INTERVAL_MS");
     expect(component).toContain("window.setInterval");
-    expect(component).not.toContain("entrega(s)");
+    expect(component).toContain("cliente(s)");
+    expect(component).toContain("fetchDailyRouteCosts");
+    expect(component).toContain("Trecho anterior");
+    expect(component).toContain("o total da rota aparece nos indicadores acima");
+    expect(component).toContain("Gastos totais");
+    expect(component).toContain("ConsolidatedRouteTollKpi");
+    expect(component).toContain("customerName");
+    expect(component).toContain("Trecho anterior");
   });
 
   it("usa o nome da rota real e numera apenas veículos adicionais", () => {
@@ -103,6 +112,10 @@ describe("sugestões otimizadas de rotas", () => {
       additionalVehicleCount: 1,
       additionalCapacityKg: 3_300,
       totalWeightKg: 12_000,
+      issueCount: 0,
+      inheritedFromResultId: null,
+      isInherited: false,
+      isStale: false,
       createdAt: new Date().toISOString(),
     };
 

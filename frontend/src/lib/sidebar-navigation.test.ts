@@ -64,9 +64,10 @@ describe("sidebar navigation", () => {
     expect(adminItems).toContain("Consumo de IA");
     expect(adminItems).toContain("Memórias da IA");
     expect(adminItems).not.toContain("Usuários");
-    expect(adminSystemItems).toHaveLength(adminItems.length + 2);
+    expect(adminSystemItems).toHaveLength(adminItems.length + 3);
     expect(adminSystemItems).toContain("Usuários");
     expect(adminSystemItems).toContain("WhatsApp corporativo");
+    expect(adminSystemItems).toContain("Localizações simuladas");
     expect(getVisibleSidebarItemsForRole("gestor")).toEqual([]);
   });
 

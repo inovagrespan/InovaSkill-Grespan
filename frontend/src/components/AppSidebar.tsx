@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   Map,
+  MapPinned,
   MessageCircle,
   Smartphone,
   Moon,
@@ -66,6 +67,7 @@ const items = [
   { to: "/importacoes/files", label: "Importações", icon: FileUp },
   { to: "/processamentos", label: "Processamento", icon: Settings },
   { to: "/administracao/usuarios", label: "Usuários", icon: UserRoundPlus },
+  { to: "/administracao/localizacoes-simuladas", label: "Localizações simuladas", icon: MapPinned },
   { to: "/administracao/consumo-ia", label: "Consumo de IA", icon: Gauge },
   { to: "/administracao/memorias", label: "Memórias da IA", icon: Brain },
   { to: "/administracao/whatsapp", label: "WhatsApp corporativo", icon: QrCode },
@@ -76,7 +78,7 @@ const menuGroups = [
   { key: "whatsapp", label: "WhatsApp", icon: MessageCircle, paths: ["/meu-whatsapp", "/simulador-whatsapp", "/administracao/whatsapp"] },
   { key: "logistics", label: "Logística", icon: Route, paths: ["/logistica/rotas", "/logistica/relatorios-custos", "/veiculos/tipos", "/configuracoes/deposito", "/mapa", "/producao"] },
   { key: "registries", label: "Cadastros", icon: Users, paths: ["/clientes", "/notas-fiscais", "/produtos", "/estoque"] },
-  { key: "administration", label: "Administração", icon: Settings, paths: ["/importacoes/files", "/processamentos", "/administracao/usuarios"] },
+  { key: "administration", label: "Administração", icon: Settings, paths: ["/importacoes/files", "/processamentos", "/administracao/usuarios", "/administracao/localizacoes-simuladas"] },
 ] as const;
 
 export function getVisibleSidebarItemsForRole(role: string | null) {

@@ -28,7 +28,7 @@ const summary: RouteOptimizationSummary = {
   currentDistanceMeters: 0, currentDurationSeconds: 0, proposedDistanceMeters: 0,
   proposedDurationSeconds: 0, currentVehicleCount: 1, proposedVehicleCount: 0,
   additionalVehicleCount: 0, additionalCapacityKg: 0, totalWeightKg: 0,
-  inheritedFromResultId: null, isInherited: false, createdAt: "2026-09-05T12:00:00Z",
+  inheritedFromResultId: null, isInherited: false, isStale: false, createdAt: "2026-09-05T12:00:00Z",
 };
 
 function diagnostic(readOnly = false): RouteOptimizationRemediation {

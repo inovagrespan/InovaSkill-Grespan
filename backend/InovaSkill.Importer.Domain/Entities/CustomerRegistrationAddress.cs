@@ -57,6 +57,31 @@ public static class CustomerAddressCoordinateStatuses
     public const string Failed = "FAILED";
 }
 
+public static class CustomerAddressCoordinateQuality
+{
+    public static readonly string[] ApproximateSources =
+    [
+        "BRASIL_API_POSTAL_CODE",
+        "HERE_INTERPOLATED",
+        "NOMINATIM_STREET",
+        "NOMINATIM_MUNICIPALITY",
+        "GEOAPIFY_STREET",
+        "GEOAPIFY_MUNICIPALITY"
+    ];
+
+    public static bool IsExact(CustomerAddressCoordinate? coordinate) =>
+        coordinate is
+        {
+            Status: CustomerAddressCoordinateStatuses.Resolved,
+            Precision: CustomerAddressCoordinatePrecisions.Exact,
+            Latitude: not null,
+            Longitude: not null
+        } && !IsApproximateSource(coordinate.Source);
+
+    public static bool IsApproximateSource(string? source) =>
+        source is not null && ApproximateSources.Contains(source, StringComparer.OrdinalIgnoreCase);
+}
+
 public static class CustomerRegistrationAddressStatuses
 {
     public const string Resolved = "RESOLVED";

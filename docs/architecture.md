@@ -28,6 +28,108 @@ A leitura parte do snapshot atual pelo índice existente de `ImportId`; como o
 arquivo pode omitir zeros à esquerda, a comparação final ocorre em memória sobre
 esse conjunto já delimitado. Não foi criado índice especializado adicional.
 
+## Localizações simuladas de clientes
+
+A rota `/administracao/localizacoes-simuladas` e os contratos em
+`/api/admin/customer-coordinate-simulations` são exclusivos de `admin_system`.
+Eles preenchem, para validação operacional dos cálculos, clientes do snapshot
+atual que ainda não possuam coordenada `EXACT`. A ação cria um
+`CUSTOMER_COORDINATE_SIMULATION` em `job_executions`; busca e reversão são
+processadas pelo Worker e acompanhadas na Central de Processamentos, sem fila ou
+monitoramento paralelo.
+
+O Worker usa a coordenada aproximada do endereço como ponto-base e recorre à
+coordenada municipal quando necessário. O provedor selecionado em
+`Geocoding:Provider` é consultado no ponto e em sondagens determinísticas
+próximas. No padrão `Geoapify`, somente um resultado predial/endereço
+(`building`, `residential`, `house`, `street` ou tipos comerciais equivalentes)
+com endereço formatado, município e UF compatíveis e distância máxima de 25 km
+pode ser ativado; o provedor pode não informar número para um endereço residencial,
+mas a coordenada ainda precisa ser única.
+No Google, permanecem obrigatórios `street_address` e granularidade `ROOFTOP`.
+Quando a sondagem reversa não encontra ponto novo e o cliente possui logradouro
+cadastrado, o Worker também consulta o geocodificador de endereço configurado
+usando esse logradouro, número, bairro e CEP. O retorno só é aceito após as
+mesmas validações de município, UF, distância e unicidade; assim uma falha do
+reverse não transforma automaticamente um cliente em pendente.
+Para clientes sem endereço cadastral, o Geoapify Places também recebe uma consulta
+municipal por categorias de lugares e imóveis, incluindo `building.residential`,
+`building.commercial`, `building.industrial`, `building.public_and_civil`,
+`building.transportation`, `service`, `commercial` e `catering`
+(uma vez por município na execução). Essas
+categorias concentram a maior cobertura de imóveis e estabelecimentos; o pool
+mínimo é ampliado para não esgotar uma única categoria quando já existem centenas
+de coordenadas simuladas na cidade;
+os resultados são deduplicados por coordenada antes da distribuição determinística.
+e seleciona estabelecimentos, lojas, prédios ou endereços retornados pelo catálogo,
+desde que tenham texto de endereço/identificação, município e UF compatíveis e
+estejam dentro do limite configurado de 25 km. A origem é persistida como
+`GEOAPIFY_CITY_ADDRESS`. O município e a UF continuam obrigatórios, evitando
+aceitar imóvel de outra cidade apenas por ampliar o raio.
+Como último fallback para esses clientes, o Worker consulta o Overpass do
+OpenStreetMap por edificações reais no raio municipal, usando o centroide da
+cidade apenas como referência espacial. Os centróides de edificações retornados
+são filtrados pelo raio ampliado e pela unicidade; nenhuma posição é calculada ou
+deslocada artificialmente.
+Se o catálogo Overpass não responder ou não tiver cobertura, o Photon (Komoot)
+é consultado como segunda fonte pública, aceitando somente resultados com
+município compatível e coordenada dentro do raio configurado.
+Na comparação municipal, acentos e caixa são ignorados e a equivalência
+ortográfica brasileira `CH`/`X` é aceita para corrigir variantes do provedor
+(por exemplo, `Echaporã`/`Exaporã`); UF e limite geográfico continuam obrigatórios.
+O cliente HTTP do Worker usa conexão IPv4 explícita para evitar falhas de
+conectividade dual-stack no ambiente local. O gate compartilhado do Geoapify limita o processo a quatro consultas por
+segundo e aplica retry exponencial para HTTP 429. O Nominatim público não é
+aceito nesse fluxo porque sua política proíbe sondagem sistemática. Ausência de
+chave, ponto-base ou resultado válido nunca gera coordenada inventada: o cliente
+permanece pendente e o motivo compõe o resultado do job.
+
+Clientes CPF sem endereço cadastral recebem, somente quando o provedor confirma
+um imóvel substituto, um registro técnico contendo apenas documento, município e
+UF conhecidos, com origem `COORDINATE_SIMULATION`. A auditoria marca que esse
+registro foi criado pela simulação para que a reversão também o remova; rua e
+número cadastrais nunca são inventados nem copiados do imóvel substituto. O
+histórico referencia diretamente o cliente e mantém a referência opcional ao
+endereço, permitindo apagar esse registro técnico sem perder a auditoria.
+
+Um resultado aceito substitui a coordenada ativa com origem específica do
+provedor (`GEOAPIFY_CITY_ADDRESS`, `GEOAPIFY_SIMULATED_NEARBY`,
+`OPENSTREETMAP_CITY_ADDRESS`, `PHOTON_CITY_ADDRESS` ou `GOOGLE_SIMULATED_NEARBY`), estado
+`RESOLVED` e precisão `EXACT`. Isso é
+intencionalmente transparente para mapas e consolidação de custos, mas a tela
+administrativa mantém o aviso de que o ponto é substituto. Cada aplicação é
+registrada em `customer_coordinate_simulation_audits`, incluindo estado anterior
+completo, ponto-base, resultado, origem do provedor, Place ID, distância, usuário e execução. A
+reversão restaura exatamente o estado anterior e rejeita registros cuja
+coordenada ativa tenha sido alterada depois da simulação.
+
+O preenchimento mantém um conjunto de coordenadas exatas já ocupadas e rejeita
+qualquer resultado que repita latitude/longitude de outro cliente; o candidato
+fica pendente para não inventar um deslocamento artificial. A otimização continua
+operando por cliente, mas a tela de sugestão exibe município, código do cliente e
+endereço cadastral para que paradas do mesmo município não pareçam duplicações.
+Fontes históricas de CEP, logradouro, município e interpolação continuam sendo
+tratadas como aproximações mesmo quando uma versão antiga persistiu `Precision =
+EXACT`; elas podem voltar ao fluxo de simulação. A matriz rodoviária também rejeita
+coordenadas repetidas entre clientes, em vez de produzir trechos falsos de `0 km /
+0 min`, e a execução fica pendente até que os pontos sejam distintos.
+Sondagens sem candidato são memorizadas por ponto-base durante a execução para
+evitar repetir chamadas externas idênticas sem alterar o limite do provedor.
+
+Antes de iniciar o preenchimento, a tela exige que `admin_system` escolha entre
+somente aplicar as coordenadas ou também atualizar os cálculos dependentes. Com
+`recalculateDependents=true`, conclusões de aplicação e reversão solicitam
+`DAILY_ROUTE_OPTIMIZATION` para o snapshot atual de rotas. A conclusão da
+otimização encadeia `ROUTE_COST_CONSOLIDATION`; com `false`, nenhum job dependente
+é encadeado. Mapas e consultas diretas refletem a coordenada sem
+reprocessamento. O fingerprint existente detecta a mudança de
+coordenadas e substitui atomicamente o snapshot materializado de custos. A
+auditoria possui índice por `JobExecutionId` e índice parcial único por endereço
+enquanto `RevertedAt` é nulo. A seleção de candidatos parte do índice existente
+de `CustomerSnapshot.ImportId`; não foi criado índice de precisão porque a
+consulta já está restrita ao único snapshot publicado e a escrita dessas
+coordenadas é pouco frequente.
+
 Este documento é o mapa arquitetural do repositório. Ele descreve os limites entre
 as aplicações, as dependências permitidas e os principais fluxos de execução.
 Detalhes exclusivos da importação de rotas estão em
@@ -297,15 +399,79 @@ modo somente leitura. A tela alterna entre `Rotas reais` e `Sugestões`, com
 filtros compartilhados de data e dia da semana. O dia é enviado tanto para
 `GET /api/routes` quanto para `GET /api/route-optimizations`, mantendo a seleção
 ao alternar a visão. As sugestões mantêm cards equivalentes aos reais,
-agrupados por dia, e o detalhe informa sequência municipal, peso por parada,
-distância, duração, veículo adicional e ociosidade. Como o problema usa blocos
-municipais, a interface não apresenta contagem de entregas inventada.
+agrupados por dia, e o detalhe informa a sequência de clientes, município, peso
+atribuído à parada, distância, duração, veículo adicional e ociosidade. O
+problema usa um nó por cliente vinculado à rota e exige coordenada `EXACT`; a
+matriz rodoviária e o OR-Tools deixam de usar o centro municipal. Como a fonte
+de rotas contém peso médio apenas por município, o Worker distribui esse peso
+em gramas igualmente entre os clientes vinculados ao município, atribuindo o
+resto determinística e unitariamente pela ordem do código externo. Essa regra
+preserva exatamente a carga total e deve ser substituída por demanda individual
+quando essa granularidade passar a existir na fonte de dados.
+Na interface, cada veículo distingue `deliveryCount` (clientes/paradas) de
+`municipalityCount` (municípios distintos); uma parada municipal sem cliente
+vinculado é ignorada, pois não existe entrega concreta para roteirizar.
+Antes do cálculo, o Worker sincroniza os vínculos inferidos usando o snapshot
+publicado, inclusive os clientes marcados como inativos: quando não existe uma
+planilha de associação publicada, cada entrada municipal seleciona de forma
+determinística no máximo a quantidade de `Deliveries` informada na própria
+entrada. A seleção é ordenada pelo código externo e não repete o mesmo cliente
+em outra rota do mesmo dia; portanto, essa relação continua identificada como
+simulação e não como vínculo operacional oficial. Se não houver clientes
+distintos suficientes, somente os disponíveis são associados, sem inventar
+clientes ou repetir pontos. O peso diário da rota representa histórico
+operacional e não pode perder uma cidade apenas pelo estado comercial atual do
+cadastro. Paradas com carga zero não entram na matriz nem bloqueiam o dia; peso
+negativo continua sendo erro de entrada explícito.
+Quando existe uma planilha de associação publicada, seus vínculos comprovados
+prevalecem, mas a fonte é tratada como sobreposição parcial: cada rota e município
+é limitado à soma de `Deliveries` das entradas correspondentes. Os vínculos
+importados são consumidos primeiro, sem repetir cliente no mesmo dia; os slots
+restantes usam a mesma seleção municipal determinística. Assim, uma planilha que
+traga linhas duplicadas, clientes não identificáveis ou mais mercados que a rota
+operacional não aumenta artificialmente a quantidade de entregas nem transforma
+um conflito em uma atribuição silenciosa.
+Até 200 blocos, a seleção de frota usa o modelo exato CP-SAT. Acima desse limite,
+usa alocação determinística best-fit decrescente para construir rapidamente uma
+solução viável, abrindo primeiro os veículos de maior capacidade e preferindo um
+veículo existente quando a capacidade empata; o Routing Solver ainda otimiza a
+sequência a partir dessa solução inicial dentro do timeout configurado. O objetivo
+principal é minimizar a quantidade de veículos ativos, depois a quantidade de
+veículos adicionais e, por fim, a capacidade adicional. A etapa de roteirização
+aplica uma penalidade fixa superior à variação máxima de distância para veículos
+adicionais, preservando esse dimensionamento. Veículos não selecionados não são
+persistidos como rotas ociosas; resultados históricos que já contenham veículos
+sem carga continuam legíveis sem serem contabilizados em `ProposedVehicleCount`.
 Ao clicar em uma rota real, o detalhe consulta `GET /api/routes/{id}/road-path` e
 exibe o percurso rodoviário no mapa, incluindo origem, paradas, retorno ao depósito,
 distância e duração, com estados próprios de carregamento e erro. O detalhe não
 exibe mais o apoio à decisão local; apresenta quilometragem, tempo para concluir e
 o último custo consolidado retornado por `GET /api/routes/{id}/cost`.
+O contrato `GET /api/routes/{id}` também retorna `customers`, ordenados pela sequência
+municipal da rota e pelo código externo, com nome, código, município e endereço cadastral;
+assim a lista operacional mostra quem receberá a entrega, mantendo as cidades apenas como
+contexto e fallback quando não houver vínculo de cliente.
 Combustível, pedágio e total não são recalculados pelo frontend.
+Nas sugestões otimizadas, cada veículo também possui mapa próprio: o detalhe chama
+`GET /api/route-optimizations/{resultId}/vehicles/{vehicleId}/road-path`, usando a
+sequência persistida de clientes exatos, a Matriz e o retorno ao depósito. Assim,
+rotas diferentes não são misturadas em um mapa municipal agregado. O modal das
+sugestões mantém a mesma composição do detalhe de rota real: indicadores de
+quilometragem, duração, combustível, pedágio (com abertura das praças), gasto total,
+carga, ocupação, entregas e cidades. O custo do veículo sugerido é localizado por
+`optimizationVehicleId` no cenário `OPTIMIZED` de `GET /api/route-costs`.
+Na sequência, os valores à direita são explicitamente rotulados como `Trecho anterior`;
+eles representam apenas o deslocamento entre a parada anterior e a atual (na primeira,
+da Matriz até o cliente), e não o total da rota. Um trecho `0 m / 0 min` significa que
+a matriz rodoviária identificou os dois pontos como a mesma localização; o total sempre
+fica nos indicadores da rota.
+Clientes distintos que compartilham uma coordenada oficial são mantidos na mesma
+matriz (podem ter trecho zero, pois representam o mesmo endereço real). Se o OSRM
+retornar zero para pontos com coordenadas diferentes, o serviço substitui somente
+esse par por distância haversine e duração na velocidade de fallback configurada,
+sem interromper toda a otimização. O mesmo fallback é aplicado quando o provedor
+retorna um valor positivo submétrico que seria arredondado para `0 m / 0 min` na
+persistência; coordenadas distintas nunca produzem um trecho nulo por arredondamento.
 As rotas também persistem o horário de saída (`DepartureTime`) como horário local
 opcional, importado do arquivo operacional de horários e exposto nas listagens e
 no detalhe. O vínculo usa dia da semana e nome normalizado; nomes compostos são
@@ -368,13 +534,14 @@ capacidade e a soma das parcelas deve conservar exatamente a carga municipal.
 A frota inicial é composta pelos veículos das
 rotas daquele dia; quando ela for insuficiente, a simulação poderá acrescentar
 instâncias virtuais de tipos cadastrados com capacidade válida, sem criar
-cadastros ou alterar o snapshot. Entre soluções que acrescentem a mesma
-quantidade de veículos, prevalece a menor capacidade total adicional. Assim, um
-excedente que caiba em Acelo não deve provocar a escolha de um Toco, desde que a
-indivisibilidade dos blocos seja respeitada. Distância, duração e equilíbrio de
-ocupação são avaliados somente depois dessas restrições de viabilidade e
-dimensionamento da frota. O CP-SAT minimiza primeiro a quantidade e depois a
-capacidade dos veículos adicionais, com quebra de simetria entre instâncias
+cadastros ou alterar o snapshot. A seleção minimiza primeiro a quantidade total
+de veículos ativos, depois a quantidade de adicionais e, entre empates, a
+capacidade adicional. Assim, veículos pequenos não ficam ativos apenas para
+preservar uma frota maior quando um conjunto menor de caminhões comporta a mesma
+carga, mas um tipo adicional só é preferido quando reduz a quantidade ativa ou
+resolve a capacidade. Distância, duração e equilíbrio de ocupação são avaliados
+somente depois dessas restrições de viabilidade e dimensionamento da frota. O
+CP-SAT aplica essa ordem lexicográfica, com quebra de simetria entre instâncias
 virtuais equivalentes. A atribuição viável encontrada é convertida em solução
 inicial do Routing Solver; se a busca rodoviária atingir o timeout, essa
 solução continua disponível em vez de ser descartada. Antes da persistência, um
@@ -404,9 +571,10 @@ dos insumos evita trabalho quando nada mudou. Falha técnica não remove o últi
 snapshot válido.
 
 O cenário `ACTUAL` usa depósito e clientes com coordenadas cadastrais exatas. O
-cenário `OPTIMIZED` usa a sequência municipal já persistida pelo solver canônico
-em `daily_route_optimization_results`; não consulta o fluxo legado de
-`ResultJson`. As bases são comparáveis somente no nível agregado do dia e não
+cenário `OPTIMIZED` usa a sequência de clientes exatos persistida pelo solver
+canônico em `daily_route_optimization_results`; resultados históricos que ainda
+possuem sequência municipal continuam legíveis. O cálculo não consulta o fluxo
+legado de `ResultJson`. As bases são comparáveis somente no nível agregado do dia e não
 estabelecem correspondência 1:1 entre rota real e veículo sugerido. Ausência de
 coordenada exata, diesel, eixos, consumo ou resultado do solver produz item
 indisponível com motivo explícito, sem estimativa inventada.
@@ -418,16 +586,26 @@ integrações rodoviárias. Litros usam três casas e valores monetários duas, 
 leituras são expostas por `GET /api/route-costs?date=&weekday=` e
 `GET /api/routes/{id}/cost`.
 
+`route_cost_items.OptimizationResultId` e `OptimizationVehicleId` são referências
+opcionais com `ON DELETE SET NULL`: ao substituir uma otimização diária, o snapshot de custo
+histórico permanece auditável e apenas perde os vínculos com o resultado removido.
+Isso evita que uma consolidação antiga impeça a reotimização do mesmo dia.
+
 `IOsrmTableClient` consulta `/table/v1/driving` com `duration,distance`, preserva
 custos direcionais e divide matrizes grandes em blocos configuráveis de
 `sources × destinations`. Para o OpenRouteService, o corpo usa pares numéricos
 `[longitude, latitude]` em `locations`, índices como strings em `sources` e
 `destinations` e a chave diretamente no cabeçalho `Authorization`, conforme o
 contrato v2. O cliente recompõe o resultado na ordem original e rejeita timeout,
-erro HTTP, resposta vazia, dimensão divergente, valor negativo, `null` ou trecho
-inalcançável. Não existe fallback geográfico nem persistência paralela de
-matrizes. A configuração `Osrm` define URL base, timeout, tamanho do bloco e
-paralelismo máximo.
+erro HTTP, resposta vazia ou dimensão divergente. Valor negativo ou `null` que o
+provedor não tenha resolvido. Para pares desconectados no grafo público, envia
+`fallback_speed` configurável (50 km/h por padrão). Se o servidor público ainda
+devolver um par nulo sem marcá-lo, o cliente calcula distância haversine e duração
+na mesma velocidade somente para esse par. Toda matriz que usar qualquer dessas
+estimativas é marcada como
+`OSRM_TABLE_DRIVING_WITH_GEOGRAPHIC_FALLBACK`, mantendo a aproximação visível.
+Não há persistência paralela de matrizes. A configuração `Osrm` define URL base,
+timeout, tamanho do bloco, paralelismo máximo e velocidade do fallback.
 
 O depósito possui índice único sobre a chave singleton, suficiente para leitura
 e atualização do único registro. A montagem diária reutiliza os índices já
@@ -559,8 +737,9 @@ custo de escrita sem atender ao padrão real de acesso.
 
 O contrato `ICustomerAddressCoordinateProvider` isola o provedor externo. A
 seção `Geocoding:Provider` seleciona explicitamente `Google`, `Geoapify` ou
-`Nominatim`. O Google é a configuração padrão e recorre ao Nominatim quando
-`GOOGLE_MAPS_API_KEY` não está preenchida. O Geoapify usa a Geocoding API em
+`Nominatim`. O Geoapify é a configuração padrão. O Google recorre ao Nominatim
+no enriquecimento cadastral quando `GOOGLE_MAPS_API_KEY` não está preenchida;
+esse fallback não se aplica à simulação por sondagem. O Geoapify usa a Geocoding API em
 `Geoapify:BaseUrl`, restringe resultados ao Brasil e exige a chave em
 `Geoapify:ApiKey`; a chave é fornecida por user-secrets no desenvolvimento ou
 pela variável `GEOAPIFY_API_KEY` no Docker e não é versionada. Município, UF e,
@@ -1043,12 +1222,13 @@ backend com testes automatizados dedicados.
 `get_route_customers` prepara o contrato de vínculo cliente-rota. Enquanto não
 existir arquivo ou cadastro manual de associação entre cliente e rota, o
 backend materializa uma associação simulada em `route_customer_assignments`:
-todo cliente ativo do snapshot atual cujo município está entre as cidades
-reconhecidas da rota atual é vinculado à rota com origem
-`InferredByMunicipality`. A resposta identifica essa origem com descrição
-explícita de que é uma inferência por município. Quando a associação manual
-existir no domínio, ela deve reutilizar a mesma tabela e o mesmo contrato
-externo, alterando apenas a origem do vínculo para `Manual` ou `Imported`.
+para cada entrada municipal, seleciona no máximo a quantidade de `Deliveries`
+do snapshot atual, em ordem determinística pelo código externo, sem repetir um
+cliente em outra rota do mesmo dia. A resposta identifica essa origem com
+descrição explícita de que é uma inferência limitada pela quantidade de
+entregas da entrada. Quando a associação manual existir no domínio, ela deve
+reutilizar a mesma tabela e o mesmo contrato externo, alterando apenas a origem
+do vínculo para `Manual` ou `Imported`.
 
 `IRouteChatQueryService` e `IBusinessChatQueryService`, em
 `Application/RouteImports`, definem DTOs pequenos e seguros para exposição ao
@@ -1618,6 +1798,32 @@ como fallback quando o primeiro retorna erro, inclusive limite de requisições
 (HTTP 429). Consultas em lote da tela de custos são serializadas para evitar
 rajadas contra o provedor externo. Rotas sem paradas distintas da Matriz não
 geram consulta externa e ficam marcadas como percurso indisponível.
+Os clientes HTTP do OSRM enviam `Osrm:UserAgent`; a matriz divide clientes em
+blocos configuráveis para respeitar o limite de coordenadas por chamada. Após a
+resposta, a matriz também rejeita distância ou duração zero entre clientes com
+coordenadas diferentes; somente a diagonal e pontos realmente coincidentes
+podem ser zero.
+
+Uma sugestão de otimização é válida somente enquanto as coordenadas usadas no
+cálculo permanecerem inalteradas. A API compara `UpdatedAt` das coordenadas dos
+clientes do mesmo snapshot/dia com `DailyRouteOptimizationResult.CreatedAt`;
+quando há alteração posterior, a listagem marca `isStale=true` e o detalhe
+recusa a leitura da rota antiga. O frontend não carrega mapa, ordem ou custos de
+uma sugestão obsoleta e orienta novo processamento. Isso evita exibir trechos
+zero artificiais de uma matriz calculada antes do preenchimento de endereços.
+
+O solver também impõe uma jornada máxima rígida de 10 horas por veículo. O limite
+inclui o tempo rodoviário da matriz e 15 minutos configuráveis de atendimento por
+cliente (`RouteOptimization:ServiceTimePerStopMinutes`), somados uma vez por
+parada, além do retorno ao depósito. Rotas de até 8 horas são preferidas pelo
+objetivo por meio de uma penalidade suave, sem criar veículos ociosos apenas para
+cumprir a preferência. A dimensão `WorkDuration` do OR-Tools impede que uma rota
+proposta ultrapasse o limite; quando a frota mínima por carga não comporta a
+jornada, veículos adicionais são testados até encontrar uma distribuição viável
+ou retornar `Infeasible`; há no máximo três tentativas de reparo por dia para
+evitar bloquear a Central de Processamentos em buscas repetidas. O tempo exibido no total da rota inclui atendimento,
+enquanto cada trecho continua exibindo somente o deslocamento rodoviário. A
+configuração aceita de 1 a 10 horas e mantém 8 horas como preferência operacional.
 
 ### Relatório de custos da logística
 
@@ -1627,7 +1833,11 @@ O frontend permite alternar a periodicidade diária/semanal e o agrupamento por 
 ou tipo de veículo e os cenários real/otimizado. Todos os totais vêm de
 `GET /api/route-costs`; o relatório exibe data do cálculo, diesel, versão
 tarifária, base do percurso e indisponibilidades. O custo atual usa clientes
-exatos e o otimizado usa blocos municipais, diferença mantida visível.
+exatos e o cenário otimizado novo também percorre clientes exatos, identificado
+por `OPTIMIZED_CUSTOMERS`. Resultados históricos municipais continuam legíveis
+como `OPTIMIZED_MUNICIPALITIES`. Quando uma consolidação combina mais de uma
+base no mesmo cenário, a API retorna `MIXED` em `pathBasis`, evitando assumir
+uma única origem e mantendo o relatório disponível.
 
 `vehicle_types` armazena eixos e as eficiências mínima/máxima em km/L. Eixos
 aceitos ficam entre 2 e 9, consumos são positivos e o mínimo não supera o

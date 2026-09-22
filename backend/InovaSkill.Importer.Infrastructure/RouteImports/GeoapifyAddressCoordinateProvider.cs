@@ -98,6 +98,16 @@ public sealed class GeoapifyAddressCoordinateProvider(
         var payload = await response.Content.ReadFromJsonAsync<GeoapifyResponse>(cancellationToken);
         var results = payload?.Results ?? [];
         var compatibleResults = results.Where(result => IsCompatibleMunicipality(result, query)).ToArray();
+        // O geocodificador frequentemente retorna o centroide municipal antes
+        // do logradouro. Quando já existe um ponto nesse centroide, aceitar o
+        // primeiro item esgota o fallback sem tentar um endereço real distinto.
+        // Para consultas que possuem logradouro, priorizamos resultados que
+        // também identificam o logradouro ou o imóvel.
+        if (!string.IsNullOrWhiteSpace(query.Street))
+            compatibleResults = compatibleResults
+                .Where(result => !string.IsNullOrWhiteSpace(result.Street) ||
+                    !string.IsNullOrWhiteSpace(result.HouseNumber))
+                .ToArray();
         var result = requireHouseNumber
             ? compatibleResults.FirstOrDefault(item => SameText(item.HouseNumber, query.Number))
             : compatibleResults.FirstOrDefault();
@@ -190,6 +200,7 @@ public sealed class GeoapifyAddressCoordinateProvider(
         [property: JsonPropertyName("lat")] decimal? Latitude,
         [property: JsonPropertyName("lon")] decimal? Longitude,
         [property: JsonPropertyName("formatted")] string? Formatted,
+        [property: JsonPropertyName("street")] string? Street,
         [property: JsonPropertyName("housenumber")] string? HouseNumber,
         [property: JsonPropertyName("city")] string? City,
         [property: JsonPropertyName("municipality")] string? Municipality,

@@ -4,6 +4,7 @@ public static class OsrmMatrixPointTypes
 {
     public const string Depot = "Depot";
     public const string Municipality = "Municipality";
+    public const string Customer = "Customer";
 }
 
 public sealed record OsrmMatrixPoint(

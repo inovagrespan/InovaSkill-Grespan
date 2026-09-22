@@ -21,10 +21,26 @@ public sealed class OsrmTableClientTests
         Assert.Contains("-49.95,-22.217", handler.Paths.Single());
         Assert.Contains("-49.9,-22.2", handler.Paths.Single());
         Assert.Contains("annotations=duration,distance", handler.Paths.Single());
+        Assert.Contains("fallback_speed=50", handler.Paths.Single());
         Assert.Equal(10m, result.DurationsSeconds[0][1]);
         Assert.Equal(20m, result.DurationsSeconds[1][0]);
         Assert.Equal(250m, result.DistancesMeters[1][0]);
         Assert.Equal("OSRM_TABLE_DRIVING", result.Source);
+    }
+
+    [Fact]
+    public async Task GetTableAsync_MarksMatrixWhenOsrmUsesGeographicFallbackCells()
+    {
+        var handler = new RecordingHandler(_ => """
+            {"code":"Ok","durations":[[0,10],[20,0]],"distances":[[0,null],[250,0]],
+             "fallback_speed_cells":[[0,1]]}
+            """);
+
+        var result = await Client(handler, blockSize: 10)
+            .GetTableAsync(Request(), CancellationToken.None);
+
+        Assert.Equal("OSRM_TABLE_DRIVING_WITH_GEOGRAPHIC_FALLBACK", result.Source);
+        Assert.InRange(result.DistancesMeters[0][1], 5_000m, 6_000m);
     }
 
     [Fact]
@@ -56,7 +72,6 @@ public sealed class OsrmTableClientTests
     }
 
     [Theory]
-    [InlineData("{\"code\":\"Ok\",\"durations\":[[0,null],[1,0]],\"distances\":[[0,1],[1,0]]}")]
     [InlineData("{\"code\":\"Ok\",\"durations\":[[0]],\"distances\":[[0]]}")]
     [InlineData("{\"code\":\"NoTable\"}")]
     public async Task GetTableAsync_RejectsIncompleteOrInvalidResponses(string json)
@@ -64,6 +79,21 @@ public sealed class OsrmTableClientTests
         var exception = await Assert.ThrowsAsync<OsrmTableException>(() =>
             Client(new RecordingHandler(_ => json), 10).GetTableAsync(Request(), CancellationToken.None));
         Assert.NotEmpty(exception.Message);
+    }
+
+    [Fact]
+    public async Task GetTableAsync_UsesExplicitFallbackForUnmarkedNullCell()
+    {
+        var handler = new RecordingHandler(_ => """
+            {"code":"Ok","durations":[[0,null],[20,0]],"distances":[[0,null],[250,0]]}
+            """);
+
+        var result = await Client(handler, blockSize: 10)
+            .GetTableAsync(Request(), CancellationToken.None);
+
+        Assert.Equal("OSRM_TABLE_DRIVING_WITH_GEOGRAPHIC_FALLBACK", result.Source);
+        Assert.InRange(result.DistancesMeters[0][1], 5_000m, 6_000m);
+        Assert.InRange(result.DurationsSeconds[0][1], 350m, 450m);
     }
 
     [Fact]

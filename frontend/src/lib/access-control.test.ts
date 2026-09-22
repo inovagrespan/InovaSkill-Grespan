@@ -18,6 +18,8 @@ describe("access control", () => {
     ["vendas", "/logistica/relatorios-custos", false],
     ["admin", "/processamentos", true],
     ["admin_system", "/importacoes/files", true],
+    ["admin_system", "/administracao/localizacoes-simuladas", true],
+    ["admin", "/administracao/localizacoes-simuladas", false],
   ])("%s acessando %s retorna %s", (role, path, expected) => {
     expect(canRoleAccessPath(role, path)).toBe(expected);
   });

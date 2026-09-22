@@ -21,6 +21,7 @@ const ROUTE_REMEDIATION_ROLES: readonly ApplicationRole[] = ["diretor", "vendas"
 const NAVIGATION_ACCESS: readonly NavigationAccess[] = [
   { path: "/administracao/usuarios", roles: SYSTEM_ADMIN_ROLES },
   { path: "/administracao/whatsapp", roles: SYSTEM_ADMIN_ROLES },
+  { path: "/administracao/localizacoes-simuladas", roles: SYSTEM_ADMIN_ROLES },
   { path: "/administracao/consumo-ia", roles: ADMIN_ROLES },
   { path: "/administracao/memorias", roles: ADMIN_ROLES },
   { path: "/assistente", roles: ALL_ROLES },

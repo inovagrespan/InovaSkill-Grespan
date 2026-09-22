@@ -31,6 +31,7 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
     public DbSet<DailyRouteOptimizationIssue> DailyRouteOptimizationIssues => Set<DailyRouteOptimizationIssue>();
     public DbSet<CustomerRegistrationAddress> CustomerRegistrationAddresses => Set<CustomerRegistrationAddress>();
     public DbSet<CustomerAddressCoordinate> CustomerAddressCoordinates => Set<CustomerAddressCoordinate>();
+    public DbSet<CustomerCoordinateSimulationAudit> CustomerCoordinateSimulationAudits => Set<CustomerCoordinateSimulationAudit>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerSnapshot> CustomerSnapshots => Set<CustomerSnapshot>();
     public DbSet<RouteCustomerAssignment> RouteCustomerAssignments => Set<RouteCustomerAssignment>();
@@ -417,8 +418,8 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasIndex(x => x.OptimizationResultId);
             entity.HasOne(x => x.Snapshot).WithMany(x => x.Items).HasForeignKey(x => x.SnapshotId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Route).WithMany().HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.OptimizationResult).WithMany().HasForeignKey(x => x.OptimizationResultId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.OptimizationVehicle).WithMany().HasForeignKey(x => x.OptimizationVehicleId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.OptimizationResult).WithMany().HasForeignKey(x => x.OptimizationResultId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.OptimizationVehicle).WithMany().HasForeignKey(x => x.OptimizationVehicleId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.VehicleType).WithMany().HasForeignKey(x => x.VehicleTypeId).OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -535,8 +536,10 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.Property(x => x.DistanceFromPreviousMeters).HasPrecision(18, 3);
             entity.Property(x => x.DurationFromPreviousSeconds).HasPrecision(18, 3);
             entity.HasIndex(x => new { x.VehicleId, x.Sequence }).IsUnique();
+            entity.HasIndex(x => x.CustomerId);
             entity.HasOne(x => x.Vehicle).WithMany(x => x.Stops).HasForeignKey(x => x.VehicleId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Municipality>(entity =>
@@ -652,6 +655,47 @@ public sealed class ImportDbContext(DbContextOptions<ImportDbContext> options) :
             entity.HasOne(x => x.CustomerRegistrationAddress).WithOne(x => x.Coordinate)
                 .HasForeignKey<CustomerAddressCoordinate>(x => x.CustomerRegistrationAddressId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CustomerCoordinateSimulationAudit>(entity =>
+        {
+            entity.ToTable("customer_coordinate_simulation_audits");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OriginalNormalizedAddress).HasMaxLength(1024);
+            entity.Property(x => x.OriginalSource).HasMaxLength(64);
+            entity.Property(x => x.OriginalStatus).HasMaxLength(32);
+            entity.Property(x => x.OriginalPrecision).HasMaxLength(32);
+            entity.Property(x => x.OriginalLatitude).HasPrecision(9, 6);
+            entity.Property(x => x.OriginalLongitude).HasPrecision(9, 6);
+            entity.Property(x => x.OriginalProviderPlaceId).HasMaxLength(512);
+            entity.Property(x => x.OriginalDisplayName).HasMaxLength(1024);
+            entity.Property(x => x.OriginalFailureReason).HasMaxLength(1024);
+            entity.Property(x => x.BaseLatitude).HasPrecision(9, 6);
+            entity.Property(x => x.BaseLongitude).HasPrecision(9, 6);
+            entity.Property(x => x.BaseSource).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.SimulatedLatitude).HasPrecision(9, 6);
+            entity.Property(x => x.SimulatedLongitude).HasPrecision(9, 6);
+            entity.Property(x => x.SimulatedSource).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.ProviderPlaceId).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.DisplayName).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.DistanceMeters).HasPrecision(12, 3);
+            entity.HasIndex(x => x.JobExecutionId);
+            entity.HasIndex(x => x.CustomerRegistrationAddressId)
+                .IsUnique().HasFilter("\"RevertedAt\" IS NULL");
+            entity.HasIndex(x => new { x.SimulatedLatitude, x.SimulatedLongitude })
+                .IsUnique().HasFilter("\"RevertedAt\" IS NULL");
+            entity.HasOne(x => x.JobExecution).WithMany().HasForeignKey(x => x.JobExecutionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CustomerRegistrationAddress).WithMany()
+                .HasForeignKey(x => x.CustomerRegistrationAddressId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.AppliedByUser).WithMany().HasForeignKey(x => x.AppliedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.RevertedByUser).WithMany().HasForeignKey(x => x.RevertedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.RevertJobExecution).WithMany().HasForeignKey(x => x.RevertJobExecutionId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<RouteCustomerAssignment>(entity =>

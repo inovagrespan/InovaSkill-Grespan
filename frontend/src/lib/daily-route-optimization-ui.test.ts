@@ -21,8 +21,13 @@ describe("otimização diária de rotas", () => {
 
   it("abre o detalhe da rota otimizada com mapa e explicação das mudanças", () => {
     expect(simulation).toContain("Detalhes da sugestão");
-    expect(simulation).toContain("Sequência das cidades");
+    expect(simulation).toContain("Sequência dos clientes");
+    expect(simulation).toContain("fetchOptimizedVehicleRoadPath");
+    expect(simulation).toContain("RouteRoadMap");
     expect(simulation).toContain("Distância");
     expect(simulation).toContain("Duração");
+    expect(simulation).toContain("Gasto estimado com combustível");
+    expect(simulation).toContain("Gastos totais");
+    expect(simulation).toContain("Trecho anterior");
   });
 });

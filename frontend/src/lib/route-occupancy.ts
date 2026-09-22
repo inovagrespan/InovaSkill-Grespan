@@ -1,6 +1,8 @@
 export const MEDIUM_OCCUPANCY_THRESHOLD = 0.6;
 export const GOOD_OCCUPANCY_THRESHOLD = 0.85;
 export const CRITICAL_OCCUPANCY_THRESHOLD = 0.95;
+const NEAR_CAPACITY_OCCUPANCY_THRESHOLD = 0.99;
+const MAX_DISPLAYED_NEAR_CAPACITY_RATIO = 0.999;
 
 export type OccupancyLevel = "idle" | "good" | "medium" | "critical" | "unavailable";
 
@@ -62,7 +64,10 @@ export function classifyOccupancy(value: number | null): OccupancyPresentation {
 
 export function formatOccupancy(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "Capacidade não configurada";
-  return Math.min(1, Math.max(0, value)).toLocaleString("pt-BR", {
+  const displayValue = value >= NEAR_CAPACITY_OCCUPANCY_THRESHOLD && value < 1
+    ? Math.min(value, MAX_DISPLAYED_NEAR_CAPACITY_RATIO)
+    : value;
+  return displayValue.toLocaleString("pt-BR", {
     style: "percent",
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,

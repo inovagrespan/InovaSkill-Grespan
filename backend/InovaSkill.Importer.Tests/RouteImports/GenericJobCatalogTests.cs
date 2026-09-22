@@ -10,6 +10,7 @@ public sealed class GenericJobCatalogTests
     [InlineData(OperationalJobCodes.MunicipalityCoordinateEnrichment, BackgroundJobQueues.Default, true)]
     [InlineData(OperationalJobCodes.CustomerRegistrationAddressEnrichment, BackgroundJobQueues.Default, true)]
     [InlineData(OperationalJobCodes.CustomerAddressCoordinateEnrichment, BackgroundJobQueues.Default, true)]
+    [InlineData(OperationalJobCodes.CustomerCoordinateSimulation, BackgroundJobQueues.Default, false)]
     [InlineData(OperationalJobCodes.DailyRouteOptimization, BackgroundJobQueues.Default, true)]
     [InlineData(OperationalJobCodes.RouteCostConsolidation, BackgroundJobQueues.Default, true)]
     [InlineData(OperationalJobCodes.WhatsAppMessageProcessing, BackgroundJobQueues.Default, false)]
@@ -20,7 +21,8 @@ public sealed class GenericJobCatalogTests
         Assert.Same(definition, OperationalJobCatalog.GetRequired(jobType));
         Assert.Equal(expectedQueue, definition.Queue);
         Assert.Equal(manualRunAllowed, definition.ManualRunAllowed);
-        Assert.Equal(1, definition.ContractVersion);
+        Assert.Equal(jobType == OperationalJobCodes.DailyRouteOptimization ? 2 : 1,
+            definition.ContractVersion);
         using var document = JsonDocument.Parse(definition.ExampleParametersJson);
         Assert.Equal(JsonValueKind.Object, document.RootElement.ValueKind);
     }
@@ -28,7 +30,7 @@ public sealed class GenericJobCatalogTests
     [Fact]
     public void Catalog_HasUniqueDictionaryKeyForEveryDefinition()
     {
-        Assert.Equal(7, OperationalJobCatalog.All.Count);
-        Assert.Equal(7, OperationalJobCatalog.All.Select(item => item.JobType).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(8, OperationalJobCatalog.All.Count);
+        Assert.Equal(8, OperationalJobCatalog.All.Select(item => item.JobType).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 }

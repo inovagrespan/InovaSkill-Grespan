@@ -58,6 +58,23 @@ public sealed class DailyRouteOptimizationSolutionValidatorTests
             DailyRouteOptimizationSolutionValidator.Validate(problem, solution));
     }
 
+    [Fact]
+    public void Validate_IncludesServiceTimeAndRejectsRouteAboveMaximum()
+    {
+        var problem = Problem();
+        var vehicle = problem.ExistingVehicles[0];
+        var valid = new RouteOptimizationSolution(DailyRouteOptimizationStatuses.Optimized, null,
+            [new(vehicle, [new(0, 100, 100), new(1, 100, 100)], 3_000, 400, 2_200)],
+            400, 2_200, 900, 2_880);
+
+        DailyRouteOptimizationSolutionValidator.Validate(problem, valid);
+
+        var invalid = valid with { Vehicles = [valid.Vehicles[0] with { DurationSeconds = 2_881 }], TotalDurationSeconds = 2_881 };
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            DailyRouteOptimizationSolutionValidator.Validate(problem, invalid));
+        Assert.Contains("limite de duração", error.Message);
+    }
+
     [Theory]
     [InlineData("Unknown", "Motivo")]
     [InlineData(DailyRouteOptimizationStatuses.Infeasible, null)]
