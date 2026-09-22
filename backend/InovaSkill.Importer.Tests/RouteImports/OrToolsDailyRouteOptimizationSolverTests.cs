@@ -156,7 +156,7 @@ public sealed class OrToolsDailyRouteOptimizationSolverTests
     }
 
     [Fact]
-    public void AllowsPreferredEightHourRouteToUseTheHardTenHourLimit()
+    public void AllowsPreferredEightHourRouteToUseTheHardFifteenHourLimit()
     {
         var constrainedSolver = new OrToolsDailyRouteOptimizationSolver(Options.Create(
             new RouteOptimizationOptions
@@ -179,10 +179,10 @@ public sealed class OrToolsDailyRouteOptimizationSolverTests
     }
 
     [Fact]
-    public void RejectsHardLimitAboveTenHours()
+    public void RejectsHardLimitAboveFifteenHours()
     {
         Assert.Throws<InvalidOperationException>(() => new OrToolsDailyRouteOptimizationSolver(Options.Create(
-            new RouteOptimizationOptions { MaximumRouteDurationHours = 11 })));
+            new RouteOptimizationOptions { MaximumRouteDurationHours = 16 })));
     }
 
     [Fact]

@@ -253,7 +253,7 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
             {
                 // A seleção por capacidade é deliberadamente econômica, mas a
                 // geometria pode exigir a frota original completa para manter
-                // cada jornada abaixo de 10h. Reaproveita-se essa frota antes
+                // cada jornada abaixo de 15h. Reaproveita-se essa frota antes
                 // de introduzir veículos adicionais.
                 var selectedRouteIds = currentSelection.Vehicles
                     .Where(vehicle => vehicle.SourceRouteId.HasValue)
@@ -324,7 +324,7 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
         for (var vehicle = 0; vehicle < fleet.Count; vehicle++)
         {
             // A rota até 8h é preferida, sem transformar a preferência em uma
-            // restrição que force veículos ociosos. O limite de 10h continua rígido.
+            // restrição que force veículos ociosos. O limite de 15h continua rígido.
             workDurationDimension.SetCumulVarSoftUpperBound(
                 routing.End(vehicle),
                 DailyRouteOptimizationPolicy.PreferredRouteDurationSeconds,

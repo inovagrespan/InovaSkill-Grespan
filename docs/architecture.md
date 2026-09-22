@@ -1812,7 +1812,7 @@ recusa a leitura da rota antiga. O frontend não carrega mapa, ordem ou custos d
 uma sugestão obsoleta e orienta novo processamento. Isso evita exibir trechos
 zero artificiais de uma matriz calculada antes do preenchimento de endereços.
 
-O solver também impõe uma jornada máxima rígida de 10 horas por veículo. O limite
+O solver também impõe uma jornada máxima rígida de 15 horas por veículo. O limite
 inclui o tempo rodoviário da matriz e 15 minutos configuráveis de atendimento por
 cliente (`RouteOptimization:ServiceTimePerStopMinutes`), somados uma vez por
 parada, além do retorno ao depósito. Rotas de até 8 horas são preferidas pelo
@@ -1823,7 +1823,7 @@ jornada, veículos adicionais são testados até encontrar uma distribuição vi
 ou retornar `Infeasible`; há no máximo três tentativas de reparo por dia para
 evitar bloquear a Central de Processamentos em buscas repetidas. O tempo exibido no total da rota inclui atendimento,
 enquanto cada trecho continua exibindo somente o deslocamento rodoviário. A
-configuração aceita de 1 a 10 horas e mantém 8 horas como preferência operacional.
+configuração aceita de 1 a 15 horas e mantém 8 horas como preferência operacional.
 
 ### Relatório de custos da logística
 
