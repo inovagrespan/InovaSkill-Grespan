@@ -156,7 +156,7 @@ public sealed class OrToolsDailyRouteOptimizationSolverTests
     }
 
     [Fact]
-    public void AllowsPreferredEightHourRouteToUseTheHardFifteenHourLimit()
+    public void AllowsPreferredEightHourRouteToUseTheHardTenHourLimit()
     {
         var constrainedSolver = new OrToolsDailyRouteOptimizationSolver(Options.Create(
             new RouteOptimizationOptions
@@ -179,10 +179,48 @@ public sealed class OrToolsDailyRouteOptimizationSolverTests
     }
 
     [Fact]
-    public void RejectsHardLimitAboveFifteenHours()
+    public void RejectsHardLimitAboveTenHours()
     {
         Assert.Throws<InvalidOperationException>(() => new OrToolsDailyRouteOptimizationSolver(Options.Create(
-            new RouteOptimizationOptions { MaximumRouteDurationHours = 16 })));
+            new RouteOptimizationOptions { MaximumRouteDurationHours = 11 })));
+    }
+
+    [Fact]
+    public void ExplainsWhenAnIndividualStopCannotFitTheHardWorkday()
+    {
+        var constrainedSolver = new OrToolsDailyRouteOptimizationSolver(Options.Create(
+            new RouteOptimizationOptions { SolverTimeoutSeconds = 1, ServiceTimePerStopMinutes = 15 }));
+        var problem = Problem([1_000_000], [Vehicle("Truck", 10_300_000)], []);
+        problem = problem with
+        {
+            Matrix = problem.Matrix with
+            {
+                DurationsSeconds = [new decimal[] { 0, 18_000 }, new decimal[] { 18_000, 0 }]
+            }
+        };
+
+        var result = constrainedSolver.Solve(problem);
+
+        Assert.Equal(DailyRouteOptimizationStatuses.Infeasible, result.Status);
+        Assert.Contains("entrega(s) isolada(s)", result.Reason);
+        Assert.Contains("Cidade 1", result.Reason);
+    }
+
+    [Fact]
+    public void SplitsRouteWhenMoreThanFifteenDeliveriesWouldBeAssigned()
+    {
+        var constrainedSolver = new OrToolsDailyRouteOptimizationSolver(Options.Create(
+            new RouteOptimizationOptions { SolverTimeoutSeconds = 1, ServiceTimePerStopMinutes = 0 }));
+        var problem = Problem(Enumerable.Repeat(1_000_000L, 16).ToArray(),
+            [Vehicle("Truck", 20_000_000)], [Vehicle("Truck", 20_000_000, true)]);
+
+        var result = constrainedSolver.Solve(problem);
+
+        Assert.Equal(DailyRouteOptimizationStatuses.Optimized, result.Status);
+        Assert.Equal(16, result.Vehicles.Sum(vehicle => vehicle.Stops.Count));
+        Assert.True(result.Vehicles.Count(vehicle => vehicle.Stops.Count > 0) >= 2);
+        Assert.All(result.Vehicles, vehicle =>
+            Assert.InRange(vehicle.Stops.Count, 0, DailyRouteOptimizationPolicy.MaximumStopsPerRoute));
     }
 
     [Fact]

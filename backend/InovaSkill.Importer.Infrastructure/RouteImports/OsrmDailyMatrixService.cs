@@ -3,6 +3,8 @@ using InovaSkill.Importer.Domain.Entities;
 using InovaSkill.Importer.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Globalization;
+using System.Text;
 
 namespace InovaSkill.Importer.Infrastructure.RouteImports;
 
@@ -37,7 +39,10 @@ public sealed class OsrmDailyMatrixService(
             .Select(assignment => new
             {
                 assignment.CustomerId,
-                Coordinate = assignment.Customer!.RegistrationAddress!.Coordinate
+                AddressCity = assignment.Customer!.RegistrationAddress!.City,
+                AddressCoordinate = assignment.Customer.RegistrationAddress.Coordinate,
+                MunicipalityName = assignment.Municipality!.NormalizedName,
+                MunicipalityCoordinate = assignment.Municipality.Coordinate
             })
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -49,21 +54,69 @@ public sealed class OsrmDailyMatrixService(
             .Select(group => group.First())
             .OrderBy(item => item.CustomerId)
             .ToArray();
-        if (distinctCustomers.Any(item => !CustomerAddressCoordinateQuality.IsExact(item.Coordinate)))
+        var customerCoordinates = distinctCustomers.Select(item => new
+        {
+            item.CustomerId,
+            Coordinate = SelectCoordinate(item.AddressCity, item.AddressCoordinate,
+                item.MunicipalityName, item.MunicipalityCoordinate)
+        }).ToArray();
+        if (customerCoordinates.Any(item => item.Coordinate is null))
             throw new OsrmTableException("Há cliente do dia sem coordenada exata resolvida.");
 
         var points = new List<OsrmMatrixPoint>(distinctCustomers.Length + 1)
         {
             new(depot.Id, OsrmMatrixPointTypes.Depot, depot.Latitude, depot.Longitude)
         };
-        points.AddRange(distinctCustomers.Select(item => new OsrmMatrixPoint(
+        points.AddRange(customerCoordinates.Select(item => new OsrmMatrixPoint(
             item.CustomerId,
             OsrmMatrixPointTypes.Customer,
-            item.Coordinate!.Latitude!.Value,
-            item.Coordinate.Longitude!.Value)));
+            item.Coordinate!.Latitude,
+            item.Coordinate.Longitude)));
         var matrix = await client.GetTableAsync(new OsrmTableRequest(normalizedWeekday, points), cancellationToken);
         return RepairZeroLegs(matrix);
     }
+
+    private static CoordinateValue? SelectCoordinate(
+        string? addressCity,
+        CustomerAddressCoordinate? addressCoordinate,
+        string? municipalityName,
+        MunicipalityCoordinate? municipalityCoordinate)
+    {
+        if (!CustomerAddressCoordinateQuality.IsExact(addressCoordinate) ||
+            addressCoordinate?.Latitude is not decimal addressLatitude ||
+            addressCoordinate.Longitude is not decimal addressLongitude)
+            return null;
+        addressCity = NormalizeCity(addressCity);
+        municipalityName = NormalizeCity(municipalityName);
+        if (string.IsNullOrWhiteSpace(addressCity) || string.IsNullOrWhiteSpace(municipalityName) ||
+            string.Equals(addressCity, municipalityName, StringComparison.Ordinal))
+            return new(addressLatitude, addressLongitude);
+
+        return municipalityCoordinate is
+        {
+            Status: MunicipalityCoordinateStatuses.Resolved,
+            Latitude: not null,
+            Longitude: not null
+        }
+            ? new(municipalityCoordinate.Latitude.Value, municipalityCoordinate.Longitude.Value)
+            : new(addressLatitude, addressLongitude);
+    }
+
+    private static string NormalizeCity(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var decomposed = value.Trim().ToUpperInvariant().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark &&
+                char.IsLetterOrDigit(character))
+                builder.Append(character);
+        }
+        return builder.ToString();
+    }
+
+    private sealed record CoordinateValue(decimal Latitude, decimal Longitude);
 
     private OsrmTableResult RepairZeroLegs(OsrmTableResult matrix)
     {

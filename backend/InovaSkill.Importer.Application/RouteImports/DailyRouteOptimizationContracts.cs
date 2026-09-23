@@ -20,10 +20,12 @@ public static class DailyRouteOptimizationPolicy
     public const int MonetaryCostScale = 100;
     public const int SolverTimeLimitSeconds = 5;
     public const int MaximumRouteRepairAttempts = 3;
-    // A jornada ideal é de até 8h, mas uma rota pode utilizar até 15h quando
-    // isso evita uma frota artificialmente fragmentada. O limite de 15h é rígido.
+    public const int AdditionalVehiclesPerRouteRepairAttempt = 10;
+    // Cada rota atende no máximo 15 entregas. A jornada preferencial é de 8h
+    // e o limite rígido é de 10h, incluindo atendimento e retorno ao depósito.
+    public const int MaximumStopsPerRoute = 15;
     public const int PreferredRouteDurationHours = 8;
-    public const int MaximumRouteDurationHours = 15;
+    public const int MaximumRouteDurationHours = 10;
     public const int DefaultServiceTimePerStopMinutes = 15;
     public const long SecondsPerMinute = 60;
     public const long SecondsPerHour = 60 * SecondsPerMinute;
@@ -43,7 +45,7 @@ public static class DailyRouteOptimizationPolicy
     public const decimal TocoRentalDailyMaximum = 900m;
     public const decimal TruckRentalDailyMinimum = 900m;
     public const decimal TruckRentalDailyMaximum = 1_300m;
-    public const string RulesVersion = "daily-v9-exact-customer-locations-max-15h";
+    public const string RulesVersion = "daily-v10-exact-customer-locations-max-15-stops-10h";
 }
 
 public static class DailyRouteOptimizationWeekdays
@@ -103,7 +105,8 @@ public sealed record RouteOptimizationSolution(
     long TotalDistanceMeters,
     long TotalDurationSeconds,
     long ServiceDurationSeconds = 0,
-    long MaximumRouteDurationSeconds = long.MaxValue);
+    long MaximumRouteDurationSeconds = long.MaxValue,
+    int MaximumStopsPerRoute = int.MaxValue);
 
 public interface IDailyRouteOptimizationSolver
 {
@@ -184,6 +187,8 @@ public static class DailyRouteOptimizationSolutionValidator
                 throw new InvalidOperationException("A solução contém distância ou duração negativa.");
             if (vehicle.DurationSeconds > solution.MaximumRouteDurationSeconds)
                 throw new InvalidOperationException("A solução excede o limite de duração da rota.");
+            if (vehicle.Stops.Count > solution.MaximumStopsPerRoute)
+                throw new InvalidOperationException("A solução excede o limite de entregas da rota.");
 
             long calculatedLoad = 0;
             long calculatedDistance = 0;

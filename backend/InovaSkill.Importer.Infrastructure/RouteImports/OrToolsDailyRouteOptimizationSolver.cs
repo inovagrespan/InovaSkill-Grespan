@@ -33,7 +33,7 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
         if (selection is null)
             return new(DailyRouteOptimizationStatuses.Infeasible,
                 "As cargas dos clientes não cabem na frota existente nem nos tipos adicionais cadastrados.", [], 0, 0,
-                serviceDurationSeconds, maximumRouteDurationSeconds);
+                serviceDurationSeconds, maximumRouteDurationSeconds, DailyRouteOptimizationPolicy.MaximumStopsPerRoute);
         var solution = Route(problem, selection);
         DailyRouteOptimizationSolutionValidator.Validate(problem, solution);
         return solution;
@@ -76,9 +76,12 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
             model.Add(LinearExpr.WeightedSum(
                 Enumerable.Range(0, problem.Blocks.Count).Select(block => assignments[block, vehicle]),
                 problem.Blocks.Select(block => block.WeightGrams)) <= candidates[vehicle].CapacityGrams);
+            var maximumStopsPerVehicle = (long)DailyRouteOptimizationPolicy.MaximumStopsPerRoute;
             if (serviceDurationSeconds > 0)
-                model.Add(LinearExpr.Sum(Enumerable.Range(0, problem.Blocks.Count)
-                    .Select(block => assignments[block, vehicle])) <= maximumRouteDurationSeconds / serviceDurationSeconds);
+                maximumStopsPerVehicle = Math.Min(maximumStopsPerVehicle,
+                    maximumRouteDurationSeconds / serviceDurationSeconds);
+            model.Add(LinearExpr.Sum(Enumerable.Range(0, problem.Blocks.Count)
+                    .Select(block => assignments[block, vehicle])) <= maximumStopsPerVehicle);
             if (candidates[vehicle].IsAdditional)
                 model.Add(LinearExpr.Sum(Enumerable.Range(0, problem.Blocks.Count)
                     .Select(block => assignments[block, vehicle])) >= used[vehicle]);
@@ -169,9 +172,10 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
                      .ThenBy(index => problem.Blocks[index].CustomerId))
         {
             var weight = problem.Blocks[blockIndex].WeightGrams;
-            var maximumStopsPerVehicle = serviceDurationSeconds > 0
-                ? maximumRouteDurationSeconds / serviceDurationSeconds
-                : long.MaxValue;
+            var maximumStopsPerVehicle = (long)DailyRouteOptimizationPolicy.MaximumStopsPerRoute;
+            if (serviceDurationSeconds > 0)
+                maximumStopsPerVehicle = Math.Min(maximumStopsPerVehicle,
+                    maximumRouteDurationSeconds / serviceDurationSeconds);
             var vehicleIndex = Enumerable.Range(0, vehicles.Count)
                 .Where(index => remainingCapacity[index] >= weight && routes[index].Count < maximumStopsPerVehicle)
                 .OrderBy(index => remainingCapacity[index] - weight)
@@ -238,6 +242,32 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
         RouteOptimizationProblem problem,
         FleetSelection selection)
     {
+        var pointIndexByLocation = problem.Matrix.Points
+            .Select((point, index) => (point, index))
+            .Where(item => item.point.Type != OsrmMatrixPointTypes.Depot)
+            .ToDictionary(item => item.point.Id, item => item.index);
+        var unserviceableBlocks = problem.Blocks
+            .Where(block =>
+            {
+                var matrixIndex = pointIndexByLocation[block.LocationId];
+                var roundTripDuration = Round(problem.Matrix.DurationsSeconds[0][matrixIndex]) +
+                    serviceDurationSeconds + Round(problem.Matrix.DurationsSeconds[matrixIndex][0]);
+                return roundTripDuration > maximumRouteDurationSeconds;
+            })
+            .ToArray();
+        if (unserviceableBlocks.Length > 0)
+        {
+            var examples = string.Join(", ", unserviceableBlocks
+                .Take(5)
+                .Select(block => block.Name));
+            return new(DailyRouteOptimizationStatuses.Infeasible,
+                $"{unserviceableBlocks.Length} entrega(s) isolada(s) excedem o limite de " +
+                $"{maximumRouteDurationSeconds / DailyRouteOptimizationPolicy.SecondsPerHour} horas mesmo em uma rota individual " +
+                $"(ida, atendimento e retorno). Exemplos: {examples}.", [], 0, 0,
+                serviceDurationSeconds, maximumRouteDurationSeconds,
+                DailyRouteOptimizationPolicy.MaximumStopsPerRoute);
+        }
+
         var currentSelection = selection;
         // A tentativa inicial usa a frota mínima que respeita capacidade e
         // atendimento. No máximo três reparos são permitidos: tentativas
@@ -253,7 +283,7 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
             {
                 // A seleção por capacidade é deliberadamente econômica, mas a
                 // geometria pode exigir a frota original completa para manter
-                // cada jornada abaixo de 15h. Reaproveita-se essa frota antes
+                // cada jornada abaixo de 10h. Reaproveita-se essa frota antes
                 // de introduzir veículos adicionais.
                 var selectedRouteIds = currentSelection.Vehicles
                     .Where(vehicle => vehicle.SourceRouteId.HasValue)
@@ -276,13 +306,20 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
                 .ThenBy(vehicle => vehicle.VehicleTypeName, StringComparer.Ordinal)
                 .FirstOrDefault();
             if (additional is null) break;
+            var repairVehicles = Enumerable.Repeat(
+                    additional with { IsAdditional = true },
+                    DailyRouteOptimizationPolicy.AdditionalVehiclesPerRouteRepairAttempt)
+                .ToArray();
             currentSelection = new FleetSelection(
-                currentSelection.Vehicles.Append(additional with { IsAdditional = true }).ToArray(),
-                currentSelection.InitialRoutes.Append(Array.Empty<int>()).ToArray());
+                currentSelection.Vehicles.Concat(repairVehicles).ToArray(),
+                currentSelection.InitialRoutes.Concat(
+                    repairVehicles.Select(_ => (IReadOnlyList<int>)Array.Empty<int>())).ToArray());
         }
         return new(DailyRouteOptimizationStatuses.Infeasible,
-            $"Não foi possível distribuir as paradas em rotas de até {maximumRouteDurationSeconds / DailyRouteOptimizationPolicy.SecondsPerHour} horas.",
-            [], 0, 0, serviceDurationSeconds, maximumRouteDurationSeconds);
+            $"Não foi possível distribuir as paradas em rotas de até {DailyRouteOptimizationPolicy.MaximumStopsPerRoute} entregas e " +
+            $"{maximumRouteDurationSeconds / DailyRouteOptimizationPolicy.SecondsPerHour} horas.",
+            [], 0, 0, serviceDurationSeconds, maximumRouteDurationSeconds,
+            DailyRouteOptimizationPolicy.MaximumStopsPerRoute);
     }
 
     private RouteOptimizationSolution? TryRoute(
@@ -324,12 +361,20 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
         for (var vehicle = 0; vehicle < fleet.Count; vehicle++)
         {
             // A rota até 8h é preferida, sem transformar a preferência em uma
-            // restrição que force veículos ociosos. O limite de 15h continua rígido.
+            // restrição que force veículos ociosos. O limite de 10h continua rígido.
             workDurationDimension.SetCumulVarSoftUpperBound(
                 routing.End(vehicle),
                 DailyRouteOptimizationPolicy.PreferredRouteDurationSeconds,
                 DailyRouteOptimizationPolicy.PreferredDurationPenaltyPerSecond);
         }
+        var stopCountCallback = routing.RegisterTransitCallback((from, _) =>
+            manager.IndexToNode(from) == 0 ? 0 : 1);
+        routing.AddDimension(
+            stopCountCallback,
+            0,
+            DailyRouteOptimizationPolicy.MaximumStopsPerRoute,
+            true,
+            "StopCount");
         var maximumArcCost = checked(Round(problem.Matrix.DistancesMeters.SelectMany(row => row).Max()) *
             durationTieBreakerBase + Round(maximumDuration));
         var additionalVehicleFixedCost = checked(maximumArcCost * (problem.Blocks.Count + fleet.Count + 1L));
@@ -358,7 +403,8 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
             ? routing.SolveWithParameters(parameters)
             : routing.SolveFromAssignmentWithParameters(initialAssignment, parameters) ??
                 routing.SolveWithParameters(parameters);
-        if (assignment is null) return null;
+        if (assignment is null)
+            return BuildGreedySolution(problem, fleet, nodeToMatrix);
 
         var vehicles = new List<RouteOptimizationVehicleSolution>(fleet.Count);
         long totalDistance = 0;
@@ -392,7 +438,65 @@ public sealed class OrToolsDailyRouteOptimizationSolver(IOptions<RouteOptimizati
             vehicles.Add(new(fleet[vehicle], stops, load, distance, duration));
         }
         return new(DailyRouteOptimizationStatuses.Optimized, null, vehicles, totalDistance, totalDuration,
-            serviceDurationSeconds, maximumRouteDurationSeconds);
+            serviceDurationSeconds, maximumRouteDurationSeconds,
+            DailyRouteOptimizationPolicy.MaximumStopsPerRoute);
+    }
+
+    private RouteOptimizationSolution? BuildGreedySolution(
+        RouteOptimizationProblem problem,
+        IReadOnlyList<RouteOptimizationVehicleInput> fleet,
+        IReadOnlyList<int> nodeToMatrix)
+    {
+        var remaining = Enumerable.Range(0, problem.Blocks.Count).ToHashSet();
+        var vehicles = new List<RouteOptimizationVehicleSolution>(fleet.Count);
+        for (var vehicleIndex = 0; vehicleIndex < fleet.Count; vehicleIndex++)
+        {
+            var vehicle = fleet[vehicleIndex];
+            var stops = new List<RouteOptimizationStopSolution>();
+            var currentMatrixIndex = 0;
+            long load = 0;
+            long distance = 0;
+            long duration = 0;
+            while (stops.Count < DailyRouteOptimizationPolicy.MaximumStopsPerRoute)
+            {
+                var candidate = remaining
+                    .Where(blockIndex => load + problem.Blocks[blockIndex].WeightGrams <= vehicle.CapacityGrams)
+                    .Select(blockIndex =>
+                    {
+                        var matrixIndex = nodeToMatrix[blockIndex + 1];
+                        var legDistance = Round(problem.Matrix.DistancesMeters[currentMatrixIndex][matrixIndex]);
+                        var legDuration = Round(problem.Matrix.DurationsSeconds[currentMatrixIndex][matrixIndex]);
+                        var projectedDuration = duration + legDuration + serviceDurationSeconds +
+                            Round(problem.Matrix.DurationsSeconds[matrixIndex][0]);
+                        return (blockIndex, matrixIndex, legDistance, legDuration, projectedDuration);
+                    })
+                    .Where(candidate => candidate.projectedDuration <= maximumRouteDurationSeconds)
+                    .OrderBy(candidate => candidate.legDistance)
+                    .ThenBy(candidate => candidate.blockIndex)
+                    .FirstOrDefault();
+                if (candidate == default) break;
+
+                stops.Add(new(candidate.blockIndex, candidate.legDistance, candidate.legDuration));
+                remaining.Remove(candidate.blockIndex);
+                load += problem.Blocks[candidate.blockIndex].WeightGrams;
+                distance += candidate.legDistance;
+                duration += candidate.legDuration + serviceDurationSeconds;
+                currentMatrixIndex = candidate.matrixIndex;
+            }
+
+            if (stops.Count > 0)
+            {
+                distance += Round(problem.Matrix.DistancesMeters[currentMatrixIndex][0]);
+                duration += Round(problem.Matrix.DurationsSeconds[currentMatrixIndex][0]);
+            }
+            vehicles.Add(new(vehicle, stops, load, distance, duration));
+        }
+
+        return remaining.Count > 0
+            ? null
+            : new(DailyRouteOptimizationStatuses.Optimized, null, vehicles, vehicles.Sum(vehicle => vehicle.DistanceMeters),
+                vehicles.Sum(vehicle => vehicle.DurationSeconds), serviceDurationSeconds,
+                maximumRouteDurationSeconds, DailyRouteOptimizationPolicy.MaximumStopsPerRoute);
     }
 
     private sealed record FleetSelection(

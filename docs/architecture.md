@@ -402,12 +402,21 @@ ao alternar a visão. As sugestões mantêm cards equivalentes aos reais,
 agrupados por dia, e o detalhe informa a sequência de clientes, município, peso
 atribuído à parada, distância, duração, veículo adicional e ociosidade. O
 problema usa um nó por cliente vinculado à rota e exige coordenada `EXACT`; a
-matriz rodoviária e o OR-Tools deixam de usar o centro municipal. Como a fonte
+matriz rodoviária e o OR-Tools deixam de usar o centro municipal. Quando a cidade
+textual do endereço exato diverge do município do vínculo, o Worker usa a
+coordenada municipal resolvida para impedir que um cadastro inconsistente arraste
+a rota para outro município; essa exceção fica registrada no diagnóstico do
+processamento. Como a fonte
 de rotas contém peso médio apenas por município, o Worker distribui esse peso
 em gramas igualmente entre os clientes vinculados ao município, atribuindo o
 resto determinística e unitariamente pela ordem do código externo. Essa regra
 preserva exatamente a carga total e deve ser substituída por demanda individual
 quando essa granularidade passar a existir na fonte de dados.
+Cada rota otimizada admite no máximo 15 entregas e 10 horas de jornada (incluindo
+15 minutos de atendimento por parada); uma penalidade suave prioriza jornadas de
+até 8 horas. Se uma parada isolada já exigir mais que o limite com ida, atendimento
+e retorno, o dia é marcado como `Infeasible` com motivo explícito, em vez de
+persistir uma rota que viole a jornada.
 Na interface, cada veículo distingue `deliveryCount` (clientes/paradas) de
 `municipalityCount` (municípios distintos); uma parada municipal sem cliente
 vinculado é ignorada, pois não existe entrega concreta para roteirizar.
@@ -1812,18 +1821,21 @@ recusa a leitura da rota antiga. O frontend não carrega mapa, ordem ou custos d
 uma sugestão obsoleta e orienta novo processamento. Isso evita exibir trechos
 zero artificiais de uma matriz calculada antes do preenchimento de endereços.
 
-O solver também impõe uma jornada máxima rígida de 15 horas por veículo. O limite
-inclui o tempo rodoviário da matriz e 15 minutos configuráveis de atendimento por
-cliente (`RouteOptimization:ServiceTimePerStopMinutes`), somados uma vez por
-parada, além do retorno ao depósito. Rotas de até 8 horas são preferidas pelo
-objetivo por meio de uma penalidade suave, sem criar veículos ociosos apenas para
-cumprir a preferência. A dimensão `WorkDuration` do OR-Tools impede que uma rota
-proposta ultrapasse o limite; quando a frota mínima por carga não comporta a
-jornada, veículos adicionais são testados até encontrar uma distribuição viável
-ou retornar `Infeasible`; há no máximo três tentativas de reparo por dia para
-evitar bloquear a Central de Processamentos em buscas repetidas. O tempo exibido no total da rota inclui atendimento,
-enquanto cada trecho continua exibindo somente o deslocamento rodoviário. A
-configuração aceita de 1 a 15 horas e mantém 8 horas como preferência operacional.
+O solver limita cada rota a 15 entregas e impõe uma jornada máxima rígida de 10
+horas por veículo. O limite inclui o tempo rodoviário da matriz e 15 minutos
+configuráveis de atendimento por cliente
+(`RouteOptimization:ServiceTimePerStopMinutes`), somados uma vez por parada, além
+do retorno ao depósito. Rotas de até 8 horas são preferidas pelo objetivo por
+meio de uma penalidade suave, sem criar veículos ociosos apenas para cumprir a
+preferência. As dimensões de entregas e `WorkDuration` do OR-Tools impedem que
+uma rota proposta ultrapasse qualquer dos limites; quando a frota mínima por
+carga não comporta a jornada, veículos adicionais são testados em lotes
+determinísticos de dez até encontrar uma distribuição viável ou retornar
+`Infeasible`; há no máximo três tentativas de
+reparo por dia para evitar bloquear a Central de Processamentos em buscas
+repetidas. O tempo exibido no total da rota inclui atendimento, enquanto cada
+trecho continua exibindo somente o deslocamento rodoviário. A configuração aceita
+de 1 a 10 horas e mantém 8 horas como preferência operacional.
 
 ### Relatório de custos da logística
 

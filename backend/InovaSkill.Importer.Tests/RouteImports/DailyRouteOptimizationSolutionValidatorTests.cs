@@ -65,7 +65,7 @@ public sealed class DailyRouteOptimizationSolutionValidatorTests
         var vehicle = problem.ExistingVehicles[0];
         var valid = new RouteOptimizationSolution(DailyRouteOptimizationStatuses.Optimized, null,
             [new(vehicle, [new(0, 100, 100), new(1, 100, 100)], 3_000, 400, 2_200)],
-            400, 2_200, 900, 2_880);
+            400, 2_200, 900, 2_880, 2);
 
         DailyRouteOptimizationSolutionValidator.Validate(problem, valid);
 
@@ -73,6 +73,12 @@ public sealed class DailyRouteOptimizationSolutionValidatorTests
         var error = Assert.Throws<InvalidOperationException>(() =>
             DailyRouteOptimizationSolutionValidator.Validate(problem, invalid));
         Assert.Contains("limite de duração", error.Message);
+
+        var stopsLimitError = Assert.Throws<InvalidOperationException>(() =>
+            DailyRouteOptimizationSolutionValidator.Validate(
+                problem,
+                valid with { MaximumStopsPerRoute = 1 }));
+        Assert.Contains("limite de entregas", stopsLimitError.Message);
     }
 
     [Theory]
